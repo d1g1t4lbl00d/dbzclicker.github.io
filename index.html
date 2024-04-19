@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DBZ Clicker</title>
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        text-align: center;
+        background-image: url('background2.jpg'); /* Ruta a tu imagen de fondo */
+        background-size: cover;
+        background-position: center;
+        background-repeat: no-repeat;
+    }
+    #coinCount {
+        font-size: 24px;
+        margin-bottom: 20px;
+    }
+    #coins {
+        font-size: 30px;
+        transition: transform 0.2s ease-in-out;
+    }
+    button {
+        padding: 10px 20px;
+        font-size: 18px;
+        margin: 10px;
+        cursor: pointer;
+    }
+</style>
+</head>
+<body>
+    <h1>DBZ Clicker</h1>
+    <p>Click en el botón para ganar DBZ:</p>
+    <p id="coinCount">DBZ: <span id="coins">0</span></p>
+    <button id="clickButton" onclick="incrementCoins()">¡Click aquí!</button>
+    <h2>Powerups:</h2>
+    <button onclick="buyPowerup(2)">x2 DBZ (Costo: 20 DBZ)</button>
+    <button onclick="buyPowerup(5)">x5 DBZ (Costo: 50 DBZ)</button>
+    <button onclick="buyPowerup(10)">x10 DBZ (Costo: 100 DBZ)</button>
+
+    <script>
+        let coins = 0;
+        let coinLossRate = 2; // Tasa de pérdida de monedas por segundo
+        let animationTimeout;
+
+        function incrementCoins() {
+            coins += 0.5; // Ganar media moneda por clic
+            document.getElementById('coins').innerText = Math.floor(coins);
+
+            // Mostrar animación de moneda cada 100 monedas
+            if (coins % 100 === 0) {
+                animateCoin();
+            }
+        }
+
+        function animateCoin() {
+            const coinElement = document.getElementById('coins');
+            coinElement.style.transform = 'scale(1.5)';
+            animationTimeout = setTimeout(() => {
+                coinElement.style.transform = 'scale(1)';
+            }, 200);
+        }
+
+        function buyPowerup(multiplier) {
+            let cost = 0;
+            switch (multiplier) {
+                case 2:
+                    cost = 20;
+                    break;
+                case 5:
+                    cost = 50;
+                    break;
+                case 10:
+                    cost = 100;
+                    break;
+                default:
+                    break;
+            }
+
+            if (coins >= cost) {
+                coins -= cost;
+                document.getElementById('coins').innerText = Math.floor(coins);
+                activatePowerup(multiplier);
+            } else {
+                alert("¡No tienes suficientes DBZ para comprar este powerup!");
+            }
+        }
+
+        function activatePowerup(multiplier) {
+            // Desactivar cualquier powerup activo
+            clearTimeout(animationTimeout);
+            document.getElementById('coins').style.transform = 'scale(1)';
+            document.getElementById('clickButton').onclick = function() {
+                coins += multiplier;
+                document.getElementById('coins').innerText = Math.floor(coins);
+            };
+
+            setTimeout(function() {
+                document.getElementById('clickButton').onclick = function() {
+                    incrementCoins();
+                };
+            }, 5000); // Powerup activo durante 5 segundos (5000 ms)
+        }
+
+        // Reducir monedas por segundo
+        setInterval(function() {
+            coins -= coinLossRate;
+            if (coins < 0) coins = 0; // Evitar que las monedas sean negativas
+            document.getElementById('coins').innerText = Math.floor(coins);
+        }, 1000); // Disminuir monedas cada segundo (1000 ms)
+    </script>
+</body>
+</html>
