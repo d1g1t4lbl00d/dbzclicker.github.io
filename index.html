@@ -19,14 +19,14 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    min-height: 100vh;
-    padding: 16px;
+    min-height: 100dvh;
+    padding: 12px;
   }
   .wrap {
     width: min(960px, 100%);
     display: flex;
     flex-direction: column;
-    gap: 14px;
+    gap: 10px;
   }
   header {
     display: flex;
@@ -35,7 +35,7 @@
     padding: 4px 8px;
   }
   h1 {
-    font-size: 20px;
+    font-size: clamp(15px, 4vw, 20px);
     letter-spacing: 2px;
     font-weight: 600;
     color: #f4f7ff;
@@ -45,12 +45,12 @@
   .mic {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     background: rgba(255,255,255,0.04);
     border: 1px solid rgba(255,255,255,0.07);
-    padding: 8px 14px;
+    padding: 6px 12px;
     border-radius: 999px;
-    font-size: 13px;
+    font-size: clamp(11px, 3vw, 13px);
     color: #c8cfdb;
   }
   .dot {
@@ -81,6 +81,8 @@
     display: block;
     width: 100%;
     height: auto;
+    max-height: 75dvh;
+    object-fit: contain;
     image-rendering: pixelated;
   }
   .heard {
@@ -185,6 +187,14 @@
     border-radius: 8px;
     font-size: 13px;
     text-align: center;
+  }
+  @media (max-width: 600px) {
+    body { padding: 6px; justify-content: flex-start; padding-top: 8px; }
+    .wrap { gap: 6px; }
+    .legend { display: none; }
+    .overlay h2 { font-size: 22px; }
+    .overlay p { font-size: 13px; }
+    button { padding: 10px 22px; font-size: 13px; }
   }
 </style>
 </head>
@@ -308,6 +318,19 @@
   document.addEventListener('keyup', (e) => { if (e.code==='ArrowDown') duckEnd(); });
   btnStart.addEventListener('click', ()=>startGame());
   btnRestart.addEventListener('click', ()=>startGame());
+
+  // Touch controls: tap = jump, swipe down = duck
+  let touchStartY = 0;
+  canvas.addEventListener('touchstart', (e) => {
+    e.preventDefault();
+    touchStartY = e.touches[0].clientY;
+    if (state===STATE.IDLE||state===STATE.OVER) startGame(); else jump();
+    if (!recognitionDesired) startRecognition();
+  }, {passive:false});
+  canvas.addEventListener('touchmove', (e) => {
+    e.preventDefault();
+    if (e.touches[0].clientY - touchStartY > 30) duckPulse();
+  }, {passive:false});
 
   function startGame() {
     state=STATE.RUNNING; overlayStart.classList.remove('show'); overlayOver.classList.remove('show');
@@ -553,16 +576,23 @@
         let best='';
         for (let a=0;a<res.length;a++){best=res[a].transcript;if(best)break;}
         if (!best) continue;
-        const words=best.trim().toLowerCase().split(/\s+/);
-        const last=words[words.length-1]||'';
         if (res.isFinal) {
+          handleCommand._lastInterim=null;
           handleCommand(best);
         } else {
-          const quick=['salta','salto','arriba','brinca','agacha','abajo','agachar','juega','empezar','empieza','jump','up','duck','down','play','start'];
-          if (quick.includes(last)&&last!==handleCommand._lastInterim) {
-            handleCommand._lastInterim=last;
-            setTimeout(()=>{handleCommand._lastInterim=null;},400);
-            handleCommand(last);
+          // Prefix matching on every word for instant response
+          const words=best.trim().toLowerCase().split(/\s+/);
+          let matched=null;
+          for (const w of words) {
+            if (!w) continue;
+            if (w.startsWith('sal')||w.startsWith('arr')||w.startsWith('bri')||w==='up'||w==='jump') { matched='salta'; break; }
+            if (w.startsWith('aga')||w.startsWith('aba')||w==='duck'||w==='down') { matched='agacha'; break; }
+            if (w.startsWith('jue')||w.startsWith('emp')||w.startsWith('com')||w==='play'||w==='start') { matched='juega'; break; }
+          }
+          if (matched && matched!==handleCommand._lastInterim) {
+            handleCommand._lastInterim=matched;
+            setTimeout(()=>{handleCommand._lastInterim=null;},200);
+            handleCommand(matched);
           }
         }
       }
