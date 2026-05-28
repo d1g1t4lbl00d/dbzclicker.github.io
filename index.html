@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Dino Voz - Corredor por Voz</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    height: 100%;
+    background: radial-gradient(ellipse at top, #1a1f2e 0%, #0a0d14 100%);
+    color: #e6e9ef;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    overflow: hidden;
+    user-select: none;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    padding: 16px;
+  }
+  .wrap {
+    width: min(960px, 100%);
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 8px;
+  }
+  h1 {
+    font-size: 20px;
+    letter-spacing: 2px;
+    font-weight: 600;
+    color: #f4f7ff;
+    text-transform: uppercase;
+  }
+  h1 span { color: #4ade80; }
+  .mic {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid rgba(255,255,255,0.07);
+    padding: 8px 14px;
+    border-radius: 999px;
+    font-size: 13px;
+    color: #c8cfdb;
+  }
+  .dot {
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    background: #ef4444;
+    box-shadow: 0 0 0 0 rgba(239,68,68,0.6);
+    transition: background 0.2s;
+  }
+  .dot.live {
+    background: #22c55e;
+    animation: pulse 1.4s infinite;
+  }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(34,197,94,0.55); }
+    70%  { box-shadow: 0 0 0 14px rgba(34,197,94,0); }
+    100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
+  }
+  .stage {
+    position: relative;
+    border-radius: 14px;
+    overflow: hidden;
+    background: linear-gradient(180deg, #0f1422 0%, #131a2c 60%, #1a2238 100%);
+    box-shadow: 0 18px 60px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.05);
+  }
+  canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    image-rendering: pixelated;
+  }
+  .heard {
+    position: absolute;
+    top: 14px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-6px);
+    background: rgba(74,222,128,0.12);
+    color: #4ade80;
+    border: 1px solid rgba(74,222,128,0.35);
+    padding: 6px 16px;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 1px;
+    opacity: 0;
+    transition: opacity 0.25s, transform 0.25s;
+    pointer-events: none;
+    text-transform: uppercase;
+  }
+  .heard.show {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  .overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(7,10,18,0.78);
+    backdrop-filter: blur(4px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    text-align: center;
+    padding: 20px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+  }
+  .overlay.show {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .overlay h2 {
+    font-size: 34px;
+    letter-spacing: 3px;
+    color: #f4f7ff;
+    text-transform: uppercase;
+  }
+  .overlay p {
+    color: #a4adc0;
+    font-size: 15px;
+    max-width: 440px;
+    line-height: 1.5;
+  }
+  .overlay .score-final {
+    font-size: 18px;
+    color: #4ade80;
+    font-weight: 600;
+    letter-spacing: 2px;
+  }
+  button {
+    background: linear-gradient(180deg, #4ade80, #16a34a);
+    color: #062712;
+    border: none;
+    padding: 12px 28px;
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    border-radius: 10px;
+    cursor: pointer;
+    text-transform: uppercase;
+    box-shadow: 0 8px 22px rgba(34,197,94,0.35);
+    transition: transform 0.15s, box-shadow 0.15s;
+  }
+  button:hover  { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(34,197,94,0.45); }
+  button:active { transform: translateY(0); }
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    justify-content: center;
+    font-size: 13px;
+    color: #9aa3b6;
+  }
+  .legend kbd {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.1);
+    padding: 4px 9px;
+    border-radius: 6px;
+    color: #e6e9ef;
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 1px;
+  }
+  .err {
+    color: #fca5a5;
+    background: rgba(239,68,68,0.1);
+    border: 1px solid rgba(239,68,68,0.3);
+    padding: 8px 14px;
+    border-radius: 8px;
+    font-size: 13px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Dino<span>Voz</span></h1>
+      <div class="mic" id="micBox">
+        <span class="dot" id="micDot"></span>
+        <span id="micLabel">Microfono inactivo</span>
+      </div>
+    </header>
+
+    <div class="stage" id="stage">
+      <canvas id="game" width="960" height="320"></canvas>
+      <div class="heard" id="heard"></div>
+      <div class="overlay show" id="overlayStart">
+        <h2>Dino por Voz</h2>
+        <p>Controla al dinosaurio con tu voz. Di <b style="color:#4ade80">"salta"</b> o <b style="color:#4ade80">"arriba"</b> para saltar, y <b style="color:#fbbf24">"agacha"</b> o <b style="color:#fbbf24">"abajo"</b> para agacharte. Esquiva cactus y aves.</p>
+        <button id="btnStart">Empezar</button>
+        <p style="font-size:12px;opacity:0.6">Permite el acceso al microfono cuando se te pida.</p>
+      </div>
+      <div class="overlay" id="overlayOver">
+        <h2>Game Over</h2>
+        <div class="score-final" id="finalScore">PUNTOS 0</div>
+        <p>Di <b style="color:#4ade80">"juega"</b> o <b style="color:#4ade80">"empezar"</b> para reintentar.</p>
+        <button id="btnRestart">Reiniciar</button>
+      </div>
+    </div>
+
+    <div class="legend">
+      <span><kbd>salta</kbd> / <kbd>arriba</kbd> saltar</span>
+      <span><kbd>agacha</kbd> / <kbd>abajo</kbd> agacharse</span>
+      <span><kbd>juega</kbd> / <kbd>empezar</kbd> reiniciar</span>
+      <span style="opacity:0.5">| Teclas: Espacio = saltar, Flecha abajo = agacharse</span>
+    </div>
+    <div id="errBox"></div>
+  </div>
+
+<script>
+(() => {
+  'use strict';
+
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width;
+  const H = canvas.height;
+  const GROUND_Y = H - 50;
+
+  const micDot = document.getElementById('micDot');
+  const micLabel = document.getElementById('micLabel');
+  const heardEl = document.getElementById('heard');
+  const overlayStart = document.getElementById('overlayStart');
+  const overlayOver = document.getElementById('overlayOver');
+  const finalScoreEl = document.getElementById('finalScore');
+  const btnStart = document.getElementById('btnStart');
+  const btnRestart = document.getElementById('btnRestart');
+  const errBox = document.getElementById('errBox');
+
+  const STATE = { IDLE: 0, RUNNING: 1, OVER: 2 };
+  let state = STATE.IDLE;
+
+  const GRAVITY = 0.85;
+  const JUMP_V = -15.5;
+  const DUCK_JUMP_BOOST = -0.6;
+
+  const dino = {
+    x: 70, y: GROUND_Y - 46, w: 44, h: 46,
+    vy: 0, onGround: true, ducking: false, legPhase: 0, blink: 0,
+  };
+
+  let speed = 6, baseSpeed = 6, score = 0;
+  let highScore = +localStorage.getItem('dinoVozHigh') || 0;
+  let frame = 0, obstacles = [], clouds = [], stars = [], mountains = [], dust = [];
+  let groundOffset = 0, nextObstacleIn = 80;
+
+  function initScenery() {
+    clouds = [];
+    for (let i = 0; i < 5; i++) clouds.push({ x: Math.random()*W, y: 30+Math.random()*90, s: 0.3+Math.random()*0.7, size: 14+Math.random()*18 });
+    stars = [];
+    for (let i = 0; i < 40; i++) stars.push({ x: Math.random()*W, y: Math.random()*(GROUND_Y-60), b: Math.random(), tw: Math.random()*Math.PI*2 });
+    mountains = [];
+    for (let i = 0; i < 6; i++) mountains.push({ x: i*220+Math.random()*80, h: 60+Math.random()*60, w: 180+Math.random()*100 });
+  }
+  initScenery();
+
+  function spawnObstacle() {
+    const r = Math.random();
+    if (r < 0.6) {
+      const variant = Math.floor(Math.random()*3);
+      const heights = [38,50,62], widths = [18,24,36];
+      obstacles.push({ type:'cactus', x:W+20, y:GROUND_Y-heights[variant], w:widths[variant], h:heights[variant], variant });
+    } else {
+      const altitude = Math.random()<0.5 ? GROUND_Y-90 : GROUND_Y-55;
+      obstacles.push({ type:'bird', x:W+20, y:altitude, w:40, h:26, wing:0 });
+    }
+    nextObstacleIn = 60+Math.floor(Math.random()*70)-Math.min(30,Math.floor(speed*1.5));
+  }
+
+  function spawnDust(x, y) {
+    for (let i = 0; i < 4; i++) dust.push({ x:x+(Math.random()-0.5)*10, y:y+(Math.random()-0.5)*4, vx:-1-Math.random()*2, vy:-Math.random()*1.5, life:18+Math.random()*8, size:2+Math.random()*2 });
+  }
+
+  function jump() {
+    if (state !== STATE.RUNNING) return;
+    if (dino.onGround) {
+      dino.vy = JUMP_V+(dino.ducking?DUCK_JUMP_BOOST:0);
+      dino.onGround = false; dino.ducking = false;
+      spawnDust(dino.x+10, GROUND_Y);
+    }
+  }
+  function duckStart() { if (state!==STATE.RUNNING) return; dino.ducking=true; if (!dino.onGround&&dino.vy<0) dino.vy*=0.5; }
+  function duckEnd() { dino.ducking=false; }
+  let duckUntil = 0;
+  function duckPulse() { duckStart(); duckUntil=performance.now()+700; }
+
+  document.addEventListener('keydown', (e) => {
+    if (e.code==='Space'||e.code==='ArrowUp') { e.preventDefault(); if (state===STATE.IDLE||state===STATE.OVER) startGame(); else jump(); }
+    else if (e.code==='ArrowDown') { e.preventDefault(); duckStart(); }
+  });
+  document.addEventListener('keyup', (e) => { if (e.code==='ArrowDown') duckEnd(); });
+  btnStart.addEventListener('click', ()=>startGame());
+  btnRestart.addEventListener('click', ()=>startGame());
+
+  function startGame() {
+    state=STATE.RUNNING; overlayStart.classList.remove('show'); overlayOver.classList.remove('show');
+    obstacles=[]; dust=[]; score=0; speed=baseSpeed; frame=0; nextObstacleIn=80;
+    dino.y=GROUND_Y-dino.h; dino.vy=0; dino.onGround=true; dino.ducking=false;
+  }
+
+  function gameOver() {
+    state=STATE.OVER;
+    if (score>highScore) { highScore=score; localStorage.setItem('dinoVozHigh',String(highScore)); }
+    finalScoreEl.textContent=`PUNTOS ${String(Math.floor(score)).padStart(5,'0')}  |  MEJOR ${String(Math.floor(highScore)).padStart(5,'0')}`;
+    overlayOver.classList.add('show');
+  }
+
+  function hitbox() {
+    if (dino.ducking&&dino.onGround) return {x:dino.x+4,y:dino.y+24,w:dino.w+8,h:22};
+    return {x:dino.x+6,y:dino.y+4,w:dino.w-12,h:dino.h-6};
+  }
+  function obstacleBox(o) {
+    if (o.type==='bird') return {x:o.x+4,y:o.y+6,w:o.w-8,h:o.h-10};
+    return {x:o.x+3,y:o.y+3,w:o.w-6,h:o.h-4};
+  }
+  function intersect(a,b) { return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y; }
+
+  function update() {
+    frame++;
+    if (state!==STATE.RUNNING) {
+      for (const c of clouds) { c.x-=0.3*c.s; if (c.x<-40){c.x=W+40;c.y=30+Math.random()*90;} }
+      for (const s of stars) s.tw+=0.05;
+      return;
+    }
+    score+=0.15+speed*0.01;
+    speed=baseSpeed+Math.min(8,score/180);
+    if (!dino.onGround) {
+      dino.vy+=GRAVITY; dino.y+=dino.vy;
+      if (dino.y>=GROUND_Y-dino.h) { dino.y=GROUND_Y-dino.h; dino.vy=0; dino.onGround=true; spawnDust(dino.x+8,GROUND_Y); }
+    }
+    dino.legPhase+=0.25+speed*0.025;
+    dino.blink=(dino.blink+1)%240;
+    if (duckUntil&&performance.now()>duckUntil) { duckUntil=0; duckEnd(); }
+    groundOffset=(groundOffset+speed)%24;
+    for (const m of mountains) { m.x-=speed*0.15; if (m.x+m.w<0){m.x=W+Math.random()*100;m.h=60+Math.random()*60;m.w=180+Math.random()*100;} }
+    for (const c of clouds) { c.x-=speed*0.15*c.s+0.2; if (c.x<-40){c.x=W+40;c.y=30+Math.random()*90;c.s=0.3+Math.random()*0.7;} }
+    for (const s of stars) s.tw+=0.04;
+    nextObstacleIn--;
+    if (nextObstacleIn<=0) spawnObstacle();
+    for (const o of obstacles) { o.x-=speed; if (o.type==='bird') o.wing+=0.2; }
+    obstacles=obstacles.filter(o=>o.x+o.w>-10);
+    for (const p of dust) { p.x+=p.vx; p.y+=p.vy; p.vy+=0.1; p.life--; }
+    dust=dust.filter(p=>p.life>0);
+    const db=hitbox();
+    for (const o of obstacles) { if (intersect(db,obstacleBox(o))) { gameOver(); break; } }
+  }
+
+  function drawSky() {
+    const g=ctx.createLinearGradient(0,0,0,H);
+    g.addColorStop(0,'#0f1422'); g.addColorStop(0.7,'#131a2c'); g.addColorStop(1,'#1c2640');
+    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
+    for (const s of stars) {
+      const a=0.3+Math.sin(s.tw)*0.25+s.b*0.3;
+      ctx.fillStyle=`rgba(220,230,255,${a.toFixed(3)})`;
+      ctx.fillRect(s.x|0,s.y|0,2,2);
+    }
+    ctx.fillStyle='#e9edf7'; ctx.beginPath(); ctx.arc(W-90,60,22,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle='#0f1422'; ctx.beginPath(); ctx.arc(W-82,54,20,0,Math.PI*2); ctx.fill();
+  }
+
+  function drawMountains() {
+    for (const m of mountains) {
+      ctx.fillStyle='#1f2942';
+      ctx.beginPath(); ctx.moveTo(m.x,GROUND_Y); ctx.lineTo(m.x+m.w/2,GROUND_Y-m.h); ctx.lineTo(m.x+m.w,GROUND_Y); ctx.closePath(); ctx.fill();
+      ctx.fillStyle='#3b4769';
+      ctx.beginPath(); ctx.moveTo(m.x+m.w/2-14,GROUND_Y-m.h+22); ctx.lineTo(m.x+m.w/2,GROUND_Y-m.h); ctx.lineTo(m.x+m.w/2+14,GROUND_Y-m.h+22); ctx.closePath(); ctx.fill();
+    }
+  }
+
+  function drawCloud(c) {
+    ctx.fillStyle=`rgba(180,195,225,${0.25+c.s*0.35})`;
+    const s=c.size;
+    ctx.beginPath();
+    ctx.arc(c.x,c.y,s*0.7,0,Math.PI*2); ctx.arc(c.x+s*0.7,c.y-s*0.2,s*0.6,0,Math.PI*2);
+    ctx.arc(c.x+s*1.3,c.y,s*0.55,0,Math.PI*2); ctx.arc(c.x+s*0.5,c.y+s*0.2,s*0.6,0,Math.PI*2);
+    ctx.fill();
+  }
+
+  function drawGround() {
+    ctx.strokeStyle='#3b4769'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(0,GROUND_Y); ctx.lineTo(W,GROUND_Y); ctx.stroke();
+    ctx.fillStyle='#4a577a';
+    for (let x=-groundOffset; x<W; x+=24) {
+      ctx.fillRect(x,GROUND_Y+6,10,2);
+      if ((x+groundOffset)%72===0) ctx.fillRect(x+4,GROUND_Y+14,4,2);
+    }
+    const gg=ctx.createLinearGradient(0,GROUND_Y,0,H);
+    gg.addColorStop(0,'rgba(74,87,122,0.18)'); gg.addColorStop(1,'rgba(74,87,122,0)');
+    ctx.fillStyle=gg; ctx.fillRect(0,GROUND_Y,W,H-GROUND_Y);
+  }
+
+  function drawDino() {
+    const ducking=dino.ducking&&dino.onGround;
+    const x=dino.x, y=ducking?dino.y+18:dino.y, w=ducking?dino.w+12:dino.w, h=ducking?dino.h-18:dino.h;
+    const bodyCol='#4ade80', darkCol='#16a34a';
+    ctx.fillStyle=bodyCol;
+    ctx.fillRect(x+4,y+(ducking?4:16),w-12,h-(ducking?8:18));
+    if (ducking) {
+      ctx.fillRect(x+w-20,y,18,14);
+      ctx.fillStyle='#0a0d14'; ctx.fillRect(x+w-8,y+4,3,3);
+      ctx.fillStyle=darkCol; ctx.fillRect(x+w-14,y+10,10,2);
+    } else {
+      ctx.fillRect(x+w-22,y,22,22);
+      ctx.fillRect(x+w-4,y+8,6,8);
+      ctx.fillStyle='#fff'; ctx.fillRect(x+w-10,y+4,4,4);
+      ctx.fillStyle='#0a0d14';
+      const blinking=dino.blink>230;
+      if (!blinking) ctx.fillRect(x+w-8,y+5,2,3);
+      else { ctx.fillStyle=darkCol; ctx.fillRect(x+w-10,y+6,4,1); }
+      ctx.fillStyle=darkCol;
+      ctx.fillRect(x+w-14,y+16,12,2);
+      ctx.fillRect(x+w-2,y+10,2,2);
+    }
+    ctx.fillStyle=bodyCol;
+    if (ducking) { ctx.fillRect(x-8,y+4,14,8); ctx.fillRect(x-14,y+6,8,5); }
+    else { ctx.fillRect(x-6,y+14,12,10); ctx.fillRect(x-12,y+16,8,6); }
+    ctx.fillStyle=darkCol;
+    if (!ducking) ctx.fillRect(x+w-14,y+22,6,4);
+    ctx.fillStyle=bodyCol;
+    if (dino.onGround) {
+      const phase=Math.sin(dino.legPhase);
+      const lift1=phase>0?4:0, lift2=phase>0?0:4;
+      if (ducking) { ctx.fillRect(x+8,y+h-6-lift1,6,6); ctx.fillRect(x+w-18,y+h-6-lift2,6,6); }
+      else { ctx.fillRect(x+10,y+h-10-lift1,8,12); ctx.fillRect(x+w-20,y+h-10-lift2,8,12); }
+    } else { ctx.fillRect(x+10,y+h-14,8,10); ctx.fillRect(x+w-20,y+h-14,8,10); }
+    ctx.fillStyle='rgba(0,0,0,0.15)';
+    ctx.fillRect(x+6,y+h-6,w-14,3);
+  }
+
+  function drawCactus(o) {
+    ctx.fillStyle='#5fae5a';
+    ctx.fillRect(o.x+o.w/2-5,o.y,10,o.h);
+    if (o.variant===0) { ctx.fillRect(o.x+o.w/2-5-8,o.y+10,8,4); ctx.fillRect(o.x+o.w/2-5-8,o.y+10,4,14); }
+    else if (o.variant===1) { ctx.fillRect(o.x+o.w/2+5,o.y+14,8,4); ctx.fillRect(o.x+o.w/2+5+4,o.y+14,4,16); ctx.fillRect(o.x+o.w/2-5-8,o.y+22,8,4); ctx.fillRect(o.x+o.w/2-5-8,o.y+22,4,12); }
+    else { ctx.fillRect(o.x+o.w/2-5-10,o.y+8,10,5); ctx.fillRect(o.x+o.w/2-5-10,o.y+8,5,18); ctx.fillRect(o.x+o.w/2+5,o.y+20,10,5); ctx.fillRect(o.x+o.w/2+5+5,o.y+20,5,18); }
+    ctx.fillStyle='#3a7a37';
+    for (let i=3; i<o.h-4; i+=5) { ctx.fillRect(o.x+o.w/2-4,o.y+i,2,2); ctx.fillRect(o.x+o.w/2+2,o.y+i+2,2,2); }
+    ctx.fillStyle='#7fc878'; ctx.fillRect(o.x+o.w/2-4,o.y+2,2,o.h-6);
+  }
+
+  function drawBird(o) {
+    const wing=Math.sin(o.wing)>0?1:-1;
+    ctx.fillStyle='#a3b3d4';
+    ctx.fillRect(o.x+10,o.y+10,22,8); ctx.fillRect(o.x+28,o.y+6,10,8);
+    ctx.fillStyle='#fbbf24'; ctx.fillRect(o.x+38,o.y+9,4,3);
+    ctx.fillStyle='#0a0d14'; ctx.fillRect(o.x+34,o.y+8,2,2);
+    ctx.fillStyle='#cdd6ea';
+    if (wing>0) { ctx.fillRect(o.x+12,o.y,16,6); ctx.fillRect(o.x+14,o.y-4,12,4); }
+    else { ctx.fillRect(o.x+12,o.y+16,16,6); ctx.fillRect(o.x+14,o.y+20,12,4); }
+    ctx.fillStyle='#a3b3d4'; ctx.fillRect(o.x+4,o.y+12,8,4);
+  }
+
+  function drawDust() {
+    for (const p of dust) {
+      const a=Math.max(0,p.life/24);
+      ctx.fillStyle=`rgba(160,170,190,${a.toFixed(3)})`;
+      ctx.fillRect(p.x|0,p.y|0,p.size,p.size);
+    }
+  }
+
+  function drawHUD() {
+    ctx.fillStyle='#e6e9ef'; ctx.font='bold 18px "Courier New", monospace'; ctx.textAlign='right';
+    const s=String(Math.floor(score)).padStart(5,'0');
+    ctx.fillText(`HI ${String(Math.floor(highScore)).padStart(5,'0')}   ${s}`,W-20,30);
+    ctx.textAlign='left';
+  }
+
+  function render() {
+    drawSky();
+    for (const c of clouds) drawCloud(c);
+    drawMountains();
+    drawGround();
+    drawDust();
+    for (const o of obstacles) { if (o.type==='cactus') drawCactus(o); else drawBird(o); }
+    drawDino();
+    drawHUD();
+  }
+
+  function loop() { update(); render(); requestAnimationFrame(loop); }
+  loop();
+
+  function showHeard(word) {
+    heardEl.textContent=word; heardEl.classList.add('show');
+    clearTimeout(showHeard._t);
+    showHeard._t=setTimeout(()=>heardEl.classList.remove('show'),900);
+  }
+  function setMic(live,label) {
+    if (live) micDot.classList.add('live'); else micDot.classList.remove('live');
+    micLabel.textContent=label;
+  }
+  function handleCommand(raw) {
+    const text=raw.toLowerCase().trim();
+    if (!text) return;
+    showHeard(text);
+    const has=(kw)=>text.includes(kw);
+    if (has('salta')||has('salto')||has('arriba')||has('brinca')||has('jump')||has('up')) {
+      if (state===STATE.RUNNING) jump(); else startGame();
+    } else if (has('agacha')||has('agachar')||has('abajo')||has('abaja')||has('duck')||has('down')) {
+      duckPulse();
+    } else if (has('juega')||has('empezar')||has('empieza')||has('reinicia')||has('comenzar')||has('start')||has('play')) {
+      if (state!==STATE.RUNNING) startGame();
+    }
+  }
+
+  let recognition=null, recognitionDesired=false;
+
+  function startRecognition() {
+    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+    if (!SR) {
+      errBox.innerHTML='<div class="err">Tu navegador no soporta Web Speech API. Usa Chrome o Edge para control por voz. Puedes usar el teclado: Espacio para saltar, Flecha abajo para agacharse.</div>';
+      setMic(false,'Voz no soportada'); return;
+    }
+    if (recognition) { try { recognition.abort(); } catch(e){} }
+    recognition=new SR();
+    recognition.lang='es-ES'; recognition.continuous=true; recognition.interimResults=true; recognition.maxAlternatives=3;
+    recognition.onstart=()=>setMic(true,'Escuchando');
+    recognition.onaudiostart=()=>setMic(true,'Escuchando');
+    recognition.onspeechstart=()=>setMic(true,'Detectando voz');
+    recognition.onspeechend=()=>setMic(true,'Escuchando');
+    recognition.onerror=(e)=>{
+      if (e.error==='not-allowed'||e.error==='service-not-allowed') {
+        setMic(false,'Permiso denegado');
+        errBox.innerHTML='<div class="err">Acceso al microfono denegado. Habilita el microfono en el navegador para jugar por voz.</div>';
+        recognitionDesired=false;
+      } else if (e.error==='no-speech'||e.error==='aborted') {
+        // ignore
+      } else { setMic(false,'Error: '+e.error); }
+    };
+    recognition.onend=()=>{
+      if (recognitionDesired) { try { recognition.start(); } catch(e){ setTimeout(()=>{try{recognition.start();}catch(er){}},250); } }
+      else setMic(false,'Microfono inactivo');
+    };
+    recognition.onresult=(event)=>{
+      for (let i=event.resultIndex; i<event.results.length; i++) {
+        const res=event.results[i];
+        let best='';
+        for (let a=0;a<res.length;a++){best=res[a].transcript;if(best)break;}
+        if (!best) continue;
+        const words=best.trim().toLowerCase().split(/\s+/);
+        const last=words[words.length-1]||'';
+        if (res.isFinal) {
+          handleCommand(best);
+        } else {
+          const quick=['salta','salto','arriba','brinca','agacha','abajo','agachar','juega','empezar','empieza','jump','up','duck','down','play','start'];
+          if (quick.includes(last)&&last!==handleCommand._lastInterim) {
+            handleCommand._lastInterim=last;
+            setTimeout(()=>{handleCommand._lastInterim=null;},400);
+            handleCommand(last);
+          }
+        }
+      }
+    };
+    recognitionDesired=true;
+    try { recognition.start(); } catch(e){}
+  }
+
+  btnStart.addEventListener('click',startRecognition,{once:true});
+  btnRestart.addEventListener('click',()=>{ if (!recognitionDesired) startRecognition(); });
+  document.addEventListener('keydown',function once(e){
+    if (e.code==='Space'||e.code==='ArrowUp'||e.code==='ArrowDown') {
+      if (!recognitionDesired) startRecognition();
+      document.removeEventListener('keydown',once);
+    }
+  });
+  document.addEventListener('visibilitychange',()=>{
+    if (document.hidden&&recognition){try{recognition.abort();}catch(e){}}
+    else if (!document.hidden&&recognitionDesired){try{recognition.start();}catch(e){}}
+  });
+
+})();
+</script>
+</body>
+</html>
