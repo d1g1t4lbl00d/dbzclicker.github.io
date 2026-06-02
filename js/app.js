@@ -366,7 +366,7 @@ async function fetchSearch(term) {
 
 function renderFeed(head, tracks, view) {
   const main = $('main');
-  main.innerHTML = `<div class="main-head"><div><h2>${esc(head.title)}</h2><div class="sub">${esc(head.sub)}</div></div></div><div id="feedList" class="feed-list"></div>`;
+  main.innerHTML = `<div class="main-head"><div><h2>${esc(head.title)}</h2><div class="sub">${esc(head.sub)}</div></div></div><div id="feedList" class="feed-list compact"></div>`;
   const list = $('feedList');
   if (!tracks.length) {
     let hint = 'No hay pistas todavía.';
@@ -407,7 +407,7 @@ function trackCard(t) {
         </div>
         ${waveHTML(t)}
         <div class="t-foot">
-          <span class="time"><svg style="width:12px;height:12px;vertical-align:-1px" fill="none" stroke="currentColor"><use href="#i-headphones"/></svg> ${t.plays||0} · ${fmtTime(t.duration)}</span>
+          <span class="time"><svg style="width:12px;height:12px;vertical-align:-1px" fill="none" stroke="currentColor"><use href="#i-headphones"/></svg> ${t.plays||0} · <svg style="width:12px;height:12px;vertical-align:-2px" fill="currentColor" stroke="none"><use href="#i-heart"/></svg> <span class="likecount">${t.likes_count||0}</span> · ${fmtTime(t.duration)}</span>
           <button class="act like ${liked?'on':''}" data-act="like"><svg><use href="#i-heart"/></svg><span class="ln">${liked?'Te gusta':'Me gusta'}</span></button>
           <button class="act" data-act="toggleComments"><svg><use href="#i-comment"/></svg><span class="cn">Comentar</span></button>
           <button class="act" data-act="download"><svg><use href="#i-download"/></svg>Descargar</button>
@@ -505,16 +505,20 @@ async function handleTrackClick(e, t, card) {
 /* ---- LIKES ---- */
 async function toggleLike(t, card) {
   const btn = card.querySelector('[data-act="like"]');
+  const cntEl = card.querySelector('.likecount');
   const liked = state.likes.has(t.id);
   if (liked) {
     state.likes.delete(t.id);
+    t.likes_count = Math.max(0, (t.likes_count || 0) - 1);
     btn.classList.remove('on'); btn.querySelector('.ln').textContent = 'Me gusta';
     await sb.from('likes').delete().eq('track_id', t.id).eq('user_id', state.user.id);
   } else {
     state.likes.add(t.id);
+    t.likes_count = (t.likes_count || 0) + 1;
     btn.classList.add('on'); btn.querySelector('.ln').textContent = 'Te gusta';
     await sb.from('likes').insert({ track_id: t.id, user_id: state.user.id });
   }
+  if (cntEl) cntEl.textContent = t.likes_count;
   updateCounts();
 }
 
@@ -1292,7 +1296,7 @@ async function openProfile(userId) {
 async function renderPeople() {
   setActiveNav('people');
   const main = $('main');
-  main.innerHTML = `<div class="main-head"><div><h2>People</h2><div class="sub">Descubre a otros creadores</div></div></div><div id="peopleList" class="loading"><div class="spinner"></div></div>`;
+  main.innerHTML = `<div class="main-head"><div><h2>Bro's</h2><div class="sub">Descubre a otros creadores</div></div></div><div id="peopleList" class="loading"><div class="spinner"></div></div>`;
   const { data } = await sb.from('profiles').select('*').order('created_at', { ascending: false }).limit(60);
   const list = $('peopleList'); list.className = 'feed-list';
   const people = (data||[]).filter(p => p.id !== state.user.id);
@@ -1802,7 +1806,7 @@ async function renderMessages() {
   list.appendChild(comm);
 
   if (convos.size === 0) {
-    list.appendChild(el(`<div class="empty"><svg fill="none"><use href="#i-mail"/></svg><p>Aún no tienes conversaciones privadas.<br>Pulsa <b>Mensaje</b> en alguien de <b>People</b> o en su perfil para empezar.</p></div>`));
+    list.appendChild(el(`<div class="empty"><svg fill="none"><use href="#i-mail"/></svg><p>Aún no tienes conversaciones privadas.<br>Pulsa <b>Mensaje</b> en alguien de <b>Bro's</b> o en su perfil para empezar.</p></div>`));
     return;
   }
   const ids = [...convos.keys()];
