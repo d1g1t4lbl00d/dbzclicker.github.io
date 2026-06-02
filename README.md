@@ -37,6 +37,15 @@ Tablas: `profiles`, `tracks`, `comments`, `likes`, `follows`, `messages` — tod
 (subida restringida a la carpeta del propio usuario). El chat usa Realtime sobre `messages`
 y "People Online" usa Presence.
 
+## 🛡️ Moderación
+
+Existe una **única cuenta de administrador** (`profiles.is_admin = true`). El admin puede:
+borrar cualquier pista, comentario o mensaje del chat, y **banear / desbanear** usuarios
+(un usuario baneado no puede subir música, comentar ni chatear). La escalada de privilegios
+está bloqueada por un trigger (`protect_profile_privileges`): ningún usuario puede asignarse
+`is_admin` ni cambiar su estado de baneo; solo un admin puede hacerlo, mediante políticas RLS
+de override. El cambio de contraseña está disponible en **Settings**.
+
 ## 🚀 Desarrollo local
 
 Es un sitio estático, así que basta con servir la carpeta:
