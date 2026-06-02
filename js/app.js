@@ -78,12 +78,15 @@ function setAuthMode(mode) {
   $('tabLogin').classList.toggle('active', mode==='login');
   $('tabRegister').classList.toggle('active', mode==='register');
   $('fieldUsername').style.display = mode==='register' ? '' : 'none';
+  $('fieldTerms').style.display = mode==='register' ? '' : 'none';
   $('authSubmit').textContent = mode==='register' ? 'Crear cuenta' : 'Entrar';
   $('authPassword').autocomplete = mode==='register' ? 'new-password' : 'current-password';
   $('authMsg').textContent = '';
 }
 $('tabLogin').onclick = () => setAuthMode('login');
 $('tabRegister').onclick = () => setAuthMode('register');
+$('authPolicyLink').onclick = (e) => { e.preventDefault(); showPrivacyPolicy(); };
+$('authPolicyFooter').onclick = (e) => { e.preventDefault(); showPrivacyPolicy(); };
 
 $('authForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -97,6 +100,7 @@ $('authForm').addEventListener('submit', async (e) => {
   try {
     if (authMode === 'register') {
       if (username.length < 3) throw new Error('El nombre de usuario debe tener al menos 3 caracteres.');
+      if (!$('authTerms').checked) throw new Error('Debes aceptar la Política de privacidad para registrarte.');
       const { data, error } = await sb.auth.signUp({
         email, password,
         options: { data: { username, display_name: username }, emailRedirectTo: window.location.origin },
@@ -1037,6 +1041,7 @@ async function openProfile(userId) {
                 : `<button class="btn ${followsHim?'':'primary'}" id="followBtn">${followsHim?'Siguiendo ✓':'+ Seguir'}</button>`}
         ${!isMe ? `<button class="btn" id="msgBtn"><svg fill="none" stroke="currentColor"><use href="#i-mail"/></svg> Mensaje</button>` : ''}
         ${(!isMe && state.profile.is_admin && !prof.is_admin) ? `<button class="btn" id="banBtn" style="border-color:#e3b7b0;color:#c0533f">${prof.banned?'Desbanear':'Banear usuario'}</button>` : ''}
+        ${(!isMe && state.profile.is_admin && !prof.is_admin) ? `<button class="btn danger-btn" id="delUserBtn"><svg fill="none" stroke="#fff"><use href="#i-trash"/></svg> Eliminar usuario</button>` : ''}
       </div>
     </div>
     <div class="main-head"><h2>Pistas</h2></div>
@@ -1049,6 +1054,8 @@ async function openProfile(userId) {
   if (isMe) $('editProfBtn').onclick = () => switchView('settings');
   const msgBtn = $('msgBtn');
   if (msgBtn) msgBtn.onclick = () => openDM(userId);
+  const delUserBtn = $('delUserBtn');
+  if (delUserBtn) delUserBtn.onclick = () => adminDeleteUser(userId, prof.username, () => switchView('people'));
   const banBtn = $('banBtn');
   if (banBtn) banBtn.onclick = async () => {
     const newVal = !prof.banned;
@@ -1101,11 +1108,14 @@ async function renderPeople() {
           <button class="btn sm" data-act="msg"><svg style="width:15px;height:15px" fill="none" stroke="currentColor"><use href="#i-mail"/></svg> Mensaje</button>
           <button class="btn sm icon-only" data-act="view" title="Ver perfil"><svg style="width:16px;height:16px" fill="none" stroke="currentColor"><use href="#i-people"/></svg></button>
           ${state.profile.is_admin && !p.is_admin ? `<button class="btn sm icon-only" data-act="ban" title="${p.banned?'Desbanear':'Banear'}" style="border-color:#e3b7b0;color:#c0533f">${p.banned?'↺':'⊘'}</button>` : ''}
+          ${state.profile.is_admin && !p.is_admin ? `<button class="btn sm icon-only" data-act="del" title="Eliminar usuario" style="border-color:#e3b7b0;color:#c0533f"><svg style="width:15px;height:15px" fill="none" stroke="currentColor"><use href="#i-trash"/></svg></button>` : ''}
         </div>
       </div>`);
     const followBtn = row.querySelector('[data-act="follow"]');
     row.querySelector('[data-act="view"]').onclick = () => openProfile(p.id);
     row.querySelector('[data-act="msg"]').onclick = () => openDM(p.id);
+    const delBtn = row.querySelector('[data-act="del"]');
+    if (delBtn) delBtn.onclick = () => adminDeleteUser(p.id, p.username, () => row.remove());
     const banBtn = row.querySelector('[data-act="ban"]');
     if (banBtn) banBtn.onclick = async () => {
       const newVal = !p.banned;
@@ -1133,6 +1143,19 @@ async function renderPeople() {
 /* =======================================================================
    SETTINGS
    ======================================================================= */
+async function adminDeleteUser(userId, username, onDone) {
+  if (!state.profile.is_admin) return;
+  if (!confirm(`¿ELIMINAR por completo a @${username}?\n\nSe borrarán su cuenta, sus pistas y TODOS sus datos. No se puede deshacer.`)) return;
+  toast('Eliminando usuario…');
+  try {
+    const { data, error } = await sb.functions.invoke('admin-delete-user', { body: { user_id: userId } });
+    if (error) throw error;
+    if (data && data.error) throw new Error(data.error);
+    toast('Usuario @' + username + ' eliminado');
+    if (onDone) onDone();
+  } catch (err) { toast('No se pudo eliminar: ' + (err.message || err)); }
+}
+
 async function deleteAccount() {
   const msg = $('delMsg'); msg.className = 'auth-msg';
   const typed = prompt('Esta acción es PERMANENTE: borrará tu cuenta y TODOS tus archivos y datos.\n\nEscribe BORRAR para confirmar:');
