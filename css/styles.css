@@ -532,6 +532,26 @@ img { display: block; }
 .person-actions .btn { flex: 1; min-width: 84px; }
 .person-actions .btn.icon-only { flex: 0 0 auto; min-width: 0; width: 40px; padding: 0; }
 
+.dm-bubble.me { touch-action: pan-y; }
+.dm-bubble.me.swiping { transition: none; }
+.dm-edited { font-size: 9px; opacity: .6; margin-left: 4px; }
+
+/* hoja de acciones (deslizar mensaje) */
+.modal-backdrop.sheet { place-items: end center; padding: 0; }
+.action-sheet { width: min(440px, 100%); background: var(--panel); border-radius: var(--r-xl) var(--r-xl) 0 0; padding: 10px 10px calc(10px + env(safe-area-inset-bottom,0px)); box-shadow: var(--sh-3); animation: fadeUp .25s var(--ease); }
+.as-item { display: flex; align-items: center; gap: 13px; width: 100%; border: none; background: transparent; padding: 15px 16px; border-radius: 12px; font-size: 15px; font-weight: 650; color: var(--ink); text-align: left; }
+.as-item svg { width: 20px; height: 20px; stroke: var(--ink-2); }
+.as-item:hover { background: var(--panel-2); }
+.as-item.danger { color: var(--danger); } .as-item.danger svg { stroke: var(--danger); }
+.as-item.cancel { justify-content: center; color: var(--ink-soft); margin-top: 4px; border-top: 1px solid var(--line-soft); border-radius: 0; }
+
+/* secciones de chats */
+.convo-section { font-size: 11px; text-transform: uppercase; letter-spacing: 1.1px; color: var(--ink-faint); font-weight: 700; margin: 16px 4px 9px; display: flex; align-items: center; gap: 8px; }
+.convo-section .dot-online { width: 8px; height: 8px; }
+.convo-community { border: 1px solid #cfe0ef; background: linear-gradient(180deg,#ffffff,#eef5fc); }
+.convo-community .avatar { background: var(--aqua-grad); }
+.convo .conv-dot { width: 10px; height: 10px; border-radius: 50%; background: #54c98a; box-shadow: 0 0 0 2px #fff, 0 0 0 4px rgba(84,201,138,.3); flex-shrink: 0; }
+
 /* lista de conversaciones (bandeja) */
 .convo { display: flex; align-items: center; gap: 13px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; margin-bottom: 10px; box-shadow: var(--sh-1); cursor: pointer; transition: transform .15s var(--ease), box-shadow .2s; }
 .convo:hover { transform: translateY(-1px); box-shadow: var(--sh-2); }

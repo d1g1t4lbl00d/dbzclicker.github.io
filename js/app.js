@@ -238,13 +238,13 @@ function bindUI() {
   document.querySelectorAll('#bottomNav button[data-bnav]').forEach(b => {
     b.onclick = () => {
       const act = b.dataset.bnav;
-      document.querySelectorAll('#bottomNav button').forEach(x => x.classList.toggle('active', x === b && act !== 'upload' && act !== 'chat'));
+      document.querySelectorAll('#bottomNav button').forEach(x => x.classList.toggle('active', x === b && act !== 'upload'));
       if (act === 'feed') { state.tab = 'trending'; switchView('feed'); $('main').scrollTo({top:0,behavior:'smooth'}); }
       else if (act === 'people') switchView('people');
       else if (act === 'me') openProfile(state.user.id);
       else if (act === 'upload') openUploadModal();
-      else if (act === 'chat') toggleRight();
-      if (act !== 'chat') hideDrawers();
+      else if (act === 'chat') switchView('messages');
+      if (act !== 'upload') hideDrawers();
     };
   });
 
@@ -1136,6 +1136,14 @@ async function initDM() {
         if (state.view === 'messages') renderMessages();
       }
     })
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'direct_messages', filter: `recipient_id=eq.${state.user.id}` }, (payload) => {
+      const n = document.querySelector(`.dm-bubble[data-mid="${payload.new.id}"]`);
+      if (n) n.replaceWith(makeBubble(payload.new));
+    })
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'direct_messages', filter: `recipient_id=eq.${state.user.id}` }, (payload) => {
+      const n = document.querySelector(`.dm-bubble[data-mid="${payload.old.id}"]`);
+      if (n) n.remove();
+    })
     .subscribe();
 }
 function bubbleHTML(msg) {
@@ -1149,13 +1157,83 @@ function bubbleHTML(msg) {
   const time = new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   return `<div class="dm-bubble ${mine ? 'me' : 'them'} ${media ? 'has-media' : ''}">${media}${cap}<span class="t">${time}</span></div>`;
 }
+function makeBubble(msg) {
+  const node = el(bubbleHTML(msg));
+  node.dataset.mid = msg.id;
+  const img = node.querySelector('.dm-img'); if (img) img.onclick = () => openImageViewer(img.dataset.full);
+  if (msg.sender_id === state.user.id) attachSwipe(node, msg);
+  return node;
+}
 function dmAppendBubble(msg) {
   const thread = $('dmThread');
   const empty = thread.querySelector('.dm-empty'); if (empty) empty.remove();
-  const node = el(bubbleHTML(msg));
-  const img = node.querySelector('.dm-img'); if (img) img.onclick = () => openImageViewer(img.dataset.full);
-  thread.appendChild(node);
+  thread.appendChild(makeBubble(msg));
   thread.scrollTop = thread.scrollHeight;
+}
+// Deslizar un mensaje propio (hacia la izquierda) para editar / eliminar
+function attachSwipe(node, msg) {
+  let startX = 0, startY = 0, dx = 0, dragging = false, swiped = false;
+  node.addEventListener('pointerdown', (e) => {
+    startX = e.clientX; startY = e.clientY; dragging = true; dx = 0; swiped = false; node.classList.add('swiping');
+  });
+  node.addEventListener('pointermove', (e) => {
+    if (!dragging) return;
+    const ddx = e.clientX - startX, ddy = e.clientY - startY;
+    if (Math.abs(ddy) > Math.abs(ddx)) return; // gesto vertical = scroll
+    dx = Math.max(-130, Math.min(0, ddx));
+    if (dx < -8) swiped = true;
+    node.style.transform = `translateX(${dx}px)`;
+  });
+  const end = () => {
+    if (!dragging) return;
+    dragging = false; node.classList.remove('swiping');
+    node.style.transform = '';
+    if (dx < -55) openMsgActions(msg, node);
+    dx = 0;
+  };
+  node.addEventListener('pointerup', end);
+  node.addEventListener('pointercancel', end);
+  node.addEventListener('pointerleave', end);
+  // si hubo deslizamiento, anula el click (no abrir imagen/archivo)
+  node.addEventListener('click', (e) => { if (swiped) { e.preventDefault(); e.stopPropagation(); swiped = false; } }, true);
+}
+function openMsgActions(msg, node) {
+  const sheet = el(`<div class="modal-backdrop sheet"><div class="action-sheet">
+    <button class="as-item" data-a="edit"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg> Editar mensaje</button>
+    <button class="as-item danger" data-a="del"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg> Eliminar mensaje</button>
+    <button class="as-item cancel" data-a="cancel">Cancelar</button>
+  </div></div>`);
+  const close = () => sheet.remove();
+  sheet.addEventListener('click', (e) => { if (e.target === sheet) close(); });
+  sheet.querySelector('[data-a="cancel"]').onclick = close;
+  sheet.querySelector('[data-a="edit"]').onclick = () => { close(); editMessage(msg, node); };
+  sheet.querySelector('[data-a="del"]').onclick = () => { close(); deleteMessage(msg, node); };
+  $('modalRoot').appendChild(sheet);
+}
+function editMessage(msg, node) {
+  const m = openModal(`
+    <div class="modal-head"><h3>Editar mensaje</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <div class="field"><textarea id="edBody" maxlength="1000">${esc(msg.body)}</textarea></div>
+      <button class="btn primary" id="edSave">Guardar cambios</button>
+    </div>`);
+  setTimeout(() => m.querySelector('#edBody')?.focus(), 60);
+  m.querySelector('#edSave').onclick = async () => {
+    const nb = m.querySelector('#edBody').value.trim();
+    if (!nb && !msg.attachment_url) { toast('El mensaje no puede quedar vacío'); return; }
+    const { error } = await sb.from('direct_messages').update({ body: nb }).eq('id', msg.id);
+    if (error) { toast('No se pudo editar'); return; }
+    msg.body = nb;
+    node.replaceWith(makeBubble(msg));
+    m.remove();
+    toast('Mensaje editado');
+  };
+}
+async function deleteMessage(msg, node) {
+  if (!confirm('¿Eliminar este mensaje?')) return;
+  const { error } = await sb.from('direct_messages').delete().eq('id', msg.id);
+  if (error) { toast('No se pudo eliminar'); return; }
+  node.remove();
 }
 function openImageViewer(url) {
   const v = el(`<div class="img-viewer"><img src="${esc(url)}" alt="" /></div>`);
@@ -1227,9 +1305,30 @@ function markDmRead(other) {
     .then(() => refreshDmBadge());
 }
 
+function openCommunityChat() {
+  const r = rightEl();
+  if (!r.classList.contains('open')) toggleRight();
+}
+function convoRow(c, p) {
+  const mine = c.last.sender_id === state.user.id;
+  const online = state.online.some(u => u.id === c.other);
+  let snip = c.last.body;
+  if (c.last.attachment_url) snip = (c.last.attachment_type === 'image' ? '📷 Foto' : '📎 Archivo') + (c.last.body ? ' · ' + c.last.body : '');
+  const row = el(`
+    <div class="convo" data-uid="${c.other}">
+      ${avatarHTML(p)}
+      <div class="c-main">
+        <div class="c-top"><span class="c-name">${esc(p.display_name || p.username || 'usuario')}</span><span class="c-when">${timeAgo(c.last.created_at)}</span></div>
+        <div class="c-snippet ${c.unread ? 'unread' : ''}">${mine ? 'Tú: ' : ''}${esc(snip || '')}</div>
+      </div>
+      ${c.unread ? '<span class="c-unread"></span>' : (online ? '<span class="conv-dot" title="En línea"></span>' : '')}
+    </div>`);
+  row.onclick = () => openDM(c.other);
+  return row;
+}
 async function renderMessages() {
   setActiveNav('messages');
-  $('main').innerHTML = `<div class="main-head"><div><h2>Mensajes</h2><div class="sub">Tus conversaciones privadas</div></div></div><div id="convoList" class="loading"><div class="spinner"></div></div>`;
+  $('main').innerHTML = `<div class="main-head"><div><h2>Chats</h2><div class="sub">Tus conversaciones</div></div></div><div id="convoList" class="loading"><div class="spinner"></div></div>`;
   const { data } = await sb.from('direct_messages').select('*')
     .or(`sender_id.eq.${state.user.id},recipient_id.eq.${state.user.id}`)
     .order('created_at', { ascending: false }).limit(400);
@@ -1240,31 +1339,38 @@ async function renderMessages() {
     if (mm.recipient_id === state.user.id && !mm.read) convos.get(other).unread++;
   });
   const list = $('convoList'); list.className = '';
+  list.innerHTML = '';
+
+  // Chat general (comunidad) fijado arriba
+  const comm = el(`
+    <div class="convo convo-community">
+      <div class="avatar"><svg width="22" height="22" fill="none" stroke="#fff"><use href="#i-comment"/></svg></div>
+      <div class="c-main"><div class="c-top"><span class="c-name">Chat general</span></div>
+      <div class="c-snippet">Conversación de toda la comunidad</div></div>
+    </div>`);
+  comm.onclick = openCommunityChat;
+  list.appendChild(comm);
+
   if (convos.size === 0) {
-    list.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-mail"/></svg><p>No tienes conversaciones todavía.<br>Abre el perfil de alguien (o People) y pulsa <b>Mensaje</b> para empezar.</p></div>`;
+    list.appendChild(el(`<div class="empty"><svg fill="none"><use href="#i-mail"/></svg><p>Aún no tienes conversaciones privadas.<br>Pulsa <b>Mensaje</b> en alguien de <b>People</b> o en su perfil para empezar.</p></div>`));
     return;
   }
   const ids = [...convos.keys()];
   const { data: profs } = await sb.from('profiles').select('*').in('id', ids);
   const byId = Object.fromEntries((profs || []).map(p => [p.id, p]));
-  list.innerHTML = '';
-  [...convos.values()].forEach(c => {
-    const p = byId[c.other] || {};
-    const mine = c.last.sender_id === state.user.id;
-    let snip = c.last.body;
-    if (c.last.attachment_url) snip = (c.last.attachment_type === 'image' ? '📷 Foto' : '📎 Archivo') + (c.last.body ? ' · ' + c.last.body : '');
-    const row = el(`
-      <div class="convo" data-uid="${c.other}">
-        ${avatarHTML(p)}
-        <div class="c-main">
-          <div class="c-top"><span class="c-name">${esc(p.display_name || p.username || 'usuario')}</span><span class="c-when">${timeAgo(c.last.created_at)}</span></div>
-          <div class="c-snippet ${c.unread ? 'unread' : ''}">${mine ? 'Tú: ' : ''}${esc(snip)}</div>
-        </div>
-        ${c.unread ? '<span class="c-unread"></span>' : ''}
-      </div>`);
-    row.onclick = () => openDM(c.other);
-    list.appendChild(row);
-  });
+  const onlineIds = new Set(state.online.map(u => u.id));
+  const all = [...convos.values()];
+  const online = all.filter(c => onlineIds.has(c.other));
+  const offline = all.filter(c => !onlineIds.has(c.other));
+
+  if (online.length) {
+    list.appendChild(el(`<div class="convo-section"><span class="dot-online"></span> En línea (${online.length})</div>`));
+    online.forEach(c => list.appendChild(convoRow(c, byId[c.other] || {})));
+  }
+  if (offline.length) {
+    list.appendChild(el(`<div class="convo-section">Desconectados (${offline.length})</div>`));
+    offline.forEach(c => list.appendChild(convoRow(c, byId[c.other] || {})));
+  }
 }
 
 async function openDM(other) {
