@@ -422,10 +422,11 @@ img { display: block; }
 /* ===================================================================== NOW PLAYING */
 .now-playing {
   position: fixed; inset: 0; z-index: 75; display: flex; flex-direction: column;
-  transform: translateY(100%); transition: transform .34s var(--ease);
+  transform: translateY(100%); transition: transform .34s var(--ease), visibility .34s;
   background: linear-gradient(180deg, #f3f6fb 0%, var(--bg) 60%, var(--bg-2) 100%);
+  visibility: hidden; pointer-events: none;   /* cerrado: no intercepta toques */
 }
-.now-playing.open { transform: none; }
+.now-playing.open { transform: none; visibility: visible; pointer-events: auto; }
 .np-bg { position: absolute; inset: 0; background-size: cover; background-position: center; filter: blur(60px) saturate(1.3); opacity: .55; transform: scale(1.3); transition: background-image .3s; }
 .np-bg::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(255,255,255,.35), rgba(238,241,246,.85)); }
 .np-inner {
