@@ -381,8 +381,10 @@ function renderFeed(head, tracks, view) {
    ======================================================================= */
 function trackCard(t) {
   const liked = state.likes.has(t.id);
-  const bars = waveBars(t.id);
   const prof = t.profiles || {};
+  const collabs = Array.isArray(t.collaborators) ? t.collaborators : [];
+  const ft = collabs.length ? ` ft. ${collabs.map(c => `<a data-collab="${c.id}">${esc(c.display_name || c.username)}</a>`).join(', ')}` : '';
+  const mine = t.user_id === state.user.id;
   const card = el(`
     <div class="track" data-id="${t.id}">
       <div class="cover" data-act="play">
@@ -393,26 +395,85 @@ function trackCard(t) {
         <div class="t-head">
           <div>
             <div class="t-title">${esc(t.title)}</div>
-            <div class="t-artist">por <a data-act="profile">${esc(prof.display_name || prof.username || t.artist || 'anónimo')}</a></div>
+            <div class="t-artist">por <a data-act="profile">${esc(prof.display_name || prof.username || t.artist || 'anónimo')}</a>${ft}</div>
           </div>
           ${t.genre ? `<span class="t-genre">${esc(t.genre)}</span>` : ''}
         </div>
-        <div class="wave" data-act="seekwave">
-          ${bars.map((h,i)=>`<div class="bar" data-i="${i}" style="--h:${h}%;--d:${((i*37)%23)*0.045}s"></div>`).join('')}
-        </div>
+        ${waveHTML(t)}
         <div class="t-foot">
           <span class="time"><svg style="width:12px;height:12px;vertical-align:-1px" fill="none" stroke="currentColor"><use href="#i-headphones"/></svg> ${t.plays||0} · ${fmtTime(t.duration)}</span>
           <button class="act like ${liked?'on':''}" data-act="like"><svg><use href="#i-heart"/></svg><span class="ln">${liked?'Te gusta':'Me gusta'}</span></button>
           <button class="act" data-act="toggleComments"><svg><use href="#i-comment"/></svg><span class="cn">Comentar</span></button>
           <button class="act" data-act="download"><svg><use href="#i-download"/></svg>Descargar</button>
-          ${(t.user_id === state.user.id || state.profile.is_admin) ? `<button class="act danger" data-act="delete"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg>${t.user_id === state.user.id ? 'Borrar' : 'Borrar (mod)'}</button>` : ''}
+          ${mine ? `<button class="act" data-act="edit"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg>Editar</button>` : ''}
+          ${(mine || state.profile.is_admin) ? `<button class="act danger" data-act="delete"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg>${mine ? 'Borrar' : 'Borrar (mod)'}</button>` : ''}
         </div>
         <div class="comments hidden" data-comments></div>
       </div>
     </div>`);
 
+  card.querySelectorAll('[data-collab]').forEach(a => a.onclick = (e) => { e.stopPropagation(); openProfile(a.dataset.collab); });
   card.addEventListener('click', (e) => handleTrackClick(e, t, card));
   return card;
+}
+
+function openEditTrack(t, card) {
+  const m = openModal(`
+    <div class="modal-head"><h3>Editar pista</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Portada</label>
+        <div class="cover-pick" id="dzCover">
+          <div class="cover-prev" id="coverPrev">${t.cover_url ? `<img src="${esc(t.cover_url)}" alt="" />` : `<svg width="24" height="24" fill="none" stroke="currentColor"><use href="#i-image"/></svg>`}</div>
+          <div class="cover-pick-txt"><b id="coverName">Cambiar portada</b><span>Imagen cuadrada · JPG, PNG o WebP</span></div>
+        </div>
+        <input type="file" id="fCover" accept="image/*" hidden />
+      </div>
+      <div class="field"><label>Título</label><input type="text" id="eTitle" value="${esc(t.title)}" /></div>
+      <div class="field"><label>Género</label><input type="text" id="eGenre" value="${esc(t.genre || '')}" /></div>
+      <div class="field">
+        <label>Colaboradores (ft.)</label>
+        <div class="collab-chips" id="collabChips"></div>
+        <div class="collab-add"><input type="text" id="collabInput" placeholder="usuario (sin @)" autocomplete="off" /><button type="button" class="btn sm" id="collabAdd">Añadir</button></div>
+      </div>
+      <button class="btn primary" id="eSave">Guardar cambios</button>
+      <div class="auth-msg" id="eMsg"></div>
+    </div>`);
+  let coverFile = null;
+  const fC = m.querySelector('#fCover');
+  m.querySelector('#dzCover').onclick = () => fC.click();
+  const setCover = (f) => { if (!f || !f.type.startsWith('image')) { toast('Selecciona una imagen'); return; } coverFile = f; m.querySelector('#coverName').textContent = f.name; m.querySelector('#coverPrev').innerHTML = `<img src="${URL.createObjectURL(f)}" alt="" />`; };
+  fC.onchange = () => { if (fC.files[0]) setCover(fC.files[0]); };
+  const collab = mountCollab(m, t.collaborators || []);
+  m.querySelector('#eSave').onclick = async () => {
+    const title = m.querySelector('#eTitle').value.trim();
+    const genre = m.querySelector('#eGenre').value.trim();
+    const eMsg = m.querySelector('#eMsg'); eMsg.className = 'auth-msg';
+    if (!title) { eMsg.className = 'auth-msg error'; eMsg.textContent = 'El título no puede estar vacío.'; return; }
+    const btn = m.querySelector('#eSave'); btn.disabled = true;
+    try {
+      let cover_url = t.cover_url;
+      if (coverFile) {
+        const cext = (coverFile.name.split('.').pop() || 'jpg').toLowerCase();
+        const path = `${state.user.id}/${Date.now()}.${cext}`;
+        const cu = await sb.storage.from('covers').upload(path, coverFile, { contentType: coverFile.type });
+        if (cu.error) throw cu.error;
+        cover_url = sb.storage.from('covers').getPublicUrl(path).data.publicUrl;
+      }
+      const { data, error } = await sb.from('tracks').update({ title, genre: genre || null, cover_url, collaborators: collab.get() })
+        .eq('id', t.id).select('*, profiles!tracks_user_id_fkey(*)').single();
+      if (error) throw error;
+      Object.assign(t, data);
+      if (card) card.replaceWith(trackCard(t));
+      m.remove(); toast('Pista actualizada ✓');
+    } catch (err) { eMsg.className = 'auth-msg error'; eMsg.textContent = 'Error: ' + (err.message || err); btn.disabled = false; }
+  };
+}
+
+// dibuja el waveform real (si existe) o uno de respaldo
+function waveHTML(t) {
+  const peaks = Array.isArray(t.waveform) && t.waveform.length ? t.waveform : waveBars(t.id, 80);
+  const bars = peaks.map((h, i) => `<div class="bar" data-i="${i}" style="--h:${h}%;--d:${((i * 37) % 23) * 0.045}s"></div>`).join('');
+  return `<div class="wave" data-act="seekwave">${bars}</div>`;
 }
 
 async function handleTrackClick(e, t, card) {
@@ -423,6 +484,7 @@ async function handleTrackClick(e, t, card) {
   else if (act === 'like') toggleLike(t, card);
   else if (act === 'download') downloadTrack(t);
   else if (act === 'delete') deleteTrack(t, card);
+  else if (act === 'edit') openEditTrack(t, card);
   else if (act === 'toggleComments') toggleComments(t, card);
   else if (act === 'seekwave') {
     const wave = e.target.closest('.wave');
@@ -502,13 +564,16 @@ function renderComments(box, t, comments) {
     const canDel = c.user_id === state.user.id || state.profile.is_admin;
     return `
     <div class="comment" data-cid="${c.id}">
-      ${avatarHTML(c.profiles)}
-      <div class="c-body" style="flex:1"><b>${esc(c.profiles?.display_name || c.profiles?.username || 'anónimo')}</b>
-      <span class="c-time">${timeAgo(c.created_at)}</span>
-      ${canDel ? `<button class="act sm" data-del-comment="${c.id}" title="Borrar comentario" style="float:right;padding:2px 6px">✕</button>` : ''}
-      <p>${esc(c.body)}</p></div>
+      <span class="c-av" data-uid="${c.user_id}">${avatarHTML(c.profiles)}</span>
+      <div class="c-body">
+        <div class="c-line"><b class="c-name" data-uid="${c.user_id}">${esc(c.profiles?.display_name || c.profiles?.username || 'anónimo')}</b>
+        <span class="c-time">${timeAgo(c.created_at)}</span>
+        ${canDel ? `<button class="c-del" data-del-comment="${c.id}" title="Borrar comentario">✕</button>` : ''}</div>
+        <p>${esc(c.body)}</p>
+      </div>
     </div>`;
-  }).join('') || '<p style="color:var(--ink-soft);font-size:12.5px;margin-bottom:6px">Sé el primero en comentar.</p>';
+  }).join('') || '<p class="c-hint">Sé el primero en comentar.</p>';
+  box.querySelectorAll('[data-uid]').forEach(elm => elm.onclick = (e) => { e.stopPropagation(); openProfile(elm.dataset.uid); });
   box.querySelectorAll('[data-del-comment]').forEach(btn => {
     btn.onclick = async () => {
       const id = btn.getAttribute('data-del-comment');
@@ -517,7 +582,7 @@ function renderComments(box, t, comments) {
       renderComments(box, t, comments.filter(x => x.id !== id));
     };
   });
-  const form = el(`<form class="comment-form"><input type="text" placeholder="Añade un comentario..." maxlength="400" required /><button class="btn sm primary" type="submit">Enviar</button></form>`);
+  const form = el(`<form class="comment-form"><input type="text" placeholder="Añade un comentario..." maxlength="400" required /><button class="comment-send" type="submit" aria-label="Enviar"><svg fill="none" stroke="#fff"><use href="#i-send"/></svg></button></form>`);
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!requireNotBanned()) return;
@@ -649,7 +714,8 @@ function syncNowPlaying() {
   $('npArtist').textContent = t.profiles?.display_name || t.profiles?.username || t.artist || '';
   $('npCover').innerHTML = t.cover_url ? `<img src="${esc(t.cover_url)}" alt="" />` : `<svg fill="none" stroke="#fff"><use href="#i-music"/></svg>`;
   $('npBg').style.backgroundImage = t.cover_url ? `url("${esc(t.cover_url)}")` : 'none';
-  $('npWave').innerHTML = waveBars(t.id, 80).map(h => `<div class="bar" style="--h:${h}%"></div>`).join('');
+  const npPeaks = Array.isArray(t.waveform) && t.waveform.length ? t.waveform : waveBars(t.id, 80);
+  $('npWave').innerHTML = npPeaks.map(h => `<div class="bar" style="--h:${h}%"></div>`).join('');
   $('npCur').textContent = fmtTime(audio.currentTime);
   $('npDur').textContent = fmtTime(audio.duration || t.duration);
   setNpPlayIcon(!audio.paused);
@@ -738,6 +804,56 @@ async function compressAudioToMp3(file, kbps = 192, onProgress) {
   return new File(mp3Data, name, { type: 'audio/mpeg' });
 }
 
+// Calcula el waveform REAL de la canción (picos RMS) para dibujarlo fielmente
+async function computeWaveformPeaks(file, n = 80) {
+  try {
+    const buf = await file.arrayBuffer();
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AudioCtx();
+    const audio = await ctx.decodeAudioData(buf);
+    const ch = audio.getChannelData(0);
+    const block = Math.floor(ch.length / n) || 1;
+    const step = Math.max(1, Math.floor(block / 220));
+    const peaks = [];
+    for (let i = 0; i < n; i++) {
+      let sum = 0, cnt = 0;
+      const start = i * block;
+      for (let j = 0; j < block; j += step) { const v = ch[start + j] || 0; sum += v * v; cnt++; }
+      peaks.push(Math.sqrt(sum / (cnt || 1)));
+    }
+    try { ctx.close(); } catch {}
+    const max = Math.max(...peaks) || 1;
+    // normaliza a 10..100 con una pizca de realce perceptual
+    return peaks.map(p => Math.round(10 + Math.pow(p / max, 0.85) * 90));
+  } catch { return null; }
+}
+
+// Selector de colaboradores reutilizable (subida y edición)
+function mountCollab(scope, initial = []) {
+  const chips = scope.querySelector('#collabChips');
+  const input = scope.querySelector('#collabInput');
+  const addBtn = scope.querySelector('#collabAdd');
+  let list = (initial || []).slice();
+  const render = () => {
+    chips.innerHTML = list.map((c, i) => `<span class="chip">@${esc(c.username)}<button type="button" data-i="${i}" aria-label="quitar">&times;</button></span>`).join('');
+    chips.querySelectorAll('button[data-i]').forEach(b => b.onclick = () => { list.splice(+b.dataset.i, 1); render(); });
+  };
+  const add = async () => {
+    const u = input.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+    if (!u) return;
+    if (u === state.profile.username) { toast('Tú ya apareces como autor'); input.value = ''; return; }
+    if (list.some(c => c.username === u)) { input.value = ''; return; }
+    const { data } = await sb.from('profiles').select('id,username,display_name').eq('username', u).maybeSingle();
+    if (!data) { toast('No existe el usuario @' + u); return; }
+    list.push({ id: data.id, username: data.username, display_name: data.display_name });
+    input.value = ''; render();
+  };
+  addBtn.onclick = add;
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+  render();
+  return { get: () => list };
+}
+
 function openUploadModal() {
   if (!requireNotBanned()) return;
   const m = openModal(`
@@ -751,7 +867,6 @@ function openUploadModal() {
           <div class="fname" id="audioName"></div>
         </div>
         <input type="file" id="fAudio" accept="audio/*" hidden />
-        <div class="sub" style="margin-top:6px;font-size:11.5px">Los archivos grandes (p. ej. WAV) se comprimen a MP3 automáticamente.</div>
       </div>
       <div class="field">
         <label>Portada (opcional)</label>
@@ -763,6 +878,11 @@ function openUploadModal() {
       </div>
       <div class="field"><label>Título</label><input type="text" id="uTitle" placeholder="Nombre de la pista" /></div>
       <div class="field"><label>Género</label><input type="text" id="uGenre" placeholder="Hip-Hop, House, Lo-Fi…" /></div>
+      <div class="field">
+        <label>Colaboradores (ft.)</label>
+        <div class="collab-chips" id="collabChips"></div>
+        <div class="collab-add"><input type="text" id="collabInput" placeholder="usuario (sin @)" autocomplete="off" /><button type="button" class="btn sm" id="collabAdd">Añadir</button></div>
+      </div>
       <div class="progress-bar hidden" id="upBar"><div></div></div>
       <button class="btn primary" id="uSubmit"><svg stroke="#fff"><use href="#i-upload"/></svg> Publicar pista</button>
       <div class="auth-msg" id="uMsg"></div>
@@ -800,6 +920,8 @@ function openUploadModal() {
     const tmp = new Audio(URL.createObjectURL(f));
     tmp.addEventListener('loadedmetadata', () => { duration = tmp.duration || 0; });
   }
+
+  const collab = mountCollab(m);
 
   m.querySelector('#uSubmit').onclick = async () => {
     const title = m.querySelector('#uTitle').value.trim();
@@ -842,12 +964,16 @@ function openUploadModal() {
         const cu = await sb.storage.from('covers').upload(coverPath, coverFile, { contentType: coverFile.type, upsert: false });
         if (!cu.error) coverUrl = sb.storage.from('covers').getPublicUrl(coverPath).data.publicUrl;
       }
-      fill.style.width = '85%';
+      fill.style.width = '80%';
+
+      const waveform = await computeWaveformPeaks(uploadFile);
+      fill.style.width = '90%';
 
       const { error } = await sb.from('tracks').insert({
         user_id: uid, title, genre: genre || null,
         artist: state.profile.display_name || state.profile.username,
         audio_url: audioUrl, cover_url: coverUrl, duration: Math.round(duration),
+        waveform, collaborators: collab.get(),
       });
       if (error) throw error;
       fill.style.width = '100%';
@@ -873,11 +999,16 @@ async function openProfile(userId) {
   main.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
   const { data: prof } = await sb.from('profiles').select('*').eq('id', userId).single();
   if (!prof) { main.innerHTML = '<div class="empty">Perfil no encontrado.</div>'; return; }
-  const [{ count: followers }, { count: following }, tracks] = await Promise.all([
+  const [{ count: followers }, { count: following }, ownTracks, collabRes] = await Promise.all([
     sb.from('follows').select('follower_id', { count:'exact', head:true }).eq('following_id', userId),
     sb.from('follows').select('following_id', { count:'exact', head:true }).eq('follower_id', userId),
     fetchTracks({ order: 'created_at', userId }),
+    sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)').contains('collaborators', [{ id: userId }]).order('created_at', { ascending: false }),
   ]);
+  // une pistas propias + colaboraciones (sin duplicar)
+  const seen = new Set();
+  const tracks = [...(ownTracks || []), ...((collabRes && collabRes.data) || [])].filter(t => (seen.has(t.id) ? false : seen.add(t.id)));
+  tracks.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   const isMe = userId === state.user.id;
   const followsHim = state.follows.has(userId);
   main.innerHTML = `
