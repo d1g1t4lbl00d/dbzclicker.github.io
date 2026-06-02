@@ -158,6 +158,7 @@ async function onAuthenticated() {
   await Promise.all([loadLikes(), loadFollows()]);
   bindUI();
   initPlayer();
+  initNowPlaying();
   initChat();
   initPresence();
   loadNotifBadge();
@@ -542,11 +543,12 @@ function initPlayer() {
     $('pKnob').style.left = (pct*100)+'%';
     $('pCur').textContent = fmtTime(audio.currentTime);
     updateCardWave(pct);
+    updateNpProgress(pct);
   });
-  audio.addEventListener('loadedmetadata', () => { $('pDur').textContent = fmtTime(audio.duration); });
+  audio.addEventListener('loadedmetadata', () => { $('pDur').textContent = fmtTime(audio.duration); if (npIsOpen()) $('npDur').textContent = fmtTime(audio.duration); });
   audio.addEventListener('ended', () => step(1));
-  audio.addEventListener('play', () => { setPlayIcon(true); showEq(true); markPlayingCard(); });
-  audio.addEventListener('pause', () => { setPlayIcon(false); showEq(false); });
+  audio.addEventListener('play', () => { setPlayIcon(true); showEq(true); markPlayingCard(); setNpPlayIcon(true); });
+  audio.addEventListener('pause', () => { setPlayIcon(false); showEq(false); setNpPlayIcon(false); });
 
   // seek preciso (pointer events: ratón + táctil unificados) con vista previa
   const seek = $('pSeek'), fill = $('pFill'), knob = $('pKnob'), ghost = $('pGhost'), tip = $('pTip');
@@ -611,6 +613,70 @@ function markPlayingCard() {
   const card = document.querySelector(`.track[data-id="${state.current?.id}"]`);
   if (card) card.classList.add('playing');
 }
+
+/* ---- Vista "Reproduciendo ahora" a pantalla completa ---- */
+function initNowPlaying() {
+  $('npPlay').onclick = togglePlay;
+  $('npPrev').onclick = () => step(-1);
+  $('npNext').onclick = () => step(1);
+  $('npClose').onclick = closeNowPlaying;
+  $('npLike').onclick = toggleLikeCurrent;
+  $('player').querySelector('.now').addEventListener('click', openNowPlaying);
+
+  // seek arrastrando sobre el waveform grande
+  const w = $('npWave');
+  const seekW = (x) => { if (!audio.duration) return; const r = w.getBoundingClientRect(); audio.currentTime = Math.min(1, Math.max(0, (x - r.left) / r.width)) * audio.duration; };
+  let wd = false;
+  w.addEventListener('pointerdown', (e) => { wd = true; try { w.setPointerCapture(e.pointerId); } catch {} seekW(e.clientX); });
+  w.addEventListener('pointermove', (e) => { if (wd) seekW(e.clientX); });
+  w.addEventListener('pointerup', () => { wd = false; });
+  w.addEventListener('pointercancel', () => { wd = false; });
+
+  // volumen
+  const vs = $('npVolSlider');
+  const setV = (x) => { const r = vs.getBoundingClientRect(); const v = Math.min(1, Math.max(0, (x - r.left) / r.width)); audio.volume = v; localStorage.setItem('ub_vol', String(v)); $('npVolFill').style.width = (v*100)+'%'; $('npVolKnob').style.left = (v*100)+'%'; setVolUI(v); };
+  let vd = false;
+  vs.addEventListener('pointerdown', (e) => { vd = true; try { vs.setPointerCapture(e.pointerId); } catch {} setV(e.clientX); });
+  vs.addEventListener('pointermove', (e) => { if (vd) setV(e.clientX); });
+  vs.addEventListener('pointerup', () => { vd = false; });
+}
+function npIsOpen() { return $('nowPlaying').classList.contains('open'); }
+function openNowPlaying() { if (!state.current) return; syncNowPlaying(); $('nowPlaying').classList.add('open'); }
+function closeNowPlaying() { $('nowPlaying').classList.remove('open'); }
+function setNpPlayIcon(playing) { const u = $('npPlay').querySelector('use'); if (u) u.setAttribute('href', playing ? '#i-pause' : '#i-play'); }
+function syncNowPlaying() {
+  const t = state.current; if (!t) return;
+  $('npTitle').textContent = t.title;
+  $('npArtist').textContent = t.profiles?.display_name || t.profiles?.username || t.artist || '';
+  $('npCover').innerHTML = t.cover_url ? `<img src="${esc(t.cover_url)}" alt="" />` : `<svg fill="none" stroke="#fff"><use href="#i-music"/></svg>`;
+  $('npBg').style.backgroundImage = t.cover_url ? `url("${esc(t.cover_url)}")` : 'none';
+  $('npWave').innerHTML = waveBars(t.id, 80).map(h => `<div class="bar" style="--h:${h}%"></div>`).join('');
+  $('npCur').textContent = fmtTime(audio.currentTime);
+  $('npDur').textContent = fmtTime(audio.duration || t.duration);
+  $('npLike').classList.toggle('on', state.likes.has(t.id));
+  $('npVolFill').style.width = (audio.volume*100)+'%'; $('npVolKnob').style.left = (audio.volume*100)+'%';
+  setNpPlayIcon(!audio.paused);
+  if (audio.duration) updateNpProgress(audio.currentTime / audio.duration);
+}
+function updateNpProgress(pct) {
+  if (!npIsOpen()) return;
+  const bars = $('npWave').querySelectorAll('.bar');
+  const upto = Math.floor(pct * bars.length);
+  bars.forEach((b, i) => b.classList.toggle('played', i <= upto));
+  $('npCur').textContent = fmtTime(audio.currentTime);
+}
+function toggleLikeCurrent() {
+  const t = state.current; if (!t) return;
+  const card = document.querySelector(`.track[data-id="${t.id}"]`);
+  if (card) { toggleLike(t, card); }
+  else {
+    const liked = state.likes.has(t.id);
+    if (liked) { state.likes.delete(t.id); sb.from('likes').delete().eq('track_id', t.id).eq('user_id', state.user.id); }
+    else { state.likes.add(t.id); sb.from('likes').insert({ track_id: t.id, user_id: state.user.id }); }
+    updateCounts();
+  }
+  $('npLike').classList.toggle('on', state.likes.has(t.id));
+}
 function setPlayIcon(playing) {
   $('pPlay').querySelector('use').setAttribute('href', playing ? '#i-pause' : '#i-play');
 }
@@ -623,6 +689,7 @@ async function playTrack(t) {
   $('pTitle').textContent = t.title;
   $('pArtist').textContent = (t.profiles?.display_name || t.profiles?.username || t.artist || '');
   $('pCover').innerHTML = t.cover_url ? `<img src="${esc(t.cover_url)}" alt="" />` : `<svg width="22" height="22" fill="none" stroke="#fff" style="margin:15px"><use href="#i-music"/></svg>`;
+  if (npIsOpen()) syncNowPlaying();
   audio.src = t.audio_url;
   try { await audio.play(); } catch {}
   // contar reproducción
@@ -672,8 +739,9 @@ function openUploadModal() {
       </div>
       <div class="field">
         <label>Portada (opcional)</label>
-        <div class="dropzone" id="dzCover" style="padding:14px">
-          <span id="coverName">Imagen de portada…</span>
+        <div class="cover-pick" id="dzCover">
+          <div class="cover-prev" id="coverPrev"><svg width="24" height="24" fill="none" stroke="currentColor"><use href="#i-image"/></svg></div>
+          <div class="cover-pick-txt"><b id="coverName">Añadir portada</b><span>Imagen cuadrada · JPG, PNG o WebP</span></div>
         </div>
         <input type="file" id="fCover" accept="image/*" hidden />
       </div>
@@ -691,7 +759,18 @@ function openUploadModal() {
   dzA.onclick = () => fA.click();
   dzC.onclick = () => fC.click();
   fA.onchange = () => setAudio(fA.files[0]);
-  fC.onchange = () => { coverFile = fC.files[0]; m.querySelector('#coverName').textContent = coverFile ? coverFile.name : 'Imagen de portada…'; };
+  const setCover = (f) => {
+    if (!f || !f.type.startsWith('image')) { toast('Selecciona una imagen'); return; }
+    coverFile = f;
+    m.querySelector('#coverName').textContent = f.name;
+    m.querySelector('#coverPrev').innerHTML = `<img src="${URL.createObjectURL(f)}" alt="" />`;
+  };
+  fC.onchange = () => { if (fC.files[0]) setCover(fC.files[0]); };
+  ['dragover','dragleave','drop'].forEach(ev => dzC.addEventListener(ev, (e) => {
+    e.preventDefault();
+    if (ev==='dragover') dzC.classList.add('drag'); else dzC.classList.remove('drag');
+    if (ev==='drop' && e.dataTransfer.files[0]) setCover(e.dataTransfer.files[0]);
+  }));
   ['dragover','dragleave','drop'].forEach(ev => dzA.addEventListener(ev, (e) => {
     e.preventDefault();
     if (ev==='dragover') dzA.classList.add('drag'); else dzA.classList.remove('drag');
