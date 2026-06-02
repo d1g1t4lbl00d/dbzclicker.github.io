@@ -108,16 +108,29 @@ img { display: block; }
 
 /* ===================================================================== LOGO */
 .logo {
-  font-weight: 800; letter-spacing: -.6px; line-height: 1;
+  position: relative; display: inline-block;
+  font-weight: 800; letter-spacing: -.4px; line-height: 1;
   background: linear-gradient(180deg, #ffffff 0%, #eef3fb 46%, #c6d3ec 54%, #ffffff 100%);
   -webkit-background-clip: text; background-clip: text; color: transparent;
-  filter: drop-shadow(0 1px 0 rgba(255,255,255,.8)) drop-shadow(0 3px 5px rgba(74,104,168,.4));
-  user-select: none;
+  filter: drop-shadow(0 1px 0 rgba(255,255,255,.85)) drop-shadow(0 3px 6px rgba(74,104,168,.42));
+  user-select: none; transition: transform .2s var(--ease), filter .2s;
 }
+.logo:hover { transform: translateY(-1px) rotate(-1deg); filter: drop-shadow(0 1px 0 rgba(255,255,255,.9)) drop-shadow(0 5px 12px rgba(74,104,168,.5)); }
+/* glint sutil que cruza el logo cada pocos segundos */
+.logo::after {
+  content: ""; position: absolute; inset: 0; pointer-events: none; mix-blend-mode: screen;
+  background: linear-gradient(112deg, transparent 38%, rgba(255,255,255,.7) 50%, transparent 62%);
+  background-size: 280% 100%; background-position: 220% 0;
+  animation: logoGlint 6.5s ease-in-out infinite;
+}
+@keyframes logoGlint { 0%, 62% { background-position: 220% 0; } 84%, 100% { background-position: -80% 0; } }
 .logo .u {
-  background: linear-gradient(180deg, #bcd0f0, #6f8fc6 55%, #4a68a8);
+  background: linear-gradient(125deg, #cdddf4 0%, #6f8fc6 38%, #3f5da0 52%, #6f8fc6 66%, #cdddf4 100%);
+  background-size: 220% auto;
   -webkit-background-clip: text; background-clip: text; color: transparent;
+  animation: uSheen 6.5s ease-in-out infinite;
 }
+@keyframes uSheen { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
 
 /* ===================================================================== BTN */
 .btn {
@@ -682,7 +695,11 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
 /* ===== personalización avanzada: fuentes, frase, brillos, efectos, tarjetas ===== */
 .profile-view { position: relative; }
 .profile-view > .pfx { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
-.profile-banner, .profile-head, .profile-view .main-head, .profile-view #feedList, .profile-tagline { position: relative; z-index: 1; }
+.profile-banner, .profile-head, .profile-view .main-head, .profile-view #feedList, .profile-tagline, .profile-back { position: relative; z-index: 1; }
+.profile-back { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--glass); backdrop-filter: blur(8px); border-radius: 30px; padding: 8px 15px 8px 11px; font-weight: 650; font-size: 13px; color: var(--ink-2); margin-bottom: 14px; box-shadow: var(--sh-1); transition: transform .14s var(--ease), box-shadow .18s; }
+.profile-back:hover { background: #fff; transform: translateX(-2px); box-shadow: var(--sh-2); }
+.profile-back:active { transform: scale(.96); }
+.profile-back svg { width: 18px; height: 18px; stroke: var(--ink-2); }
 
 /* fuente del perfil */
 .profile-head, .profile-head h2, .profile-tagline { font-family: var(--pf-font, inherit); }
