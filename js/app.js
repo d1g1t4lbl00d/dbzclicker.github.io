@@ -393,10 +393,7 @@ function trackCard(t) {
   const mine = t.user_id === state.user.id;
   const card = el(`
     <div class="track" data-id="${t.id}">
-      <div class="cover" data-act="play">
-        ${t.cover_url ? `<img src="${esc(t.cover_url)}" alt="" />` : `<svg width="34" height="34" fill="none" stroke="#fff" stroke-width="1.6"><use href="#i-music"/></svg>`}
-        <button class="cover-play" data-act="play" title="Reproducir"><svg class="ci-play"><use href="#i-play"/></svg><svg class="ci-pause"><use href="#i-pause"/></svg></button>
-      </div>
+      <button class="play-lg" data-act="play" title="Reproducir"><svg class="ci-play"><use href="#i-play"/></svg><svg class="ci-pause"><use href="#i-pause"/></svg></button>
       <div class="body">
         <div class="t-head">
           <div>
@@ -485,7 +482,8 @@ function openEditTrack(t, card) {
 function waveHTML(t) {
   const peaks = Array.isArray(t.waveform) && t.waveform.length ? t.waveform : waveBars(t.id, 80);
   const bars = peaks.map((h, i) => `<div class="bar" data-i="${i}" style="--h:${h}%;--d:${((i * 37) % 23) * 0.045}s"></div>`).join('');
-  return `<div class="wave" data-act="seekwave">${bars}</div>`;
+  const cov = t.cover_url ? czUrl(t.cover_url) : '';
+  return `<div class="wave ${cov ? 'has-cover' : ''}" data-act="seekwave" ${cov ? `style="background-image:url('${cov}')"` : ''}>${bars}</div>`;
 }
 
 async function handleTrackClick(e, t, card) {
