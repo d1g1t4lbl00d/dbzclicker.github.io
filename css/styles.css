@@ -456,13 +456,6 @@ img { display: block; }
 .np-controls button svg { width: 22px; height: 22px; fill: var(--ink-2); }
 .np-controls .np-play { width: 72px; height: 72px; border-color: transparent; background: var(--accent-grad); box-shadow: var(--sh-blue); }
 .np-controls .np-play svg { width: 28px; height: 28px; fill: #fff; stroke: #fff; }
-.np-extra { display: flex; align-items: center; gap: 18px; width: 100%; }
-.np-like { width: 46px; height: 46px; border-radius: 50%; border: 1px solid var(--line); background: linear-gradient(180deg,#fff,#eef2f8); display: grid; place-items: center; }
-.np-like svg { width: 20px; height: 20px; fill: none; stroke: var(--ink-soft); }
-.np-like.on svg { fill: var(--like); stroke: var(--like); animation: pop .32s var(--ease); }
-.np-vol { flex: 1; display: flex; align-items: center; gap: 10px; }
-.np-vol svg { width: 19px; height: 19px; stroke: var(--ink-soft); flex-shrink: 0; }
-.np-vol .vol-slider { flex: 1; height: 6px; }
 
 /* selector de portada con vista previa (modal de subida) */
 .cover-pick { display: flex; align-items: center; gap: 12px; border: 1.5px solid var(--line); border-radius: 12px; padding: 10px; background: var(--panel-2); cursor: pointer; transition: border-color .18s, background .18s; }
