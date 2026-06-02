@@ -708,6 +708,36 @@ function openModal(html) {
   return backdrop;
 }
 
+// Comprime cualquier audio a MP3 en el navegador (reduce mucho el tamaño de los WAV)
+async function compressAudioToMp3(file, kbps = 192, onProgress) {
+  const arrayBuf = await file.arrayBuffer();
+  const AudioCtx = window.AudioContext || window.webkitAudioContext;
+  const ctx = new AudioCtx();
+  let audioBuf;
+  try { audioBuf = await ctx.decodeAudioData(arrayBuf); }
+  finally { /* se cierra abajo */ }
+  const channels = Math.min(2, audioBuf.numberOfChannels);
+  const sampleRate = audioBuf.sampleRate;
+  const enc = new window.lamejs.Mp3Encoder(channels, sampleRate, kbps);
+  const left = audioBuf.getChannelData(0);
+  const right = channels > 1 ? audioBuf.getChannelData(1) : null;
+  const len = left.length, blockSize = 1152, mp3Data = [];
+  const to16 = (f) => { const s = Math.max(-1, Math.min(1, f)); return s < 0 ? s * 0x8000 : s * 0x7FFF; };
+  for (let i = 0; i < len; i += blockSize) {
+    const n = Math.min(blockSize, len - i);
+    const l16 = new Int16Array(n); const r16 = right ? new Int16Array(n) : null;
+    for (let j = 0; j < n; j++) { l16[j] = to16(left[i + j]); if (r16) r16[j] = to16(right[i + j]); }
+    const buf = r16 ? enc.encodeBuffer(l16, r16) : enc.encodeBuffer(l16);
+    if (buf.length) mp3Data.push(buf);
+    if (i % (blockSize * 300) === 0) { if (onProgress) onProgress(i / len); await new Promise(r => setTimeout(r)); }
+  }
+  const tail = enc.flush(); if (tail.length) mp3Data.push(tail);
+  try { ctx.close(); } catch {}
+  if (onProgress) onProgress(1);
+  const name = file.name.replace(/\.[^.]+$/, '') + '.mp3';
+  return new File(mp3Data, name, { type: 'audio/mpeg' });
+}
+
 function openUploadModal() {
   if (!requireNotBanned()) return;
   const m = openModal(`
@@ -721,6 +751,7 @@ function openUploadModal() {
           <div class="fname" id="audioName"></div>
         </div>
         <input type="file" id="fAudio" accept="audio/*" hidden />
+        <div class="sub" style="margin-top:6px;font-size:11.5px">Los archivos grandes (p. ej. WAV) se comprimen a MP3 automáticamente.</div>
       </div>
       <div class="field">
         <label>Portada (opcional)</label>
@@ -782,9 +813,24 @@ function openUploadModal() {
     try {
       const uid = state.user.id;
       const stamp = Date.now();
-      const ext = (audioFile.name.split('.').pop() || 'mp3').toLowerCase();
+      const LIMIT = 50 * 1024 * 1024;            // 50 MB (límite del bucket)
+      let uploadFile = audioFile;
+      // comprimir a MP3 si el archivo es grande (p.ej. WAV) para que entre en el límite
+      if (audioFile.size > 45 * 1024 * 1024) {
+        if (!window.lamejs) { throw new Error('No se pudo cargar el compresor. Recarga la página e inténtalo de nuevo.'); }
+        msg.className = 'auth-msg'; msg.textContent = 'Comprimiendo audio… esto puede tardar unos segundos.';
+        try {
+          uploadFile = await compressAudioToMp3(audioFile, 192, (p) => { fill.style.width = (8 + p * 42) + '%'; });
+          if (uploadFile.size > LIMIT) uploadFile = await compressAudioToMp3(audioFile, 128, (p) => { fill.style.width = (8 + p * 42) + '%'; });
+        } catch (ce) {
+          throw new Error('No se pudo comprimir el audio. Prueba con un MP3 o un archivo más corto.');
+        }
+        if (uploadFile.size > LIMIT) throw new Error('La pista sigue siendo demasiado grande. Prueba con una versión más corta o un MP3.');
+        msg.textContent = '';
+      }
+      const ext = (uploadFile.name.split('.').pop() || 'mp3').toLowerCase();
       const audioPath = `${uid}/${stamp}.${ext}`;
-      const up = await sb.storage.from('tracks').upload(audioPath, audioFile, { contentType: audioFile.type, upsert: false });
+      const up = await sb.storage.from('tracks').upload(audioPath, uploadFile, { contentType: uploadFile.type || 'audio/mpeg', upsert: false });
       if (up.error) throw up.error;
       fill.style.width = '60%';
       const audioUrl = sb.storage.from('tracks').getPublicUrl(audioPath).data.publicUrl;
