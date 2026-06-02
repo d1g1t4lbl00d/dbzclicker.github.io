@@ -410,9 +410,11 @@ async function handleTrackClick(e, t, card) {
   else if (act === 'delete') deleteTrack(t, card);
   else if (act === 'toggleComments') toggleComments(t, card);
   else if (act === 'seekwave') {
-    const bar = e.target.closest('.bar');
-    if (bar && state.current?.id === t.id && audio.duration) {
-      audio.currentTime = (+bar.dataset.i / 64) * audio.duration;
+    const wave = e.target.closest('.wave');
+    if (wave && state.current?.id === t.id && audio.duration) {
+      const r = wave.getBoundingClientRect();
+      const pct = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+      audio.currentTime = pct * audio.duration;
     } else { playTrack(t); }
   }
 }
@@ -540,20 +542,36 @@ function initPlayer() {
   audio.addEventListener('play', () => { setPlayIcon(true); showEq(true); markPlayingCard(); });
   audio.addEventListener('pause', () => { setPlayIcon(false); showEq(false); });
 
-  // seek
-  const seek = $('pSeek');
-  const doSeek = (clientX) => {
-    const r = seek.getBoundingClientRect();
-    const pct = Math.min(1, Math.max(0, (clientX - r.left) / r.width));
-    if (audio.duration) audio.currentTime = pct * audio.duration;
-    $('pFill').style.width = (pct*100)+'%'; $('pKnob').style.left = (pct*100)+'%';
+  // seek preciso (pointer events: ratón + táctil unificados) con vista previa
+  const seek = $('pSeek'), fill = $('pFill'), knob = $('pKnob'), ghost = $('pGhost'), tip = $('pTip');
+  const pctFromX = (clientX) => { const r = seek.getBoundingClientRect(); return Math.min(1, Math.max(0, (clientX - r.left) / r.width)); };
+  const paint = (pct) => { fill.style.width = (pct*100)+'%'; knob.style.left = (pct*100)+'%'; };
+  const preview = (pct) => { ghost.style.width = (pct*100)+'%'; tip.style.left = (pct*100)+'%'; if (audio.duration) tip.textContent = fmtTime(pct*audio.duration); };
+  let rafSeek = 0, pendingPct = null;
+  const commitLive = () => { rafSeek = 0; if (audio.duration && pendingPct != null) audio.currentTime = pendingPct * audio.duration; };
+  const queueLive = (p) => { pendingPct = p; if (!rafSeek) rafSeek = requestAnimationFrame(commitLive); };
+  seek.addEventListener('pointerdown', (e) => {
+    seeking = true; seek.classList.add('scrub');
+    try { seek.setPointerCapture(e.pointerId); } catch {}
+    const p = pctFromX(e.clientX); paint(p); preview(p); $('pCur').textContent = fmtTime(p*(audio.duration||0)); queueLive(p);
+  });
+  seek.addEventListener('pointermove', (e) => {
+    const p = pctFromX(e.clientX); preview(p);
+    if (seeking) { paint(p); $('pCur').textContent = fmtTime(p*(audio.duration||0)); queueLive(p); }
+  });
+  const endScrub = (e) => {
+    if (!seeking) return; seeking = false; seek.classList.remove('scrub');
+    try { seek.releasePointerCapture(e.pointerId); } catch {}
+    const p = pctFromX(e.clientX); if (audio.duration) audio.currentTime = p * audio.duration; paint(p);
   };
-  seek.addEventListener('mousedown', (e) => { seeking = true; doSeek(e.clientX); });
-  window.addEventListener('mousemove', (e) => { if (seeking) doSeek(e.clientX); });
-  window.addEventListener('mouseup', () => { seeking = false; });
-  seek.addEventListener('touchstart', (e)=>{ seeking=true; doSeek(e.touches[0].clientX); }, {passive:true});
-  seek.addEventListener('touchmove', (e)=>{ if(seeking) doSeek(e.touches[0].clientX); }, {passive:true});
-  seek.addEventListener('touchend', ()=>{ seeking=false; });
+  seek.addEventListener('pointerup', endScrub);
+  seek.addEventListener('pointercancel', endScrub);
+
+  // indicador del buffer cargado
+  audio.addEventListener('progress', () => {
+    if (audio.duration && audio.buffered.length)
+      $('pBuffered').style.width = (audio.buffered.end(audio.buffered.length-1) / audio.duration * 100) + '%';
+  });
 
   // volumen
   const vol = $('volSlider');
@@ -567,11 +585,12 @@ function initPlayer() {
   window.addEventListener('mousemove', (e) => { if (volDrag) doVol(e.clientX); });
   window.addEventListener('mouseup', () => { volDrag = false; });
 
-  // teclado: espacio = play/pause
+  // teclado: espacio = play/pause · ←/→ = retroceder/avanzar (Shift = 15s)
   document.addEventListener('keydown', (e) => {
-    if (e.code === 'Space' && state.current && !/INPUT|TEXTAREA/.test(document.activeElement.tagName)) {
-      e.preventDefault(); togglePlay();
-    }
+    if (!state.current || /INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
+    if (e.code === 'Space') { e.preventDefault(); togglePlay(); }
+    else if (e.code === 'ArrowRight' && audio.duration) { e.preventDefault(); audio.currentTime = Math.min(audio.duration, audio.currentTime + (e.shiftKey ? 15 : 5)); }
+    else if (e.code === 'ArrowLeft' && audio.duration) { e.preventDefault(); audio.currentTime = Math.max(0, audio.currentTime - (e.shiftKey ? 15 : 5)); }
   });
 }
 function setVolUI(v) { $('volFill').style.width = (v*100)+'%'; $('volKnob').style.left = (v*100)+'%'; }

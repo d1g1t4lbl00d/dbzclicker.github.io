@@ -387,11 +387,24 @@ img { display: block; }
 .player .controls svg { width: 16px; height: 16px; fill: var(--ink-2); }
 .player .progress { flex: 1; display: flex; align-items: center; gap: 11px; }
 .player .progress .time { font-size: 11px; color: var(--ink-soft); font-variant-numeric: tabular-nums; width: 38px; text-align: center; }
-.seek { flex: 1; height: 6px; border-radius: 6px; background: #d8dfec; position: relative; cursor: pointer; }
-.seek:hover { height: 8px; }
+.seek { flex: 1; height: 6px; border-radius: 6px; background: #d8dfec; position: relative; cursor: pointer; touch-action: none; transition: height .12s var(--ease); }
+/* área de agarre ampliada (invisible) para arrastrar fácil */
+.seek::before { content: ""; position: absolute; inset: -11px 0; }
+.seek:hover, .seek.scrub { height: 9px; }
+.seek .buffered { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; background: rgba(95,127,184,.22); width: 0; }
+.seek .ghost { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; background: rgba(95,127,184,.30); width: 0; opacity: 0; transition: opacity .12s; }
+.seek:hover .ghost, .seek.scrub .ghost { opacity: 1; }
 .seek .fill { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 6px; background: var(--accent-grad); width: 0; }
-.seek .knob { position: absolute; top: 50%; width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 2px solid var(--blue-deep); transform: translate(-50%,-50%); left: 0; box-shadow: var(--sh-1); transition: transform .12s; }
-.seek:hover .knob { transform: translate(-50%,-50%) scale(1.15); }
+.seek .knob { position: absolute; top: 50%; width: 14px; height: 14px; border-radius: 50%; background: #fff; border: 2px solid var(--blue-deep); transform: translate(-50%,-50%) scale(1); left: 0; box-shadow: var(--sh-1); transition: transform .12s var(--ease); }
+.seek:hover .knob { transform: translate(-50%,-50%) scale(1.12); }
+.seek.scrub .knob { transform: translate(-50%,-50%) scale(1.25); box-shadow: 0 0 0 6px rgba(95,127,184,.18), var(--sh-1); }
+.seek .seek-tip {
+  position: absolute; bottom: 18px; left: 0; transform: translateX(-50%);
+  background: rgba(40,48,70,.94); color: #fff; font-size: 11px; font-weight: 650;
+  padding: 3px 8px; border-radius: 7px; white-space: nowrap; pointer-events: none;
+  opacity: 0; transition: opacity .12s; font-variant-numeric: tabular-nums;
+}
+.seek:hover .seek-tip, .seek.scrub .seek-tip { opacity: 1; }
 .player .vol { display: flex; align-items: center; gap: 9px; width: 132px; }
 .player .vol svg { width: 18px; height: 18px; stroke: var(--ink-soft); flex-shrink: 0; }
 .vol-slider { flex: 1; height: 6px; border-radius: 6px; background: #d8dfec; position: relative; cursor: pointer; }
