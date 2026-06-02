@@ -850,8 +850,8 @@ async function openProfile(userId) {
       <div class="pactions">
         ${isMe ? `<button class="btn" id="editProfBtn"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg> Editar perfil</button>`
                 : `<button class="btn ${followsHim?'':'primary'}" id="followBtn">${followsHim?'Siguiendo ✓':'+ Seguir'}</button>`}
-        ${!isMe ? `<button class="btn" id="msgBtn" style="margin-top:8px"><svg fill="none" stroke="currentColor"><use href="#i-mail"/></svg> Mensaje</button>` : ''}
-        ${(!isMe && state.profile.is_admin && !prof.is_admin) ? `<button class="btn" id="banBtn" style="border-color:#e3b7b0;color:#c0533f;margin-top:8px">${prof.banned?'Desbanear':'Banear usuario'}</button>` : ''}
+        ${!isMe ? `<button class="btn" id="msgBtn"><svg fill="none" stroke="currentColor"><use href="#i-mail"/></svg> Mensaje</button>` : ''}
+        ${(!isMe && state.profile.is_admin && !prof.is_admin) ? `<button class="btn" id="banBtn" style="border-color:#e3b7b0;color:#c0533f">${prof.banned?'Desbanear':'Banear usuario'}</button>` : ''}
       </div>
     </div>
     <div class="main-head"><h2>Pistas</h2></div>
@@ -902,17 +902,23 @@ async function renderPeople() {
   people.forEach(p => {
     const f = state.follows.has(p.id);
     const row = el(`
-      <div class="track" style="align-items:center">
-        ${avatarHTML(p)}
-        <div class="body"><div class="t-title">${esc(p.display_name||p.username)} ${p.is_admin?'<span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c">MOD</span>':''} ${p.banned?'<span class="t-genre" style="background:#fae3e0;border-color:#f0c2bc;color:#c0533f">baneado</span>':''}</div>
-        <div class="t-artist">@${esc(p.username)}</div>${p.bio?`<div class="sub" style="margin-top:4px">${esc(p.bio)}</div>`:''}</div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
-          <button class="btn sm" data-act="msg" title="Mensaje"><svg style="width:14px;height:14px" fill="none" stroke="currentColor"><use href="#i-mail"/></svg></button>
-          <button class="btn sm" data-act="view">Ver perfil</button>
+      <div class="person">
+        <div class="person-top">
+          ${avatarHTML(p)}
+          <div class="person-info">
+            <div class="person-name">${esc(p.display_name||p.username)}${p.is_admin?' <span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c">MOD</span>':''}${p.banned?' <span class="t-genre" style="background:#fae3e0;border-color:#f0c2bc;color:#c0533f">baneado</span>':''}</div>
+            <div class="person-handle">@${esc(p.username)}</div>
+            ${p.bio?`<div class="person-bio">${esc(p.bio)}</div>`:''}
+          </div>
+        </div>
+        <div class="person-actions">
           <button class="btn sm ${f?'':'primary'}" data-act="follow">${f?'Siguiendo ✓':'+ Seguir'}</button>
-          ${state.profile.is_admin && !p.is_admin ? `<button class="btn sm" data-act="ban" style="border-color:#e3b7b0;color:#c0533f">${p.banned?'Desbanear':'Banear'}</button>` : ''}
+          <button class="btn sm" data-act="msg"><svg style="width:15px;height:15px" fill="none" stroke="currentColor"><use href="#i-mail"/></svg> Mensaje</button>
+          <button class="btn sm icon-only" data-act="view" title="Ver perfil"><svg style="width:16px;height:16px" fill="none" stroke="currentColor"><use href="#i-people"/></svg></button>
+          ${state.profile.is_admin && !p.is_admin ? `<button class="btn sm icon-only" data-act="ban" title="${p.banned?'Desbanear':'Banear'}" style="border-color:#e3b7b0;color:#c0533f">${p.banned?'↺':'⊘'}</button>` : ''}
         </div>
       </div>`);
+    const followBtn = row.querySelector('[data-act="follow"]');
     row.querySelector('[data-act="view"]').onclick = () => openProfile(p.id);
     row.querySelector('[data-act="msg"]').onclick = () => openDM(p.id);
     const banBtn = row.querySelector('[data-act="ban"]');
@@ -921,19 +927,18 @@ async function renderPeople() {
       const { error } = await sb.from('profiles').update({ banned: newVal }).eq('id', p.id);
       if (error) { toast('No se pudo actualizar'); return; }
       p.banned = newVal;
-      banBtn.textContent = newVal ? 'Desbanear' : 'Banear';
+      banBtn.textContent = newVal ? '↺' : '⊘'; banBtn.title = newVal ? 'Desbanear' : 'Banear';
       toast(newVal ? `${p.username} baneado` : `${p.username} desbaneado`);
     };
-    row.querySelector('[data-act="follow"]').onclick = async (e) => {
-      const btn = e.target;
+    followBtn.onclick = async () => {
       if (state.follows.has(p.id)) {
         state.follows.delete(p.id);
         await sb.from('follows').delete().eq('follower_id', state.user.id).eq('following_id', p.id);
-        btn.className = 'btn sm primary'; btn.textContent = '+ Seguir';
+        followBtn.classList.add('primary'); followBtn.textContent = '+ Seguir';
       } else {
         state.follows.add(p.id);
         await sb.from('follows').insert({ follower_id: state.user.id, following_id: p.id });
-        btn.className = 'btn sm'; btn.textContent = 'Siguiendo ✓';
+        followBtn.classList.remove('primary'); followBtn.textContent = 'Siguiendo ✓';
       }
     };
     list.appendChild(row);
@@ -1113,20 +1118,100 @@ function scrollChat() { const b = $('chatMsgs'); b.scrollTop = b.scrollHeight; }
    ======================================================================= */
 async function initDM() {
   await refreshDmBadge();
+  // controles de la pantalla de chat (persistente)
+  $('dmBack').onclick = closeDmScreen;
+  $('dmAttach').onclick = () => $('dmFile').click();
+  $('dmFile').onchange = () => { if ($('dmFile').files[0]) setDmPending($('dmFile').files[0]); };
+  $('dmForm').addEventListener('submit', sendDm);
+
   sb.channel('dm-inbox-' + state.user.id)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'direct_messages', filter: `recipient_id=eq.${state.user.id}` }, async (payload) => {
       const msg = payload.new;
-      if (state.dmPeer === msg.sender_id && state.dmAppend) {
-        state.dmAppend(msg);
-        markDmRead(msg.sender_id);
+      if (state.dmPeer === msg.sender_id) {
+        dmAppendBubble(msg); markDmRead(msg.sender_id);
       } else {
         refreshDmBadge();
         let p = null; try { ({ data: p } = await sb.from('profiles').select('username,display_name').eq('id', msg.sender_id).single()); } catch {}
-        toast('💬 ' + (p?.display_name || p?.username || 'Mensaje') + ': ' + msg.body.slice(0, 38));
+        toast('💬 ' + (p?.display_name || p?.username || 'Mensaje') + ': ' + (msg.body || '📎 Adjunto').slice(0, 38));
         if (state.view === 'messages') renderMessages();
       }
     })
     .subscribe();
+}
+function bubbleHTML(msg) {
+  const mine = msg.sender_id === state.user.id;
+  let media = '';
+  if (msg.attachment_url) {
+    if (msg.attachment_type === 'image') media = `<img class="dm-img" src="${esc(msg.attachment_url)}" alt="" data-full="${esc(msg.attachment_url)}" />`;
+    else media = `<a class="dm-filechip" href="${esc(msg.attachment_url)}" target="_blank" rel="noopener"><svg fill="none"><use href="#i-file"/></svg><span class="fn">${esc(msg.attachment_name || 'archivo')}</span></a>`;
+  }
+  const cap = msg.body ? `<div class="dm-cap">${esc(msg.body)}</div>` : '';
+  const time = new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return `<div class="dm-bubble ${mine ? 'me' : 'them'} ${media ? 'has-media' : ''}">${media}${cap}<span class="t">${time}</span></div>`;
+}
+function dmAppendBubble(msg) {
+  const thread = $('dmThread');
+  const empty = thread.querySelector('.dm-empty'); if (empty) empty.remove();
+  const node = el(bubbleHTML(msg));
+  const img = node.querySelector('.dm-img'); if (img) img.onclick = () => openImageViewer(img.dataset.full);
+  thread.appendChild(node);
+  thread.scrollTop = thread.scrollHeight;
+}
+function openImageViewer(url) {
+  const v = el(`<div class="img-viewer"><img src="${esc(url)}" alt="" /></div>`);
+  v.onclick = () => v.remove();
+  document.body.appendChild(v);
+}
+function setDmPending(file) {
+  if (file.size > 26214400) { toast('Máximo 25 MB'); $('dmFile').value=''; return; }
+  state.dmPendingFile = file;
+  const prev = $('dmAttachPreview');
+  const isImg = file.type.startsWith('image');
+  prev.innerHTML = `${isImg ? `<img src="${URL.createObjectURL(file)}" alt="" />` : `<svg width="34" height="34" fill="none" stroke="var(--ink-soft)"><use href="#i-file"/></svg>`}<span class="ap-name">${esc(file.name)}</span><button type="button" class="ap-x" id="dmApX">&times;</button>`;
+  prev.classList.remove('hidden');
+  $('dmApX').onclick = clearDmPending;
+}
+function clearDmPending() {
+  state.dmPendingFile = null;
+  $('dmFile').value = '';
+  $('dmAttachPreview').classList.add('hidden');
+  $('dmAttachPreview').innerHTML = '';
+}
+async function sendDm(e) {
+  e.preventDefault();
+  if (!requireNotBanned()) return;
+  const other = state.dmPeer; if (!other) return;
+  const input = $('dmInput');
+  const body = input.value.trim();
+  const file = state.dmPendingFile;
+  if (!body && !file) return;
+  input.value = '';
+  let attachment_url = null, attachment_type = null, attachment_name = null;
+  if (file) {
+    const sendBtn = $('dmForm').querySelector('.dm-send'); sendBtn.disabled = true;
+    try {
+      const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
+      const path = `${state.user.id}/${Date.now()}.${ext}`;
+      const up = await sb.storage.from('chat').upload(path, file, { contentType: file.type || 'application/octet-stream' });
+      if (up.error) throw up.error;
+      attachment_url = sb.storage.from('chat').getPublicUrl(path).data.publicUrl;
+      attachment_type = file.type.startsWith('image') ? 'image' : 'file';
+      attachment_name = file.name;
+    } catch (err) { toast('No se pudo subir el archivo'); sendBtn.disabled = false; return; }
+    sendBtn.disabled = false;
+    clearDmPending();
+  }
+  const { data: sent, error } = await sb.from('direct_messages')
+    .insert({ sender_id: state.user.id, recipient_id: other, body, attachment_url, attachment_type, attachment_name })
+    .select().single();
+  if (error) { toast('No se pudo enviar'); return; }
+  dmAppendBubble(sent);
+}
+function closeDmScreen() {
+  $('dmScreen').classList.remove('open');
+  state.dmPeer = null;
+  clearDmPending();
+  if (state.view === 'messages') renderMessages();
 }
 async function refreshDmBadge() {
   const { count } = await sb.from('direct_messages').select('id', { count: 'exact', head: true })
@@ -1166,12 +1251,14 @@ async function renderMessages() {
   [...convos.values()].forEach(c => {
     const p = byId[c.other] || {};
     const mine = c.last.sender_id === state.user.id;
+    let snip = c.last.body;
+    if (c.last.attachment_url) snip = (c.last.attachment_type === 'image' ? '📷 Foto' : '📎 Archivo') + (c.last.body ? ' · ' + c.last.body : '');
     const row = el(`
       <div class="convo" data-uid="${c.other}">
         ${avatarHTML(p)}
         <div class="c-main">
           <div class="c-top"><span class="c-name">${esc(p.display_name || p.username || 'usuario')}</span><span class="c-when">${timeAgo(c.last.created_at)}</span></div>
-          <div class="c-snippet ${c.unread ? 'unread' : ''}">${mine ? 'Tú: ' : ''}${esc(c.last.body)}</div>
+          <div class="c-snippet ${c.unread ? 'unread' : ''}">${mine ? 'Tú: ' : ''}${esc(snip)}</div>
         </div>
         ${c.unread ? '<span class="c-unread"></span>' : ''}
       </div>`);
@@ -1185,47 +1272,24 @@ async function openDM(other) {
   const { data: prof } = await sb.from('profiles').select('*').eq('id', other).single();
   if (!prof) { toast('Usuario no encontrado'); return; }
   const name = prof.display_name || prof.username;
-  const backdrop = openModal(`
-    <div class="modal-head dm-head">
-      <div class="dm-peer" data-uid="${other}">${avatarHTML(prof)}<div><div class="dm-name">${esc(name)}</div><div class="dm-handle">@${esc(prof.username)}</div></div></div>
-      <button class="close">&times;</button>
-    </div>
-    <div class="dm-thread" id="dmThread"><div class="loading"><div class="spinner"></div></div></div>
-    <form class="dm-form" id="dmForm"><input type="text" id="dmInput" placeholder="Mensaje para ${esc(name)}..." maxlength="1000" autocomplete="off" /><button class="btn primary" type="submit"><svg style="width:16px;height:16px" stroke="#fff"><use href="#i-send"/></svg></button></form>
-  `);
-  const thread = backdrop.querySelector('#dmThread');
-  const appendBubble = (msg) => {
-    const mine = msg.sender_id === state.user.id;
-    const b = el(`<div class="dm-bubble ${mine ? 'me' : 'them'}">${esc(msg.body)}<span class="t">${new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div>`);
-    thread.appendChild(b); thread.scrollTop = thread.scrollHeight;
-  };
-  // conversación activa (para el realtime entrante)
-  state.dmPeer = other; state.dmAppend = appendBubble;
-  const clear = () => { state.dmPeer = null; state.dmAppend = null; };
-  backdrop.querySelector('.close').addEventListener('click', clear);
-  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) clear(); });
-  backdrop.querySelector('.dm-peer').onclick = () => { clear(); backdrop.remove(); openProfile(other); };
+  state.dmPeer = other;
+  clearDmPending();
+  $('dmPeerHead').innerHTML = `${avatarHTML(prof)}<div><div class="dm-name">${esc(name)}</div><div class="dm-handle">@${esc(prof.username)}</div></div>`;
+  $('dmPeerHead').onclick = () => { closeDmScreen(); openProfile(other); };
+  $('dmInput').placeholder = `Mensaje para ${name}...`;
+  const thread = $('dmThread');
+  thread.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
+  $('dmScreen').classList.add('open');
+  hideDrawers();
 
   const { data } = await sb.from('direct_messages').select('*')
     .or(`and(sender_id.eq.${state.user.id},recipient_id.eq.${other}),and(sender_id.eq.${other},recipient_id.eq.${state.user.id})`)
     .order('created_at', { ascending: true }).limit(300);
   thread.innerHTML = '';
   if (!data || !data.length) thread.innerHTML = `<div class="dm-empty">Aún no hay mensajes.<br>¡Escribe el primero! 👋</div>`;
-  else data.forEach(appendBubble);
+  else data.forEach(dmAppendBubble);
   markDmRead(other);
-
-  backdrop.querySelector('#dmForm').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    if (!requireNotBanned()) return;
-    const input = backdrop.querySelector('#dmInput');
-    const body = input.value.trim(); if (!body) return;
-    input.value = '';
-    const emptyEl = thread.querySelector('.dm-empty'); if (emptyEl) emptyEl.remove();
-    const { data: sent, error } = await sb.from('direct_messages').insert({ sender_id: state.user.id, recipient_id: other, body }).select().single();
-    if (error) { toast('No se pudo enviar'); return; }
-    appendBubble(sent);
-  });
-  setTimeout(() => backdrop.querySelector('#dmInput')?.focus(), 90);
+  setTimeout(() => $('dmInput')?.focus(), 120);
 }
 
 /* =======================================================================
