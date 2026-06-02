@@ -1005,6 +1005,128 @@ function openUploadModal() {
 /* =======================================================================
    PERFIL
    ======================================================================= */
+// saneamiento de la personalización (evita inyección en estilos/enlaces)
+function czColor(c) { return (typeof c === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(c)) ? c : ''; }
+function czUrl(u) { return (typeof u === 'string') ? u.replace(/["')\\<>]/g, '') : ''; }
+function czHref(u) { if (typeof u !== 'string' || !u) return '#'; return /^https?:\/\//i.test(u) ? u : 'https://' + u.replace(/^\/+/, ''); }
+function bgStyle(theme) {
+  const bg = (theme && theme.bg) ? theme.bg : {};
+  if (bg.type === 'image' && czUrl(bg.image)) return `background-image:linear-gradient(rgba(244,247,251,.5),rgba(238,241,246,.68)),url('${czUrl(bg.image)}');background-size:cover;background-position:center;`;
+  if (bg.type === 'solid' && czColor(bg.c1)) return `background:${czColor(bg.c1)};`;
+  if (bg.type === 'gradient' && (czColor(bg.c1) || czColor(bg.c2))) return `background:linear-gradient(160deg, ${czColor(bg.c1) || '#f3f6fb'}, ${czColor(bg.c2) || '#e0e6f0'});`;
+  return '';
+}
+
+const LINK_TYPES = ['Instagram', 'YouTube', 'Spotify', 'SoundCloud', 'TikTok', 'X / Twitter', 'Sitio web', 'Otro'];
+
+function openProfileCustomizer() {
+  const t = (state.profile.theme && typeof state.profile.theme === 'object') ? JSON.parse(JSON.stringify(state.profile.theme)) : {};
+  t.bg = t.bg || { type: 'gradient', c1: '#eef3fb', c2: '#e2e8f5' };
+  let links = Array.isArray(t.links) ? t.links.slice() : [];
+  const m = openModal(`
+    <div class="modal-head"><h3>Personalizar perfil</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Banner (cabecera)</label>
+        <div class="cover-pick" id="bannerPick">
+          <div class="cover-prev cz-banner" id="bannerPrev">${t.banner ? `<img src="${esc(t.banner)}" alt="" />` : `<svg width="22" height="22" fill="none" stroke="currentColor"><use href="#i-image"/></svg>`}</div>
+          <div class="cover-pick-txt"><b id="bannerName">Subir banner</b><span>Imagen ancha (16:9)</span></div>
+        </div>
+        <input type="file" id="bannerFile" accept="image/*" hidden />
+      </div>
+      <div class="field"><label>Color de acento</label><div class="bg-row"><input type="color" id="thAccent" value="${czColor(t.accent) || '#5f7fb8'}"><span class="sub">Tiñe tu nombre, botones y enlaces</span></div></div>
+      <div class="field"><label>Fondo del perfil</label>
+        <select class="cz-select" id="bgType">
+          <option value="gradient">Degradado</option>
+          <option value="solid">Color sólido</option>
+          <option value="image">Imagen</option>
+        </select>
+        <div class="bg-row" id="bgColors"><input type="color" id="bgC1" value="${czColor(t.bg.c1) || '#eef3fb'}"><input type="color" id="bgC2" value="${czColor(t.bg.c2) || '#e2e8f5'}"></div>
+        <div class="cover-pick" id="bgPick" style="margin-top:8px;display:none">
+          <div class="cover-prev" id="bgPrev">${czUrl(t.bg.image) ? `<img src="${esc(t.bg.image)}" alt="" />` : `<svg width="22" height="22" fill="none" stroke="currentColor"><use href="#i-image"/></svg>`}</div>
+          <div class="cover-pick-txt"><b id="bgName">Subir imagen de fondo</b></div>
+        </div>
+        <input type="file" id="bgFile" accept="image/*" hidden />
+      </div>
+      <div class="field"><label>Enlaces / redes</label>
+        <div id="linkList"></div>
+        <div class="link-add">
+          <select id="linkType">${LINK_TYPES.map(x => `<option>${x}</option>`).join('')}</select>
+          <input type="text" id="linkUrl" placeholder="https://..." />
+          <button type="button" class="btn sm" id="linkAdd">Añadir</button>
+        </div>
+      </div>
+      <button class="btn primary" id="thSave">Guardar perfil</button>
+      <div class="auth-msg" id="thMsg"></div>
+    </div>`);
+
+  let bannerFile = null, bgFile = null;
+  const bannerInput = m.querySelector('#bannerFile'), bgInput = m.querySelector('#bgFile');
+  m.querySelector('#bannerPick').onclick = () => bannerInput.click();
+  bannerInput.onchange = () => { const f = bannerInput.files[0]; if (!f || !f.type.startsWith('image')) return; bannerFile = f; m.querySelector('#bannerPrev').innerHTML = `<img src="${URL.createObjectURL(f)}" alt="" />`; m.querySelector('#bannerName').textContent = f.name; };
+  m.querySelector('#bgPick').onclick = () => bgInput.click();
+  bgInput.onchange = () => { const f = bgInput.files[0]; if (!f || !f.type.startsWith('image')) return; bgFile = f; m.querySelector('#bgPrev').innerHTML = `<img src="${URL.createObjectURL(f)}" alt="" />`; m.querySelector('#bgName').textContent = f.name; };
+
+  const bgType = m.querySelector('#bgType');
+  bgType.value = t.bg.type || 'gradient';
+  const syncBgType = () => {
+    m.querySelector('#bgColors').style.display = (bgType.value === 'image') ? 'none' : 'flex';
+    m.querySelector('#bgC2').style.display = (bgType.value === 'gradient') ? '' : 'none';
+    m.querySelector('#bgPick').style.display = (bgType.value === 'image') ? 'flex' : 'none';
+  };
+  bgType.onchange = syncBgType; syncBgType();
+
+  const renderLinks = () => {
+    const box = m.querySelector('#linkList');
+    box.innerHTML = links.map((l, i) => `<div class="link-row"><span class="lr-label">${esc(l.label)}</span><span class="lr-url">${esc(l.url)}</span><button type="button" data-i="${i}">&times;</button></div>`).join('');
+    box.querySelectorAll('button[data-i]').forEach(b => b.onclick = () => { links.splice(+b.dataset.i, 1); renderLinks(); });
+  };
+  renderLinks();
+  m.querySelector('#linkAdd').onclick = () => {
+    const label = m.querySelector('#linkType').value;
+    const url = m.querySelector('#linkUrl').value.trim();
+    if (!url) return;
+    if (links.length >= 8) { toast('Máximo 8 enlaces'); return; }
+    links.push({ label, url });
+    m.querySelector('#linkUrl').value = '';
+    renderLinks();
+  };
+
+  m.querySelector('#thSave').onclick = async () => {
+    const msg = m.querySelector('#thMsg'); msg.className = 'auth-msg';
+    const btn = m.querySelector('#thSave'); btn.disabled = true;
+    msg.textContent = 'Guardando…';
+    try {
+      const uid = state.user.id;
+      const theme = {
+        accent: m.querySelector('#thAccent').value,
+        banner: t.banner || null,
+        bg: { type: bgType.value, c1: m.querySelector('#bgC1').value, c2: m.querySelector('#bgC2').value, image: t.bg.image || null },
+        links: links.slice(0, 8),
+      };
+      if (bannerFile) {
+        const ext = (bannerFile.name.split('.').pop() || 'jpg').toLowerCase();
+        const path = `${uid}/banner_${Date.now()}.${ext}`;
+        const up = await sb.storage.from('avatars').upload(path, bannerFile, { contentType: bannerFile.type });
+        if (up.error) throw up.error;
+        theme.banner = sb.storage.from('avatars').getPublicUrl(path).data.publicUrl;
+      }
+      if (bgFile) {
+        const ext = (bgFile.name.split('.').pop() || 'jpg').toLowerCase();
+        const path = `${uid}/bg_${Date.now()}.${ext}`;
+        const up = await sb.storage.from('avatars').upload(path, bgFile, { contentType: bgFile.type });
+        if (up.error) throw up.error;
+        theme.bg.image = sb.storage.from('avatars').getPublicUrl(path).data.publicUrl;
+      }
+      const { data, error } = await sb.from('profiles').update({ theme }).eq('id', uid).select().single();
+      if (error) throw error;
+      state.profile = data;
+      m.remove();
+      toast('Perfil personalizado ✓');
+      openProfile(uid);
+    } catch (err) { msg.className = 'auth-msg error'; msg.textContent = 'Error: ' + (err.message || err); btn.disabled = false; }
+  };
+}
+
 async function openProfile(userId) {
   const main = $('main');
   setActiveNav('');
@@ -1023,29 +1145,38 @@ async function openProfile(userId) {
   tracks.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   const isMe = userId === state.user.id;
   const followsHim = state.follows.has(userId);
+  const theme = (prof.theme && typeof prof.theme === 'object') ? prof.theme : {};
+  const accent = czColor(theme.accent) || '#5f7fb8';
+  const banner = czUrl(theme.banner);
+  const links = Array.isArray(theme.links) ? theme.links : [];
   main.innerHTML = `
-    <div class="profile-head">
-      ${avatarHTML(prof)}
-      <div>
-        <h2>${esc(prof.display_name || prof.username)} ${prof.is_admin?'<span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c;vertical-align:middle">MOD</span>':''} ${prof.banned?'<span class="t-genre" style="background:#fae3e0;border-color:#f0c2bc;color:#c0533f;vertical-align:middle">baneado</span>':''}</h2>
-        <div style="color:var(--ink-soft)">@${esc(prof.username)}</div>
-        ${prof.bio ? `<p style="margin-top:6px;max-width:520px">${esc(prof.bio)}</p>` : ''}
-        <div class="pstats">
-          <span><b>${tracks.length}</b> pistas</span>
-          <span><b>${followers||0}</b> seguidores</span>
-          <span><b>${following||0}</b> siguiendo</span>
+    <div class="profile-view" style="--accent:${accent};${bgStyle(theme)}">
+      ${banner ? `<div class="profile-banner" style="background-image:url('${banner}')"></div>` : ''}
+      <div class="profile-head ${banner ? 'has-banner' : ''}">
+        ${avatarHTML(prof)}
+        <div style="flex:1;min-width:0">
+          <h2 class="accent-name">${esc(prof.display_name || prof.username)} ${prof.is_admin?'<span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c;vertical-align:middle">MOD</span>':''} ${prof.banned?'<span class="t-genre" style="background:#fae3e0;border-color:#f0c2bc;color:#c0533f;vertical-align:middle">baneado</span>':''}</h2>
+          <div style="color:var(--ink-soft)">@${esc(prof.username)}</div>
+          ${prof.bio ? `<p style="margin-top:6px;max-width:520px">${esc(prof.bio)}</p>` : ''}
+          <div class="pstats">
+            <span><b>${tracks.length}</b> pistas</span>
+            <span><b>${followers||0}</b> seguidores</span>
+            <span><b>${following||0}</b> siguiendo</span>
+          </div>
+          ${links.length ? `<div class="profile-links">${links.map(l => `<a href="${esc(czHref(l.url))}" target="_blank" rel="noopener noreferrer"><svg fill="none" stroke="currentColor"><use href="#i-globe"/></svg>${esc(l.label || 'enlace')}</a>`).join('')}</div>` : ''}
+        </div>
+        <div class="pactions">
+          ${isMe ? `<button class="btn primary" id="customizeBtn"><svg fill="none" stroke="#fff"><use href="#i-palette"/></svg> Personalizar</button><button class="btn" id="editProfBtn"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg> Editar perfil</button>`
+                  : `<button class="btn ${followsHim?'':'primary'}" id="followBtn">${followsHim?'Siguiendo ✓':'+ Seguir'}</button>`}
+          ${!isMe ? `<button class="btn" id="msgBtn"><svg fill="none" stroke="currentColor"><use href="#i-mail"/></svg> Mensaje</button>` : ''}
+          ${(!isMe && state.profile.is_admin && !prof.is_admin) ? `<button class="btn" id="banBtn" style="border-color:#e3b7b0;color:#c0533f">${prof.banned?'Desbanear':'Banear usuario'}</button>` : ''}
+          ${(!isMe && state.profile.is_admin && !prof.is_admin) ? `<button class="btn danger-btn" id="delUserBtn"><svg fill="none" stroke="#fff"><use href="#i-trash"/></svg> Eliminar usuario</button>` : ''}
         </div>
       </div>
-      <div class="pactions">
-        ${isMe ? `<button class="btn" id="editProfBtn"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg> Editar perfil</button>`
-                : `<button class="btn ${followsHim?'':'primary'}" id="followBtn">${followsHim?'Siguiendo ✓':'+ Seguir'}</button>`}
-        ${!isMe ? `<button class="btn" id="msgBtn"><svg fill="none" stroke="currentColor"><use href="#i-mail"/></svg> Mensaje</button>` : ''}
-        ${(!isMe && state.profile.is_admin && !prof.is_admin) ? `<button class="btn" id="banBtn" style="border-color:#e3b7b0;color:#c0533f">${prof.banned?'Desbanear':'Banear usuario'}</button>` : ''}
-        ${(!isMe && state.profile.is_admin && !prof.is_admin) ? `<button class="btn danger-btn" id="delUserBtn"><svg fill="none" stroke="#fff"><use href="#i-trash"/></svg> Eliminar usuario</button>` : ''}
-      </div>
-    </div>
-    <div class="main-head"><h2>Pistas</h2></div>
-    <div id="feedList" class="feed-list"></div>`;
+      <div class="main-head"><h2>Pistas</h2></div>
+      <div id="feedList" class="feed-list"></div>
+    </div>`;
+  if (isMe) { const cb = $('customizeBtn'); if (cb) cb.onclick = openProfileCustomizer; }
 
   const list = $('feedList');
   if (!tracks.length) list.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-music"/></svg><p>Sin pistas todavía.</p></div>`;
@@ -1191,6 +1322,7 @@ function renderSettings() {
       <div class="field"><label>Nombre para mostrar</label><input type="text" id="setName" value="${esc(p.display_name||'')}" /></div>
       <div class="field"><label>Usuario</label><input type="text" id="setUser" value="${esc(p.username||'')}" /></div>
       <div class="field"><label>Bio</label><textarea id="setBio" placeholder="Cuéntanos algo sobre ti…">${esc(p.bio||'')}</textarea></div>
+      <button class="btn" id="openCustomize" style="width:100%;margin-bottom:12px"><svg fill="none" stroke="currentColor"><use href="#i-palette"/></svg> Personalizar perfil (banner, colores, enlaces)</button>
       <button class="btn primary" id="saveProfile">Guardar cambios</button>
       <div class="auth-msg" id="setMsg"></div>
       <hr style="border:none;border-top:1px solid var(--line-soft);margin:20px 0" />
@@ -1206,6 +1338,7 @@ function renderSettings() {
       <div style="text-align:center;margin-top:16px"><a id="policyLink" style="font-size:12px;color:var(--ink-soft);cursor:pointer">Política de privacidad y cookies</a></div>
     </div>`;
   $('policyLink').onclick = showPrivacyPolicy;
+  $('openCustomize').onclick = openProfileCustomizer;
   $('deleteAccount').onclick = deleteAccount;
 
   const avatarFile = $('avatarFile');
