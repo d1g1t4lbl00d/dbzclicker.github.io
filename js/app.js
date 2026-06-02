@@ -45,6 +45,10 @@ function toast(msg) {
   $('toastWrap').appendChild(t);
   setTimeout(() => { t.style.opacity = '0'; t.style.transition = 'opacity .3s'; setTimeout(()=>t.remove(), 300); }, 2600);
 }
+function requireNotBanned() {
+  if (state.profile?.banned) { toast('Tu cuenta está suspendida por un moderador.'); return false; }
+  return true;
+}
 function avatarHTML(profile, cls='') {
   const url = profile?.avatar_url;
   const name = profile?.display_name || profile?.username || '?';
@@ -176,7 +180,8 @@ async function ensureProfile() {
 }
 
 function renderMe() {
-  $('meName').textContent = state.profile.display_name || state.profile.username;
+  $('meName').innerHTML = esc(state.profile.display_name || state.profile.username) +
+    (state.profile.is_admin ? ' <span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c;padding:1px 7px">MOD</span>' : '');
   $('meAvatar').outerHTML = avatarHTML(state.profile).replace('class="avatar ', 'id="meAvatar" class="avatar ');
 }
 
@@ -349,7 +354,7 @@ function trackCard(t) {
           <button class="act like ${liked?'on':''}" data-act="like"><svg><use href="#i-heart"/></svg><span class="ln">${liked?'Te gusta':'Me gusta'}</span></button>
           <button class="act" data-act="toggleComments"><svg><use href="#i-comment"/></svg><span class="cn">Comentar</span></button>
           <button class="act" data-act="download"><svg><use href="#i-download"/></svg>Descargar</button>
-          ${t.user_id === state.user.id ? `<button class="act" data-act="delete"><svg fill="none" stroke="currentColor"><use href="#i-files"/></svg>Borrar</button>` : ''}
+          ${(t.user_id === state.user.id || state.profile.is_admin) ? `<button class="act" data-act="delete"><svg fill="none" stroke="currentColor"><use href="#i-files"/></svg>${t.user_id === state.user.id ? 'Borrar' : 'Borrar (mod)'}</button>` : ''}
         </div>
         <div class="comments hidden" data-comments></div>
       </div>
@@ -440,15 +445,29 @@ async function toggleComments(t, card) {
   renderComments(box, t, data || []);
 }
 function renderComments(box, t, comments) {
-  box.innerHTML = comments.map(c => `
-    <div class="comment">
+  box.innerHTML = comments.map(c => {
+    const canDel = c.user_id === state.user.id || state.profile.is_admin;
+    return `
+    <div class="comment" data-cid="${c.id}">
       ${avatarHTML(c.profiles)}
-      <div class="c-body"><b>${esc(c.profiles?.display_name || c.profiles?.username || 'anónimo')}</b>
-      <span class="c-time">${timeAgo(c.created_at)}</span><p>${esc(c.body)}</p></div>
-    </div>`).join('') || '<p style="color:var(--ink-soft);font-size:12.5px;margin-bottom:6px">Sé el primero en comentar.</p>';
+      <div class="c-body" style="flex:1"><b>${esc(c.profiles?.display_name || c.profiles?.username || 'anónimo')}</b>
+      <span class="c-time">${timeAgo(c.created_at)}</span>
+      ${canDel ? `<button class="act sm" data-del-comment="${c.id}" title="Borrar comentario" style="float:right;padding:2px 6px">✕</button>` : ''}
+      <p>${esc(c.body)}</p></div>
+    </div>`;
+  }).join('') || '<p style="color:var(--ink-soft);font-size:12.5px;margin-bottom:6px">Sé el primero en comentar.</p>';
+  box.querySelectorAll('[data-del-comment]').forEach(btn => {
+    btn.onclick = async () => {
+      const id = btn.getAttribute('data-del-comment');
+      const { error } = await sb.from('comments').delete().eq('id', id);
+      if (error) { toast('No se pudo borrar el comentario'); return; }
+      renderComments(box, t, comments.filter(x => x.id !== id));
+    };
+  });
   const form = el(`<form class="comment-form"><input type="text" placeholder="Añade un comentario..." maxlength="400" required /><button class="btn sm primary" type="submit">Enviar</button></form>`);
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (!requireNotBanned()) return;
     const input = form.querySelector('input');
     const body = input.value.trim(); if (!body) return;
     input.value = '';
@@ -566,6 +585,7 @@ function openModal(html) {
 }
 
 function openUploadModal() {
+  if (!requireNotBanned()) return;
   const m = openModal(`
     <div class="modal-head"><h3>Subir pista</h3><button class="close">&times;</button></div>
     <div class="modal-body">
@@ -682,7 +702,7 @@ async function openProfile(userId) {
     <div class="profile-head">
       ${avatarHTML(prof)}
       <div>
-        <h2>${esc(prof.display_name || prof.username)}</h2>
+        <h2>${esc(prof.display_name || prof.username)} ${prof.is_admin?'<span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c;vertical-align:middle">MOD</span>':''} ${prof.banned?'<span class="t-genre" style="background:#fae3e0;border-color:#f0c2bc;color:#c0533f;vertical-align:middle">baneado</span>':''}</h2>
         <div style="color:var(--ink-soft)">@${esc(prof.username)}</div>
         ${prof.bio ? `<p style="margin-top:6px;max-width:520px">${esc(prof.bio)}</p>` : ''}
         <div class="pstats">
@@ -694,6 +714,7 @@ async function openProfile(userId) {
       <div class="pactions">
         ${isMe ? `<button class="btn" id="editProfBtn"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg> Editar perfil</button>`
                 : `<button class="btn ${followsHim?'':'primary'}" id="followBtn">${followsHim?'Siguiendo ✓':'+ Seguir'}</button>`}
+        ${(!isMe && state.profile.is_admin && !prof.is_admin) ? `<button class="btn" id="banBtn" style="border-color:#e3b7b0;color:#c0533f;margin-top:8px">${prof.banned?'Desbanear':'Banear usuario'}</button>` : ''}
       </div>
     </div>
     <div class="main-head"><h2>Pistas</h2></div>
@@ -704,7 +725,16 @@ async function openProfile(userId) {
   else { state.tracks = tracks; state.queue = tracks.map(t=>t.id); tracks.forEach(t => list.appendChild(trackCard(t))); }
 
   if (isMe) $('editProfBtn').onclick = () => switchView('settings');
-  else $('followBtn').onclick = async () => {
+  const banBtn = $('banBtn');
+  if (banBtn) banBtn.onclick = async () => {
+    const newVal = !prof.banned;
+    const { error } = await sb.from('profiles').update({ banned: newVal }).eq('id', userId);
+    if (error) { toast('No se pudo actualizar'); return; }
+    prof.banned = newVal;
+    banBtn.textContent = newVal ? 'Desbanear' : 'Banear usuario';
+    toast(newVal ? 'Usuario baneado' : 'Usuario desbaneado');
+  };
+  if (!isMe) $('followBtn').onclick = async () => {
     const btn = $('followBtn');
     if (state.follows.has(userId)) {
       state.follows.delete(userId);
@@ -735,14 +765,24 @@ async function renderPeople() {
     const row = el(`
       <div class="track" style="align-items:center">
         ${avatarHTML(p)}
-        <div class="body"><div class="t-title">${esc(p.display_name||p.username)}</div>
+        <div class="body"><div class="t-title">${esc(p.display_name||p.username)} ${p.is_admin?'<span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c">MOD</span>':''} ${p.banned?'<span class="t-genre" style="background:#fae3e0;border-color:#f0c2bc;color:#c0533f">baneado</span>':''}</div>
         <div class="t-artist">@${esc(p.username)}</div>${p.bio?`<div class="sub" style="margin-top:4px">${esc(p.bio)}</div>`:''}</div>
         <div style="display:flex;gap:8px;align-items:center">
           <button class="btn sm" data-act="view">Ver perfil</button>
           <button class="btn sm ${f?'':'primary'}" data-act="follow">${f?'Siguiendo ✓':'+ Seguir'}</button>
+          ${state.profile.is_admin && !p.is_admin ? `<button class="btn sm" data-act="ban" style="border-color:#e3b7b0;color:#c0533f">${p.banned?'Desbanear':'Banear'}</button>` : ''}
         </div>
       </div>`);
     row.querySelector('[data-act="view"]').onclick = () => openProfile(p.id);
+    const banBtn = row.querySelector('[data-act="ban"]');
+    if (banBtn) banBtn.onclick = async () => {
+      const newVal = !p.banned;
+      const { error } = await sb.from('profiles').update({ banned: newVal }).eq('id', p.id);
+      if (error) { toast('No se pudo actualizar'); return; }
+      p.banned = newVal;
+      banBtn.textContent = newVal ? 'Desbanear' : 'Banear';
+      toast(newVal ? `${p.username} baneado` : `${p.username} desbaneado`);
+    };
     row.querySelector('[data-act="follow"]').onclick = async (e) => {
       const btn = e.target;
       if (state.follows.has(p.id)) {
@@ -778,6 +818,10 @@ function renderSettings() {
       <div class="field"><label>Bio</label><textarea id="setBio" placeholder="Cuéntanos algo sobre ti…">${esc(p.bio||'')}</textarea></div>
       <button class="btn primary" id="saveProfile">Guardar cambios</button>
       <div class="auth-msg" id="setMsg"></div>
+      <hr style="border:none;border-top:1px solid var(--line-soft);margin:20px 0" />
+      <div class="field"><label>Nueva contraseña</label><input type="password" id="setPass" placeholder="Mínimo 6 caracteres" autocomplete="new-password" /></div>
+      <button class="btn" id="savePass">Cambiar contraseña</button>
+      <div class="auth-msg" id="passMsg"></div>
     </div>`;
 
   const avatarFile = $('avatarFile');
@@ -813,6 +857,17 @@ function renderSettings() {
     } catch (err) {
       msg.className='auth-msg error'; msg.textContent = traducirError(err.message);
     } finally { btn.disabled = false; }
+  };
+
+  $('savePass').onclick = async () => {
+    const pass = $('setPass').value;
+    const msg = $('passMsg'); msg.className = 'auth-msg';
+    if (pass.length < 6) { msg.className = 'auth-msg error'; msg.textContent = 'Mínimo 6 caracteres.'; return; }
+    const { error } = await sb.auth.updateUser({ password: pass });
+    if (error) { msg.className = 'auth-msg error'; msg.textContent = traducirError(error.message); return; }
+    $('setPass').value = '';
+    msg.className = 'auth-msg ok'; msg.textContent = 'Contraseña actualizada ✓';
+    toast('Contraseña cambiada');
   };
 }
 
@@ -879,10 +934,15 @@ async function initChat() {
       appendChatMsg({ ...m, profiles: prof });
       scrollChat();
     })
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'messages' }, (payload) => {
+      const node = document.querySelector(`.chat-msg[data-mid="${payload.old.id}"]`);
+      if (node) node.remove();
+    })
     .subscribe();
 
   $('chatForm').addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (!requireNotBanned()) return;
     const input = $('chatInput');
     const body = input.value.trim(); if (!body) return;
     input.value = '';
@@ -892,9 +952,17 @@ async function initChat() {
 }
 function appendChatMsg(m) {
   const box = $('chatMsgs');
-  const row = el(`<div class="chat-msg"><span class="who" data-uid="${m.user_id}">${esc(m.profiles?.display_name||m.profiles?.username||'anónimo')}</span><span class="when">${timeAgo(m.created_at)}</span><p>${esc(m.body)}</p></div>`);
-  row.querySelector('.who').onclick = () => openProfile(m.user_id);
-  row.querySelector('.who').style.cursor = 'pointer';
+  const canDel = m.user_id === state.user.id || state.profile.is_admin;
+  const row = el(`<div class="chat-msg" data-mid="${m.id}"><span class="who" data-uid="${m.user_id}">${esc(m.profiles?.display_name||m.profiles?.username||'anónimo')}</span><span class="when">${timeAgo(m.created_at)}</span>${canDel?`<button class="act sm" data-del-msg style="float:right;padding:0 5px" title="Borrar mensaje">✕</button>`:''}<p>${esc(m.body)}</p></div>`);
+  const who = row.querySelector('.who');
+  who.onclick = () => openProfile(m.user_id);
+  who.style.cursor = 'pointer';
+  const del = row.querySelector('[data-del-msg]');
+  if (del) del.onclick = async () => {
+    const { error } = await sb.from('messages').delete().eq('id', m.id);
+    if (error) { toast('No se pudo borrar'); return; }
+    row.remove();
+  };
   box.appendChild(row);
 }
 function scrollChat() { const b = $('chatMsgs'); b.scrollTop = b.scrollHeight; }
