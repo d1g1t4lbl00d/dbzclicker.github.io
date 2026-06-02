@@ -140,10 +140,12 @@ function traducirError(m) {
   return m;
 }
 
-$('btnLogout').onclick = async () => {
-  await sb.auth.signOut();
+async function logout() {
+  if (!confirm('¿Cerrar sesión?')) return;
+  try { await sb.auth.signOut(); } catch {}
   location.reload();
-};
+}
+$('btnLogout').onclick = logout;
 
 /* =======================================================================
    ARRANQUE / SESIÓN
@@ -1235,7 +1237,7 @@ async function openProfile(userId) {
           ${links.length ? `<div class="profile-links">${links.map(l => `<a href="${esc(czHref(l.url))}" target="_blank" rel="noopener noreferrer"><svg fill="none" stroke="currentColor"><use href="#i-globe"/></svg>${esc(l.label || 'enlace')}</a>`).join('')}</div>` : ''}
         </div>
         <div class="pactions">
-          ${isMe ? `<button class="btn primary" id="customizeBtn"><svg fill="none" stroke="#fff"><use href="#i-palette"/></svg> Personalizar</button><button class="btn" id="editProfBtn"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg> Editar perfil</button>`
+          ${isMe ? `<button class="btn primary" id="customizeBtn"><svg fill="none" stroke="#fff"><use href="#i-palette"/></svg> Personalizar</button><button class="btn" id="editProfBtn"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg> Editar perfil</button><button class="btn" id="logoutBtn"><svg fill="none" stroke="currentColor"><use href="#i-logout"/></svg> Cerrar sesión</button>`
                   : `<button class="btn ${followsHim?'':'primary'}" id="followBtn">${followsHim?'Siguiendo ✓':'+ Seguir'}</button>`}
           ${!isMe ? `<button class="btn" id="msgBtn"><svg fill="none" stroke="currentColor"><use href="#i-mail"/></svg> Mensaje</button>` : ''}
           ${(!isMe && state.profile.is_admin && !prof.is_admin) ? `<button class="btn" id="banBtn" style="border-color:#e3b7b0;color:#c0533f">${prof.banned?'Desbanear':'Banear usuario'}</button>` : ''}
@@ -1250,7 +1252,7 @@ async function openProfile(userId) {
   if (theme.effect && theme.effect !== 'none' && EFFECTS[theme.effect]) {
     const v = main.querySelector('.profile-view'); if (v) v.prepend(buildEffect(theme.effect));
   }
-  if (isMe) { const cb = $('customizeBtn'); if (cb) cb.onclick = openProfileCustomizer; }
+  if (isMe) { const cb = $('customizeBtn'); if (cb) cb.onclick = openProfileCustomizer; const lo = $('logoutBtn'); if (lo) lo.onclick = logout; }
 
   const list = $('feedList');
   if (!tracks.length) list.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-music"/></svg><p>Sin pistas todavía.</p></div>`;
@@ -1403,6 +1405,8 @@ function renderSettings() {
       <div class="field"><label>Nueva contraseña</label><input type="password" id="setPass" placeholder="Mínimo 6 caracteres" autocomplete="new-password" /></div>
       <button class="btn" id="savePass">Cambiar contraseña</button>
       <div class="auth-msg" id="passMsg"></div>
+      <hr style="border:none;border-top:1px solid var(--line-soft);margin:20px 0" />
+      <button class="btn" id="settingsLogout" style="width:100%"><svg fill="none" stroke="currentColor"><use href="#i-logout"/></svg> Cerrar sesión</button>
       <div class="danger-zone">
         <h4>Eliminar cuenta</h4>
         <p>Borra para siempre tu cuenta, tu perfil y <b>todo</b> lo que has subido: pistas, portadas, comentarios, "me gusta", seguidores y mensajes. No se puede deshacer.</p>
@@ -1413,6 +1417,7 @@ function renderSettings() {
     </div>`;
   $('policyLink').onclick = showPrivacyPolicy;
   $('openCustomize').onclick = openProfileCustomizer;
+  $('settingsLogout').onclick = logout;
   $('deleteAccount').onclick = deleteAccount;
 
   const avatarFile = $('avatarFile');
