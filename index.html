@@ -3,618 +3,180 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Dino Voz - Corredor por Voz</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  html, body {
-    height: 100%;
-    background: radial-gradient(ellipse at top, #1a1f2e 0%, #0a0d14 100%);
-    color: #e6e9ef;
-    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-    overflow: hidden;
-    user-select: none;
-  }
-  body {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    min-height: 100dvh;
-    padding: 12px;
-  }
-  .wrap {
-    width: min(960px, 100%);
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-  }
-  header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 4px 8px;
-  }
-  h1 {
-    font-size: clamp(15px, 4vw, 20px);
-    letter-spacing: 2px;
-    font-weight: 600;
-    color: #f4f7ff;
-    text-transform: uppercase;
-  }
-  h1 span { color: #4ade80; }
-  .mic {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.07);
-    padding: 6px 12px;
-    border-radius: 999px;
-    font-size: clamp(11px, 3vw, 13px);
-    color: #c8cfdb;
-  }
-  .dot {
-    width: 11px;
-    height: 11px;
-    border-radius: 50%;
-    background: #ef4444;
-    box-shadow: 0 0 0 0 rgba(239,68,68,0.6);
-    transition: background 0.2s;
-  }
-  .dot.live {
-    background: #22c55e;
-    animation: pulse 1.4s infinite;
-  }
-  @keyframes pulse {
-    0%   { box-shadow: 0 0 0 0 rgba(34,197,94,0.55); }
-    70%  { box-shadow: 0 0 0 14px rgba(34,197,94,0); }
-    100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); }
-  }
-  .stage {
-    position: relative;
-    border-radius: 14px;
-    overflow: hidden;
-    background: linear-gradient(180deg, #0f1422 0%, #131a2c 60%, #1a2238 100%);
-    box-shadow: 0 18px 60px rgba(0,0,0,0.55), inset 0 0 0 1px rgba(255,255,255,0.05);
-  }
-  canvas {
-    display: block;
-    width: 100%;
-    height: auto;
-    max-height: 75dvh;
-    object-fit: contain;
-    image-rendering: pixelated;
-  }
-  .heard {
-    position: absolute;
-    top: 14px;
-    left: 50%;
-    transform: translateX(-50%) translateY(-6px);
-    background: rgba(74,222,128,0.12);
-    color: #4ade80;
-    border: 1px solid rgba(74,222,128,0.35);
-    padding: 6px 16px;
-    border-radius: 999px;
-    font-size: 14px;
-    font-weight: 600;
-    letter-spacing: 1px;
-    opacity: 0;
-    transition: opacity 0.25s, transform 0.25s;
-    pointer-events: none;
-    text-transform: uppercase;
-  }
-  .heard.show {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-  }
-  .overlay {
-    position: absolute;
-    inset: 0;
-    background: rgba(7,10,18,0.78);
-    backdrop-filter: blur(4px);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: 18px;
-    text-align: center;
-    padding: 20px;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.3s;
-  }
-  .overlay.show {
-    opacity: 1;
-    pointer-events: auto;
-  }
-  .overlay h2 {
-    font-size: 34px;
-    letter-spacing: 3px;
-    color: #f4f7ff;
-    text-transform: uppercase;
-  }
-  .overlay p {
-    color: #a4adc0;
-    font-size: 15px;
-    max-width: 440px;
-    line-height: 1.5;
-  }
-  .overlay .score-final {
-    font-size: 18px;
-    color: #4ade80;
-    font-weight: 600;
-    letter-spacing: 2px;
-  }
-  button {
-    background: linear-gradient(180deg, #4ade80, #16a34a);
-    color: #062712;
-    border: none;
-    padding: 12px 28px;
-    font-size: 15px;
-    font-weight: 700;
-    letter-spacing: 1.5px;
-    border-radius: 10px;
-    cursor: pointer;
-    text-transform: uppercase;
-    box-shadow: 0 8px 22px rgba(34,197,94,0.35);
-    transition: transform 0.15s, box-shadow 0.15s;
-  }
-  button:hover  { transform: translateY(-2px); box-shadow: 0 12px 26px rgba(34,197,94,0.45); }
-  button:active { transform: translateY(0); }
-  .legend {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 10px;
-    justify-content: center;
-    font-size: 13px;
-    color: #9aa3b6;
-  }
-  .legend kbd {
-    background: rgba(255,255,255,0.06);
-    border: 1px solid rgba(255,255,255,0.1);
-    padding: 4px 9px;
-    border-radius: 6px;
-    color: #e6e9ef;
-    font-family: inherit;
-    font-size: 12px;
-    letter-spacing: 1px;
-  }
-  .err {
-    color: #fca5a5;
-    background: rgba(239,68,68,0.1);
-    border: 1px solid rgba(239,68,68,0.3);
-    padding: 8px 14px;
-    border-radius: 8px;
-    font-size: 13px;
-    text-align: center;
-  }
-  @media (max-width: 600px) {
-    body { padding: 6px; justify-content: flex-start; padding-top: 8px; }
-    .wrap { gap: 6px; }
-    .legend { display: none; }
-    .overlay h2 { font-size: 22px; }
-    .overlay p { font-size: 13px; }
-    button { padding: 10px 22px; font-size: 13px; }
-  }
-</style>
+<title>UnderBro — upload. share. connect.</title>
+<meta name="description" content="UnderBro — sube, comparte y conecta a través de la música." />
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90' font-weight='bold' fill='%235f7fb8'>U</text></svg>" />
+<link rel="stylesheet" href="css/styles.css" />
 </head>
 <body>
-  <div class="wrap">
-    <header>
-      <h1>Dino<span>Voz</span></h1>
-      <div class="mic" id="micBox">
-        <span class="dot" id="micDot"></span>
-        <span id="micLabel">Microfono inactivo</span>
-      </div>
-    </header>
 
-    <div class="stage" id="stage">
-      <canvas id="game" width="960" height="320"></canvas>
-      <div class="heard" id="heard"></div>
-      <div class="overlay show" id="overlayStart">
-        <h2>Dino por Voz</h2>
-        <p>Controla al dinosaurio con tu voz. Di <b style="color:#4ade80">"salta"</b> o <b style="color:#4ade80">"arriba"</b> para saltar, y <b style="color:#fbbf24">"agacha"</b> o <b style="color:#fbbf24">"abajo"</b> para agacharte. Esquiva cactus y aves.</p>
-        <button id="btnStart">Empezar</button>
-        <p style="font-size:12px;opacity:0.6">Permite el acceso al microfono cuando se te pida.</p>
-      </div>
-      <div class="overlay" id="overlayOver">
-        <h2>Game Over</h2>
-        <div class="score-final" id="finalScore">PUNTOS 0</div>
-        <p>Di <b style="color:#4ade80">"juega"</b> o <b style="color:#4ade80">"empezar"</b> para reintentar.</p>
-        <button id="btnRestart">Reiniciar</button>
-      </div>
-    </div>
+<!-- ===================== ICON SPRITE ===================== -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></symbol>
+    <symbol id="i-stream" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></symbol>
+    <symbol id="i-people" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+    <symbol id="i-comment" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></symbol>
+    <symbol id="i-files" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><polyline points="13 2 13 9 20 9"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></symbol>
+    <symbol id="i-feed" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11a9 9 0 0 1 9 9"/><path d="M4 4a16 16 0 0 1 16 16"/><circle cx="5" cy="19" r="1"/></symbol>
+    <symbol id="i-headphones" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></symbol>
+    <symbol id="i-music" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></symbol>
+    <symbol id="i-mixer" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></symbol>
+    <symbol id="i-bell" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></symbol>
+    <symbol id="i-mail" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><polyline points="22,6 12,13 2,6"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 4 20 12 6 20 6 4"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></symbol>
+    <symbol id="i-prev" viewBox="0 0 24 24"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" stroke-width="2"/></symbol>
+    <symbol id="i-next" viewBox="0 0 24 24"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" stroke-width="2"/></symbol>
+    <symbol id="i-vol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></symbol>
+    <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></symbol>
+    <symbol id="i-send" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></symbol>
+  </defs>
+</svg>
 
-    <div class="legend">
-      <span><kbd>salta</kbd> / <kbd>arriba</kbd> saltar</span>
-      <span><kbd>agacha</kbd> / <kbd>abajo</kbd> agacharse</span>
-      <span><kbd>juega</kbd> / <kbd>empezar</kbd> reiniciar</span>
-      <span style="opacity:0.5">| Teclas: Espacio = saltar, Flecha abajo = agacharse</span>
+<!-- ===================== AUTH SCREEN ===================== -->
+<div class="auth-screen" id="authScreen">
+  <div class="auth-card">
+    <div class="auth-head">
+      <div class="logo">Under<span class="u">Bro</span></div>
+      <p>upload. share. connect.</p>
     </div>
-    <div id="errBox"></div>
+    <div class="auth-body">
+      <div class="auth-tabs">
+        <button id="tabLogin" class="active">Iniciar sesión</button>
+        <button id="tabRegister">Registrarse</button>
+      </div>
+      <form id="authForm">
+        <div class="field" id="fieldUsername" style="display:none">
+          <label>Nombre de usuario</label>
+          <input type="text" id="authUsername" autocomplete="username" placeholder="tu_alias" />
+        </div>
+        <div class="field">
+          <label>Correo electrónico</label>
+          <input type="email" id="authEmail" autocomplete="email" placeholder="tu@correo.com" required />
+        </div>
+        <div class="field">
+          <label>Contraseña</label>
+          <input type="password" id="authPassword" autocomplete="current-password" placeholder="••••••••" required minlength="6" />
+        </div>
+        <button type="submit" class="btn primary" id="authSubmit">Entrar</button>
+        <div class="auth-msg" id="authMsg"></div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== APP ===================== -->
+<div class="app hidden" id="app">
+  <div class="brand">
+    <div class="logo">Under<span class="u">Bro</span></div>
   </div>
 
-<script>
-(() => {
-  'use strict';
+  <!-- TOPBAR -->
+  <div class="topbar">
+    <button class="icon-btn menu-toggle" id="menuToggle"><svg><use href="#i-menu"/></svg></button>
+    <div class="tabs" id="feedTabs">
+      <button data-tab="following">Following</button>
+      <button data-tab="trending" class="active">Trending</button>
+      <button data-tab="new">New</button>
+    </div>
+    <div class="search">
+      <svg><use href="#i-search"/></svg>
+      <input type="text" id="searchInput" placeholder="Search UnderBro..." />
+    </div>
+    <div class="topbar-right">
+      <button class="icon-btn" id="btnNotif" title="Notificaciones"><svg><use href="#i-bell"/></svg><span class="badge hidden" id="notifBadge">0</span></button>
+      <div class="avatar-chip" id="meChip" title="Mi perfil">
+        <div class="avatar" id="meAvatar"></div>
+        <span class="uname" id="meName"></span>
+      </div>
+    </div>
+  </div>
 
-  const canvas = document.getElementById('game');
-  const ctx = canvas.getContext('2d');
-  const W = canvas.width;
-  const H = canvas.height;
-  const GROUND_Y = H - 50;
+  <!-- SIDEBAR -->
+  <nav class="sidebar" id="sidebar">
+    <button class="btn primary upload-cta" id="btnUpload"><svg><use href="#i-upload"/></svg> Upload Track</button>
+    <div class="side-group">
+      <h4>Descubrir</h4>
+      <button class="nav-item active" data-view="feed"><svg><use href="#i-stream"/></svg> Stream</button>
+      <button class="nav-item" data-view="feed-trending"><svg><use href="#i-feed"/></svg> Trending</button>
+      <button class="nav-item" data-view="people"><svg><use href="#i-people"/></svg> People</button>
+    </div>
+    <div class="side-group">
+      <h4>Library</h4>
+      <button class="nav-item" data-view="all"><svg><use href="#i-music"/></svg> All Tracks <span class="count" id="cntAll"></span></button>
+      <button class="nav-item" data-view="favorites"><svg><use href="#i-heart"/></svg> Favorites <span class="count" id="cntFav"></span></button>
+      <button class="nav-item" data-view="mytracks"><svg><use href="#i-files"/></svg> My Uploads <span class="count" id="cntMine"></span></button>
+      <button class="nav-item" data-view="downloads"><svg><use href="#i-download"/></svg> Downloads <span class="count" id="cntDl"></span></button>
+    </div>
+    <div class="side-group">
+      <h4>Cuenta</h4>
+      <button class="nav-item" data-view="notifications"><svg><use href="#i-bell"/></svg> Notifications</button>
+      <button class="nav-item" data-view="settings"><svg><use href="#i-settings"/></svg> Settings</button>
+      <button class="nav-item" id="btnLogout"><svg><use href="#i-logout"/></svg> Salir</button>
+    </div>
+  </nav>
 
-  const micDot = document.getElementById('micDot');
-  const micLabel = document.getElementById('micLabel');
-  const heardEl = document.getElementById('heard');
-  const overlayStart = document.getElementById('overlayStart');
-  const overlayOver = document.getElementById('overlayOver');
-  const finalScoreEl = document.getElementById('finalScore');
-  const btnStart = document.getElementById('btnStart');
-  const btnRestart = document.getElementById('btnRestart');
-  const errBox = document.getElementById('errBox');
+  <!-- MAIN -->
+  <main class="main" id="main"></main>
 
-  const STATE = { IDLE: 0, RUNNING: 1, OVER: 2 };
-  let state = STATE.IDLE;
+  <!-- RIGHT -->
+  <aside class="right">
+    <div class="right-section">
+      <h4><svg style="width:14px;height:14px" stroke="currentColor"><use href="#i-people"/></svg> People Online (<span id="onlineCount">0</span>)</h4>
+      <div class="online-list" id="onlineList"></div>
+    </div>
+    <div class="chat">
+      <div class="right-section" style="border:none;padding-bottom:0">
+        <h4><svg style="width:14px;height:14px" stroke="currentColor"><use href="#i-comment"/></svg> UnderBro Chat</h4>
+      </div>
+      <div class="chat-msgs" id="chatMsgs"></div>
+      <form class="chat-form" id="chatForm">
+        <input type="text" id="chatInput" placeholder="Escribe un mensaje..." maxlength="500" autocomplete="off" />
+        <button type="submit" class="btn primary" title="Enviar"><svg style="width:16px;height:16px" stroke="#fff"><use href="#i-send"/></svg></button>
+      </form>
+    </div>
+  </aside>
+</div>
 
-  const GRAVITY = 0.85;
-  const JUMP_V = -15.5;
-  const DUCK_JUMP_BOOST = -0.6;
+<!-- ===================== PLAYER ===================== -->
+<div class="player hidden" id="player">
+  <div class="now">
+    <div class="cover" id="pCover"></div>
+    <div class="info">
+      <div class="t" id="pTitle">—</div>
+      <div class="a" id="pArtist"></div>
+    </div>
+  </div>
+  <div class="controls">
+    <button id="pPrev" title="Anterior"><svg><use href="#i-prev"/></svg></button>
+    <button class="play-big" id="pPlay" title="Reproducir"><svg><use href="#i-play"/></svg></button>
+    <button id="pNext" title="Siguiente"><svg><use href="#i-next"/></svg></button>
+  </div>
+  <div class="progress">
+    <span class="time" id="pCur">0:00</span>
+    <div class="seek" id="pSeek"><div class="fill" id="pFill"></div><div class="knob" id="pKnob"></div></div>
+    <span class="time" id="pDur">0:00</span>
+  </div>
+  <div class="vol">
+    <svg><use href="#i-vol"/></svg>
+    <div class="vol-slider" id="volSlider"><div class="fill" id="volFill"></div><div class="knob" id="volKnob"></div></div>
+  </div>
+  <audio id="audio" preload="metadata"></audio>
+</div>
 
-  const dino = {
-    x: 70, y: GROUND_Y - 46, w: 44, h: 46,
-    vy: 0, onGround: true, ducking: false, legPhase: 0, blink: 0,
-  };
+<!-- ===================== MODAL ROOT + TOASTS ===================== -->
+<div id="modalRoot"></div>
+<div class="toast-wrap" id="toastWrap"></div>
 
-  let speed = 6, baseSpeed = 6, score = 0;
-  let highScore = +localStorage.getItem('dinoVozHigh') || 0;
-  let frame = 0, obstacles = [], clouds = [], stars = [], mountains = [], dust = [];
-  let groundOffset = 0, nextObstacleIn = 80;
-
-  function initScenery() {
-    clouds = [];
-    for (let i = 0; i < 5; i++) clouds.push({ x: Math.random()*W, y: 30+Math.random()*90, s: 0.3+Math.random()*0.7, size: 14+Math.random()*18 });
-    stars = [];
-    for (let i = 0; i < 40; i++) stars.push({ x: Math.random()*W, y: Math.random()*(GROUND_Y-60), b: Math.random(), tw: Math.random()*Math.PI*2 });
-    mountains = [];
-    for (let i = 0; i < 6; i++) mountains.push({ x: i*220+Math.random()*80, h: 60+Math.random()*60, w: 180+Math.random()*100 });
-  }
-  initScenery();
-
-  function spawnObstacle() {
-    const r = Math.random();
-    if (r < 0.6) {
-      const variant = Math.floor(Math.random()*3);
-      const heights = [38,50,62], widths = [18,24,36];
-      obstacles.push({ type:'cactus', x:W+20, y:GROUND_Y-heights[variant], w:widths[variant], h:heights[variant], variant });
-    } else {
-      const altitude = Math.random()<0.5 ? GROUND_Y-90 : GROUND_Y-55;
-      obstacles.push({ type:'bird', x:W+20, y:altitude, w:40, h:26, wing:0 });
-    }
-    nextObstacleIn = 60+Math.floor(Math.random()*70)-Math.min(30,Math.floor(speed*1.5));
-  }
-
-  function spawnDust(x, y) {
-    for (let i = 0; i < 4; i++) dust.push({ x:x+(Math.random()-0.5)*10, y:y+(Math.random()-0.5)*4, vx:-1-Math.random()*2, vy:-Math.random()*1.5, life:18+Math.random()*8, size:2+Math.random()*2 });
-  }
-
-  function jump() {
-    if (state !== STATE.RUNNING) return;
-    if (dino.onGround) {
-      dino.vy = JUMP_V+(dino.ducking?DUCK_JUMP_BOOST:0);
-      dino.onGround = false; dino.ducking = false;
-      spawnDust(dino.x+10, GROUND_Y);
-    }
-  }
-  function duckStart() { if (state!==STATE.RUNNING) return; dino.ducking=true; if (!dino.onGround&&dino.vy<0) dino.vy*=0.5; }
-  function duckEnd() { dino.ducking=false; }
-  let duckUntil = 0;
-  function duckPulse() { duckStart(); duckUntil=performance.now()+700; }
-
-  document.addEventListener('keydown', (e) => {
-    if (e.code==='Space'||e.code==='ArrowUp') { e.preventDefault(); if (state===STATE.IDLE||state===STATE.OVER) startGame(); else jump(); }
-    else if (e.code==='ArrowDown') { e.preventDefault(); duckStart(); }
-  });
-  document.addEventListener('keyup', (e) => { if (e.code==='ArrowDown') duckEnd(); });
-  btnStart.addEventListener('click', ()=>startGame());
-  btnRestart.addEventListener('click', ()=>startGame());
-
-  // Touch controls: tap = jump, swipe down = duck
-  let touchStartY = 0;
-  canvas.addEventListener('touchstart', (e) => {
-    e.preventDefault();
-    touchStartY = e.touches[0].clientY;
-    if (state===STATE.IDLE||state===STATE.OVER) startGame(); else jump();
-    if (!recognitionDesired) startRecognition();
-  }, {passive:false});
-  canvas.addEventListener('touchmove', (e) => {
-    e.preventDefault();
-    if (e.touches[0].clientY - touchStartY > 30) duckPulse();
-  }, {passive:false});
-
-  function startGame() {
-    state=STATE.RUNNING; overlayStart.classList.remove('show'); overlayOver.classList.remove('show');
-    obstacles=[]; dust=[]; score=0; speed=baseSpeed; frame=0; nextObstacleIn=80;
-    dino.y=GROUND_Y-dino.h; dino.vy=0; dino.onGround=true; dino.ducking=false;
-  }
-
-  function gameOver() {
-    state=STATE.OVER;
-    if (score>highScore) { highScore=score; localStorage.setItem('dinoVozHigh',String(highScore)); }
-    finalScoreEl.textContent=`PUNTOS ${String(Math.floor(score)).padStart(5,'0')}  |  MEJOR ${String(Math.floor(highScore)).padStart(5,'0')}`;
-    overlayOver.classList.add('show');
-  }
-
-  function hitbox() {
-    if (dino.ducking&&dino.onGround) return {x:dino.x+4,y:dino.y+24,w:dino.w+8,h:22};
-    return {x:dino.x+6,y:dino.y+4,w:dino.w-12,h:dino.h-6};
-  }
-  function obstacleBox(o) {
-    if (o.type==='bird') return {x:o.x+4,y:o.y+6,w:o.w-8,h:o.h-10};
-    return {x:o.x+3,y:o.y+3,w:o.w-6,h:o.h-4};
-  }
-  function intersect(a,b) { return a.x<b.x+b.w&&a.x+a.w>b.x&&a.y<b.y+b.h&&a.y+a.h>b.y; }
-
-  function update() {
-    frame++;
-    if (state!==STATE.RUNNING) {
-      for (const c of clouds) { c.x-=0.3*c.s; if (c.x<-40){c.x=W+40;c.y=30+Math.random()*90;} }
-      for (const s of stars) s.tw+=0.05;
-      return;
-    }
-    score+=0.15+speed*0.01;
-    speed=baseSpeed+Math.min(8,score/180);
-    if (!dino.onGround) {
-      dino.vy+=GRAVITY; dino.y+=dino.vy;
-      if (dino.y>=GROUND_Y-dino.h) { dino.y=GROUND_Y-dino.h; dino.vy=0; dino.onGround=true; spawnDust(dino.x+8,GROUND_Y); }
-    }
-    dino.legPhase+=0.25+speed*0.025;
-    dino.blink=(dino.blink+1)%240;
-    if (duckUntil&&performance.now()>duckUntil) { duckUntil=0; duckEnd(); }
-    groundOffset=(groundOffset+speed)%24;
-    for (const m of mountains) { m.x-=speed*0.15; if (m.x+m.w<0){m.x=W+Math.random()*100;m.h=60+Math.random()*60;m.w=180+Math.random()*100;} }
-    for (const c of clouds) { c.x-=speed*0.15*c.s+0.2; if (c.x<-40){c.x=W+40;c.y=30+Math.random()*90;c.s=0.3+Math.random()*0.7;} }
-    for (const s of stars) s.tw+=0.04;
-    nextObstacleIn--;
-    if (nextObstacleIn<=0) spawnObstacle();
-    for (const o of obstacles) { o.x-=speed; if (o.type==='bird') o.wing+=0.2; }
-    obstacles=obstacles.filter(o=>o.x+o.w>-10);
-    for (const p of dust) { p.x+=p.vx; p.y+=p.vy; p.vy+=0.1; p.life--; }
-    dust=dust.filter(p=>p.life>0);
-    const db=hitbox();
-    for (const o of obstacles) { if (intersect(db,obstacleBox(o))) { gameOver(); break; } }
-  }
-
-  function drawSky() {
-    const g=ctx.createLinearGradient(0,0,0,H);
-    g.addColorStop(0,'#0f1422'); g.addColorStop(0.7,'#131a2c'); g.addColorStop(1,'#1c2640');
-    ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
-    for (const s of stars) {
-      const a=0.3+Math.sin(s.tw)*0.25+s.b*0.3;
-      ctx.fillStyle=`rgba(220,230,255,${a.toFixed(3)})`;
-      ctx.fillRect(s.x|0,s.y|0,2,2);
-    }
-    ctx.fillStyle='#e9edf7'; ctx.beginPath(); ctx.arc(W-90,60,22,0,Math.PI*2); ctx.fill();
-    ctx.fillStyle='#0f1422'; ctx.beginPath(); ctx.arc(W-82,54,20,0,Math.PI*2); ctx.fill();
-  }
-
-  function drawMountains() {
-    for (const m of mountains) {
-      ctx.fillStyle='#1f2942';
-      ctx.beginPath(); ctx.moveTo(m.x,GROUND_Y); ctx.lineTo(m.x+m.w/2,GROUND_Y-m.h); ctx.lineTo(m.x+m.w,GROUND_Y); ctx.closePath(); ctx.fill();
-      ctx.fillStyle='#3b4769';
-      ctx.beginPath(); ctx.moveTo(m.x+m.w/2-14,GROUND_Y-m.h+22); ctx.lineTo(m.x+m.w/2,GROUND_Y-m.h); ctx.lineTo(m.x+m.w/2+14,GROUND_Y-m.h+22); ctx.closePath(); ctx.fill();
-    }
-  }
-
-  function drawCloud(c) {
-    ctx.fillStyle=`rgba(180,195,225,${0.25+c.s*0.35})`;
-    const s=c.size;
-    ctx.beginPath();
-    ctx.arc(c.x,c.y,s*0.7,0,Math.PI*2); ctx.arc(c.x+s*0.7,c.y-s*0.2,s*0.6,0,Math.PI*2);
-    ctx.arc(c.x+s*1.3,c.y,s*0.55,0,Math.PI*2); ctx.arc(c.x+s*0.5,c.y+s*0.2,s*0.6,0,Math.PI*2);
-    ctx.fill();
-  }
-
-  function drawGround() {
-    ctx.strokeStyle='#3b4769'; ctx.lineWidth=2;
-    ctx.beginPath(); ctx.moveTo(0,GROUND_Y); ctx.lineTo(W,GROUND_Y); ctx.stroke();
-    ctx.fillStyle='#4a577a';
-    for (let x=-groundOffset; x<W; x+=24) {
-      ctx.fillRect(x,GROUND_Y+6,10,2);
-      if ((x+groundOffset)%72===0) ctx.fillRect(x+4,GROUND_Y+14,4,2);
-    }
-    const gg=ctx.createLinearGradient(0,GROUND_Y,0,H);
-    gg.addColorStop(0,'rgba(74,87,122,0.18)'); gg.addColorStop(1,'rgba(74,87,122,0)');
-    ctx.fillStyle=gg; ctx.fillRect(0,GROUND_Y,W,H-GROUND_Y);
-  }
-
-  function drawDino() {
-    const ducking=dino.ducking&&dino.onGround;
-    const x=dino.x, y=ducking?dino.y+18:dino.y, w=ducking?dino.w+12:dino.w, h=ducking?dino.h-18:dino.h;
-    const bodyCol='#4ade80', darkCol='#16a34a';
-    ctx.fillStyle=bodyCol;
-    ctx.fillRect(x+4,y+(ducking?4:16),w-12,h-(ducking?8:18));
-    if (ducking) {
-      ctx.fillRect(x+w-20,y,18,14);
-      ctx.fillStyle='#0a0d14'; ctx.fillRect(x+w-8,y+4,3,3);
-      ctx.fillStyle=darkCol; ctx.fillRect(x+w-14,y+10,10,2);
-    } else {
-      ctx.fillRect(x+w-22,y,22,22);
-      ctx.fillRect(x+w-4,y+8,6,8);
-      ctx.fillStyle='#fff'; ctx.fillRect(x+w-10,y+4,4,4);
-      ctx.fillStyle='#0a0d14';
-      const blinking=dino.blink>230;
-      if (!blinking) ctx.fillRect(x+w-8,y+5,2,3);
-      else { ctx.fillStyle=darkCol; ctx.fillRect(x+w-10,y+6,4,1); }
-      ctx.fillStyle=darkCol;
-      ctx.fillRect(x+w-14,y+16,12,2);
-      ctx.fillRect(x+w-2,y+10,2,2);
-    }
-    ctx.fillStyle=bodyCol;
-    if (ducking) { ctx.fillRect(x-8,y+4,14,8); ctx.fillRect(x-14,y+6,8,5); }
-    else { ctx.fillRect(x-6,y+14,12,10); ctx.fillRect(x-12,y+16,8,6); }
-    ctx.fillStyle=darkCol;
-    if (!ducking) ctx.fillRect(x+w-14,y+22,6,4);
-    ctx.fillStyle=bodyCol;
-    if (dino.onGround) {
-      const phase=Math.sin(dino.legPhase);
-      const lift1=phase>0?4:0, lift2=phase>0?0:4;
-      if (ducking) { ctx.fillRect(x+8,y+h-6-lift1,6,6); ctx.fillRect(x+w-18,y+h-6-lift2,6,6); }
-      else { ctx.fillRect(x+10,y+h-10-lift1,8,12); ctx.fillRect(x+w-20,y+h-10-lift2,8,12); }
-    } else { ctx.fillRect(x+10,y+h-14,8,10); ctx.fillRect(x+w-20,y+h-14,8,10); }
-    ctx.fillStyle='rgba(0,0,0,0.15)';
-    ctx.fillRect(x+6,y+h-6,w-14,3);
-  }
-
-  function drawCactus(o) {
-    ctx.fillStyle='#5fae5a';
-    ctx.fillRect(o.x+o.w/2-5,o.y,10,o.h);
-    if (o.variant===0) { ctx.fillRect(o.x+o.w/2-5-8,o.y+10,8,4); ctx.fillRect(o.x+o.w/2-5-8,o.y+10,4,14); }
-    else if (o.variant===1) { ctx.fillRect(o.x+o.w/2+5,o.y+14,8,4); ctx.fillRect(o.x+o.w/2+5+4,o.y+14,4,16); ctx.fillRect(o.x+o.w/2-5-8,o.y+22,8,4); ctx.fillRect(o.x+o.w/2-5-8,o.y+22,4,12); }
-    else { ctx.fillRect(o.x+o.w/2-5-10,o.y+8,10,5); ctx.fillRect(o.x+o.w/2-5-10,o.y+8,5,18); ctx.fillRect(o.x+o.w/2+5,o.y+20,10,5); ctx.fillRect(o.x+o.w/2+5+5,o.y+20,5,18); }
-    ctx.fillStyle='#3a7a37';
-    for (let i=3; i<o.h-4; i+=5) { ctx.fillRect(o.x+o.w/2-4,o.y+i,2,2); ctx.fillRect(o.x+o.w/2+2,o.y+i+2,2,2); }
-    ctx.fillStyle='#7fc878'; ctx.fillRect(o.x+o.w/2-4,o.y+2,2,o.h-6);
-  }
-
-  function drawBird(o) {
-    const wing=Math.sin(o.wing)>0?1:-1;
-    ctx.fillStyle='#a3b3d4';
-    ctx.fillRect(o.x+10,o.y+10,22,8); ctx.fillRect(o.x+28,o.y+6,10,8);
-    ctx.fillStyle='#fbbf24'; ctx.fillRect(o.x+38,o.y+9,4,3);
-    ctx.fillStyle='#0a0d14'; ctx.fillRect(o.x+34,o.y+8,2,2);
-    ctx.fillStyle='#cdd6ea';
-    if (wing>0) { ctx.fillRect(o.x+12,o.y,16,6); ctx.fillRect(o.x+14,o.y-4,12,4); }
-    else { ctx.fillRect(o.x+12,o.y+16,16,6); ctx.fillRect(o.x+14,o.y+20,12,4); }
-    ctx.fillStyle='#a3b3d4'; ctx.fillRect(o.x+4,o.y+12,8,4);
-  }
-
-  function drawDust() {
-    for (const p of dust) {
-      const a=Math.max(0,p.life/24);
-      ctx.fillStyle=`rgba(160,170,190,${a.toFixed(3)})`;
-      ctx.fillRect(p.x|0,p.y|0,p.size,p.size);
-    }
-  }
-
-  function drawHUD() {
-    ctx.fillStyle='#e6e9ef'; ctx.font='bold 18px "Courier New", monospace'; ctx.textAlign='right';
-    const s=String(Math.floor(score)).padStart(5,'0');
-    ctx.fillText(`HI ${String(Math.floor(highScore)).padStart(5,'0')}   ${s}`,W-20,30);
-    ctx.textAlign='left';
-  }
-
-  function render() {
-    drawSky();
-    for (const c of clouds) drawCloud(c);
-    drawMountains();
-    drawGround();
-    drawDust();
-    for (const o of obstacles) { if (o.type==='cactus') drawCactus(o); else drawBird(o); }
-    drawDino();
-    drawHUD();
-  }
-
-  function loop() { update(); render(); requestAnimationFrame(loop); }
-  loop();
-
-  function showHeard(word) {
-    heardEl.textContent=word; heardEl.classList.add('show');
-    clearTimeout(showHeard._t);
-    showHeard._t=setTimeout(()=>heardEl.classList.remove('show'),900);
-  }
-  function setMic(live,label) {
-    if (live) micDot.classList.add('live'); else micDot.classList.remove('live');
-    micLabel.textContent=label;
-  }
-  function handleCommand(raw) {
-    const text=raw.toLowerCase().trim();
-    if (!text) return;
-    showHeard(text);
-    const has=(kw)=>text.includes(kw);
-    if (has('salta')||has('salto')||has('arriba')||has('brinca')||has('jump')||has('up')) {
-      if (state===STATE.RUNNING) jump(); else startGame();
-    } else if (has('agacha')||has('agachar')||has('abajo')||has('abaja')||has('duck')||has('down')) {
-      duckPulse();
-    } else if (has('juega')||has('empezar')||has('empieza')||has('reinicia')||has('comenzar')||has('start')||has('play')) {
-      if (state!==STATE.RUNNING) startGame();
-    }
-  }
-
-  let recognition=null, recognitionDesired=false;
-
-  function startRecognition() {
-    const SR=window.SpeechRecognition||window.webkitSpeechRecognition;
-    if (!SR) {
-      errBox.innerHTML='<div class="err">Tu navegador no soporta Web Speech API. Usa Chrome o Edge para control por voz. Puedes usar el teclado: Espacio para saltar, Flecha abajo para agacharse.</div>';
-      setMic(false,'Voz no soportada'); return;
-    }
-    if (recognition) { try { recognition.abort(); } catch(e){} }
-    recognition=new SR();
-    recognition.lang='es-ES'; recognition.continuous=true; recognition.interimResults=true; recognition.maxAlternatives=3;
-    recognition.onstart=()=>setMic(true,'Escuchando');
-    recognition.onaudiostart=()=>setMic(true,'Escuchando');
-    recognition.onspeechstart=()=>setMic(true,'Detectando voz');
-    recognition.onspeechend=()=>setMic(true,'Escuchando');
-    recognition.onerror=(e)=>{
-      if (e.error==='not-allowed'||e.error==='service-not-allowed') {
-        setMic(false,'Permiso denegado');
-        errBox.innerHTML='<div class="err">Acceso al microfono denegado. Habilita el microfono en el navegador para jugar por voz.</div>';
-        recognitionDesired=false;
-      } else if (e.error==='no-speech'||e.error==='aborted') {
-        // ignore
-      } else { setMic(false,'Error: '+e.error); }
-    };
-    recognition.onend=()=>{
-      if (recognitionDesired) { try { recognition.start(); } catch(e){ setTimeout(()=>{try{recognition.start();}catch(er){}},250); } }
-      else setMic(false,'Microfono inactivo');
-    };
-    recognition.onresult=(event)=>{
-      for (let i=event.resultIndex; i<event.results.length; i++) {
-        const res=event.results[i];
-        let best='';
-        for (let a=0;a<res.length;a++){best=res[a].transcript;if(best)break;}
-        if (!best) continue;
-        if (res.isFinal) {
-          handleCommand._lastInterim=null;
-          handleCommand(best);
-        } else {
-          // Prefix matching on every word for instant response
-          const words=best.trim().toLowerCase().split(/\s+/);
-          let matched=null;
-          for (const w of words) {
-            if (!w) continue;
-            if (w.startsWith('sal')||w.startsWith('arr')||w.startsWith('bri')||w==='up'||w==='jump') { matched='salta'; break; }
-            if (w.startsWith('aga')||w.startsWith('aba')||w==='duck'||w==='down') { matched='agacha'; break; }
-            if (w.startsWith('jue')||w.startsWith('emp')||w.startsWith('com')||w==='play'||w==='start') { matched='juega'; break; }
-          }
-          if (matched && matched!==handleCommand._lastInterim) {
-            handleCommand._lastInterim=matched;
-            setTimeout(()=>{handleCommand._lastInterim=null;},200);
-            handleCommand(matched);
-          }
-        }
-      }
-    };
-    recognitionDesired=true;
-    try { recognition.start(); } catch(e){}
-  }
-
-  btnStart.addEventListener('click',startRecognition,{once:true});
-  btnRestart.addEventListener('click',()=>{ if (!recognitionDesired) startRecognition(); });
-  document.addEventListener('keydown',function once(e){
-    if (e.code==='Space'||e.code==='ArrowUp'||e.code==='ArrowDown') {
-      if (!recognitionDesired) startRecognition();
-      document.removeEventListener('keydown',once);
-    }
-  });
-  document.addEventListener('visibilitychange',()=>{
-    if (document.hidden&&recognition){try{recognition.abort();}catch(e){}}
-    else if (!document.hidden&&recognitionDesired){try{recognition.start();}catch(e){}}
-  });
-
-})();
-</script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="js/config.js"></script>
+<script src="js/app.js"></script>
 </body>
 </html>
