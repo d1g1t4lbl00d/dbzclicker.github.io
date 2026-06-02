@@ -97,6 +97,7 @@
     <div class="topbar-right">
       <button class="icon-btn search-toggle" id="btnSearchToggle" title="Buscar"><svg><use href="#i-search"/></svg></button>
       <button class="icon-btn drawer-only" id="btnChatToggle" title="Chat y online"><svg><use href="#i-comment"/></svg></button>
+      <button class="icon-btn mail-btn" id="btnMessages" title="Mensajes"><svg><use href="#i-mail"/></svg><span class="badge hidden" id="dmBadge">0</span></button>
       <button class="icon-btn" id="btnNotif" title="Notificaciones"><svg><use href="#i-bell"/></svg><span class="badge hidden" id="notifBadge">0</span></button>
       <div class="avatar-chip" id="meChip" title="Mi perfil">
         <div class="avatar" id="meAvatar"></div>
@@ -123,6 +124,7 @@
     </div>
     <div class="side-group">
       <h4>Cuenta</h4>
+      <button class="nav-item" data-view="messages"><svg><use href="#i-mail"/></svg> Mensajes <span class="count" id="dmCount"></span></button>
       <button class="nav-item" data-view="notifications"><svg><use href="#i-bell"/></svg> Notifications</button>
       <button class="nav-item" data-view="settings"><svg><use href="#i-settings"/></svg> Settings</button>
       <button class="nav-item" id="btnLogout"><svg><use href="#i-logout"/></svg> Salir</button>
