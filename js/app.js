@@ -313,7 +313,7 @@ async function switchView(view) {
 }
 
 async function fetchTracks({ order='created_at', userId=null, limit=50 } = {}) {
-  let q = sb.from('tracks').select('*, profiles(*)');
+  let q = sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)');
   if (userId) q = q.eq('user_id', userId);
   q = q.order(order, { ascending: false }).limit(limit);
   const { data, error } = await q;
@@ -322,7 +322,7 @@ async function fetchTracks({ order='created_at', userId=null, limit=50 } = {}) {
 }
 async function fetchFollowingTracks() {
   if (state.follows.size === 0) return [];
-  const { data } = await sb.from('tracks').select('*, profiles(*)')
+  const { data } = await sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)')
     .in('user_id', [...state.follows]).order('created_at', { ascending: false }).limit(50);
   return data || [];
 }
@@ -332,12 +332,12 @@ async function fetchFavorites() {
 }
 async function fetchByIds(ids) {
   if (!ids.length) return [];
-  const { data } = await sb.from('tracks').select('*, profiles(*)').in('id', ids);
+  const { data } = await sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)').in('id', ids);
   return data || [];
 }
 async function fetchSearch(term) {
   if (!term) return [];
-  const { data } = await sb.from('tracks').select('*, profiles(*)')
+  const { data } = await sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)')
     .or(`title.ilike.%${term}%,artist.ilike.%${term}%,genre.ilike.%${term}%`)
     .order('plays', { ascending: false }).limit(50);
   return data || [];
