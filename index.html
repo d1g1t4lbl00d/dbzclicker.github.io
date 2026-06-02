@@ -2,7 +2,7 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>UnderBro — upload. share. connect.</title>
 <meta name="description" content="UnderBro — sube, comparte y conecta a través de la música." />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90' font-weight='bold' fill='%235f7fb8'>U</text></svg>" />
@@ -82,6 +82,7 @@
   <!-- TOPBAR -->
   <div class="topbar">
     <button class="icon-btn menu-toggle" id="menuToggle"><svg><use href="#i-menu"/></svg></button>
+    <div class="logo topbar-logo">Under<span class="u">Bro</span></div>
     <div class="tabs" id="feedTabs">
       <button data-tab="following">Following</button>
       <button data-tab="trending" class="active">Trending</button>
@@ -92,6 +93,7 @@
       <input type="text" id="searchInput" placeholder="Search UnderBro..." />
     </div>
     <div class="topbar-right">
+      <button class="icon-btn search-toggle" id="btnSearchToggle" title="Buscar"><svg><use href="#i-search"/></svg></button>
       <button class="icon-btn drawer-only" id="btnChatToggle" title="Chat y online"><svg><use href="#i-comment"/></svg></button>
       <button class="icon-btn" id="btnNotif" title="Notificaciones"><svg><use href="#i-bell"/></svg><span class="badge hidden" id="notifBadge">0</span></button>
       <div class="avatar-chip" id="meChip" title="Mi perfil">
