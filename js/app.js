@@ -936,19 +936,27 @@ function openUploadModal() {
       const uid = state.user.id;
       const stamp = Date.now();
       const LIMIT = 50 * 1024 * 1024;            // 50 MB (límite del bucket)
+      const TARGET_KBPS = 160;                   // bitrate de streaming eficiente
+      const bytesPerSec = TARGET_KBPS * 1000 / 8;
       let uploadFile = audioFile;
-      // comprimir a MP3 si el archivo es grande (p.ej. WAV) para que entre en el límite
-      if (audioFile.size > 45 * 1024 * 1024) {
-        if (!window.lamejs) { throw new Error('No se pudo cargar el compresor. Recarga la página e inténtalo de nuevo.'); }
-        msg.className = 'auth-msg'; msg.textContent = 'Comprimiendo audio… esto puede tardar unos segundos.';
+      const tooBig = audioFile.size > 45 * 1024 * 1024;
+      // optimiza si es muy grande (WAV) o si pesa más de lo que ocuparía a 160 kbps (ahorra datos)
+      const worthShrinking = duration > 0 && audioFile.size > duration * bytesPerSec * 1.2;
+      if (window.lamejs && (tooBig || worthShrinking)) {
+        msg.className = 'auth-msg'; msg.textContent = 'Optimizando audio… esto puede tardar unos segundos.';
         try {
-          uploadFile = await compressAudioToMp3(audioFile, 192, (p) => { fill.style.width = (8 + p * 42) + '%'; });
+          uploadFile = await compressAudioToMp3(audioFile, tooBig ? 192 : TARGET_KBPS, (p) => { fill.style.width = (8 + p * 42) + '%'; });
           if (uploadFile.size > LIMIT) uploadFile = await compressAudioToMp3(audioFile, 128, (p) => { fill.style.width = (8 + p * 42) + '%'; });
         } catch (ce) {
-          throw new Error('No se pudo comprimir el audio. Prueba con un MP3 o un archivo más corto.');
+          if (tooBig) throw new Error('No se pudo procesar el audio. Prueba con un MP3 o un archivo más corto.');
+          uploadFile = audioFile; // si falla y cabía, sube el original
         }
-        if (uploadFile.size > LIMIT) throw new Error('La pista sigue siendo demasiado grande. Prueba con una versión más corta o un MP3.');
+        if (uploadFile.size > LIMIT) throw new Error('La pista es demasiado grande. Prueba con una versión más corta.');
+        // si la versión optimizada no ahorró nada, conserva el original
+        if (!tooBig && uploadFile.size >= audioFile.size && audioFile.size <= LIMIT) uploadFile = audioFile;
         msg.textContent = '';
+      } else if (tooBig) {
+        throw new Error('No se pudo cargar el optimizador. Recarga la página e inténtalo de nuevo.');
       }
       const ext = (uploadFile.name.split('.').pop() || 'mp3').toLowerCase();
       const audioPath = `${uid}/${stamp}.${ext}`;
