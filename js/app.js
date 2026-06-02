@@ -1019,6 +1019,45 @@ function bgStyle(theme) {
 
 const LINK_TYPES = ['Instagram', 'YouTube', 'Spotify', 'SoundCloud', 'TikTok', 'X / Twitter', 'Sitio web', 'Otro'];
 
+// fuentes disponibles (Google Fonts, se cargan bajo demanda)
+const FONTS = {
+  'Sistema': '',
+  'Poppins': 'Poppins:wght@500;700',
+  'Montserrat': 'Montserrat:wght@600;800',
+  'Bebas Neue': 'Bebas+Neue',
+  'Pacifico': 'Pacifico',
+  'Lobster': 'Lobster',
+  'Orbitron': 'Orbitron:wght@600;800',
+  'Righteous': 'Righteous',
+  'Caveat': 'Caveat:wght@600;700',
+};
+const _fontsLoaded = new Set();
+function loadFont(name) {
+  const spec = FONTS[name];
+  if (!spec || _fontsLoaded.has(name)) return;
+  _fontsLoaded.add(name);
+  const link = document.createElement('link');
+  link.rel = 'stylesheet';
+  link.href = `https://fonts.googleapis.com/css2?family=${spec}&display=swap`;
+  document.head.appendChild(link);
+}
+const EFFECTS = { 'none': 'Ninguno', 'aurora': 'Aurora', 'stars': 'Estrellas', 'notes': 'Notas musicales' };
+const GLOWS = { 'none': 'Ninguno', 'soft': 'Suave', 'neon': 'Neón' };
+const CARD_STYLES = { 'default': 'Normal', 'glass': 'Cristal', 'dark': 'Oscuro', 'neon': 'Neón' };
+function buildEffect(kind) {
+  const fx = document.createElement('div');
+  fx.className = 'pfx pfx-' + kind;
+  if (kind === 'stars') {
+    for (let i = 0; i < 40; i++) { const s = document.createElement('i'); s.style.left = (Math.random()*100)+'%'; s.style.top = (Math.random()*100)+'%'; s.style.animationDelay = (Math.random()*3)+'s'; s.style.setProperty('--sz', (1+Math.random()*2.4).toFixed(1)+'px'); fx.appendChild(s); }
+  } else if (kind === 'notes') {
+    const g = ['♪','♫','♩','✦','♬'];
+    for (let i = 0; i < 18; i++) { const s = document.createElement('i'); s.textContent = g[i % g.length]; s.style.left = (Math.random()*100)+'%'; s.style.animationDelay = (Math.random()*9)+'s'; s.style.animationDuration = (8+Math.random()*8)+'s'; s.style.fontSize = (12+Math.random()*18)+'px'; fx.appendChild(s); }
+  } else if (kind === 'aurora') {
+    fx.innerHTML = '<span></span><span></span><span></span>';
+  }
+  return fx;
+}
+
 function openProfileCustomizer() {
   const t = (state.profile.theme && typeof state.profile.theme === 'object') ? JSON.parse(JSON.stringify(state.profile.theme)) : {};
   t.bg = t.bg || { type: 'gradient', c1: '#eef3fb', c2: '#e2e8f5' };
@@ -1034,6 +1073,8 @@ function openProfileCustomizer() {
         <input type="file" id="bannerFile" accept="image/*" hidden />
       </div>
       <div class="field"><label>Color de acento</label><div class="bg-row"><input type="color" id="thAccent" value="${czColor(t.accent) || '#5f7fb8'}"><span class="sub">Tiñe tu nombre, botones y enlaces</span></div></div>
+      <div class="field"><label>Fuente</label><select class="cz-select" id="thFont">${Object.keys(FONTS).map(f => `<option>${f}</option>`).join('')}</select></div>
+      <div class="field"><label>Frase destacada</label><input type="text" id="thTagline" maxlength="140" placeholder="Una frase que te represente" value="${esc(t.tagline || '')}" /></div>
       <div class="field"><label>Fondo del perfil</label>
         <select class="cz-select" id="bgType">
           <option value="gradient">Degradado</option>
@@ -1041,12 +1082,16 @@ function openProfileCustomizer() {
           <option value="image">Imagen</option>
         </select>
         <div class="bg-row" id="bgColors"><input type="color" id="bgC1" value="${czColor(t.bg.c1) || '#eef3fb'}"><input type="color" id="bgC2" value="${czColor(t.bg.c2) || '#e2e8f5'}"></div>
+        <label id="bgAnimRow" style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:12.5px"><input type="checkbox" id="bgAnim" style="width:auto" /> Degradado animado</label>
         <div class="cover-pick" id="bgPick" style="margin-top:8px;display:none">
           <div class="cover-prev" id="bgPrev">${czUrl(t.bg.image) ? `<img src="${esc(t.bg.image)}" alt="" />` : `<svg width="22" height="22" fill="none" stroke="currentColor"><use href="#i-image"/></svg>`}</div>
           <div class="cover-pick-txt"><b id="bgName">Subir imagen de fondo</b></div>
         </div>
         <input type="file" id="bgFile" accept="image/*" hidden />
       </div>
+      <div class="field"><label>Brillo (glow)</label><select class="cz-select" id="thGlow">${Object.entries(GLOWS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+      <div class="field"><label>Efecto animado</label><select class="cz-select" id="thEffect">${Object.entries(EFFECTS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+      <div class="field"><label>Estilo de tarjetas</label><select class="cz-select" id="thCards">${Object.entries(CARD_STYLES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
       <div class="field"><label>Enlaces / redes</label>
         <div id="linkList"></div>
         <div class="link-add">
@@ -1075,6 +1120,16 @@ function openProfileCustomizer() {
   };
   bgType.onchange = syncBgType; syncBgType();
 
+  m.querySelector('#thFont').value = (t.font && FONTS[t.font]) ? t.font : 'Sistema';
+  m.querySelector('#thGlow').value = GLOWS[t.glow] ? t.glow : 'none';
+  m.querySelector('#thEffect').value = EFFECTS[t.effect] ? t.effect : 'none';
+  m.querySelector('#thCards').value = CARD_STYLES[t.cards] ? t.cards : 'default';
+  m.querySelector('#bgAnim').checked = !!t.bg.animated;
+  const syncAnim = () => { m.querySelector('#bgAnimRow').style.display = (bgType.value === 'gradient') ? 'flex' : 'none'; };
+  bgType.addEventListener('change', syncAnim); syncAnim();
+  // previsualizar la fuente al elegirla
+  m.querySelector('#thFont').addEventListener('change', (e) => loadFont(e.target.value));
+
   const renderLinks = () => {
     const box = m.querySelector('#linkList');
     box.innerHTML = links.map((l, i) => `<div class="link-row"><span class="lr-label">${esc(l.label)}</span><span class="lr-url">${esc(l.url)}</span><button type="button" data-i="${i}">&times;</button></div>`).join('');
@@ -1100,8 +1155,13 @@ function openProfileCustomizer() {
       const theme = {
         accent: m.querySelector('#thAccent').value,
         banner: t.banner || null,
-        bg: { type: bgType.value, c1: m.querySelector('#bgC1').value, c2: m.querySelector('#bgC2').value, image: t.bg.image || null },
+        bg: { type: bgType.value, c1: m.querySelector('#bgC1').value, c2: m.querySelector('#bgC2').value, image: t.bg.image || null, animated: m.querySelector('#bgAnim').checked },
         links: links.slice(0, 8),
+        font: m.querySelector('#thFont').value,
+        tagline: m.querySelector('#thTagline').value.trim().slice(0, 140),
+        glow: m.querySelector('#thGlow').value,
+        effect: m.querySelector('#thEffect').value,
+        cards: m.querySelector('#thCards').value,
       };
       if (bannerFile) {
         const ext = (bannerFile.name.split('.').pop() || 'jpg').toLowerCase();
@@ -1149,14 +1209,21 @@ async function openProfile(userId) {
   const accent = czColor(theme.accent) || '#5f7fb8';
   const banner = czUrl(theme.banner);
   const links = Array.isArray(theme.links) ? theme.links : [];
+  const font = (theme.font && FONTS[theme.font]) ? theme.font : '';
+  const fontVar = font ? `--pf-font:'${font.replace(/'/g,'')}', sans-serif;` : '';
+  const glowCls = theme.glow === 'neon' ? 'glow-neon' : theme.glow === 'soft' ? 'glow-soft' : '';
+  const cardsCls = (theme.cards && theme.cards !== 'default' && CARD_STYLES[theme.cards]) ? 'cards-' + theme.cards : '';
+  const animCls = (theme.bg && theme.bg.type === 'gradient' && theme.bg.animated) ? 'bg-animated' : '';
+  const tagline = (typeof theme.tagline === 'string') ? theme.tagline.slice(0, 140) : '';
   main.innerHTML = `
-    <div class="profile-view" style="--accent:${accent};${bgStyle(theme)}">
+    <div class="profile-view ${glowCls} ${cardsCls} ${animCls}" style="--accent:${accent};${fontVar}${bgStyle(theme)}">
       ${banner ? `<div class="profile-banner" style="background-image:url('${banner}')"></div>` : ''}
       <div class="profile-head ${banner ? 'has-banner' : ''}">
         ${avatarHTML(prof)}
         <div style="flex:1;min-width:0">
           <h2 class="accent-name">${esc(prof.display_name || prof.username)} ${prof.is_admin?'<span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c;vertical-align:middle">MOD</span>':''} ${prof.banned?'<span class="t-genre" style="background:#fae3e0;border-color:#f0c2bc;color:#c0533f;vertical-align:middle">baneado</span>':''}</h2>
           <div style="color:var(--ink-soft)">@${esc(prof.username)}</div>
+          ${tagline ? `<div class="profile-tagline">${esc(tagline)}</div>` : ''}
           ${prof.bio ? `<p style="margin-top:6px;max-width:520px">${esc(prof.bio)}</p>` : ''}
           <div class="pstats">
             <span><b>${tracks.length}</b> pistas</span>
@@ -1176,6 +1243,10 @@ async function openProfile(userId) {
       <div class="main-head"><h2>Pistas</h2></div>
       <div id="feedList" class="feed-list"></div>
     </div>`;
+  if (font) loadFont(font);
+  if (theme.effect && theme.effect !== 'none' && EFFECTS[theme.effect]) {
+    const v = main.querySelector('.profile-view'); if (v) v.prepend(buildEffect(theme.effect));
+  }
   if (isMe) { const cb = $('customizeBtn'); if (cb) cb.onclick = openProfileCustomizer; }
 
   const list = $('feedList');
