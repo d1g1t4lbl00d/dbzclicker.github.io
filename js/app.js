@@ -103,12 +103,17 @@ $('authForm').addEventListener('submit', async (e) => {
       });
       if (error) throw error;
       if (data.session) {
-        // sesión inmediata (confirmación de email desactivada)
         await onAuthenticated();
       } else {
-        msg.className = 'auth-msg ok';
-        msg.textContent = 'Cuenta creada. Revisa tu correo para confirmar, o inicia sesión.';
-        setAuthMode('login');
+        // las cuentas se autoconfirman: iniciar sesión directamente
+        const { error: e2 } = await sb.auth.signInWithPassword({ email, password });
+        if (e2) {
+          msg.className = 'auth-msg ok';
+          msg.textContent = '¡Cuenta creada! Ya puedes iniciar sesión.';
+          setAuthMode('login');
+        } else {
+          await onAuthenticated();
+        }
       }
     } else {
       const { error } = await sb.auth.signInWithPassword({ email, password });
