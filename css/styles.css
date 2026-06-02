@@ -274,52 +274,53 @@ img { display: block; }
 
 /* ----------------------------------------------------------- TRACK CARD */
 .track {
-  display: flex; gap: 14px; align-items: center; background: var(--panel); border: 1px solid var(--line);
-  border-radius: var(--r-lg); padding: 14px; margin-bottom: 14px; box-shadow: var(--sh-1);
+  position: relative; overflow: hidden;
+  display: flex; flex-direction: column; gap: 9px;
+  background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--r-lg); padding: 15px; margin-bottom: 14px; box-shadow: var(--sh-1);
   transition: transform .18s var(--ease), box-shadow .22s var(--ease), border-color .2s;
   animation: fadeUp .4s var(--ease) both;
 }
-.track:has(.comments:not(.hidden)) { align-items: flex-start; }
+.track > * { position: relative; z-index: 1; }
 .track:hover { transform: translateY(-2px); box-shadow: var(--sh-2); border-color: #d2dcec; }
 .track.playing { border-color: var(--blue); box-shadow: 0 0 0 1px var(--blue), var(--sh-2); }
+
+/* carátula como fondo de toda la pill (detrás del texto y la onda) */
+.track.has-bg { background-size: cover; background-position: center; border-color: transparent; }
+.track.has-bg::before { content: ""; position: absolute; inset: 0; z-index: 0; background: linear-gradient(180deg, rgba(16,20,36,.58), rgba(16,20,36,.74)); }
+.track.has-bg.playing { box-shadow: 0 0 0 2px rgba(255,255,255,.55), var(--sh-2); }
+
 /* feed compacto tipo lista */
-.feed-list.compact .track { padding: 10px 13px; gap: 12px; border-radius: var(--r); margin-bottom: 9px; }
-.feed-list.compact .track .cover { width: 56px; height: 56px; border-radius: 10px; }
+.feed-list.compact .track { padding: 11px 14px; gap: 7px; border-radius: var(--r); margin-bottom: 9px; }
 .feed-list.compact .track .t-title { font-size: 14px; }
 .feed-list.compact .track .t-artist { font-size: 11.5px; }
-.feed-list.compact .track .wave { height: 26px; margin: 7px 0 6px; }
+.feed-list.compact .track .wave { height: 30px; }
 .feed-list.compact .track .t-genre { padding: 2px 9px; font-size: 10px; }
 .feed-list.compact .track .t-foot { gap: 2px; }
 .feed-list.compact .track .act { padding: 5px 7px; }
-@media (max-width: 720px) {
-  .feed-list.compact .track .cover { width: 50px; height: 50px; }
-  .feed-list.compact .track .wave { height: 22px; }
-}
+.feed-list.compact .play-lg { width: 46px; height: 46px; }
+.feed-list.compact .play-lg svg { width: 17px; height: 17px; }
+@media (max-width: 720px) { .feed-list.compact .track .wave { height: 26px; } }
 .feed-list .track:nth-child(1){animation-delay:.02s}.feed-list .track:nth-child(2){animation-delay:.06s}
 .feed-list .track:nth-child(3){animation-delay:.10s}.feed-list .track:nth-child(4){animation-delay:.14s}
 .feed-list .track:nth-child(5){animation-delay:.18s}.feed-list .track:nth-child(6){animation-delay:.22s}
 .feed-list .track:nth-child(7){animation-delay:.26s}.feed-list .track:nth-child(8){animation-delay:.30s}
 
-.track .cover {
-  width: 92px; height: 92px; border-radius: var(--r); flex-shrink: 0; position: relative;
-  overflow: hidden; background: var(--cover-grad); display: grid; place-items: center; color: #fff;
-  box-shadow: inset 0 0 0 1px rgba(255,255,255,.25), 0 4px 12px rgba(74,104,168,.25); cursor: pointer;
-}
-.track .cover img { width: 100%; height: 100%; object-fit: cover; }
-/* botón de play grande a la izquierda */
-.play-lg { flex-shrink: 0; width: 60px; height: 60px; border-radius: 50%; border: none; background: var(--accent-grad); box-shadow: var(--sh-blue); display: grid; place-items: center; padding: 0; transition: transform .14s var(--ease); }
+/* fila: botón de play (izquierda) + onda a lo ancho */
+.wave-row { display: flex; align-items: center; gap: 13px; }
+.wave-row .wave { flex: 1; margin: 0; }
+.play-lg { flex-shrink: 0; width: 56px; height: 56px; border-radius: 50%; border: none; background: var(--accent-grad); box-shadow: var(--sh-blue); display: grid; place-items: center; padding: 0; transition: transform .14s var(--ease); }
 .play-lg:hover { transform: scale(1.07); }
 .play-lg:active { transform: scale(.93); }
-.play-lg svg { width: 22px; height: 22px; fill: #fff; stroke: #fff; }
+.play-lg svg { width: 20px; height: 20px; fill: #fff; stroke: #fff; }
 .play-lg .ci-play { margin-left: 2px; }
 .play-lg .ci-pause { display: none; }
 .track.playing .play-lg .ci-play { display: none; }
 .track.playing .play-lg .ci-pause { display: inline; }
-.feed-list.compact .play-lg { width: 48px; height: 48px; }
-.feed-list.compact .play-lg svg { width: 18px; height: 18px; }
+.track.has-bg .play-lg { border: 2px solid rgba(255,255,255,.85); }
 
-.track .body { flex: 1; min-width: 0; }
 .track .t-head { display: flex; align-items: flex-start; gap: 8px; }
+.track .t-titles { flex: 1; min-width: 0; }
 .track .t-title { font-weight: 750; font-size: 15.5px; color: var(--ink); letter-spacing: -.2px; }
 .track .t-artist { font-size: 12.5px; color: var(--ink-soft); margin-top: 1px; }
 .track .t-artist a { color: var(--blue-deep); font-weight: 600; cursor: pointer; }
@@ -327,19 +328,32 @@ img { display: block; }
 .t-genre { margin-left: auto; font-size: 10.5px; font-weight: 650; color: var(--blue-deep); background: linear-gradient(180deg,#f1f6fd,#e7eefb); border: 1px solid #dbe5f5; padding: 4px 11px; border-radius: 30px; white-space: nowrap; }
 
 /* waveform real, simétrico y centrado */
-.wave { position: relative; display: flex; align-items: center; justify-content: center; gap: 2px; height: 48px; margin: 13px 0 9px; cursor: pointer; overflow: hidden; }
+.wave { position: relative; display: flex; align-items: center; justify-content: center; gap: 2px; height: 50px; cursor: pointer; overflow: hidden; }
 .wave .bar { position: relative; z-index: 1; flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: center; }
 .wave .bar::before { content: ""; width: 100%; max-width: 4px; margin: 0 auto; border-radius: 3px; background: #c7d2e6; transition: background .12s, transform .12s; height: var(--h,40%); }
 .wave .bar.played::before { background: linear-gradient(180deg, var(--aqua), var(--blue-deep)); }
 .wave:hover .bar::before { transform: scaleY(1.06); }
-/* el waveform "respira" como un ecualizador vivo en la pista que suena */
 .track.playing .wave .bar::before { animation: wavebreath 1.2s var(--ease) infinite; animation-delay: var(--d); }
-/* carátula como fondo del waveform (cubre todo el fondo) */
-.wave.has-cover { height: 60px; border-radius: 12px; background-size: cover; background-position: center; padding: 0 10px; box-shadow: inset 0 0 0 1px rgba(255,255,255,.15); }
-.wave.has-cover::before { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(24,28,46,.4), rgba(24,28,46,.6)); z-index: 0; }
-.wave.has-cover .bar::before { background: rgba(255,255,255,.5); }
-.wave.has-cover .bar.played::before { background: #fff; }
-.feed-list.compact .wave.has-cover { height: 40px; border-radius: 10px; }
+
+/* texto y onda sobre la carátula de fondo */
+.track.has-bg .t-title { color: #fff; }
+.track.has-bg .t-artist { color: rgba(255,255,255,.82); }
+.track.has-bg .t-artist a { color: #fff; }
+.track.has-bg .time { color: rgba(255,255,255,.85); }
+.track.has-bg .act { color: rgba(255,255,255,.9); }
+.track.has-bg .act svg { stroke: rgba(255,255,255,.9); }
+.track.has-bg .act:hover { background: rgba(255,255,255,.16); color: #fff; }
+.track.has-bg .act.like.on, .track.has-bg .act.like.on svg { color: #ff8aa0; stroke: #ff8aa0; fill: #ff8aa0; }
+.track.has-bg .t-genre { background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.35); color: #fff; }
+.track.has-bg .wave .bar::before { background: rgba(255,255,255,.5); }
+.track.has-bg .wave .bar.played::before { background: #fff; }
+.track.has-bg .comments { border-top-color: rgba(255,255,255,.22); }
+.track.has-bg .comment .c-name { color: #fff; }
+.track.has-bg .comment .c-time { color: rgba(255,255,255,.6); }
+.track.has-bg .comment .c-body p { color: rgba(255,255,255,.92); }
+.track.has-bg .c-hint { color: rgba(255,255,255,.8); }
+.track.has-bg .comment-form input { background: rgba(255,255,255,.16); border-color: rgba(255,255,255,.3); color: #fff; }
+.track.has-bg .comment-form input::placeholder { color: rgba(255,255,255,.7); }
 
 .track .t-foot { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
 .track .t-foot .time { font-size: 11px; color: var(--ink-soft); font-variant-numeric: tabular-nums; margin-right: auto; display: inline-flex; align-items: center; gap: 5px; }

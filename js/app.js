@@ -391,28 +391,29 @@ function trackCard(t) {
   const collabs = Array.isArray(t.collaborators) ? t.collaborators : [];
   const ft = collabs.length ? ` ft. ${collabs.map(c => `<a data-collab="${c.id}">${esc(c.display_name || c.username)}</a>`).join(', ')}` : '';
   const mine = t.user_id === state.user.id;
+  const cov = t.cover_url ? czUrl(t.cover_url) : '';
   const card = el(`
-    <div class="track" data-id="${t.id}">
-      <button class="play-lg" data-act="play" title="Reproducir"><svg class="ci-play"><use href="#i-play"/></svg><svg class="ci-pause"><use href="#i-pause"/></svg></button>
-      <div class="body">
-        <div class="t-head">
-          <div>
-            <div class="t-title">${esc(t.title)}</div>
-            <div class="t-artist">por <a data-act="profile">${esc(prof.display_name || prof.username || t.artist || 'anónimo')}</a>${ft}</div>
-          </div>
-          ${t.genre ? `<span class="t-genre">${esc(t.genre)}</span>` : ''}
+    <div class="track ${cov ? 'has-bg' : ''}" data-id="${t.id}" ${cov ? `style="background-image:url('${cov}')"` : ''}>
+      <div class="t-head">
+        <div class="t-titles">
+          <div class="t-title">${esc(t.title)}</div>
+          <div class="t-artist">por <a data-act="profile">${esc(prof.display_name || prof.username || t.artist || 'anónimo')}</a>${ft}</div>
         </div>
-        ${waveHTML(t)}
-        <div class="t-foot">
-          <span class="time"><svg style="width:12px;height:12px;vertical-align:-1px" fill="none" stroke="currentColor"><use href="#i-headphones"/></svg> ${t.plays||0} · <svg style="width:12px;height:12px;vertical-align:-2px" fill="currentColor" stroke="none"><use href="#i-heart"/></svg> <span class="likecount">${t.likes_count||0}</span> · ${fmtTime(t.duration)}</span>
-          <button class="act like ${liked?'on':''}" data-act="like"><svg><use href="#i-heart"/></svg><span class="ln">${liked?'Te gusta':'Me gusta'}</span></button>
-          <button class="act" data-act="toggleComments"><svg><use href="#i-comment"/></svg><span class="cn">Comentar</span></button>
-          <button class="act" data-act="download"><svg><use href="#i-download"/></svg>Descargar</button>
-          ${mine ? `<button class="act" data-act="edit"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg>Editar</button>` : ''}
-          ${(mine || state.profile.is_admin) ? `<button class="act danger" data-act="delete"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg>${mine ? 'Borrar' : 'Borrar (mod)'}</button>` : ''}
-        </div>
-        <div class="comments hidden" data-comments></div>
+        ${t.genre ? `<span class="t-genre">${esc(t.genre)}</span>` : ''}
       </div>
+      <div class="wave-row">
+        <button class="play-lg" data-act="play" title="Reproducir"><svg class="ci-play"><use href="#i-play"/></svg><svg class="ci-pause"><use href="#i-pause"/></svg></button>
+        ${waveHTML(t)}
+      </div>
+      <div class="t-foot">
+        <span class="time"><svg style="width:12px;height:12px;vertical-align:-1px" fill="none" stroke="currentColor"><use href="#i-headphones"/></svg> ${t.plays||0} · <svg style="width:12px;height:12px;vertical-align:-2px" fill="currentColor" stroke="none"><use href="#i-heart"/></svg> <span class="likecount">${t.likes_count||0}</span> · ${fmtTime(t.duration)}</span>
+        <button class="act like ${liked?'on':''}" data-act="like"><svg><use href="#i-heart"/></svg><span class="ln">${liked?'Te gusta':'Me gusta'}</span></button>
+        <button class="act" data-act="toggleComments"><svg><use href="#i-comment"/></svg><span class="cn">Comentar</span></button>
+        <button class="act" data-act="download"><svg><use href="#i-download"/></svg>Descargar</button>
+        ${mine ? `<button class="act" data-act="edit"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg>Editar</button>` : ''}
+        ${(mine || state.profile.is_admin) ? `<button class="act danger" data-act="delete"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg>${mine ? 'Borrar' : 'Borrar (mod)'}</button>` : ''}
+      </div>
+      <div class="comments hidden" data-comments></div>
     </div>`);
 
   card.querySelectorAll('[data-collab]').forEach(a => a.onclick = (e) => { e.stopPropagation(); openProfile(a.dataset.collab); });
@@ -482,8 +483,7 @@ function openEditTrack(t, card) {
 function waveHTML(t) {
   const peaks = Array.isArray(t.waveform) && t.waveform.length ? t.waveform : waveBars(t.id, 80);
   const bars = peaks.map((h, i) => `<div class="bar" data-i="${i}" style="--h:${h}%;--d:${((i * 37) % 23) * 0.045}s"></div>`).join('');
-  const cov = t.cover_url ? czUrl(t.cover_url) : '';
-  return `<div class="wave ${cov ? 'has-cover' : ''}" data-act="seekwave" ${cov ? `style="background-image:url('${cov}')"` : ''}>${bars}</div>`;
+  return `<div class="wave" data-act="seekwave">${bars}</div>`;
 }
 
 async function handleTrackClick(e, t, card) {
