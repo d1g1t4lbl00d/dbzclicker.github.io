@@ -99,7 +99,7 @@ $('authForm').addEventListener('submit', async (e) => {
       if (username.length < 3) throw new Error('El nombre de usuario debe tener al menos 3 caracteres.');
       const { data, error } = await sb.auth.signUp({
         email, password,
-        options: { data: { username, display_name: username } },
+        options: { data: { username, display_name: username }, emailRedirectTo: window.location.origin },
       });
       if (error) throw error;
       if (data.session) {
