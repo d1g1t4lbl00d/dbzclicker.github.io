@@ -166,6 +166,7 @@ async function onAuthenticated() {
   initNowPlaying();
   initChat();
   initPresence();
+  initDM();
   loadNotifBadge();
   switchView('feed');
 }
@@ -221,6 +222,7 @@ function bindUI() {
   });
   $('btnUpload').onclick = openUploadModal;
   $('btnNotif').onclick = () => switchView('notifications');
+  $('btnMessages').onclick = () => { switchView('messages'); hideDrawers(); };
   $('meChip').onclick = () => openProfile(state.user.id);
   $('menuToggle').onclick = () => { const open = $('sidebar').classList.toggle('open'); $('drawerBackdrop').classList.toggle('show', open); };
   $('btnChatToggle').onclick = toggleRight;
@@ -295,6 +297,7 @@ async function switchView(view) {
   if (view === 'settings') return renderSettings();
   if (view === 'notifications') return renderNotifications();
   if (view === 'people') return renderPeople();
+  if (view === 'messages') return renderMessages();
 
   main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
   main.innerHTML = skeletonFeed();
@@ -847,6 +850,7 @@ async function openProfile(userId) {
       <div class="pactions">
         ${isMe ? `<button class="btn" id="editProfBtn"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg> Editar perfil</button>`
                 : `<button class="btn ${followsHim?'':'primary'}" id="followBtn">${followsHim?'Siguiendo ✓':'+ Seguir'}</button>`}
+        ${!isMe ? `<button class="btn" id="msgBtn" style="margin-top:8px"><svg fill="none" stroke="currentColor"><use href="#i-mail"/></svg> Mensaje</button>` : ''}
         ${(!isMe && state.profile.is_admin && !prof.is_admin) ? `<button class="btn" id="banBtn" style="border-color:#e3b7b0;color:#c0533f;margin-top:8px">${prof.banned?'Desbanear':'Banear usuario'}</button>` : ''}
       </div>
     </div>
@@ -858,6 +862,8 @@ async function openProfile(userId) {
   else { state.tracks = tracks; state.queue = tracks.map(t=>t.id); tracks.forEach(t => list.appendChild(trackCard(t))); }
 
   if (isMe) $('editProfBtn').onclick = () => switchView('settings');
+  const msgBtn = $('msgBtn');
+  if (msgBtn) msgBtn.onclick = () => openDM(userId);
   const banBtn = $('banBtn');
   if (banBtn) banBtn.onclick = async () => {
     const newVal = !prof.banned;
@@ -900,13 +906,15 @@ async function renderPeople() {
         ${avatarHTML(p)}
         <div class="body"><div class="t-title">${esc(p.display_name||p.username)} ${p.is_admin?'<span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c">MOD</span>':''} ${p.banned?'<span class="t-genre" style="background:#fae3e0;border-color:#f0c2bc;color:#c0533f">baneado</span>':''}</div>
         <div class="t-artist">@${esc(p.username)}</div>${p.bio?`<div class="sub" style="margin-top:4px">${esc(p.bio)}</div>`:''}</div>
-        <div style="display:flex;gap:8px;align-items:center">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end">
+          <button class="btn sm" data-act="msg" title="Mensaje"><svg style="width:14px;height:14px" fill="none" stroke="currentColor"><use href="#i-mail"/></svg></button>
           <button class="btn sm" data-act="view">Ver perfil</button>
           <button class="btn sm ${f?'':'primary'}" data-act="follow">${f?'Siguiendo ✓':'+ Seguir'}</button>
           ${state.profile.is_admin && !p.is_admin ? `<button class="btn sm" data-act="ban" style="border-color:#e3b7b0;color:#c0533f">${p.banned?'Desbanear':'Banear'}</button>` : ''}
         </div>
       </div>`);
     row.querySelector('[data-act="view"]').onclick = () => openProfile(p.id);
+    row.querySelector('[data-act="msg"]').onclick = () => openDM(p.id);
     const banBtn = row.querySelector('[data-act="ban"]');
     if (banBtn) banBtn.onclick = async () => {
       const newVal = !p.banned;
@@ -1099,6 +1107,126 @@ function appendChatMsg(m) {
   box.appendChild(row);
 }
 function scrollChat() { const b = $('chatMsgs'); b.scrollTop = b.scrollHeight; }
+
+/* =======================================================================
+   MENSAJES DIRECTOS (1 a 1)
+   ======================================================================= */
+async function initDM() {
+  await refreshDmBadge();
+  sb.channel('dm-inbox-' + state.user.id)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'direct_messages', filter: `recipient_id=eq.${state.user.id}` }, async (payload) => {
+      const msg = payload.new;
+      if (state.dmPeer === msg.sender_id && state.dmAppend) {
+        state.dmAppend(msg);
+        markDmRead(msg.sender_id);
+      } else {
+        refreshDmBadge();
+        let p = null; try { ({ data: p } = await sb.from('profiles').select('username,display_name').eq('id', msg.sender_id).single()); } catch {}
+        toast('💬 ' + (p?.display_name || p?.username || 'Mensaje') + ': ' + msg.body.slice(0, 38));
+        if (state.view === 'messages') renderMessages();
+      }
+    })
+    .subscribe();
+}
+async function refreshDmBadge() {
+  const { count } = await sb.from('direct_messages').select('id', { count: 'exact', head: true })
+    .eq('recipient_id', state.user.id).eq('read', false);
+  const n = count || 0;
+  const badge = $('dmBadge'), side = $('dmCount');
+  if (n > 0) { badge.textContent = n; badge.classList.remove('hidden'); side.textContent = n; }
+  else { badge.classList.add('hidden'); side.textContent = ''; }
+}
+function markDmRead(other) {
+  sb.from('direct_messages').update({ read: true })
+    .eq('sender_id', other).eq('recipient_id', state.user.id).eq('read', false)
+    .then(() => refreshDmBadge());
+}
+
+async function renderMessages() {
+  setActiveNav('messages');
+  $('main').innerHTML = `<div class="main-head"><div><h2>Mensajes</h2><div class="sub">Tus conversaciones privadas</div></div></div><div id="convoList" class="loading"><div class="spinner"></div></div>`;
+  const { data } = await sb.from('direct_messages').select('*')
+    .or(`sender_id.eq.${state.user.id},recipient_id.eq.${state.user.id}`)
+    .order('created_at', { ascending: false }).limit(400);
+  const convos = new Map();
+  (data || []).forEach(mm => {
+    const other = mm.sender_id === state.user.id ? mm.recipient_id : mm.sender_id;
+    if (!convos.has(other)) convos.set(other, { other, last: mm, unread: 0 });
+    if (mm.recipient_id === state.user.id && !mm.read) convos.get(other).unread++;
+  });
+  const list = $('convoList'); list.className = '';
+  if (convos.size === 0) {
+    list.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-mail"/></svg><p>No tienes conversaciones todavía.<br>Abre el perfil de alguien (o People) y pulsa <b>Mensaje</b> para empezar.</p></div>`;
+    return;
+  }
+  const ids = [...convos.keys()];
+  const { data: profs } = await sb.from('profiles').select('*').in('id', ids);
+  const byId = Object.fromEntries((profs || []).map(p => [p.id, p]));
+  list.innerHTML = '';
+  [...convos.values()].forEach(c => {
+    const p = byId[c.other] || {};
+    const mine = c.last.sender_id === state.user.id;
+    const row = el(`
+      <div class="convo" data-uid="${c.other}">
+        ${avatarHTML(p)}
+        <div class="c-main">
+          <div class="c-top"><span class="c-name">${esc(p.display_name || p.username || 'usuario')}</span><span class="c-when">${timeAgo(c.last.created_at)}</span></div>
+          <div class="c-snippet ${c.unread ? 'unread' : ''}">${mine ? 'Tú: ' : ''}${esc(c.last.body)}</div>
+        </div>
+        ${c.unread ? '<span class="c-unread"></span>' : ''}
+      </div>`);
+    row.onclick = () => openDM(c.other);
+    list.appendChild(row);
+  });
+}
+
+async function openDM(other) {
+  if (!other || other === state.user.id) return;
+  const { data: prof } = await sb.from('profiles').select('*').eq('id', other).single();
+  if (!prof) { toast('Usuario no encontrado'); return; }
+  const name = prof.display_name || prof.username;
+  const backdrop = openModal(`
+    <div class="modal-head dm-head">
+      <div class="dm-peer" data-uid="${other}">${avatarHTML(prof)}<div><div class="dm-name">${esc(name)}</div><div class="dm-handle">@${esc(prof.username)}</div></div></div>
+      <button class="close">&times;</button>
+    </div>
+    <div class="dm-thread" id="dmThread"><div class="loading"><div class="spinner"></div></div></div>
+    <form class="dm-form" id="dmForm"><input type="text" id="dmInput" placeholder="Mensaje para ${esc(name)}..." maxlength="1000" autocomplete="off" /><button class="btn primary" type="submit"><svg style="width:16px;height:16px" stroke="#fff"><use href="#i-send"/></svg></button></form>
+  `);
+  const thread = backdrop.querySelector('#dmThread');
+  const appendBubble = (msg) => {
+    const mine = msg.sender_id === state.user.id;
+    const b = el(`<div class="dm-bubble ${mine ? 'me' : 'them'}">${esc(msg.body)}<span class="t">${new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div>`);
+    thread.appendChild(b); thread.scrollTop = thread.scrollHeight;
+  };
+  // conversación activa (para el realtime entrante)
+  state.dmPeer = other; state.dmAppend = appendBubble;
+  const clear = () => { state.dmPeer = null; state.dmAppend = null; };
+  backdrop.querySelector('.close').addEventListener('click', clear);
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) clear(); });
+  backdrop.querySelector('.dm-peer').onclick = () => { clear(); backdrop.remove(); openProfile(other); };
+
+  const { data } = await sb.from('direct_messages').select('*')
+    .or(`and(sender_id.eq.${state.user.id},recipient_id.eq.${other}),and(sender_id.eq.${other},recipient_id.eq.${state.user.id})`)
+    .order('created_at', { ascending: true }).limit(300);
+  thread.innerHTML = '';
+  if (!data || !data.length) thread.innerHTML = `<div class="dm-empty">Aún no hay mensajes.<br>¡Escribe el primero! 👋</div>`;
+  else data.forEach(appendBubble);
+  markDmRead(other);
+
+  backdrop.querySelector('#dmForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!requireNotBanned()) return;
+    const input = backdrop.querySelector('#dmInput');
+    const body = input.value.trim(); if (!body) return;
+    input.value = '';
+    const emptyEl = thread.querySelector('.dm-empty'); if (emptyEl) emptyEl.remove();
+    const { data: sent, error } = await sb.from('direct_messages').insert({ sender_id: state.user.id, recipient_id: other, body }).select().single();
+    if (error) { toast('No se pudo enviar'); return; }
+    appendBubble(sent);
+  });
+  setTimeout(() => backdrop.querySelector('#dmInput')?.focus(), 90);
+}
 
 /* =======================================================================
    PRESENCIA (People Online)
