@@ -620,7 +620,6 @@ function initNowPlaying() {
   $('npPrev').onclick = () => step(-1);
   $('npNext').onclick = () => step(1);
   $('npClose').onclick = closeNowPlaying;
-  $('npLike').onclick = toggleLikeCurrent;
   $('player').querySelector('.now').addEventListener('click', openNowPlaying);
 
   // seek arrastrando sobre el waveform grande
@@ -631,14 +630,6 @@ function initNowPlaying() {
   w.addEventListener('pointermove', (e) => { if (wd) seekW(e.clientX); });
   w.addEventListener('pointerup', () => { wd = false; });
   w.addEventListener('pointercancel', () => { wd = false; });
-
-  // volumen
-  const vs = $('npVolSlider');
-  const setV = (x) => { const r = vs.getBoundingClientRect(); const v = Math.min(1, Math.max(0, (x - r.left) / r.width)); audio.volume = v; localStorage.setItem('ub_vol', String(v)); $('npVolFill').style.width = (v*100)+'%'; $('npVolKnob').style.left = (v*100)+'%'; setVolUI(v); };
-  let vd = false;
-  vs.addEventListener('pointerdown', (e) => { vd = true; try { vs.setPointerCapture(e.pointerId); } catch {} setV(e.clientX); });
-  vs.addEventListener('pointermove', (e) => { if (vd) setV(e.clientX); });
-  vs.addEventListener('pointerup', () => { vd = false; });
 }
 function npIsOpen() { return $('nowPlaying').classList.contains('open'); }
 function openNowPlaying() { if (!state.current) return; syncNowPlaying(); $('nowPlaying').classList.add('open'); }
@@ -653,8 +644,6 @@ function syncNowPlaying() {
   $('npWave').innerHTML = waveBars(t.id, 80).map(h => `<div class="bar" style="--h:${h}%"></div>`).join('');
   $('npCur').textContent = fmtTime(audio.currentTime);
   $('npDur').textContent = fmtTime(audio.duration || t.duration);
-  $('npLike').classList.toggle('on', state.likes.has(t.id));
-  $('npVolFill').style.width = (audio.volume*100)+'%'; $('npVolKnob').style.left = (audio.volume*100)+'%';
   setNpPlayIcon(!audio.paused);
   if (audio.duration) updateNpProgress(audio.currentTime / audio.duration);
 }
@@ -664,18 +653,6 @@ function updateNpProgress(pct) {
   const upto = Math.floor(pct * bars.length);
   bars.forEach((b, i) => b.classList.toggle('played', i <= upto));
   $('npCur').textContent = fmtTime(audio.currentTime);
-}
-function toggleLikeCurrent() {
-  const t = state.current; if (!t) return;
-  const card = document.querySelector(`.track[data-id="${t.id}"]`);
-  if (card) { toggleLike(t, card); }
-  else {
-    const liked = state.likes.has(t.id);
-    if (liked) { state.likes.delete(t.id); sb.from('likes').delete().eq('track_id', t.id).eq('user_id', state.user.id); }
-    else { state.likes.add(t.id); sb.from('likes').insert({ track_id: t.id, user_id: state.user.id }); }
-    updateCounts();
-  }
-  $('npLike').classList.toggle('on', state.likes.has(t.id));
 }
 function setPlayIcon(playing) {
   $('pPlay').querySelector('use').setAttribute('href', playing ? '#i-pause' : '#i-play');
