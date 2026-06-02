@@ -40,6 +40,11 @@ function timeAgo(ts) {
   if (d < 604800) return Math.floor(d/86400)+'d';
   return new Date(ts).toLocaleDateString();
 }
+function skeletonFeed(n=5) {
+  let s = '';
+  for (let i=0;i<n;i++) s += `<div class="skeleton"><div class="sk sk-cover"></div><div style="flex:1"><div class="sk sk-line" style="width:42%"></div><div class="sk sk-line" style="width:28%"></div><div class="sk sk-line" style="width:100%;height:40px;margin-top:14px"></div></div></div>`;
+  return s;
+}
 function toast(msg) {
   const t = el(`<div class="toast">${esc(msg)}</div>`);
   $('toastWrap').appendChild(t);
@@ -199,7 +204,7 @@ async function loadFollows() {
    ======================================================================= */
 function bindUI() {
   document.querySelectorAll('.nav-item[data-view]').forEach(b => {
-    b.onclick = () => { switchView(b.dataset.view); closeSidebar(); };
+    b.onclick = () => { switchView(b.dataset.view); hideDrawers(); };
   });
   document.querySelectorAll('#feedTabs button').forEach(b => {
     b.onclick = () => {
@@ -211,7 +216,24 @@ function bindUI() {
   $('btnUpload').onclick = openUploadModal;
   $('btnNotif').onclick = () => switchView('notifications');
   $('meChip').onclick = () => openProfile(state.user.id);
-  $('menuToggle').onclick = () => $('sidebar').classList.toggle('open');
+  $('menuToggle').onclick = () => { const open = $('sidebar').classList.toggle('open'); $('drawerBackdrop').classList.toggle('show', open); };
+  $('btnChatToggle').onclick = toggleRight;
+  $('drawerBackdrop').onclick = hideDrawers;
+
+  // navegación inferior (móvil)
+  document.querySelectorAll('#bottomNav button[data-bnav]').forEach(b => {
+    b.onclick = () => {
+      const act = b.dataset.bnav;
+      document.querySelectorAll('#bottomNav button').forEach(x => x.classList.toggle('active', x === b && act !== 'upload' && act !== 'chat'));
+      if (act === 'feed') { state.tab = 'trending'; switchView('feed'); $('main').scrollTo({top:0,behavior:'smooth'}); }
+      else if (act === 'people') switchView('people');
+      else if (act === 'me') openProfile(state.user.id);
+      else if (act === 'upload') openUploadModal();
+      else if (act === 'chat') toggleRight();
+      if (act !== 'chat') hideDrawers();
+    };
+  });
+
   let st;
   $('searchInput').addEventListener('input', (e) => {
     clearTimeout(st);
@@ -219,7 +241,19 @@ function bindUI() {
   });
   updateCounts();
 }
-function closeSidebar() { $('sidebar').classList.remove('open'); }
+const rightEl = () => document.querySelector('.right');
+function hideDrawers() {
+  $('sidebar').classList.remove('open');
+  rightEl().classList.remove('open');
+  $('drawerBackdrop').classList.remove('show');
+}
+function toggleRight() {
+  const r = rightEl();
+  const open = r.classList.toggle('open');
+  $('sidebar').classList.remove('open');
+  $('drawerBackdrop').classList.toggle('show', open);
+  if (open) setTimeout(scrollChat, 50);
+}
 
 function setActiveNav(view) {
   document.querySelectorAll('.nav-item[data-view]').forEach(b => b.classList.toggle('active', b.dataset.view === view));
@@ -250,7 +284,8 @@ async function switchView(view) {
   if (view === 'notifications') return renderNotifications();
   if (view === 'people') return renderPeople();
 
-  main.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
+  main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
+  main.innerHTML = skeletonFeed();
   let tracks = [], head = { title: 'Stream', sub: '' };
 
   try {
@@ -310,7 +345,7 @@ async function fetchSearch(term) {
 
 function renderFeed(head, tracks, view) {
   const main = $('main');
-  main.innerHTML = `<div class="main-head"><div><h2>${esc(head.title)}</h2><div class="sub">${esc(head.sub)}</div></div></div><div id="feedList"></div>`;
+  main.innerHTML = `<div class="main-head"><div><h2>${esc(head.title)}</h2><div class="sub">${esc(head.sub)}</div></div></div><div id="feedList" class="feed-list"></div>`;
   const list = $('feedList');
   if (!tracks.length) {
     let hint = 'No hay pistas todavía.';
@@ -323,6 +358,7 @@ function renderFeed(head, tracks, view) {
   }
   state.queue = tracks.map(t => t.id);
   tracks.forEach(t => list.appendChild(trackCard(t)));
+  if (state.current && audio && !audio.paused) markPlayingCard();
 }
 
 /* =======================================================================
@@ -347,7 +383,7 @@ function trackCard(t) {
           ${t.genre ? `<span class="t-genre">${esc(t.genre)}</span>` : ''}
         </div>
         <div class="wave" data-act="seekwave">
-          ${bars.map((h,i)=>`<div class="bar" data-i="${i}" style="height:${h}%"></div>`).join('')}
+          ${bars.map((h,i)=>`<div class="bar" data-i="${i}" style="--h:${h}%;--d:${((i*37)%23)*0.045}s"></div>`).join('')}
         </div>
         <div class="t-foot">
           <span class="time"><svg style="width:12px;height:12px;vertical-align:-1px" fill="none" stroke="currentColor"><use href="#i-headphones"/></svg> ${t.plays||0} · ${fmtTime(t.duration)}</span>
@@ -501,8 +537,8 @@ function initPlayer() {
   });
   audio.addEventListener('loadedmetadata', () => { $('pDur').textContent = fmtTime(audio.duration); });
   audio.addEventListener('ended', () => step(1));
-  audio.addEventListener('play', () => setPlayIcon(true));
-  audio.addEventListener('pause', () => setPlayIcon(false));
+  audio.addEventListener('play', () => { setPlayIcon(true); showEq(true); markPlayingCard(); });
+  audio.addEventListener('pause', () => { setPlayIcon(false); showEq(false); });
 
   // seek
   const seek = $('pSeek');
@@ -539,6 +575,17 @@ function initPlayer() {
   });
 }
 function setVolUI(v) { $('volFill').style.width = (v*100)+'%'; $('volKnob').style.left = (v*100)+'%'; }
+function showEq(on) {
+  const cover = $('pCover');
+  let eq = cover.querySelector('.eq');
+  if (on) { if (!eq) { eq = el('<div class="eq"><span></span><span></span><span></span><span></span></div>'); cover.appendChild(eq); } }
+  else if (eq) eq.remove();
+}
+function markPlayingCard() {
+  document.querySelectorAll('.track.playing').forEach(c => c.classList.remove('playing'));
+  const card = document.querySelector(`.track[data-id="${state.current?.id}"]`);
+  if (card) card.classList.add('playing');
+}
 function setPlayIcon(playing) {
   $('pPlay').querySelector('use').setAttribute('href', playing ? '#i-pause' : '#i-play');
 }
@@ -718,7 +765,7 @@ async function openProfile(userId) {
       </div>
     </div>
     <div class="main-head"><h2>Pistas</h2></div>
-    <div id="feedList"></div>`;
+    <div id="feedList" class="feed-list"></div>`;
 
   const list = $('feedList');
   if (!tracks.length) list.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-music"/></svg><p>Sin pistas todavía.</p></div>`;
@@ -756,7 +803,7 @@ async function renderPeople() {
   const main = $('main');
   main.innerHTML = `<div class="main-head"><div><h2>People</h2><div class="sub">Descubre a otros creadores</div></div></div><div id="peopleList" class="loading"><div class="spinner"></div></div>`;
   const { data } = await sb.from('profiles').select('*').order('created_at', { ascending: false }).limit(60);
-  const list = $('peopleList'); list.className = '';
+  const list = $('peopleList'); list.className = 'feed-list';
   const people = (data||[]).filter(p => p.id !== state.user.id);
   if (!people.length) { list.innerHTML = '<div class="empty"><p>Aún no hay nadie más por aquí.</p></div>'; return; }
   list.innerHTML = '';

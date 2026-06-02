@@ -91,6 +91,7 @@
       <input type="text" id="searchInput" placeholder="Search UnderBro..." />
     </div>
     <div class="topbar-right">
+      <button class="icon-btn drawer-only" id="btnChatToggle" title="Chat y online"><svg><use href="#i-comment"/></svg></button>
       <button class="icon-btn" id="btnNotif" title="Notificaciones"><svg><use href="#i-bell"/></svg><span class="badge hidden" id="notifBadge">0</span></button>
       <div class="avatar-chip" id="meChip" title="Mi perfil">
         <div class="avatar" id="meAvatar"></div>
@@ -170,6 +171,17 @@
   </div>
   <audio id="audio" preload="metadata"></audio>
 </div>
+
+<!-- ===================== DRAWER BACKDROP + MOBILE NAV ===================== -->
+<div class="drawer-backdrop" id="drawerBackdrop"></div>
+
+<nav class="bottom-nav" id="bottomNav">
+  <button data-bnav="feed" class="active"><svg><use href="#i-stream"/></svg>Stream</button>
+  <button data-bnav="people"><svg><use href="#i-people"/></svg>People</button>
+  <button data-bnav="upload" class="nav-upload"><span class="u-fab"><svg><use href="#i-plus"/></svg></span></button>
+  <button data-bnav="chat"><svg><use href="#i-comment"/></svg>Chat</button>
+  <button data-bnav="me"><svg><use href="#i-headphones"/></svg>Yo</button>
+</nav>
 
 <!-- ===================== MODAL ROOT + TOASTS ===================== -->
 <div id="modalRoot"></div>
