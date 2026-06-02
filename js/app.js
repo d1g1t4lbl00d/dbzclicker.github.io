@@ -1133,6 +1133,27 @@ async function renderPeople() {
 /* =======================================================================
    SETTINGS
    ======================================================================= */
+async function deleteAccount() {
+  const msg = $('delMsg'); msg.className = 'auth-msg';
+  const typed = prompt('Esta acción es PERMANENTE: borrará tu cuenta y TODOS tus archivos y datos.\n\nEscribe BORRAR para confirmar:');
+  if (typed == null) return;
+  if (typed.trim().toUpperCase() !== 'BORRAR') { msg.className = 'auth-msg error'; msg.textContent = 'Confirmación incorrecta. Escribe BORRAR.'; return; }
+  const btn = $('deleteAccount'); btn.disabled = true;
+  msg.className = 'auth-msg'; msg.textContent = 'Eliminando tu cuenta y archivos…';
+  try {
+    const { data, error } = await sb.functions.invoke('delete-account');
+    if (error) throw error;
+    if (data && data.error) throw new Error(data.error);
+    try { await sb.auth.signOut(); } catch {}
+    localStorage.clear();
+    alert('Tu cuenta y todos tus datos se han eliminado. ¡Gracias por usar UnderBro!');
+    location.reload();
+  } catch (err) {
+    msg.className = 'auth-msg error'; msg.textContent = 'No se pudo eliminar: ' + (err.message || err);
+    btn.disabled = false;
+  }
+}
+
 function renderSettings() {
   setActiveNav('settings');
   const p = state.profile;
@@ -1153,7 +1174,16 @@ function renderSettings() {
       <div class="field"><label>Nueva contraseña</label><input type="password" id="setPass" placeholder="Mínimo 6 caracteres" autocomplete="new-password" /></div>
       <button class="btn" id="savePass">Cambiar contraseña</button>
       <div class="auth-msg" id="passMsg"></div>
+      <div class="danger-zone">
+        <h4>Eliminar cuenta</h4>
+        <p>Borra para siempre tu cuenta, tu perfil y <b>todo</b> lo que has subido: pistas, portadas, comentarios, "me gusta", seguidores y mensajes. No se puede deshacer.</p>
+        <button class="btn danger-btn" id="deleteAccount"><svg fill="none" stroke="#fff"><use href="#i-trash"/></svg> Eliminar mi cuenta y mis datos</button>
+        <div class="auth-msg" id="delMsg"></div>
+      </div>
+      <div style="text-align:center;margin-top:16px"><a id="policyLink" style="font-size:12px;color:var(--ink-soft);cursor:pointer">Política de privacidad y cookies</a></div>
     </div>`;
+  $('policyLink').onclick = showPrivacyPolicy;
+  $('deleteAccount').onclick = deleteAccount;
 
   const avatarFile = $('avatarFile');
   $('changeAvatar').onclick = () => avatarFile.click();
@@ -1620,6 +1650,41 @@ function renderOnline(users) {
   list.querySelectorAll('.online-item').forEach(it => it.onclick = () => openProfile(it.dataset.uid));
 }
 
+/* =======================================================================
+   COOKIES / POLÍTICA DE PRIVACIDAD
+   ======================================================================= */
+function initCookies() {
+  const banner = $('cookieBanner');
+  if (!banner) return;
+  if (!localStorage.getItem('ub_cookie_ok')) banner.classList.remove('hidden');
+  $('ckAccept').onclick = () => { localStorage.setItem('ub_cookie_ok', '1'); banner.classList.add('hidden'); };
+  $('ckPolicyBtn').onclick = showPrivacyPolicy;
+  $('ckPolicyLink').onclick = showPrivacyPolicy;
+}
+function showPrivacyPolicy() {
+  openModal(`
+    <div class="modal-head"><h3>Política de privacidad y cookies</h3><button class="close">&times;</button></div>
+    <div class="modal-body policy-body">
+      <p><b>UnderBro</b> es una plataforma social de música. Aquí explicamos qué datos tratamos y cómo controlarlos.</p>
+      <h4>Datos que guardamos</h4>
+      <ul>
+        <li>Cuenta: tu correo y una contraseña cifrada (gestionada por Supabase Auth).</li>
+        <li>Perfil: nombre, usuario, biografía y foto.</li>
+        <li>Contenido: pistas que subes, portadas, comentarios, "me gusta", seguidores, mensajes del chat y mensajes directos.</li>
+      </ul>
+      <h4>Cookies y almacenamiento local</h4>
+      <p>Usamos almacenamiento local del navegador para mantener tu sesión iniciada, recordar el volumen y tus preferencias. No usamos cookies de publicidad ni de rastreo de terceros.</p>
+      <h4>Dónde se procesan</h4>
+      <p>Los datos se almacenan en <b>Supabase</b> (base de datos y archivos) y la web se sirve desde <b>Vercel</b>, actuando como encargados del tratamiento.</p>
+      <h4>Tus derechos</h4>
+      <p>Puedes editar tu perfil en cualquier momento y <b>eliminar tu cuenta y todos tus datos y archivos</b> desde <b>Ajustes → Eliminar cuenta</b>. Esa acción es permanente.</p>
+      <h4>Contenido y conducta</h4>
+      <p>Sube solo contenido sobre el que tengas derechos. El contenido que infrinja derechos o las normas puede ser retirado por moderación.</p>
+      <p style="color:var(--ink-soft);font-size:12px;margin-top:14px">Última actualización: ${new Date().toLocaleDateString('es-ES')}.</p>
+    </div>`);
+}
+
 /* ----------------------------------------------------------------------- */
+initCookies();
 init();
 })();

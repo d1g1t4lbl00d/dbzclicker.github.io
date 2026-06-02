@@ -587,6 +587,31 @@ img { display: block; }
 .mail-btn { position: relative; }
 @media (max-width: 720px) { .mail-btn { display: none; } }
 
+/* banner de cookies */
+.cookie-banner {
+  position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 96;
+  width: min(680px, calc(100% - 24px)); display: flex; align-items: center; gap: 14px;
+  background: rgba(255,255,255,.97); backdrop-filter: blur(12px); border: 1px solid var(--line);
+  border-radius: 16px; box-shadow: var(--sh-3); padding: 14px 16px; animation: fadeUp .35s var(--ease);
+}
+.cookie-banner .ck-text { font-size: 12.8px; color: var(--ink-2); line-height: 1.45; flex: 1; }
+.cookie-banner .ck-text a { color: var(--blue-deep); font-weight: 650; cursor: pointer; text-decoration: underline; }
+.cookie-banner .ck-actions { display: flex; gap: 8px; flex-shrink: 0; }
+@media (max-width: 720px) {
+  .cookie-banner { flex-direction: column; align-items: stretch; bottom: 10px; gap: 10px; }
+  .cookie-banner .ck-actions .btn { flex: 1; }
+}
+
+/* zona de peligro (ajustes) */
+.danger-zone { margin-top: 24px; border: 1px solid #f0c9c1; background: #fdf3f1; border-radius: var(--r); padding: 16px; }
+.danger-zone h4 { color: var(--danger); font-size: 13px; font-weight: 800; margin-bottom: 6px; }
+.danger-zone p { font-size: 12.5px; color: var(--ink-soft); margin-bottom: 12px; }
+.btn.danger-btn { color: #fff; border-color: transparent; background: linear-gradient(180deg,#e0705c,#cf5642); box-shadow: 0 4px 12px rgba(207,86,66,.35); }
+.policy-body { font-size: 13.5px; line-height: 1.6; color: var(--ink-2); }
+.policy-body h4 { color: var(--ink); font-size: 14px; margin: 16px 0 6px; }
+.policy-body ul { margin: 6px 0 6px 18px; } .policy-body li { margin-bottom: 4px; }
+.policy-body p { margin-bottom: 8px; }
+
 /* selector de portada con vista previa (modal de subida) */
 .cover-pick { display: flex; align-items: center; gap: 12px; border: 1.5px solid var(--line); border-radius: 12px; padding: 10px; background: var(--panel-2); cursor: pointer; transition: border-color .18s, background .18s; }
 .cover-pick:hover, .cover-pick.drag { border-color: var(--blue); background: #eef4fc; }
