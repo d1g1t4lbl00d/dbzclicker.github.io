@@ -525,34 +525,36 @@ img { display: block; }
   .upload-cta { padding: 14px; }
 
   /* MAIN: hueco para reproductor + nav + safe-area, así nada queda tapado */
-  .main { padding: 14px 13px calc(var(--nav-h) + 78px + env(safe-area-inset-bottom,0px)); }
+  .main { padding: 14px 13px calc(var(--nav-h) + 94px + env(safe-area-inset-bottom,0px)); }
   .main-head h2 { font-size: 19px; }
   .track { padding: 13px; gap: 12px; border-radius: var(--r); }
   .track .cover { width: 78px; height: 78px; }
   .track .t-foot { gap: 1px; }
   .act { padding: 9px 9px; }
 
-  /* PLAYER: ancho completo, barra de tiempo ARRIBA, justo sobre la nav (sin solapes) */
+  /* PLAYER: tarjeta flotante con márgenes, barra de tiempo integrada abajo */
   .player {
-    left: 0; right: 0; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom,0px));
-    height: 60px; gap: 12px; padding: 0 14px; border-radius: 0;
-    border-top: 1px solid var(--line); box-shadow: 0 -6px 20px rgba(47,56,80,.12); z-index: 46;
+    left: 12px; right: 12px; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom,0px) + 8px);
+    height: 66px; gap: 12px; padding: 0 10px 11px; border-radius: 18px;
+    border: 1px solid var(--line); box-shadow: var(--sh-3); z-index: 46;
+    background: rgba(255,255,255,.92); backdrop-filter: blur(18px) saturate(1.5); overflow: visible;
   }
   .player .now { width: auto; flex: 1; gap: 11px; min-width: 0; }
-  .player .now .cover { width: 44px; height: 44px; animation: none; }
+  .player .now .cover { width: 44px; height: 44px; border-radius: 11px; animation: none; }
   .player .controls { gap: 8px; }
   .player .controls #pPrev, .player .controls #pNext { display: none; }
   .player .controls .play-big { width: 46px; height: 46px; }
   .player .vol { display: none; }
-  .player .progress { position: absolute; top: 0; left: 0; right: 0; gap: 0; padding: 0; }
+  /* barra de tiempo fina integrada en el borde inferior de la tarjeta, con margen interior */
+  .player .progress { position: absolute; left: 14px; right: 14px; bottom: 7px; gap: 0; padding: 0; }
   .player .progress .time { display: none; }
-  .player .seek { border-radius: 0; height: 4px; }
-  .player .seek::before { inset: -11px 0 -9px; }      /* zona de agarre amplia y cómoda */
-  .player .seek .knob { width: 17px; height: 17px; }
+  .player .seek { height: 4px; border-radius: 4px; background: #d3dbe9; }
+  .player .seek::before { inset: -13px 0 -9px; }      /* zona de agarre cómoda */
+  .player .seek .knob { width: 13px; height: 13px; }
   .player .seek:hover, .player .seek.scrub { height: 5px; }
-  .player .seek .seek-tip { bottom: 13px; }
+  .player .seek .seek-tip { bottom: 15px; }
 
-  .toast-wrap { bottom: calc(var(--nav-h) + 76px + env(safe-area-inset-bottom,0px)); }
+  .toast-wrap { bottom: calc(var(--nav-h) + 92px + env(safe-area-inset-bottom,0px)); }
 
   /* BOTTOM NAV con safe-area */
   .bottom-nav {
