@@ -390,7 +390,7 @@ function trackCard(t) {
           <button class="act like ${liked?'on':''}" data-act="like"><svg><use href="#i-heart"/></svg><span class="ln">${liked?'Te gusta':'Me gusta'}</span></button>
           <button class="act" data-act="toggleComments"><svg><use href="#i-comment"/></svg><span class="cn">Comentar</span></button>
           <button class="act" data-act="download"><svg><use href="#i-download"/></svg>Descargar</button>
-          ${(t.user_id === state.user.id || state.profile.is_admin) ? `<button class="act" data-act="delete"><svg fill="none" stroke="currentColor"><use href="#i-files"/></svg>${t.user_id === state.user.id ? 'Borrar' : 'Borrar (mod)'}</button>` : ''}
+          ${(t.user_id === state.user.id || state.profile.is_admin) ? `<button class="act danger" data-act="delete"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg>${t.user_id === state.user.id ? 'Borrar' : 'Borrar (mod)'}</button>` : ''}
         </div>
         <div class="comments hidden" data-comments></div>
       </div>
