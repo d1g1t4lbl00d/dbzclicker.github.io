@@ -1215,8 +1215,10 @@ async function openProfile(userId) {
   const cardsCls = (theme.cards && theme.cards !== 'default' && CARD_STYLES[theme.cards]) ? 'cards-' + theme.cards : '';
   const animCls = (theme.bg && theme.bg.type === 'gradient' && theme.bg.animated) ? 'bg-animated' : '';
   const tagline = (typeof theme.tagline === 'string') ? theme.tagline.slice(0, 140) : '';
+  const backTo = ['feed','people','messages','favorites','mytracks','all','downloads','notifications','search'].includes(state.view) ? state.view : 'feed';
   main.innerHTML = `
     <div class="profile-view ${glowCls} ${cardsCls} ${animCls}" style="--accent:${accent};${fontVar}${bgStyle(theme)}">
+      <button class="profile-back" id="profileBack"><svg fill="none" stroke="currentColor"><use href="#i-chevron-left"/></svg> Volver</button>
       ${banner ? `<div class="profile-banner" style="background-image:url('${banner}')"></div>` : ''}
       <div class="profile-head ${banner ? 'has-banner' : ''}">
         ${avatarHTML(prof)}
@@ -1243,6 +1245,7 @@ async function openProfile(userId) {
       <div class="main-head"><h2>Pistas</h2></div>
       <div id="feedList" class="feed-list"></div>
     </div>`;
+  $('profileBack').onclick = () => switchView(backTo);
   if (font) loadFont(font);
   if (theme.effect && theme.effect !== 'none' && EFFECTS[theme.effect]) {
     const v = main.querySelector('.profile-view'); if (v) v.prepend(buildEffect(theme.effect));
