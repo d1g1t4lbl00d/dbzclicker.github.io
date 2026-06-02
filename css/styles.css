@@ -305,11 +305,17 @@ img { display: block; }
   box-shadow: inset 0 0 0 1px rgba(255,255,255,.25), 0 4px 12px rgba(74,104,168,.25); cursor: pointer;
 }
 .track .cover img { width: 100%; height: 100%; object-fit: cover; }
-.track .cover .play-overlay { position: absolute; inset: 0; background: linear-gradient(180deg, rgba(47,56,80,.1), rgba(47,56,80,.45)); display: grid; place-items: center; opacity: 0; transition: opacity .18s; }
-.track .cover:hover .play-overlay { opacity: 1; }
-.track .cover .play-overlay svg { width: 30px; height: 30px; fill: #fff; filter: drop-shadow(0 2px 6px rgba(0,0,0,.4)); transform: scale(.8); transition: transform .18s var(--ease); }
-.track .cover:hover .play-overlay svg { transform: scale(1); }
-.track.playing .cover .play-overlay { opacity: 1; background: rgba(47,56,80,.35); }
+/* botón de play físico en la esquina de la carátula (no la tapa) */
+.cover-play { position: absolute; bottom: 5px; right: 5px; width: 30px; height: 30px; border-radius: 50%; border: 2px solid rgba(255,255,255,.85); background: var(--accent-grad); box-shadow: 0 3px 10px rgba(47,56,80,.45); display: grid; place-items: center; padding: 0; transition: transform .14s var(--ease); }
+.cover-play:hover { transform: scale(1.1); }
+.cover-play:active { transform: scale(.92); }
+.cover-play svg { width: 13px; height: 13px; fill: #fff; stroke: #fff; }
+.cover-play .ci-play { margin-left: 1px; }
+.cover-play .ci-pause { display: none; }
+.track.playing .cover-play .ci-play { display: none; }
+.track.playing .cover-play .ci-pause { display: inline; }
+.feed-list.compact .cover-play { width: 26px; height: 26px; bottom: 3px; right: 3px; }
+.feed-list.compact .cover-play svg { width: 11px; height: 11px; }
 
 .track .body { flex: 1; min-width: 0; }
 .track .t-head { display: flex; align-items: flex-start; gap: 8px; }

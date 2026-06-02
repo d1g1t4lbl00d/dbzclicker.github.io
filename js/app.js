@@ -395,7 +395,7 @@ function trackCard(t) {
     <div class="track" data-id="${t.id}">
       <div class="cover" data-act="play">
         ${t.cover_url ? `<img src="${esc(t.cover_url)}" alt="" />` : `<svg width="34" height="34" fill="none" stroke="#fff" stroke-width="1.6"><use href="#i-music"/></svg>`}
-        <div class="play-overlay"><svg><use href="#i-play"/></svg></div>
+        <button class="cover-play" data-act="play" title="Reproducir"><svg class="ci-play"><use href="#i-play"/></svg><svg class="ci-pause"><use href="#i-pause"/></svg></button>
       </div>
       <div class="body">
         <div class="t-head">
@@ -465,7 +465,13 @@ function openEditTrack(t, card) {
         if (cu.error) throw cu.error;
         cover_url = sb.storage.from('covers').getPublicUrl(path).data.publicUrl;
       }
-      const { data, error } = await sb.from('tracks').update({ title, genre: genre || null, cover_url, collaborators: collab.get() })
+      // regenerar la onda real si la pista no la tiene (pistas antiguas)
+      const patch = { title, genre: genre || null, cover_url, collaborators: collab.get() };
+      if (!Array.isArray(t.waveform) || !t.waveform.length) {
+        eMsg.textContent = 'Generando la onda real…';
+        try { const r = await fetch(t.audio_url); const wf = await computeWaveformPeaks(await r.blob()); if (wf) patch.waveform = wf; } catch {}
+      }
+      const { data, error } = await sb.from('tracks').update(patch)
         .eq('id', t.id).select('*, profiles!tracks_user_id_fkey(*)').single();
       if (error) throw error;
       Object.assign(t, data);
@@ -631,7 +637,7 @@ function initPlayer() {
   audio.addEventListener('loadedmetadata', () => { $('pDur').textContent = fmtTime(audio.duration); if (npIsOpen()) $('npDur').textContent = fmtTime(audio.duration); });
   audio.addEventListener('ended', () => step(1));
   audio.addEventListener('play', () => { setPlayIcon(true); showEq(true); markPlayingCard(); setNpPlayIcon(true); });
-  audio.addEventListener('pause', () => { setPlayIcon(false); showEq(false); setNpPlayIcon(false); });
+  audio.addEventListener('pause', () => { setPlayIcon(false); showEq(false); setNpPlayIcon(false); document.querySelectorAll('.track.playing').forEach(c => c.classList.remove('playing')); });
 
   // seek preciso (pointer events: ratón + táctil unificados) con vista previa
   const seek = $('pSeek'), fill = $('pFill'), knob = $('pKnob'), ghost = $('pGhost'), tip = $('pTip');
