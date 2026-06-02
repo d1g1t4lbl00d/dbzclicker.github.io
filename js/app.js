@@ -219,6 +219,12 @@ function bindUI() {
   $('menuToggle').onclick = () => { const open = $('sidebar').classList.toggle('open'); $('drawerBackdrop').classList.toggle('show', open); };
   $('btnChatToggle').onclick = toggleRight;
   $('drawerBackdrop').onclick = hideDrawers;
+  $('btnSearchToggle').onclick = () => {
+    const tb = document.querySelector('.topbar');
+    const open = tb.classList.toggle('search-open');
+    if (open) setTimeout(() => $('searchInput').focus(), 60);
+    else { $('searchInput').value = ''; state.search = ''; }
+  };
 
   // navegación inferior (móvil)
   document.querySelectorAll('#bottomNav button[data-bnav]').forEach(b => {
