@@ -226,7 +226,7 @@ function bindUI() {
       switchView('feed');
     };
   });
-  $('btnUpload').onclick = openUploadModal;
+  $('btnUpload').onclick = openCreateChooser;
   $('btnNotif').onclick = () => switchView('notifications');
   $('btnMessages').onclick = () => { switchView('messages'); hideDrawers(); };
   $('meChip').onclick = () => openProfile(state.user.id);
@@ -248,7 +248,7 @@ function bindUI() {
       if (act === 'feed') { state.tab = 'trending'; switchView('feed'); $('main').scrollTo({top:0,behavior:'smooth'}); }
       else if (act === 'people') switchView('people');
       else if (act === 'me') openProfile(state.user.id);
-      else if (act === 'upload') openUploadModal();
+      else if (act === 'upload') openCreateChooser();
       else if (act === 'chat') switchView('messages');
       if (act !== 'upload') hideDrawers();
     };
@@ -304,6 +304,7 @@ async function switchView(view) {
   if (view === 'notifications') return renderNotifications();
   if (view === 'people') return renderPeople();
   if (view === 'messages') return renderMessages();
+  if (view === 'posts') return renderPosts();
 
   main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
   main.innerHTML = skeletonFeed();
@@ -1013,6 +1014,240 @@ function openUploadModal() {
 }
 
 /* =======================================================================
+   POSTS / FOTOS
+   ======================================================================= */
+// Selector: ¿subir una pista o una foto?
+function openCreateChooser() {
+  if (!requireNotBanned()) return;
+  const m = openModal(`
+    <div class="modal-head"><h3>¿Qué quieres compartir?</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <div class="create-choices">
+        <button class="create-choice" id="chTrack"><span class="cc-ic"><svg fill="none" stroke="#fff"><use href="#i-music"/></svg></span><b>Pista</b><span class="cc-sub">Sube una canción o beat</span></button>
+        <button class="create-choice" id="chPhoto"><span class="cc-ic"><svg fill="none" stroke="#fff"><use href="#i-camera"/></svg></span><b>Foto</b><span class="cc-sub">Publica una imagen</span></button>
+      </div>
+    </div>`);
+  m.querySelector('#chTrack').onclick = () => { m.remove(); openUploadModal(); };
+  m.querySelector('#chPhoto').onclick = () => { m.remove(); openPhotoUploadModal(); };
+}
+
+function openPhotoUploadModal() {
+  if (!requireNotBanned()) return;
+  const m = openModal(`
+    <div class="modal-head"><h3>Nueva foto</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <div class="field">
+        <label>Foto</label>
+        <div class="dropzone" id="dzPhoto">
+          <svg fill="none"><use href="#i-image"/></svg>
+          <div>Arrastra una imagen aquí o haz clic</div>
+          <div class="fname" id="photoName"></div>
+        </div>
+        <div class="post-photo-prev hidden" id="photoPrev"></div>
+        <input type="file" id="fPhoto" accept="image/*" hidden />
+      </div>
+      <div class="field"><label>Pie de foto (opcional)</label><textarea id="pCaption" maxlength="600" placeholder="Escribe algo sobre tu foto…"></textarea></div>
+      <div class="progress-bar hidden" id="ppBar"><div></div></div>
+      <button class="btn primary" id="pSubmit"><svg stroke="#fff"><use href="#i-upload"/></svg> Publicar foto</button>
+      <div class="auth-msg" id="ppMsg"></div>
+    </div>`);
+
+  let photoFile = null;
+  const dz = m.querySelector('#dzPhoto'), fP = m.querySelector('#fPhoto'), prev = m.querySelector('#photoPrev');
+  const setPhoto = (f) => {
+    if (!f || !f.type.startsWith('image')) { toast('Selecciona una imagen'); return; }
+    if (f.size > 10 * 1024 * 1024) { toast('La imagen no puede superar los 10 MB'); return; }
+    photoFile = f;
+    prev.innerHTML = `<img src="${URL.createObjectURL(f)}" alt="" />`;
+    prev.classList.remove('hidden');
+    m.querySelector('#photoName').textContent = f.name;
+  };
+  dz.onclick = () => fP.click();
+  fP.onchange = () => { if (fP.files[0]) setPhoto(fP.files[0]); };
+  ['dragover','dragleave','drop'].forEach(ev => dz.addEventListener(ev, (e) => {
+    e.preventDefault();
+    if (ev === 'dragover') dz.classList.add('drag'); else dz.classList.remove('drag');
+    if (ev === 'drop' && e.dataTransfer.files[0]) setPhoto(e.dataTransfer.files[0]);
+  }));
+
+  m.querySelector('#pSubmit').onclick = async () => {
+    const caption = m.querySelector('#pCaption').value.trim();
+    const msg = m.querySelector('#ppMsg'); msg.className = 'auth-msg';
+    if (!photoFile) { msg.className = 'auth-msg error'; msg.textContent = 'Selecciona una imagen.'; return; }
+    const btn = m.querySelector('#pSubmit'); btn.disabled = true;
+    const bar = m.querySelector('#ppBar'); bar.classList.remove('hidden');
+    const fill = bar.firstElementChild; fill.style.width = '20%';
+    try {
+      const uid = state.user.id;
+      const ext = (photoFile.name.split('.').pop() || 'jpg').toLowerCase();
+      const path = `${uid}/${Date.now()}.${ext}`;
+      const up = await sb.storage.from('posts').upload(path, photoFile, { contentType: photoFile.type, upsert: false });
+      if (up.error) throw up.error;
+      fill.style.width = '70%';
+      const image_url = sb.storage.from('posts').getPublicUrl(path).data.publicUrl;
+      const { error } = await sb.from('posts').insert({ user_id: uid, image_url, caption });
+      if (error) throw error;
+      fill.style.width = '100%';
+      toast('¡Foto publicada! 📸');
+      m.remove();
+      switchView('posts');
+    } catch (err) {
+      console.error(err);
+      msg.className = 'auth-msg error';
+      msg.textContent = 'Error al subir: ' + (err.message || err);
+      btn.disabled = false;
+    }
+  };
+}
+
+async function fetchPosts({ userId = null, limit = 50 } = {}) {
+  let q = sb.from('posts').select('*, profiles(*)');
+  if (userId) q = q.eq('user_id', userId);
+  q = q.order('created_at', { ascending: false }).limit(limit);
+  const { data, error } = await q;
+  if (error) throw error;
+  return data || [];
+}
+
+async function renderPosts() {
+  setActiveNav('posts');
+  const main = $('main');
+  main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
+  main.innerHTML = `
+    <div class="main-head">
+      <div><h2>Fotos</h2><div class="sub">Comparte momentos con la comunidad</div></div>
+      <button class="btn primary" id="newPostBtn"><svg stroke="#fff"><use href="#i-camera"/></svg> Nueva foto</button>
+    </div>
+    <div id="postList" class="post-list"><div class="loading"><div class="spinner"></div></div></div>`;
+  $('newPostBtn').onclick = openPhotoUploadModal;
+
+  let posts = [];
+  try { posts = await fetchPosts(); }
+  catch (err) { console.error(err); toast('Error al cargar las fotos'); }
+
+  const list = $('postList'); list.innerHTML = '';
+  if (!posts.length) {
+    list.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-camera"/></svg><p>Todavía no hay fotos. ¡Pulsa "Nueva foto" y sé el primero!</p></div>`;
+    return;
+  }
+  // qué fotos me gustan (entre las visibles)
+  let likedSet = new Set();
+  try {
+    const ids = posts.map(p => p.id);
+    const { data } = await sb.from('post_likes').select('post_id').eq('user_id', state.user.id).in('post_id', ids);
+    likedSet = new Set((data || []).map(r => r.post_id));
+  } catch {}
+  posts.forEach(p => list.appendChild(postCard(p, likedSet.has(p.id))));
+}
+
+function postCard(p, liked) {
+  const prof = p.profiles || {};
+  const mine = p.user_id === state.user.id;
+  const card = el(`
+    <div class="track post" data-id="${p.id}">
+      <div class="post-head">
+        <span class="post-av" data-act="profile">${avatarHTML(prof)}</span>
+        <div class="post-who">
+          <b data-act="profile">${esc(prof.display_name || prof.username || 'anónimo')}</b>
+          <span class="post-time">${timeAgo(p.created_at)}</span>
+        </div>
+        ${(mine || state.profile.is_admin) ? `<button class="post-del" data-act="delete" title="Borrar publicación">&times;</button>` : ''}
+      </div>
+      <div class="post-img"><img src="${esc(p.image_url)}" alt="" loading="lazy" data-act="zoom" /></div>
+      ${p.caption ? `<div class="post-caption"><b data-act="profile">@${esc(prof.username || '')}</b> ${esc(p.caption)}</div>` : ''}
+      <div class="t-foot">
+        <span class="time"><svg style="width:12px;height:12px;vertical-align:-2px" fill="currentColor" stroke="none"><use href="#i-heart"/></svg> <span class="likecount">${p.likes_count || 0}</span></span>
+        <button class="act like ${liked ? 'on' : ''}" data-act="like"><svg><use href="#i-heart"/></svg><span class="ln">${liked ? 'Te gusta' : 'Me gusta'}</span></button>
+        <button class="act" data-act="toggleComments"><svg><use href="#i-comment"/></svg>Comentar</button>
+      </div>
+      <div class="comments hidden" data-comments></div>
+    </div>`);
+  card.addEventListener('click', (e) => handlePostClick(e, p, card));
+  return card;
+}
+
+function handlePostClick(e, p, card) {
+  const act = e.target.closest('[data-act]')?.dataset.act;
+  if (!act) return;
+  if (act === 'profile') openProfile(p.user_id);
+  else if (act === 'like') togglePostLike(p, card);
+  else if (act === 'delete') deletePost(p, card);
+  else if (act === 'toggleComments') togglePostComments(p, card);
+  else if (act === 'zoom') openImageViewer(p.image_url);
+}
+
+async function togglePostLike(p, card) {
+  const btn = card.querySelector('[data-act="like"]');
+  const cntEl = card.querySelector('.likecount');
+  const liked = btn.classList.contains('on');
+  if (liked) {
+    p.likes_count = Math.max(0, (p.likes_count || 0) - 1);
+    btn.classList.remove('on'); btn.querySelector('.ln').textContent = 'Me gusta';
+    await sb.from('post_likes').delete().eq('post_id', p.id).eq('user_id', state.user.id);
+  } else {
+    p.likes_count = (p.likes_count || 0) + 1;
+    btn.classList.add('on'); btn.querySelector('.ln').textContent = 'Te gusta';
+    await sb.from('post_likes').insert({ post_id: p.id, user_id: state.user.id });
+  }
+  if (cntEl) cntEl.textContent = p.likes_count;
+}
+
+async function deletePost(p, card) {
+  if (!confirm('¿Borrar esta publicación? No se puede deshacer.')) return;
+  const { error } = await sb.from('posts').delete().eq('id', p.id);
+  if (error) { toast('No se pudo borrar'); return; }
+  try { const path = storagePathFromUrl(p.image_url, 'posts'); if (path) await sb.storage.from('posts').remove([path]); } catch {}
+  card.remove();
+  toast('Publicación borrada');
+}
+
+async function togglePostComments(p, card) {
+  const box = card.querySelector('[data-comments]');
+  if (!box.classList.contains('hidden')) { box.classList.add('hidden'); return; }
+  box.classList.remove('hidden');
+  box.innerHTML = `<div class="loading" style="padding:14px"><div class="spinner"></div></div>`;
+  const { data } = await sb.from('post_comments').select('*, profiles(*)').eq('post_id', p.id).order('created_at', { ascending: true });
+  renderPostComments(box, p, data || []);
+}
+
+function renderPostComments(box, p, comments) {
+  box.innerHTML = comments.map(c => {
+    const canDel = c.user_id === state.user.id || state.profile.is_admin;
+    return `
+    <div class="comment" data-cid="${c.id}">
+      <span class="c-av" data-uid="${c.user_id}">${avatarHTML(c.profiles)}</span>
+      <div class="c-body">
+        <div class="c-line"><b class="c-name" data-uid="${c.user_id}">${esc(c.profiles?.display_name || c.profiles?.username || 'anónimo')}</b>
+        <span class="c-time">${timeAgo(c.created_at)}</span>
+        ${canDel ? `<button class="c-del" data-del-comment="${c.id}" title="Borrar comentario">✕</button>` : ''}</div>
+        <p>${esc(c.body)}</p>
+      </div>
+    </div>`;
+  }).join('') || '<p class="c-hint">Sé el primero en comentar.</p>';
+  box.querySelectorAll('[data-uid]').forEach(elm => elm.onclick = (e) => { e.stopPropagation(); openProfile(elm.dataset.uid); });
+  box.querySelectorAll('[data-del-comment]').forEach(btn => {
+    btn.onclick = async () => {
+      const id = btn.getAttribute('data-del-comment');
+      const { error } = await sb.from('post_comments').delete().eq('id', id);
+      if (error) { toast('No se pudo borrar el comentario'); return; }
+      renderPostComments(box, p, comments.filter(x => x.id !== id));
+    };
+  });
+  const form = el(`<form class="comment-form"><input type="text" placeholder="Añade un comentario..." maxlength="400" required /><button class="comment-send" type="submit" aria-label="Enviar"><svg fill="none" stroke="#fff"><use href="#i-send"/></svg></button></form>`);
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    if (!requireNotBanned()) return;
+    const input = form.querySelector('input');
+    const body = input.value.trim(); if (!body) return;
+    input.value = '';
+    const { data, error } = await sb.from('post_comments').insert({ post_id: p.id, user_id: state.user.id, body }).select('*, profiles(*)').single();
+    if (error) { toast('No se pudo comentar'); return; }
+    renderPostComments(box, p, [...comments, data]);
+  });
+  box.appendChild(form);
+}
+
+/* =======================================================================
    PERFIL
    ======================================================================= */
 // saneamiento de la personalización (evita inyección en estilos/enlaces)
@@ -1225,7 +1460,7 @@ async function openProfile(userId) {
   const cardsCls = (theme.cards && theme.cards !== 'default' && CARD_STYLES[theme.cards]) ? 'cards-' + theme.cards : '';
   const animCls = (theme.bg && theme.bg.type === 'gradient' && theme.bg.animated) ? 'bg-animated' : '';
   const tagline = (typeof theme.tagline === 'string') ? theme.tagline.slice(0, 140) : '';
-  const backTo = ['feed','people','messages','favorites','mytracks','all','downloads','notifications','search'].includes(state.view) ? state.view : 'feed';
+  const backTo = ['feed','posts','people','messages','favorites','mytracks','all','downloads','notifications','search'].includes(state.view) ? state.view : 'feed';
   main.innerHTML = `
     <div class="profile-view ${glowCls} ${cardsCls} ${animCls}" style="--accent:${accent};${fontVar}${bgStyle(theme)}">
       <button class="profile-back" id="profileBack"><svg fill="none" stroke="currentColor"><use href="#i-chevron-left"/></svg> Volver</button>
