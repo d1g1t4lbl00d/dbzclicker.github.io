@@ -1151,7 +1151,10 @@ function postCard(p, liked) {
           <b data-act="profile">${esc(prof.display_name || prof.username || 'anónimo')}</b>
           <span class="post-time">${timeAgo(p.created_at)}</span>
         </div>
-        ${(mine || state.profile.is_admin) ? `<button class="post-del" data-act="delete" title="Borrar publicación">&times;</button>` : ''}
+        ${(mine || state.profile.is_admin) ? `<div class="post-tools">
+          ${mine ? `<button class="post-tool" data-act="edit" title="Editar pie de foto"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg></button>` : ''}
+          <button class="post-tool danger" data-act="delete" title="Borrar publicación"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg></button>
+        </div>` : ''}
       </div>
       <div class="post-img"><img src="${esc(p.image_url)}" alt="" loading="lazy" data-act="zoom" /></div>
       ${p.caption ? `<div class="post-caption"><b data-act="profile">@${esc(prof.username || '')}</b> ${esc(p.caption)}</div>` : ''}
@@ -1171,9 +1174,43 @@ function handlePostClick(e, p, card) {
   if (!act) return;
   if (act === 'profile') openProfile(p.user_id);
   else if (act === 'like') togglePostLike(p, card);
+  else if (act === 'edit') openEditPost(p, card);
   else if (act === 'delete') deletePost(p, card);
   else if (act === 'toggleComments') togglePostComments(p, card);
   else if (act === 'zoom') openImageViewer(p.image_url);
+}
+
+// Editar el pie de foto de una publicación propia
+function openEditPost(p, card) {
+  const m = openModal(`
+    <div class="modal-head"><h3>Editar publicación</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <div class="post-photo-prev" style="margin-top:0"><img src="${esc(p.image_url)}" alt="" /></div>
+      <div class="field" style="margin-top:12px"><label>Pie de foto</label><textarea id="epCaption" maxlength="600" placeholder="Escribe algo sobre tu foto…">${esc(p.caption || '')}</textarea></div>
+      <button class="btn primary" id="epSave">Guardar cambios</button>
+      <div class="auth-msg" id="epMsg"></div>
+    </div>`);
+  setTimeout(() => m.querySelector('#epCaption')?.focus(), 60);
+  m.querySelector('#epSave').onclick = async () => {
+    const caption = m.querySelector('#epCaption').value.trim();
+    const msg = m.querySelector('#epMsg'); msg.className = 'auth-msg';
+    const btn = m.querySelector('#epSave'); btn.disabled = true;
+    try {
+      const { data, error } = await sb.from('posts').update({ caption }).eq('id', p.id).select('*, profiles!posts_user_id_fkey(*)').single();
+      if (error) throw error;
+      Object.assign(p, data);
+      if (card && card.isConnected) {
+        const liked = card.querySelector('[data-act="like"]')?.classList.contains('on');
+        card.replaceWith(postCard(p, !!liked));
+      }
+      m.remove();
+      toast('Publicación actualizada ✓');
+    } catch (err) {
+      msg.className = 'auth-msg error';
+      msg.textContent = 'Error: ' + (err.message || err);
+      btn.disabled = false;
+    }
+  };
 }
 
 async function togglePostLike(p, card) {
