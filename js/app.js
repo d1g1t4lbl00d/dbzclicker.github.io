@@ -511,7 +511,7 @@ function trackCard(t) {
       <div class="t-foot">
         <span class="time"><svg style="width:12px;height:12px;vertical-align:-1px" fill="none" stroke="currentColor"><use href="#i-headphones"/></svg> ${t.plays||0} · <svg style="width:12px;height:12px;vertical-align:-2px" fill="currentColor" stroke="none"><use href="#i-heart"/></svg> <span class="likecount">${t.likes_count||0}</span> · <svg style="width:12px;height:12px;vertical-align:-2px" fill="none" stroke="currentColor"><use href="#i-repeat"/></svg> <span class="repostcount">${t.reposts_count||0}</span> · ${fmtTime(t.duration)}</span>
         <button class="act like ${liked?'on':''}" data-act="like"><svg><use href="#i-heart"/></svg><span class="ln">${liked?'Te gusta':'Me gusta'}</span></button>
-        <button class="act repost ${reposted?'on':''}" data-act="repost"><svg fill="none" stroke="currentColor"><use href="#i-repeat"/></svg><span class="rn">${reposted?'Reposteado':'Resubir'}</span></button>
+        ${mine ? '' : `<button class="act repost ${reposted?'on':''}" data-act="repost"><svg fill="none" stroke="currentColor"><use href="#i-repeat"/></svg><span class="rn">${reposted?'Reposteado':'Resubir'}</span></button>`}
         <button class="act" data-act="toggleComments"><svg><use href="#i-comment"/></svg><span class="cn">Comentar</span></button>
         <button class="act" data-act="share"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg>Compartir</button>
         <button class="act" data-act="download"><svg><use href="#i-download"/></svg>Descargar</button>
@@ -648,7 +648,7 @@ async function shareToChatPicker(t, url, title) {
   if (!people.length) { body.innerHTML = `<div class="empty"><p>Sigue a alguien para poder enviarle pistas por chat.</p></div>`; return; }
   body.innerHTML = '';
   people.forEach(p => {
-    const row = el(`<div class="follow-row"><div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0">${avatarHTML(p)}<div class="fr-info"><div class="fr-name">${esc(p.display_name || p.username)}</div><div class="fr-handle">@${esc(p.username)}</div></div></div><button class="btn sm primary" data-send>Enviar</button></div>`);
+    const row = el(`<div class="follow-row">${avatarHTML(p)}<div class="fr-info"><div class="fr-name">${esc(p.display_name || p.username)}</div><div class="fr-handle">@${esc(p.username)}</div></div><div class="fr-actions"><button class="btn sm primary" data-send>Enviar</button></div></div>`);
     row.querySelector('[data-send]').onclick = async (e) => {
       const btn = e.currentTarget; btn.disabled = true; btn.textContent = 'Enviando…';
       const msg = `🎵 ${title}\n${url}`;
@@ -694,6 +694,7 @@ async function toggleLike(t, card) {
 /* ---- REPOST ---- */
 async function toggleRepost(t, card) {
   if (typeof requireNotBanned === 'function' && !requireNotBanned()) return;
+  if (t.user_id === state.user.id) { toast('No puedes repostear tu propia pista'); return; }
   const btn = card.querySelector('[data-act="repost"]');
   const cntEl = card.querySelector('.repostcount');
   const reposted = state.reposts.has(t.id);
