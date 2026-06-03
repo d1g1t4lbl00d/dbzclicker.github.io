@@ -4,6 +4,9 @@
 (() => {
 'use strict';
 
+// versión de esta build (derivada del ?v= con el que se cargó este script)
+const APP_VERSION = (() => { try { return (document.currentScript.src.match(/[?&]v=([^&]+)/) || [])[1] || 'dev'; } catch { return 'dev'; } })();
+
 const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.UNDERBRO_CONFIG;
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true },
@@ -2378,7 +2381,30 @@ function showPrivacyPolicy() {
     </div>`);
 }
 
+/* =======================================================================
+   AUTO-ACTUALIZACIÓN (si hay versión nueva publicada, recarga sola)
+   ======================================================================= */
+async function checkForUpdate() {
+  try {
+    const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+    if (!r.ok) return;
+    const { v } = await r.json();
+    if (v && v !== APP_VERSION && sessionStorage.getItem('ub_reload_for') !== v) {
+      sessionStorage.setItem('ub_reload_for', v); // evita bucles de recarga
+      location.reload();
+    }
+  } catch {}
+}
+let _lastUpdCheck = Date.now();
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && Date.now() - _lastUpdCheck > 120000) {
+    _lastUpdCheck = Date.now();
+    checkForUpdate();
+  }
+});
+
 /* ----------------------------------------------------------------------- */
 initCookies();
 init();
+checkForUpdate();
 })();
