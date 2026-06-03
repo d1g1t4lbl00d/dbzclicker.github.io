@@ -246,6 +246,7 @@ function bindUI() {
       const act = b.dataset.bnav;
       document.querySelectorAll('#bottomNav button').forEach(x => x.classList.toggle('active', x === b && act !== 'upload'));
       if (act === 'feed') { state.tab = 'trending'; switchView('feed'); $('main').scrollTo({top:0,behavior:'smooth'}); }
+      else if (act === 'posts') switchView('posts');
       else if (act === 'people') switchView('people');
       else if (act === 'me') openProfile(state.user.id);
       else if (act === 'upload') openCreateChooser();
@@ -305,6 +306,7 @@ async function switchView(view) {
   if (view === 'people') return renderPeople();
   if (view === 'messages') return renderMessages();
   if (view === 'posts') return renderPosts();
+  if (view === 'search') return renderSearch();
 
   main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
   main.innerHTML = skeletonFeed();
@@ -325,8 +327,6 @@ async function switchView(view) {
       tracks = await fetchTracks({ order: 'created_at', userId: state.user.id }); head = { title: 'My Uploads', sub: 'Pistas que has subido' };
     } else if (view === 'downloads') {
       tracks = await fetchByIds([...state.downloads]); head = { title: 'Downloads', sub: 'Pistas que descargaste' };
-    } else if (view === 'search') {
-      tracks = await fetchSearch(state.search); head = { title: `Búsqueda: "${state.search}"`, sub: `${tracks.length} resultado(s)` };
     }
   } catch (err) { console.error(err); toast('Error al cargar pistas'); tracks = []; }
 
@@ -357,12 +357,84 @@ async function fetchByIds(ids) {
   const { data } = await sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)').in('id', ids);
   return data || [];
 }
+// quita caracteres que romperían el filtro or() de PostgREST
+function sanitizeTerm(s) { return (s || '').trim().replace(/[,()*%:]/g, ''); }
+
 async function fetchSearch(term) {
-  if (!term) return [];
+  const t = sanitizeTerm(term);
+  if (!t) return [];
   const { data } = await sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)')
-    .or(`title.ilike.%${term}%,artist.ilike.%${term}%,genre.ilike.%${term}%`)
+    .or(`title.ilike.%${t}%,artist.ilike.%${t}%,genre.ilike.%${t}%`)
     .order('plays', { ascending: false }).limit(50);
   return data || [];
+}
+async function fetchPeopleSearch(term) {
+  const t = sanitizeTerm(term);
+  if (!t) return [];
+  const { data } = await sb.from('profiles').select('*')
+    .or(`username.ilike.%${t}%,display_name.ilike.%${t}%`)
+    .limit(12);
+  return (data || []).filter(p => p.id !== state.user.id);
+}
+
+// Vista de búsqueda: personas + pistas
+async function renderSearch() {
+  setActiveNav('');
+  const main = $('main');
+  const term = (state.search || '').trim();
+  main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
+  if (!term) {
+    main.innerHTML = `<div class="main-head"><div><h2>Buscar</h2><div class="sub">Personas y pistas en UnderBro</div></div></div><div class="empty"><svg fill="none"><use href="#i-search"/></svg><p>Escribe para buscar personas o pistas.</p></div>`;
+    return;
+  }
+  main.innerHTML = skeletonFeed();
+  let people = [], tracks = [];
+  try { [people, tracks] = await Promise.all([fetchPeopleSearch(term), fetchSearch(term)]); }
+  catch (err) { console.error(err); toast('Error en la búsqueda'); }
+
+  main.innerHTML = `
+    <div class="main-head"><div><h2>Búsqueda: "${esc(term)}"</h2><div class="sub">${people.length} persona(s) · ${tracks.length} pista(s)</div></div></div>
+    ${people.length ? `<div class="search-section">Personas</div><div class="search-people" id="searchPeople"></div>` : ''}
+    ${tracks.length ? `<div class="search-section">Pistas</div>` : ''}
+    <div id="feedList" class="feed-list compact"></div>`;
+
+  if (people.length) { const pc = $('searchPeople'); people.forEach(p => pc.appendChild(personSearchRow(p))); }
+
+  const list = $('feedList');
+  if (!people.length && !tracks.length) {
+    list.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-search"/></svg><p>Sin resultados para "${esc(term)}".</p></div>`;
+  } else if (tracks.length) {
+    state.tracks = tracks; state.queue = tracks.map(t => t.id);
+    tracks.forEach(t => list.appendChild(trackCard(t)));
+  }
+}
+
+function personSearchRow(p) {
+  const f = state.follows.has(p.id);
+  const row = el(`
+    <div class="search-person" data-uid="${p.id}">
+      ${avatarHTML(p)}
+      <div class="sp-meta">
+        <div class="sp-name">${esc(p.display_name || p.username)}${p.is_admin ? ' <span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c">MOD</span>' : ''}</div>
+        <div class="sp-handle">@${esc(p.username)}</div>
+      </div>
+      <button class="btn sm ${f ? '' : 'primary'}" data-act="follow">${f ? 'Siguiendo ✓' : '+ Seguir'}</button>
+    </div>`);
+  const fb = row.querySelector('[data-act="follow"]');
+  fb.onclick = async (e) => {
+    e.stopPropagation();
+    if (state.follows.has(p.id)) {
+      state.follows.delete(p.id);
+      await sb.from('follows').delete().eq('follower_id', state.user.id).eq('following_id', p.id);
+      fb.classList.add('primary'); fb.textContent = '+ Seguir';
+    } else {
+      state.follows.add(p.id);
+      await sb.from('follows').insert({ follower_id: state.user.id, following_id: p.id });
+      fb.classList.remove('primary'); fb.textContent = 'Siguiendo ✓';
+    }
+  };
+  row.addEventListener('click', (e) => { if (e.target.closest('[data-act]')) return; openProfile(p.id); });
+  return row;
 }
 
 function renderFeed(head, tracks, view) {
