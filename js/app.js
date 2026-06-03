@@ -438,7 +438,7 @@ function openEditTrack(t, card) {
       <div class="field">
         <label>Colaboradores (ft.)</label>
         <div class="collab-chips" id="collabChips"></div>
-        <div class="collab-add"><input type="text" id="collabInput" placeholder="usuario (sin @)" autocomplete="off" /><button type="button" class="btn sm" id="collabAdd">Añadir</button></div>
+        <div class="collab-add"><input type="text" id="collabInput" placeholder="usuario o nombre…" autocomplete="off" /><button type="button" class="btn sm" id="collabAdd">Añadir</button></div>
       </div>
       <button class="btn primary" id="eSave">Guardar cambios</button>
       <div class="auth-msg" id="eMsg"></div>
@@ -844,27 +844,69 @@ async function computeWaveformPeaks(file, n = 80) {
 }
 
 // Selector de colaboradores reutilizable (subida y edición)
+// Busca por nombre de usuario O nombre visible, con sugerencias.
 function mountCollab(scope, initial = []) {
   const chips = scope.querySelector('#collabChips');
   const input = scope.querySelector('#collabInput');
   const addBtn = scope.querySelector('#collabAdd');
+  let sug = scope.querySelector('#collabSug');
+  if (!sug) { sug = el('<div class="collab-sug hidden" id="collabSug"></div>'); input.parentElement.appendChild(sug); }
   let list = (initial || []).slice();
+  let matches = [];
+
   const render = () => {
     chips.innerHTML = list.map((c, i) => `<span class="chip">@${esc(c.username)}<button type="button" data-i="${i}" aria-label="quitar">&times;</button></span>`).join('');
     chips.querySelectorAll('button[data-i]').forEach(b => b.onclick = () => { list.splice(+b.dataset.i, 1); render(); });
   };
-  const add = async () => {
-    const u = input.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
-    if (!u) return;
-    if (u === state.profile.username) { toast('Tú ya apareces como autor'); input.value = ''; return; }
-    if (list.some(c => c.username === u)) { input.value = ''; return; }
-    const { data } = await sb.from('profiles').select('id,username,display_name').eq('username', u).maybeSingle();
-    if (!data) { toast('No existe el usuario @' + u); return; }
-    list.push({ id: data.id, username: data.username, display_name: data.display_name });
-    input.value = ''; render();
+  const hideSug = () => { sug.classList.add('hidden'); sug.innerHTML = ''; matches = []; };
+  const addProfile = (p) => {
+    if (!p) return;
+    if (p.id === state.user.id) { toast('Tú ya apareces como autor'); input.value = ''; hideSug(); return; }
+    if (list.some(c => c.id === p.id)) { input.value = ''; hideSug(); return; }
+    list.push({ id: p.id, username: p.username, display_name: p.display_name });
+    input.value = ''; hideSug(); render();
   };
-  addBtn.onclick = add;
-  input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+  const clean = (s) => s.trim().replace(/[,()*%:]/g, '');
+  const search = async (raw) => {
+    const t = clean(raw);
+    if (t.length < 2) { hideSug(); return; }
+    const { data } = await sb.from('profiles').select('id,username,display_name')
+      .or(`username.ilike.%${t}%,display_name.ilike.%${t}%`).limit(6);
+    matches = (data || []).filter(p => p.id !== state.user.id && !list.some(c => c.id === p.id));
+    if (!matches.length) { sug.innerHTML = `<div class="cs-empty">Sin resultados para "${esc(t)}"</div>`; sug.classList.remove('hidden'); return; }
+    sug.innerHTML = matches.map((p, i) => `
+      <button type="button" class="cs-item" data-i="${i}">
+        ${avatarHTML(p)}
+        <span class="cs-meta"><b>${esc(p.display_name || p.username)}</b><span>@${esc(p.username)}</span></span>
+      </button>`).join('');
+    sug.classList.remove('hidden');
+    sug.querySelectorAll('.cs-item').forEach(b => b.onclick = () => addProfile(matches[+b.dataset.i]));
+  };
+  let deb;
+  input.addEventListener('input', () => { clearTimeout(deb); deb = setTimeout(() => search(input.value), 250); });
+  input.addEventListener('blur', () => setTimeout(hideSug, 160));
+
+  const addBest = async () => {
+    const raw = input.value.trim();
+    if (!raw) return;
+    // si ya hay sugerencias en pantalla, usa la primera
+    if (matches.length) { addProfile(matches[0]); return; }
+    // 1) coincidencia exacta por nombre de usuario
+    const uname = raw.toLowerCase().replace(/[^a-z0-9_]/g, '');
+    let found = null;
+    if (uname) { const { data } = await sb.from('profiles').select('id,username,display_name').eq('username', uname).maybeSingle(); found = data; }
+    // 2) si no, primer resultado por usuario o nombre visible
+    if (!found) {
+      const t = clean(raw);
+      const { data } = await sb.from('profiles').select('id,username,display_name')
+        .or(`username.ilike.%${t}%,display_name.ilike.%${t}%`).limit(1);
+      found = (data || [])[0] || null;
+    }
+    if (!found) { toast('No existe ningún usuario con "' + raw + '"'); return; }
+    addProfile(found);
+  };
+  addBtn.onclick = addBest;
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); addBest(); } });
   render();
   return { get: () => list };
 }
@@ -896,7 +938,7 @@ function openUploadModal() {
       <div class="field">
         <label>Colaboradores (ft.)</label>
         <div class="collab-chips" id="collabChips"></div>
-        <div class="collab-add"><input type="text" id="collabInput" placeholder="usuario (sin @)" autocomplete="off" /><button type="button" class="btn sm" id="collabAdd">Añadir</button></div>
+        <div class="collab-add"><input type="text" id="collabInput" placeholder="usuario o nombre…" autocomplete="off" /><button type="button" class="btn sm" id="collabAdd">Añadir</button></div>
       </div>
       <div class="progress-bar hidden" id="upBar"><div></div></div>
       <button class="btn primary" id="uSubmit"><svg stroke="#fff"><use href="#i-upload"/></svg> Publicar pista</button>
