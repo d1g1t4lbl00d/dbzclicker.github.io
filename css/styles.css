@@ -392,7 +392,15 @@ img { display: block; }
 .collab-chips:empty { display: none; }
 .collab-chips .chip { display: inline-flex; align-items: center; gap: 5px; background: #eef3fb; border: 1px solid #dbe5f5; color: var(--blue-deep); font-size: 12.5px; font-weight: 600; padding: 4px 6px 4px 11px; border-radius: 20px; }
 .collab-chips .chip button { border: none; background: rgba(95,127,184,.18); color: var(--blue-deep); width: 18px; height: 18px; border-radius: 50%; font-size: 13px; line-height: 1; display: grid; place-items: center; }
-.collab-add { display: flex; gap: 8px; }
+.collab-add { display: flex; gap: 8px; position: relative; }
+.collab-sug { position: absolute; top: calc(100% + 5px); left: 0; right: 0; z-index: 60; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); box-shadow: var(--sh-2); overflow: hidden auto; max-height: 246px; animation: fadeIn .15s; }
+.collab-sug .cs-item { display: flex; align-items: center; gap: 10px; width: 100%; border: none; background: none; padding: 9px 12px; cursor: pointer; text-align: left; transition: background .14s; }
+.collab-sug .cs-item:hover { background: var(--panel-2); }
+.collab-sug .cs-item .avatar { width: 32px; height: 32px; flex-shrink: 0; }
+.collab-sug .cs-meta { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+.collab-sug .cs-meta b { font-size: 13px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.collab-sug .cs-meta span { font-size: 11.5px; color: var(--ink-soft); }
+.collab-sug .cs-empty { padding: 11px 12px; font-size: 12.5px; color: var(--ink-soft); }
 .collab-add input { flex: 1; min-width: 0; padding: 10px 13px; border-radius: 11px; border: 1.5px solid var(--line); background: var(--panel-2); }
 .collab-add input:focus { outline: none; border-color: var(--blue); background: #fff; box-shadow: 0 0 0 3px rgba(126,159,214,.15); }
 .t-artist a { cursor: pointer; }
