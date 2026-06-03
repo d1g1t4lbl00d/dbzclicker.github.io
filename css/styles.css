@@ -735,6 +735,27 @@ img { display: block; }
 .share-link input { flex: 1; min-width: 0; padding: 9px 11px; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--glass); color: var(--ink); font-size: 13px; }
 .share-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .share-actions .btn { flex: 1; justify-content: center; min-width: 130px; }
+/* ---- Playlists ---- */
+.pl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+.pl-card { cursor: pointer; border-radius: 14px; overflow: hidden; background: var(--panel); border: 1px solid var(--line-soft); transition: transform .15s, box-shadow .15s; }
+.pl-card:hover { transform: translateY(-3px); box-shadow: var(--sh-1); }
+.pl-cover { aspect-ratio: 1 / 1; background-size: cover; background-position: center; background-color: #5f7fb8; display: flex; align-items: center; justify-content: center; }
+.pl-cover-empty svg { width: 38px; height: 38px; opacity: .85; }
+.pl-cover-grid { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; gap: 1px; width: 100%; height: 100%; }
+.pl-cover-grid > div { background-size: cover; background-position: center; background-color: #5f7fb8; }
+.pl-info { padding: 9px 11px; }
+.pl-title { font-weight: 750; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pl-count { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+.pl-head { display: flex; gap: 18px; align-items: flex-end; margin-bottom: 18px; flex-wrap: wrap; }
+.pl-head .pl-cover { width: 160px; height: 160px; border-radius: 14px; flex-shrink: 0; box-shadow: var(--sh-1); }
+.pl-head-info { flex: 1; min-width: 220px; }
+.pl-kicker { font-size: 11px; letter-spacing: 1.5px; color: var(--ink-soft); font-weight: 700; }
+.pl-h2 { font-size: 28px; font-weight: 820; letter-spacing: -.5px; margin: 2px 0 6px; color: var(--ink); }
+.pl-desc { color: var(--ink-soft); margin-bottom: 6px; }
+.pl-meta { font-size: 13px; color: var(--ink-soft); margin-bottom: 12px; }
+.pl-meta a { color: var(--accent); cursor: pointer; }
+.pl-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.main-head .btn.primary { flex-shrink: 0; }
 .profile-head .pactions { margin-left: auto; display: flex; flex-direction: column; gap: 8px; align-items: stretch; min-width: 150px; }
 .profile-head .pactions .btn { justify-content: center; }
 @media (max-width: 720px) {
