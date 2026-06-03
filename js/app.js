@@ -651,8 +651,12 @@ async function shareToChatPicker(t, url, title) {
     const row = el(`<div class="follow-row">${avatarHTML(p)}<div class="fr-info"><div class="fr-name">${esc(p.display_name || p.username)}</div><div class="fr-handle">@${esc(p.username)}</div></div><div class="fr-actions"><button class="btn sm primary" data-send>Enviar</button></div></div>`);
     row.querySelector('[data-send]').onclick = async (e) => {
       const btn = e.currentTarget; btn.disabled = true; btn.textContent = 'Enviando…';
-      const msg = `🎵 ${title}\n${url}`;
-      const { error } = await sb.from('direct_messages').insert({ sender_id: state.user.id, recipient_id: p.id, body: msg });
+      const meta = JSON.stringify({ id: t.id, title: t.title, artist: (t.profiles?.display_name || t.profiles?.username || t.artist || ''), cover_url: t.cover_url || '' });
+      const { error } = await sb.from('direct_messages').insert({
+        sender_id: state.user.id, recipient_id: p.id,
+        body: `🎵 ${t.title}`,
+        attachment_type: 'track', attachment_url: t.audio_url, attachment_name: meta,
+      });
       if (error) { toast('No se pudo enviar'); btn.disabled = false; btn.textContent = 'Enviar'; return; }
       btn.textContent = 'Enviado ✓';
       toast('Pista enviada a ' + (p.display_name || p.username));
@@ -825,7 +829,7 @@ function initPlayer() {
   audio.addEventListener('loadedmetadata', () => { $('pDur').textContent = fmtTime(audio.duration); if (npIsOpen()) $('npDur').textContent = fmtTime(audio.duration); updateMediaPositionState(); });
   audio.addEventListener('ended', () => step(1));
   audio.addEventListener('play', () => { setPlayIcon(true); showEq(true); markPlayingCard(); setNpPlayIcon(true); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; });
-  audio.addEventListener('pause', () => { setPlayIcon(false); showEq(false); setNpPlayIcon(false); document.querySelectorAll('.track.playing').forEach(c => c.classList.remove('playing')); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; });
+  audio.addEventListener('pause', () => { setPlayIcon(false); showEq(false); setNpPlayIcon(false); document.querySelectorAll('.track.playing, .dm-track.playing').forEach(c => c.classList.remove('playing')); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; });
 
   // controles del sistema (pantalla de bloqueo / notificación de reproducción)
   if ('mediaSession' in navigator) {
@@ -898,10 +902,10 @@ function showEq(on) {
   else if (eq) eq.remove();
 }
 function markPlayingCard() {
-  document.querySelectorAll('.track.playing').forEach(c => c.classList.remove('playing'));
+  document.querySelectorAll('.track.playing, .dm-track.playing').forEach(c => c.classList.remove('playing'));
   if (!state.current?.id) return;
-  // puede haber la misma pista en varias listas (p. ej. Pistas y Feats): marcarlas todas
-  document.querySelectorAll(`.track[data-id="${state.current.id}"]`).forEach(card => card.classList.add('playing'));
+  // puede haber la misma pista en varias listas (p. ej. Pistas y Feats) y en el chat: marcarlas todas
+  document.querySelectorAll(`.track[data-id="${state.current.id}"], .dm-track[data-track-id="${state.current.id}"]`).forEach(card => card.classList.add('playing'));
 }
 
 /* ---- Vista "Reproduciendo ahora" a pantalla completa ---- */
@@ -2327,11 +2331,24 @@ async function initDM() {
 function bubbleHTML(msg) {
   const mine = msg.sender_id === state.user.id;
   let media = '';
+  let isTrack = false;
   if (msg.attachment_url) {
     if (msg.attachment_type === 'image') media = `<img class="dm-img" src="${esc(msg.attachment_url)}" alt="" data-full="${esc(msg.attachment_url)}" />`;
+    else if (msg.attachment_type === 'track') {
+      isTrack = true;
+      let meta = {}; try { meta = JSON.parse(msg.attachment_name || '{}'); } catch (_) {}
+      const cover = meta.cover_url
+        ? `<div class="dm-track-cover" style="background-image:url('${esc(meta.cover_url)}')"></div>`
+        : `<div class="dm-track-cover"><svg fill="none" stroke="#fff"><use href="#i-music"/></svg></div>`;
+      media = `<div class="dm-track" data-track-id="${esc(meta.id || '')}">
+        ${cover}
+        <div class="dm-track-info"><div class="dm-track-title">${esc(meta.title || 'Pista')}</div><div class="dm-track-artist">${esc(meta.artist || '')}</div></div>
+        <button class="dm-track-play" data-dmplay aria-label="Reproducir"><svg class="ci-play"><use href="#i-play"/></svg><svg class="ci-pause"><use href="#i-pause"/></svg></button>
+      </div>`;
+    }
     else media = `<a class="dm-filechip" href="${esc(msg.attachment_url)}" target="_blank" rel="noopener"><svg fill="none"><use href="#i-file"/></svg><span class="fn">${esc(msg.attachment_name || 'archivo')}</span></a>`;
   }
-  const cap = msg.body ? `<div class="dm-cap">${esc(msg.body)}</div>` : '';
+  const cap = (msg.body && !isTrack) ? `<div class="dm-cap">${esc(msg.body)}</div>` : '';
   const time = new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   return `<div class="dm-bubble ${mine ? 'me' : 'them'} ${media ? 'has-media' : ''}">${media}${cap}<span class="t">${time}</span></div>`;
 }
@@ -2339,8 +2356,25 @@ function makeBubble(msg) {
   const node = el(bubbleHTML(msg));
   node.dataset.mid = msg.id;
   const img = node.querySelector('.dm-img'); if (img) img.onclick = () => openImageViewer(img.dataset.full);
+  const dmPlay = node.querySelector('[data-dmplay]');
+  if (dmPlay) dmPlay.onclick = (e) => {
+    e.stopPropagation();
+    let meta = {}; try { meta = JSON.parse(msg.attachment_name || '{}'); } catch (_) {}
+    playSharedTrack(meta, msg.attachment_url);
+  };
   if (msg.sender_id === state.user.id) attachSwipe(node, msg);
   return node;
+}
+// reproduce una pista compartida en el chat (en el reproductor principal)
+async function playSharedTrack(meta, audioUrl) {
+  if (meta && meta.id) {
+    if (state.current?.id === meta.id) { togglePlay(); return; }
+    const { data } = await sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)').eq('id', meta.id).maybeSingle();
+    if (data) { state.tracks = [data]; state.queue = [data.id]; playTrack(data); return; }
+  }
+  if (!audioUrl) { toast('Esta pista ya no está disponible'); return; }
+  const t = { id: meta.id || audioUrl, title: meta.title || 'Pista', artist: meta.artist || '', cover_url: meta.cover_url || '', audio_url: audioUrl, duration: 0 };
+  state.tracks = [t]; state.queue = [t.id]; playTrack(t);
 }
 function dmAppendBubble(msg) {
   const thread = $('dmThread');
@@ -2491,7 +2525,10 @@ function convoRow(c, p) {
   const mine = c.last.sender_id === state.user.id;
   const online = state.online.some(u => u.id === c.other);
   let snip = c.last.body;
-  if (c.last.attachment_url) snip = (c.last.attachment_type === 'image' ? '📷 Foto' : '📎 Archivo') + (c.last.body ? ' · ' + c.last.body : '');
+  if (c.last.attachment_url) {
+    if (c.last.attachment_type === 'track') snip = c.last.body || '🎵 Pista';
+    else snip = (c.last.attachment_type === 'image' ? '📷 Foto' : '📎 Archivo') + (c.last.body ? ' · ' + c.last.body : '');
+  }
   const row = el(`
     <div class="convo" data-uid="${c.other}">
       ${avatarHTML(p)}
