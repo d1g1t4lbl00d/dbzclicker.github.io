@@ -366,6 +366,13 @@ img { display: block; }
 .act:active { transform: scale(.92); }
 .act.like.on { color: var(--like); }
 .act.like.on svg { stroke: var(--like); fill: var(--like); animation: pop .32s var(--ease); }
+.act.repost.on { color: #2fa56f; }
+.act.repost.on svg { stroke: #2fa56f; animation: pop .32s var(--ease); }
+.track.has-bg .act.repost.on, .track.has-bg .act.repost.on svg { color: #7be0ad; stroke: #7be0ad; }
+.repost-badge { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-soft); margin-bottom: 8px; font-weight: 600; }
+.repost-badge svg { width: 14px; height: 14px; }
+.repost-badge a { color: var(--accent); cursor: pointer; }
+.track.has-bg .repost-badge { color: rgba(255,255,255,.85); }
 .act.danger:hover { background: rgba(214,90,71,.12); color: var(--danger); }
 .act.danger:hover svg { stroke: var(--danger); }
 
