@@ -468,7 +468,9 @@ function personSearchRow(p) {
 
 function renderFeed(head, tracks, view) {
   const main = $('main');
-  main.innerHTML = `<div class="main-head"><div><h2>${esc(head.title)}</h2><div class="sub">${esc(head.sub)}</div></div></div><div id="feedList" class="feed-list compact"></div>`;
+  const showStories = view === 'feed';
+  main.innerHTML = `<div class="main-head"><div><h2>${esc(head.title)}</h2><div class="sub">${esc(head.sub)}</div></div></div>${showStories ? '<div id="storiesBar" class="stories-bar"></div>' : ''}<div id="feedList" class="feed-list compact"></div>`;
+  if (showStories) loadStoriesBar();
   const list = $('feedList');
   if (!tracks.length) {
     let hint = 'No hay pistas todavía.';
@@ -2220,6 +2222,205 @@ async function openPlaylistPicker(t) {
     toast('Añadida a ' + data.title);
     draw([{ ...data, playlist_tracks: [{ track_id: t.id }] }, ...(lists || [])]);
   };
+}
+
+/* =======================================================================
+   HISTORIAS (stories) — foto 24h + canción de fondo + enlaces como botón
+   ======================================================================= */
+let storyAudio = null;
+
+async function loadStoriesBar() {
+  const bar = document.getElementById('storiesBar');
+  if (!bar) return;
+  bar.innerHTML = `<div class="story-circle add" id="storyAddBtn"><span class="story-ring add-ring"><span class="story-av">${avatarHTML(state.profile, '')}</span><span class="story-add-badge"><svg fill="none" stroke="#fff"><use href="#i-plus"/></svg></span></span><span class="story-name">Tu historia</span></div>`;
+  const addBtn = bar.querySelector('#storyAddBtn');
+  addBtn.onclick = () => openAddStory();
+
+  const ids = [state.user.id, ...state.follows];
+  const { data } = await sb.from('stories')
+    .select('*, profiles!stories_user_id_fkey(*), tracks(id,title,audio_url,cover_url,artist,profiles!tracks_user_id_fkey(display_name,username))')
+    .in('user_id', ids).gt('expires_at', new Date().toISOString()).order('created_at', { ascending: true });
+  const stories = data || [];
+  if (!stories.length) return;
+  const { data: views } = await sb.from('story_views').select('story_id').eq('viewer_id', state.user.id);
+  const seen = new Set((views || []).map(v => v.story_id));
+  state._storySeen = seen;
+
+  const groups = new Map();
+  stories.forEach(s => {
+    if (!groups.has(s.user_id)) groups.set(s.user_id, { userId: s.user_id, user: s.profiles, items: [] });
+    groups.get(s.user_id).items.push(s);
+  });
+  let arr = [...groups.values()];
+  arr.forEach(g => g.allSeen = g.items.every(s => seen.has(s.id)));
+  arr.sort((a, b) => {
+    if (a.userId === state.user.id) return -1; if (b.userId === state.user.id) return 1;
+    return (a.allSeen ? 1 : 0) - (b.allSeen ? 1 : 0);
+  });
+
+  const myGroup = arr.find(g => g.userId === state.user.id);
+  if (myGroup) {
+    addBtn.classList.add('has-story');
+    addBtn.querySelector('.add-ring').classList.toggle('seen', myGroup.allSeen);
+    addBtn.onclick = (e) => { if (e.target.closest('.story-add-badge')) { openAddStory(); return; } openStoryViewer(myGroup); };
+  }
+  arr.filter(g => g.userId !== state.user.id).forEach(g => {
+    const c = el(`<div class="story-circle"><span class="story-ring ${g.allSeen ? 'seen' : ''}"><span class="story-av">${avatarHTML(g.user, '')}</span></span><span class="story-name">${esc(g.user.display_name || g.user.username)}</span></div>`);
+    c.onclick = () => openStoryViewer(g);
+    bar.appendChild(c);
+  });
+}
+
+function pickTrackModal(cb) {
+  const m = openModal(`<div class="modal-head"><h3>Elegir canción</h3><button class="close">&times;</button></div><div class="modal-body"><input type="text" id="stSearch" placeholder="Buscar pista…" style="width:100%;padding:10px 12px;border:1px solid var(--line-soft);border-radius:10px;margin-bottom:10px;background:var(--glass);color:var(--ink)" /><div id="stResults"><div class="loading" style="padding:16px"><div class="spinner"></div></div></div></div>`);
+  const results = m.querySelector('#stResults');
+  const run = async (q) => {
+    let query = sb.from('tracks').select('id,title,cover_url,artist,profiles!tracks_user_id_fkey(display_name,username)');
+    query = q ? query.ilike('title', `%${q}%`).limit(30) : query.order('plays', { ascending: false }).limit(30);
+    const { data } = await query;
+    const list = data || [];
+    if (!list.length) { results.innerHTML = `<div class="empty" style="padding:14px"><p>Sin resultados.</p></div>`; return; }
+    results.innerHTML = '';
+    list.forEach(t => {
+      const row = el(`<div class="follow-row"><div class="st-tc-cover" style="${t.cover_url ? `background-image:url('${esc(t.cover_url)}')` : ''}"></div><div class="fr-info"><div class="fr-name">${esc(t.title)}</div><div class="fr-handle">${esc(t.profiles?.display_name || t.profiles?.username || t.artist || '')}</div></div></div>`);
+      row.onclick = () => { cb(t); m.remove(); };
+      results.appendChild(row);
+    });
+  };
+  let to; const inp = m.querySelector('#stSearch');
+  inp.oninput = () => { clearTimeout(to); to = setTimeout(() => run(inp.value.trim()), 250); };
+  run('');
+}
+
+function openAddStory() {
+  let imgFile = null, pickedTrack = null;
+  const m = openModal(`
+    <div class="modal-head"><h3>Nueva historia</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <div class="cover-pick" id="stDz">
+        <div class="cover-prev" id="stPrev"><svg width="24" height="24" fill="none" stroke="currentColor"><use href="#i-image"/></svg></div>
+        <div class="cover-pick-txt"><b id="stPickTxt">Elige una foto</b><span>Se borra sola a las 24h</span></div>
+      </div>
+      <input type="file" id="stFile" accept="image/*" hidden />
+      <div class="field"><label>Canción de fondo (opcional)</label>
+        <button class="btn" id="stTrackBtn" style="width:100%"><svg fill="none" stroke="currentColor"><use href="#i-music"/></svg> Elegir canción</button>
+        <div id="stTrackChip"></div>
+      </div>
+      <div class="field"><label>Enlaces (se muestran como botón)</label><div id="stLinks"></div><button class="btn sm" id="stAddLink" type="button">＋ Añadir enlace</button></div>
+      <button class="btn primary" id="stPublish" disabled style="width:100%">Publicar historia</button>
+      <div class="auth-msg" id="stMsg"></div>
+    </div>`);
+  const fileInput = m.querySelector('#stFile');
+  const prev = m.querySelector('#stPrev');
+  const publish = m.querySelector('#stPublish');
+  const chip = m.querySelector('#stTrackChip');
+  const linksWrap = m.querySelector('#stLinks');
+  m.querySelector('#stDz').onclick = () => fileInput.click();
+  fileInput.onchange = () => {
+    const f = fileInput.files[0]; if (!f) return;
+    imgFile = f;
+    prev.innerHTML = `<img src="${URL.createObjectURL(f)}" alt="" />`;
+    m.querySelector('#stPickTxt').textContent = 'Cambiar foto';
+    publish.disabled = false;
+  };
+  m.querySelector('#stTrackBtn').onclick = () => pickTrackModal((t) => {
+    pickedTrack = t;
+    chip.innerHTML = `<div class="st-track-chip"><div class="st-tc-cover" style="${t.cover_url ? `background-image:url('${esc(t.cover_url)}')` : ''}"></div><div class="st-tc-info"><b>${esc(t.title)}</b><span>${esc(t.profiles?.display_name || t.profiles?.username || t.artist || '')}</span></div><button class="st-tc-x" type="button" aria-label="Quitar">&times;</button></div>`;
+    chip.querySelector('.st-tc-x').onclick = () => { pickedTrack = null; chip.innerHTML = ''; };
+  });
+  function addLinkRow() {
+    if (linksWrap.children.length >= 4) { toast('Máximo 4 enlaces'); return; }
+    const row = el(`<div class="st-link-row"><input type="url" class="st-link-url" placeholder="https://..." /><input type="text" class="st-link-label" maxlength="24" placeholder="Texto del botón" /><button class="st-link-x" type="button" aria-label="Quitar">&times;</button></div>`);
+    row.querySelector('.st-link-x').onclick = () => row.remove();
+    linksWrap.appendChild(row);
+  }
+  m.querySelector('#stAddLink').onclick = addLinkRow;
+  publish.onclick = async () => {
+    if (!imgFile) return;
+    publish.disabled = true; publish.textContent = 'Publicando…';
+    try {
+      const ext = (imgFile.name.split('.').pop() || 'jpg').toLowerCase();
+      const path = `${state.user.id}/story_${Date.now()}.${ext}`;
+      const up = await sb.storage.from('posts').upload(path, imgFile, { contentType: imgFile.type, upsert: false });
+      if (up.error) throw up.error;
+      const image_url = sb.storage.from('posts').getPublicUrl(path).data.publicUrl;
+      const links = [...linksWrap.querySelectorAll('.st-link-row')]
+        .map(r => ({ url: czHref(r.querySelector('.st-link-url').value.trim()), label: r.querySelector('.st-link-label').value.trim() || 'Ver enlace' }))
+        .filter(l => l.url);
+      const { error } = await sb.from('stories').insert({ user_id: state.user.id, image_url, track_id: pickedTrack?.id || null, links });
+      if (error) throw error;
+      m.remove(); toast('📸 Historia publicada'); loadStoriesBar();
+    } catch (e) {
+      m.querySelector('#stMsg').textContent = 'No se pudo publicar la historia';
+      publish.disabled = false; publish.textContent = 'Publicar historia';
+    }
+  };
+}
+
+function openStoryViewer(group, startIdx = 0) {
+  if (!group || !group.items.length) return;
+  try { if (audio && !audio.paused) audio.pause(); } catch (_) {}
+  const STORY_MS = 7000;
+  let idx = startIdx, timer = null;
+  const overlay = el(`
+    <div class="story-viewer">
+      <div class="sv-bars"></div>
+      <div class="sv-head">
+        <span class="sv-av">${avatarHTML(group.user, '')}</span>
+        <div class="sv-who"><b>${esc(group.user.display_name || group.user.username)}</b><span class="sv-time"></span></div>
+        <button class="sv-x" type="button" aria-label="Cerrar">&times;</button>
+      </div>
+      <div class="sv-stage"><img class="sv-img" alt="" /></div>
+      <div class="sv-music"></div>
+      <div class="sv-links"></div>
+      <button class="sv-tap left" type="button" aria-label="Anterior"></button>
+      <button class="sv-tap right" type="button" aria-label="Siguiente"></button>
+    </div>`);
+  document.body.appendChild(overlay);
+  document.body.style.overflow = 'hidden';
+  const barsEl = overlay.querySelector('.sv-bars');
+  barsEl.innerHTML = group.items.map(() => `<div class="sv-bar"><i></i></div>`).join('');
+  const bars = [...barsEl.querySelectorAll('.sv-bar i')];
+  const isOwner = group.userId === state.user.id;
+
+  const stopAudio = () => { if (storyAudio) { try { storyAudio.pause(); } catch (_) {} storyAudio = null; } };
+  const close = () => { clearTimeout(timer); stopAudio(); overlay.remove(); document.body.style.overflow = ''; loadStoriesBar(); };
+  const nextItem = () => { if (idx < group.items.length - 1) show(idx + 1); else close(); };
+  const prevItem = () => { show(idx > 0 ? idx - 1 : 0); };
+
+  function show(i) {
+    clearTimeout(timer); stopAudio(); idx = i;
+    const s = group.items[idx];
+    overlay.querySelector('.sv-img').src = s.image_url;
+    const ageH = Math.floor((Date.now() - new Date(s.created_at)) / 3600000);
+    overlay.querySelector('.sv-time').textContent = ageH <= 0 ? 'hace un momento' : `hace ${ageH} h`;
+    bars.forEach((fill, k) => { fill.style.transition = 'none'; fill.style.width = k < idx ? '100%' : '0%'; });
+    const mus = overlay.querySelector('.sv-music');
+    if (s.tracks) {
+      mus.innerHTML = `<svg fill="none" stroke="#fff"><use href="#i-music"/></svg> <span>${esc(s.tracks.title)} · ${esc(s.tracks.profiles?.display_name || s.tracks.profiles?.username || s.tracks.artist || '')}</span>`;
+      try { storyAudio = new Audio(s.tracks.audio_url); storyAudio.play().catch(() => {}); } catch (_) {}
+    } else mus.innerHTML = '';
+    const links = Array.isArray(s.links) ? s.links : [];
+    overlay.querySelector('.sv-links').innerHTML = links.map(l => `<a class="sv-link" href="${esc(czHref(l.url))}" target="_blank" rel="noopener noreferrer">${esc(l.label || 'Ver enlace')}</a>`).join('');
+    markStoryViewed(s.id);
+    const cur = bars[idx];
+    requestAnimationFrame(() => { cur.style.transition = `width ${STORY_MS}ms linear`; cur.style.width = '100%'; });
+    timer = setTimeout(nextItem, STORY_MS);
+  }
+  overlay.querySelector('.sv-x').onclick = close;
+  overlay.querySelector('.sv-tap.right').onclick = nextItem;
+  overlay.querySelector('.sv-tap.left').onclick = prevItem;
+  if (isOwner) {
+    const del = el(`<button class="sv-del" type="button" aria-label="Eliminar"><svg fill="none" stroke="#fff"><use href="#i-trash"/></svg></button>`);
+    del.onclick = async () => { const s = group.items[idx]; if (!confirm('¿Eliminar esta historia?')) return; await sb.from('stories').delete().eq('id', s.id); toast('Historia eliminada'); close(); };
+    overlay.querySelector('.sv-head').insertBefore(del, overlay.querySelector('.sv-x'));
+  }
+  show(startIdx);
+}
+async function markStoryViewed(id) {
+  if (state._storySeen && state._storySeen.has(id)) return;
+  if (state._storySeen) state._storySeen.add(id);
+  try { await sb.from('story_views').upsert({ story_id: id, viewer_id: state.user.id }, { onConflict: 'story_id,viewer_id' }); } catch (_) {}
 }
 
 /* =======================================================================
