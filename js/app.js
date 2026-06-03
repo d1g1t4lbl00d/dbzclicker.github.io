@@ -1707,9 +1707,9 @@ async function openProfile(userId) {
           ${tagline ? `<div class="profile-tagline">${esc(tagline)}</div>` : ''}
           ${prof.bio ? `<p style="margin-top:6px;max-width:520px">${esc(prof.bio)}</p>` : ''}
           <div class="pstats">
-            <span><b>${myTracks.length}</b> pistas</span>
-            <span><b>${followers||0}</b> seguidores</span>
-            <span><b>${following||0}</b> siguiendo</span>
+            <span class="pstat" data-pstat="tracks"><b>${myTracks.length}</b> pistas</span>
+            <span class="pstat" data-pstat="followers"><b>${followers||0}</b> seguidores</span>
+            <span class="pstat" data-pstat="following"><b>${following||0}</b> siguiendo</span>
           </div>
           ${links.length ? `<div class="profile-links">${links.map(l => `<a href="${esc(czHref(l.url))}" target="_blank" rel="noopener noreferrer"><svg fill="none" stroke="currentColor"><use href="#i-globe"/></svg>${esc(l.label || 'enlace')}</a>`).join('')}</div>` : ''}
         </div>
@@ -1760,6 +1760,18 @@ async function openProfile(userId) {
     if (tab === 'tracks') { state.tracks = myTracks; state.queue = myTracks.map(t => t.id); }
     else if (tab === 'feats') { state.tracks = featTracks; state.queue = featTracks.map(t => t.id); }
     if (tab === 'posts' && !postsLoaded) { postsLoaded = true; loadProfilePosts(userId, gridEl); }
+  });
+
+  // estadísticas clicables: pistas → pestaña Pistas · seguidores/siguiendo → lista
+  main.querySelectorAll('.pstat').forEach(s => s.onclick = () => {
+    const k = s.dataset.pstat;
+    if (k === 'tracks') {
+      const tb = tabsEl.querySelector('[data-ptab="tracks"]');
+      if (tb) tb.click();
+      list.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } else {
+      openFollowList(userId, k);
+    }
   });
 
   if (isMe) $('editProfBtn').onclick = () => switchView('settings');
@@ -1848,6 +1860,36 @@ async function renderPeople() {
       }
     };
     list.appendChild(row);
+  });
+}
+
+// Lista de seguidores / seguidos de un perfil (en modal)
+async function openFollowList(userId, mode) {
+  const title = mode === 'followers' ? 'Seguidores' : 'Siguiendo';
+  const m = openModal(`<div class="modal-head"><h3>${title}</h3><button class="close">&times;</button></div><div class="modal-body" id="followListBody"><div class="loading" style="padding:30px"><div class="spinner"></div></div></div>`);
+  const body = m.querySelector('#followListBody');
+  const q = mode === 'followers'
+    ? sb.from('follows').select('created_at, profiles!follows_follower_id_fkey(*)').eq('following_id', userId).order('created_at', { ascending: false })
+    : sb.from('follows').select('created_at, profiles!follows_following_id_fkey(*)').eq('follower_id', userId).order('created_at', { ascending: false });
+  const { data, error } = await q;
+  if (error) { body.innerHTML = `<div class="empty"><p>No se pudo cargar la lista.</p></div>`; return; }
+  const people = (data || []).map(r => r.profiles).filter(Boolean);
+  if (!people.length) {
+    body.innerHTML = `<div class="empty"><p>${mode === 'followers' ? 'Aún no tiene seguidores.' : 'Todavía no sigue a nadie.'}</p></div>`;
+    return;
+  }
+  body.innerHTML = '';
+  people.forEach(p => {
+    const row = el(`
+      <div class="follow-row">
+        ${avatarHTML(p)}
+        <div class="fr-info">
+          <div class="fr-name">${esc(p.display_name || p.username)}${p.is_admin ? ' <span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c">MOD</span>' : ''}</div>
+          <div class="fr-handle">@${esc(p.username)}</div>
+        </div>
+      </div>`);
+    row.onclick = () => { m.remove(); openProfile(p.id); };
+    body.appendChild(row);
   });
 }
 
