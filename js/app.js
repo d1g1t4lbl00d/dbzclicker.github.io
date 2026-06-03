@@ -1630,10 +1630,10 @@ async function openProfile(userId) {
     fetchTracks({ order: 'created_at', userId }),
     sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)').contains('collaborators', [{ id: userId }]).order('created_at', { ascending: false }),
   ]);
-  // une pistas propias + colaboraciones (sin duplicar)
-  const seen = new Set();
-  const tracks = [...(ownTracks || []), ...((collabRes && collabRes.data) || [])].filter(t => (seen.has(t.id) ? false : seen.add(t.id)));
-  tracks.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  // pistas propias y "feats" (canciones donde OTROS lo añadieron como colaborador), por separado
+  const myTracks = (ownTracks || []).slice();
+  const featTracks = ((collabRes && collabRes.data) || [])
+    .filter(t => t.user_id !== userId && !myTracks.some(o => o.id === t.id));
   const isMe = userId === state.user.id;
   const followsHim = state.follows.has(userId);
   const theme = (prof.theme && typeof prof.theme === 'object') ? prof.theme : {};
@@ -1659,7 +1659,7 @@ async function openProfile(userId) {
           ${tagline ? `<div class="profile-tagline">${esc(tagline)}</div>` : ''}
           ${prof.bio ? `<p style="margin-top:6px;max-width:520px">${esc(prof.bio)}</p>` : ''}
           <div class="pstats">
-            <span><b>${tracks.length}</b> pistas</span>
+            <span><b>${myTracks.length}</b> pistas</span>
             <span><b>${followers||0}</b> seguidores</span>
             <span><b>${following||0}</b> siguiendo</span>
           </div>
@@ -1674,11 +1674,13 @@ async function openProfile(userId) {
         </div>
       </div>
       <div class="profile-tabs" id="profileTabs">
-        <button class="active" data-ptab="tracks"><svg fill="none" stroke="currentColor"><use href="#i-music"/></svg> Pistas <span class="ptab-n">${tracks.length}</span></button>
+        <button class="active" data-ptab="tracks"><svg fill="none" stroke="currentColor"><use href="#i-music"/></svg> Pistas <span class="ptab-n">${myTracks.length}</span></button>
         <button data-ptab="posts"><svg fill="none" stroke="currentColor"><use href="#i-camera"/></svg> Fotos</button>
+        <button data-ptab="feats"><svg fill="none" stroke="currentColor"><use href="#i-people"/></svg> Feats <span class="ptab-n">${featTracks.length}</span></button>
       </div>
       <div id="feedList" class="feed-list"></div>
       <div id="postGrid" class="post-grid hidden"></div>
+      <div id="featList" class="feed-list hidden"></div>
     </div>`;
   $('profileBack').onclick = () => switchView(backTo);
   if (font) loadFont(font);
@@ -1688,18 +1690,28 @@ async function openProfile(userId) {
   if (isMe) { const cb = $('customizeBtn'); if (cb) cb.onclick = openProfileCustomizer; const lo = $('logoutBtn'); if (lo) lo.onclick = logout; }
 
   const list = $('feedList');
-  if (!tracks.length) list.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-music"/></svg><p>Sin pistas todavía.</p></div>`;
-  else { state.tracks = tracks; state.queue = tracks.map(t=>t.id); tracks.forEach(t => list.appendChild(trackCard(t))); }
+  if (!myTracks.length) list.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-music"/></svg><p>Sin pistas todavía.</p></div>`;
+  else myTracks.forEach(t => list.appendChild(trackCard(t)));
 
-  // pestañas Pistas / Fotos (cuadrícula estilo Instagram)
+  const featEl = $('featList');
+  if (!featTracks.length) featEl.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-people"/></svg><p>Sin colaboraciones todavía. Cuando alguien te añada como <b>ft.</b> en una pista, aparecerá aquí.</p></div>`;
+  else featTracks.forEach(t => featEl.appendChild(trackCard(t)));
+
+  // cola de reproducción inicial = pestaña Pistas
+  state.tracks = myTracks; state.queue = myTracks.map(t => t.id);
+
+  // pestañas Pistas / Fotos / Feats
   const tabsEl = $('profileTabs'), gridEl = $('postGrid');
   let postsLoaded = false;
   tabsEl.querySelectorAll('button').forEach(b => b.onclick = () => {
     tabsEl.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
-    const isPosts = b.dataset.ptab === 'posts';
-    list.classList.toggle('hidden', isPosts);
-    gridEl.classList.toggle('hidden', !isPosts);
-    if (isPosts && !postsLoaded) { postsLoaded = true; loadProfilePosts(userId, gridEl); }
+    const tab = b.dataset.ptab;
+    list.classList.toggle('hidden', tab !== 'tracks');
+    gridEl.classList.toggle('hidden', tab !== 'posts');
+    featEl.classList.toggle('hidden', tab !== 'feats');
+    if (tab === 'tracks') { state.tracks = myTracks; state.queue = myTracks.map(t => t.id); }
+    else if (tab === 'feats') { state.tracks = featTracks; state.queue = featTracks.map(t => t.id); }
+    if (tab === 'posts' && !postsLoaded) { postsLoaded = true; loadProfilePosts(userId, gridEl); }
   });
 
   if (isMe) $('editProfBtn').onclick = () => switchView('settings');
