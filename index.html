@@ -6,10 +6,10 @@
 <title>UnderBro — upload. share. connect.</title>
 <meta name="description" content="UnderBro — sube, comparte y conecta a través de la música." />
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90' font-weight='bold' fill='%235f7fb8'>U</text></svg>" />
-<link rel="manifest" href="/manifest.json?v=20260603t" />
+<link rel="manifest" href="/manifest.json?v=20260603u" />
 <meta name="theme-color" content="#5f7fb8" />
 <link rel="apple-touch-icon" href="/icon-192.png" />
-<link rel="stylesheet" href="css/styles.css?v=20260603t" />
+<link rel="stylesheet" href="css/styles.css?v=20260603u" />
 </head>
 <body>
 
@@ -39,6 +39,8 @@
     <symbol id="i-share" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></symbol>
     <symbol id="i-radio" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2"/><path d="M4.93 19.07a10 10 0 0 1 0-14.14M7.76 16.24a6 6 0 0 1 0-8.48M16.24 7.76a6 6 0 0 1 0 8.48M19.07 4.93a10 10 0 0 1 0 14.14"/></symbol>
     <symbol id="i-repeat" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="14" y2="6"/><line x1="3" y1="12" x2="14" y2="12"/><line x1="3" y1="18" x2="10" y2="18"/><circle cx="18" cy="16" r="3"/><path d="M21 16V7"/></symbol>
+    <symbol id="i-listadd" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="6" x2="13" y2="6"/><line x1="3" y1="12" x2="13" y2="12"/><line x1="3" y1="18" x2="9" y2="18"/><line x1="17" y1="13" x2="17" y2="21"/><line x1="13" y1="17" x2="21" y2="17"/></symbol>
     <symbol id="i-vol" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></symbol>
     <symbol id="i-menu" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></symbol>
     <symbol id="i-logout" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></symbol>
@@ -140,6 +142,7 @@
       <h4>Library</h4>
       <button class="nav-item" data-view="all"><svg><use href="#i-music"/></svg> All Tracks <span class="count" id="cntAll"></span></button>
       <button class="nav-item" data-view="favorites"><svg><use href="#i-heart"/></svg> Favorites <span class="count" id="cntFav"></span></button>
+      <button class="nav-item" data-view="playlists"><svg><use href="#i-list"/></svg> Playlists</button>
       <button class="nav-item" data-view="mytracks"><svg><use href="#i-files"/></svg> My Uploads <span class="count" id="cntMine"></span></button>
       <button class="nav-item" data-view="downloads"><svg><use href="#i-download"/></svg> Downloads <span class="count" id="cntDl"></span></button>
     </div>
@@ -268,7 +271,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
-<script src="js/config.js?v=20260603t"></script>
-<script src="js/app.js?v=20260603t"></script>
+<script src="js/config.js?v=20260603u"></script>
+<script src="js/app.js?v=20260603u"></script>
 </body>
 </html>

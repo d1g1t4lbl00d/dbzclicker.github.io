@@ -317,6 +317,7 @@ async function switchView(view) {
   if (view === 'messages') return renderMessages();
   if (view === 'posts') return renderPosts();
   if (view === 'search') return renderSearch();
+  if (view === 'playlists') return renderPlaylists();
   if (view === 'radio') return startRadio();
 
   main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
@@ -514,6 +515,7 @@ function trackCard(t) {
         ${mine ? '' : `<button class="act repost ${reposted?'on':''}" data-act="repost"><svg fill="none" stroke="currentColor"><use href="#i-repeat"/></svg><span class="rn">${reposted?'Reposteado':'Resubir'}</span></button>`}
         <button class="act" data-act="toggleComments"><svg><use href="#i-comment"/></svg><span class="cn">Comentar</span></button>
         <button class="act" data-act="share"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg>Compartir</button>
+        <button class="act" data-act="addPlaylist"><svg fill="none" stroke="currentColor"><use href="#i-listadd"/></svg>Playlist</button>
         <button class="act" data-act="download"><svg><use href="#i-download"/></svg>Descargar</button>
         ${mine ? `<button class="act" data-act="edit"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg>Editar</button>` : ''}
         ${(mine || state.profile.is_admin) ? `<button class="act danger" data-act="delete"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg>${mine ? 'Borrar' : 'Borrar (mod)'}</button>` : ''}
@@ -599,6 +601,7 @@ async function handleTrackClick(e, t, card) {
   else if (act === 'like') toggleLike(t, card);
   else if (act === 'download') downloadTrack(t);
   else if (act === 'share') shareTrack(t);
+  else if (act === 'addPlaylist') openPlaylistPicker(t);
   else if (act === 'repost') toggleRepost(t, card);
   else if (act === 'repostby') { if (t._repostedById) openProfile(t._repostedById); }
   else if (act === 'delete') deleteTrack(t, card);
@@ -2067,6 +2070,156 @@ async function openFollowList(userId, mode) {
     };
     body.appendChild(row);
   });
+}
+
+/* =======================================================================
+   PLAYLISTS
+   ======================================================================= */
+async function renderPlaylists() {
+  setActiveNav('playlists');
+  const main = $('main');
+  main.innerHTML = `<div class="main-head"><div><h2>Playlists</h2><div class="sub">Tus listas de reproducción</div></div><button class="btn primary" id="newPlaylistBtn"><svg fill="none" stroke="#fff"><use href="#i-plus"/></svg> Crear</button></div><div id="plGrid" class="pl-grid"><div class="loading" style="grid-column:1/-1;padding:30px"><div class="spinner"></div></div></div>`;
+  $('newPlaylistBtn').onclick = createPlaylistModal;
+  const { data } = await sb.from('playlists')
+    .select('*, playlist_tracks(track_id, tracks(cover_url))')
+    .eq('user_id', state.user.id).order('created_at', { ascending: false });
+  const grid = $('plGrid');
+  const lists = data || [];
+  if (!lists.length) { grid.innerHTML = `<div class="empty" style="grid-column:1/-1"><svg fill="none"><use href="#i-list"/></svg><p>No tienes playlists todavía. Crea una y añade pistas con el botón <b>Playlist</b> de cada tema.</p></div>`; return; }
+  grid.innerHTML = '';
+  lists.forEach(pl => grid.appendChild(playlistCard(pl)));
+}
+function playlistCovers(pl) {
+  if (pl.cover_url) return `<div class="pl-cover" style="background-image:url('${esc(pl.cover_url)}')"></div>`;
+  const covers = (pl.playlist_tracks || []).map(x => x.tracks?.cover_url).filter(Boolean).slice(0, 4);
+  if (!covers.length) return `<div class="pl-cover pl-cover-empty"><svg fill="none" stroke="#fff"><use href="#i-list"/></svg></div>`;
+  return `<div class="pl-cover pl-cover-grid">${covers.map(c => `<div style="background-image:url('${esc(c)}')"></div>`).join('')}</div>`;
+}
+function playlistCard(pl) {
+  const n = (pl.playlist_tracks || []).length;
+  const card = el(`<div class="pl-card">${playlistCovers(pl)}<div class="pl-info"><div class="pl-title">${esc(pl.title)}</div><div class="pl-count">${n} ${n === 1 ? 'pista' : 'pistas'}</div></div></div>`);
+  card.onclick = () => openPlaylist(pl.id);
+  return card;
+}
+function createPlaylistModal() {
+  const m = openModal(`<div class="modal-head"><h3>Nueva playlist</h3><button class="close">&times;</button></div><div class="modal-body"><div class="field"><label>Nombre</label><input type="text" id="plTitle" maxlength="60" placeholder="Mi playlist" /></div><div class="field"><label>Descripción (opcional)</label><input type="text" id="plDesc" maxlength="140" /></div><button class="btn primary" id="plCreate" style="width:100%">Crear</button></div>`);
+  const input = m.querySelector('#plTitle'); input.focus();
+  m.querySelector('#plCreate').onclick = async () => {
+    const title = input.value.trim(); if (!title) { input.focus(); return; }
+    const description = m.querySelector('#plDesc').value.trim();
+    const { data, error } = await sb.from('playlists').insert({ user_id: state.user.id, title, description }).select().single();
+    if (error) { toast('No se pudo crear'); return; }
+    m.remove(); toast('Playlist creada'); openPlaylist(data.id);
+  };
+}
+async function openPlaylist(id) {
+  const main = $('main'); setActiveNav('playlists'); state.view = 'playlist';
+  main.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
+  const { data: pl } = await sb.from('playlists').select('*, profiles!playlists_user_id_fkey(*)').eq('id', id).maybeSingle();
+  if (!pl) { main.innerHTML = '<div class="empty">Playlist no encontrada.</div>'; return; }
+  const { data: rows } = await sb.from('playlist_tracks').select('added_at, tracks(*, profiles!tracks_user_id_fkey(*))').eq('playlist_id', id).order('added_at', { ascending: true });
+  const tracks = (rows || []).map(r => r.tracks).filter(Boolean);
+  const isOwner = pl.user_id === state.user.id;
+  const owner = pl.profiles?.display_name || pl.profiles?.username || '';
+  main.innerHTML = `
+    <div class="pl-detail">
+      <button class="profile-back" id="plBack"><svg fill="none" stroke="currentColor"><use href="#i-chevron-left"/></svg> Volver</button>
+      <div class="pl-head">
+        ${playlistCovers({ ...pl, playlist_tracks: tracks.map(t => ({ tracks: { cover_url: t.cover_url } })) })}
+        <div class="pl-head-info">
+          <div class="pl-kicker">PLAYLIST</div>
+          <h2 class="pl-h2">${esc(pl.title)}</h2>
+          ${pl.description ? `<p class="pl-desc">${esc(pl.description)}</p>` : ''}
+          <div class="pl-meta">por <a id="plOwner">${esc(owner)}</a> · ${tracks.length} ${tracks.length === 1 ? 'pista' : 'pistas'}</div>
+          <div class="pl-actions">
+            <button class="btn primary" id="plPlay"><svg fill="none" stroke="#fff"><use href="#i-play"/></svg> Reproducir</button>
+            <button class="btn" id="plShare"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg> Compartir</button>
+            ${isOwner ? `<button class="btn" id="plRename"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg> Editar</button><button class="btn danger-btn" id="plDelete"><svg fill="none" stroke="#fff"><use href="#i-trash"/></svg> Eliminar</button>` : ''}
+          </div>
+        </div>
+      </div>
+      <div id="plTracks" class="feed-list"></div>
+    </div>`;
+  $('plBack').onclick = () => switchView('playlists');
+  $('plOwner').onclick = () => openProfile(pl.user_id);
+  const listEl = $('plTracks');
+  if (!tracks.length) { listEl.innerHTML = `<div class="empty"><p>Esta playlist está vacía. Añade pistas con el botón <b>Playlist</b> de cada tema.</p></div>`; }
+  else tracks.forEach(t => {
+    const card = trackCard(t);
+    if (isOwner) {
+      const rm = el(`<button class="act danger" data-act="rmpl"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg>Quitar</button>`);
+      rm.onclick = async (e) => {
+        e.stopPropagation();
+        await sb.from('playlist_tracks').delete().eq('playlist_id', id).eq('track_id', t.id);
+        card.remove(); toast('Quitada de la playlist');
+      };
+      card.querySelector('.t-foot')?.appendChild(rm);
+    }
+    listEl.appendChild(card);
+  });
+  state.tracks = tracks;
+  $('plPlay').onclick = () => { if (!tracks.length) return; state.tracks = tracks; state.queue = tracks.map(t => t.id); playTrack(tracks[0]); };
+  $('plShare').onclick = async () => {
+    const url = `${location.origin}/?playlist=${pl.id}`;
+    try { await navigator.clipboard.writeText(url); toast('Enlace de la playlist copiado'); } catch { toast(url); }
+  };
+  if (isOwner) { $('plRename').onclick = () => renamePlaylist(pl); $('plDelete').onclick = () => deletePlaylist(pl); }
+}
+function renamePlaylist(pl) {
+  const m = openModal(`<div class="modal-head"><h3>Editar playlist</h3><button class="close">&times;</button></div><div class="modal-body"><div class="field"><label>Nombre</label><input type="text" id="plTitle2" maxlength="60" value="${esc(pl.title)}" /></div><div class="field"><label>Descripción</label><input type="text" id="plDesc2" maxlength="140" value="${esc(pl.description || '')}" /></div><button class="btn primary" id="plSave2" style="width:100%">Guardar</button></div>`);
+  m.querySelector('#plSave2').onclick = async () => {
+    const title = m.querySelector('#plTitle2').value.trim(); if (!title) return;
+    const description = m.querySelector('#plDesc2').value.trim();
+    const { error } = await sb.from('playlists').update({ title, description }).eq('id', pl.id);
+    if (error) { toast('No se pudo guardar'); return; }
+    m.remove(); openPlaylist(pl.id);
+  };
+}
+async function deletePlaylist(pl) {
+  if (!confirm(`¿Eliminar la playlist "${pl.title}"? No se puede deshacer.`)) return;
+  const { error } = await sb.from('playlists').delete().eq('id', pl.id);
+  if (error) { toast('No se pudo eliminar'); return; }
+  toast('Playlist eliminada'); switchView('playlists');
+}
+async function openPlaylistPicker(t) {
+  const m = openModal(`<div class="modal-head"><h3>Añadir a playlist</h3><button class="close">&times;</button></div><div class="modal-body" id="plPickBody"><div class="loading" style="padding:20px"><div class="spinner"></div></div></div>`);
+  const body = m.querySelector('#plPickBody');
+  const [{ data: lists }, { data: inRows }] = await Promise.all([
+    sb.from('playlists').select('id, title, playlist_tracks(track_id)').eq('user_id', state.user.id).order('created_at', { ascending: false }),
+    sb.from('playlist_tracks').select('playlist_id').eq('track_id', t.id),
+  ]);
+  const inSet = new Set((inRows || []).map(r => r.playlist_id));
+  body.innerHTML = `<button class="btn primary" id="plPickNew" style="width:100%;margin-bottom:12px"><svg fill="none" stroke="#fff"><use href="#i-plus"/></svg> Crear nueva playlist</button><div id="plPickList"></div>`;
+  const listWrap = body.querySelector('#plPickList');
+  const renderItem = (pl) => {
+    const on = inSet.has(pl.id);
+    const row = el(`<div class="follow-row"><div class="fr-info"><div class="fr-name">${esc(pl.title)}</div><div class="fr-handle">${(pl.playlist_tracks || []).length} pistas</div></div><div class="fr-actions"><button class="btn sm ${on ? '' : 'primary'}" data-add>${on ? 'Quitar' : 'Añadir'}</button></div></div>`);
+    const btn = row.querySelector('[data-add]');
+    btn.onclick = async (e) => {
+      e.stopPropagation(); btn.disabled = true;
+      if (inSet.has(pl.id)) {
+        await sb.from('playlist_tracks').delete().eq('playlist_id', pl.id).eq('track_id', t.id);
+        inSet.delete(pl.id); btn.classList.add('primary'); btn.textContent = 'Añadir';
+      } else {
+        await sb.from('playlist_tracks').insert({ playlist_id: pl.id, track_id: t.id });
+        inSet.add(pl.id); btn.classList.remove('primary'); btn.textContent = 'Quitar';
+      }
+      btn.disabled = false;
+    };
+    return row;
+  };
+  const draw = (arr) => { listWrap.innerHTML = ''; if (!arr.length) listWrap.innerHTML = `<div class="empty" style="padding:14px"><p>Crea tu primera playlist arriba.</p></div>`; else arr.forEach(pl => listWrap.appendChild(renderItem(pl))); };
+  draw(lists || []);
+  m.querySelector('#plPickNew').onclick = async () => {
+    const title = prompt('Nombre de la nueva playlist:');
+    if (!title || !title.trim()) return;
+    const { data, error } = await sb.from('playlists').insert({ user_id: state.user.id, title: title.trim() }).select('id,title').single();
+    if (error) { toast('No se pudo crear'); return; }
+    await sb.from('playlist_tracks').insert({ playlist_id: data.id, track_id: t.id });
+    inSet.add(data.id);
+    toast('Añadida a ' + data.title);
+    draw([{ ...data, playlist_tracks: [{ track_id: t.id }] }, ...(lists || [])]);
+  };
 }
 
 /* =======================================================================
