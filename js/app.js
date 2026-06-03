@@ -773,8 +773,9 @@ function showEq(on) {
 }
 function markPlayingCard() {
   document.querySelectorAll('.track.playing').forEach(c => c.classList.remove('playing'));
-  const card = document.querySelector(`.track[data-id="${state.current?.id}"]`);
-  if (card) card.classList.add('playing');
+  if (!state.current?.id) return;
+  // puede haber la misma pista en varias listas (p. ej. Pistas y Feats): marcarlas todas
+  document.querySelectorAll(`.track[data-id="${state.current.id}"]`).forEach(card => card.classList.add('playing'));
 }
 
 /* ---- Vista "Reproduciendo ahora" a pantalla completa ---- */
@@ -846,11 +847,13 @@ function step(dir) {
   else if (dir > 0) { setPlayIcon(false); }
 }
 function updateCardWave(pct) {
-  const card = document.querySelector(`.track[data-id="${state.current?.id}"]`);
-  if (!card) return;
-  const bars = card.querySelectorAll('.wave .bar');
-  const upto = Math.floor(pct * bars.length);
-  bars.forEach((b, i) => b.classList.toggle('played', i <= upto));
+  if (!state.current?.id) return;
+  // actualizar la onda en todas las copias de la pista (Pistas y Feats)
+  document.querySelectorAll(`.track[data-id="${state.current.id}"]`).forEach(card => {
+    const bars = card.querySelectorAll('.wave .bar');
+    const upto = Math.floor(pct * bars.length);
+    bars.forEach((b, i) => b.classList.toggle('played', i <= upto));
+  });
 }
 
 /* =======================================================================
