@@ -706,6 +706,12 @@ img { display: block; }
 .follow-row .fr-name { font-weight: 700; color: var(--ink); }
 .follow-row .fr-handle { font-size: 12.5px; color: var(--ink-soft); }
 .follow-row .fr-actions { display: flex; gap: 6px; flex-shrink: 0; }
+.share-meta { margin-bottom: 12px; font-size: 14px; }
+.share-meta span { color: var(--ink-soft); }
+.share-link { display: flex; gap: 8px; margin-bottom: 12px; }
+.share-link input { flex: 1; min-width: 0; padding: 9px 11px; border: 1px solid var(--line-soft); border-radius: 10px; background: var(--glass); color: var(--ink); font-size: 13px; }
+.share-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.share-actions .btn { flex: 1; justify-content: center; min-width: 130px; }
 .profile-head .pactions { margin-left: auto; display: flex; flex-direction: column; gap: 8px; align-items: stretch; min-width: 150px; }
 .profile-head .pactions .btn { justify-content: center; }
 @media (max-width: 720px) {

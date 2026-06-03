@@ -179,6 +179,7 @@ async function onAuthenticated() {
   setupPush();
   loadNotifBadge();
   switchView('feed');
+  handleDeepLink();
 }
 
 async function ensureProfile() {
@@ -311,6 +312,7 @@ async function switchView(view) {
   if (view === 'messages') return renderMessages();
   if (view === 'posts') return renderPosts();
   if (view === 'search') return renderSearch();
+  if (view === 'radio') return startRadio();
 
   main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
   main.innerHTML = skeletonFeed();
@@ -486,6 +488,7 @@ function trackCard(t) {
         <span class="time"><svg style="width:12px;height:12px;vertical-align:-1px" fill="none" stroke="currentColor"><use href="#i-headphones"/></svg> ${t.plays||0} · <svg style="width:12px;height:12px;vertical-align:-2px" fill="currentColor" stroke="none"><use href="#i-heart"/></svg> <span class="likecount">${t.likes_count||0}</span> · ${fmtTime(t.duration)}</span>
         <button class="act like ${liked?'on':''}" data-act="like"><svg><use href="#i-heart"/></svg><span class="ln">${liked?'Te gusta':'Me gusta'}</span></button>
         <button class="act" data-act="toggleComments"><svg><use href="#i-comment"/></svg><span class="cn">Comentar</span></button>
+        <button class="act" data-act="share"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg>Compartir</button>
         <button class="act" data-act="download"><svg><use href="#i-download"/></svg>Descargar</button>
         ${mine ? `<button class="act" data-act="edit"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg>Editar</button>` : ''}
         ${(mine || state.profile.is_admin) ? `<button class="act danger" data-act="delete"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg>${mine ? 'Borrar' : 'Borrar (mod)'}</button>` : ''}
@@ -570,6 +573,7 @@ async function handleTrackClick(e, t, card) {
   else if (act === 'profile') openProfile(t.user_id);
   else if (act === 'like') toggleLike(t, card);
   else if (act === 'download') downloadTrack(t);
+  else if (act === 'share') shareTrack(t);
   else if (act === 'delete') deleteTrack(t, card);
   else if (act === 'edit') openEditTrack(t, card);
   else if (act === 'toggleComments') toggleComments(t, card);
@@ -581,6 +585,63 @@ async function handleTrackClick(e, t, card) {
       audio.currentTime = pct * audio.duration;
     } else { playTrack(t); }
   }
+}
+
+/* ---- COMPARTIR ---- */
+function trackShareUrl(t) { return `${location.origin}/?track=${t.id}`; }
+function shareTrack(t) {
+  const url = trackShareUrl(t);
+  const who = t.profiles?.display_name || t.profiles?.username || t.artist || 'UnderBro';
+  const title = `${t.title} — ${who}`;
+  const m = openModal(`
+    <div class="modal-head"><h3>Compartir pista</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <div class="share-meta"><b>${esc(t.title)}</b><span> · ${esc(who)}</span></div>
+      <div class="share-link"><input type="text" id="shareUrl" readonly value="${esc(url)}" /><button class="btn sm primary" id="copyLink">Copiar</button></div>
+      <div class="share-actions">
+        ${navigator.share ? `<button class="btn" id="nativeShare"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg> Compartir…</button>` : ''}
+        <button class="btn" id="shareToChat"><svg fill="none" stroke="currentColor"><use href="#i-mail"/></svg> Enviar por chat</button>
+      </div>
+    </div>`);
+  const copyBtn = m.querySelector('#copyLink');
+  copyBtn.onclick = async () => {
+    try { await navigator.clipboard.writeText(url); }
+    catch { const i = m.querySelector('#shareUrl'); i.select(); try { document.execCommand('copy'); } catch {} }
+    copyBtn.textContent = 'Copiado ✓'; toast('Enlace copiado');
+  };
+  const ns = m.querySelector('#nativeShare');
+  if (ns) ns.onclick = () => { navigator.share({ title, text: title, url }).catch(() => {}); };
+  m.querySelector('#shareToChat').onclick = () => { m.remove(); shareToChatPicker(t, url, title); };
+}
+async function shareToChatPicker(t, url, title) {
+  const m = openModal(`<div class="modal-head"><h3>Enviar a…</h3><button class="close">&times;</button></div><div class="modal-body" id="shareChatBody"><div class="loading" style="padding:24px"><div class="spinner"></div></div></div>`);
+  const body = m.querySelector('#shareChatBody');
+  const { data } = await sb.from('follows').select('profiles!follows_following_id_fkey(*)').eq('follower_id', state.user.id);
+  const people = (data || []).map(r => r.profiles).filter(Boolean);
+  if (!people.length) { body.innerHTML = `<div class="empty"><p>Sigue a alguien para poder enviarle pistas por chat.</p></div>`; return; }
+  body.innerHTML = '';
+  people.forEach(p => {
+    const row = el(`<div class="follow-row"><div style="display:flex;align-items:center;gap:12px;flex:1;min-width:0">${avatarHTML(p)}<div class="fr-info"><div class="fr-name">${esc(p.display_name || p.username)}</div><div class="fr-handle">@${esc(p.username)}</div></div></div><button class="btn sm primary" data-send>Enviar</button></div>`);
+    row.querySelector('[data-send]').onclick = async (e) => {
+      const btn = e.currentTarget; btn.disabled = true; btn.textContent = 'Enviando…';
+      const msg = `🎵 ${title}\n${url}`;
+      const { error } = await sb.from('direct_messages').insert({ sender_id: state.user.id, recipient_id: p.id, body: msg });
+      if (error) { toast('No se pudo enviar'); btn.disabled = false; btn.textContent = 'Enviar'; return; }
+      btn.textContent = 'Enviado ✓';
+      toast('Pista enviada a ' + (p.display_name || p.username));
+    };
+    body.appendChild(row);
+  });
+}
+// abrir una pista compartida por enlace (?track=ID)
+async function handleDeepLink() {
+  const params = new URLSearchParams(location.search);
+  const trackId = params.get('track');
+  if (!trackId) return;
+  history.replaceState(null, '', location.pathname);
+  const { data } = await sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)').eq('id', trackId).maybeSingle();
+  if (data) { state.tracks = [data]; state.queue = [data.id]; playTrack(data); openNowPlaying(); }
+  else toast('La pista no existe o fue eliminada');
 }
 
 /* ---- LIKES ---- */
@@ -878,12 +939,51 @@ async function playTrack(t) {
   // si no está en la cola actual, crear cola con la vista
   if (!state.queue.includes(t.id)) state.queue = [t.id];
 }
-function step(dir) {
+async function step(dir) {
   if (!state.current) return;
-  const idx = state.queue.indexOf(state.current.id);
-  const next = state.queue[idx + dir];
-  if (next) { const t = state.tracks.find(x => x.id === next); if (t) playTrack(t); }
+  let idx = state.queue.indexOf(state.current.id);
+  let nextId = state.queue[idx + dir];
+  // radio / autoplay infinito: al llegar al final, cargar más y seguir
+  if (!nextId && dir > 0) {
+    const added = await loadRadioBatch();
+    if (added) {
+      idx = state.queue.indexOf(state.current.id);
+      nextId = state.queue[idx + 1];
+      if (added > 0 && !state._radioToasted) { state._radioToasted = true; toast('📻 Radio: seguimos con más música'); }
+    }
+  }
+  if (nextId) { const t = state.tracks.find(x => x.id === nextId); if (t) playTrack(t); }
   else if (dir > 0) { setPlayIcon(false); }
+}
+// trae más pistas (mezcladas) y las añade a la cola para que la música no pare
+let _radioLoading = false;
+async function loadRadioBatch() {
+  if (_radioLoading) return 0;
+  _radioLoading = true;
+  try {
+    const exclude = new Set(state.queue);
+    const { data } = await sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)').order('plays', { ascending: false }).limit(80);
+    let pool = (data || []).filter(t => !exclude.has(t.id));
+    for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+    const batch = pool.slice(0, 20);
+    batch.forEach(t => { if (!state.tracks.find(x => x.id === t.id)) state.tracks.push(t); });
+    state.queue.push(...batch.map(t => t.id));
+    return batch.length;
+  } catch (_) { return 0; }
+  finally { _radioLoading = false; }
+}
+// inicia una sesión de radio (mezcla sin fin) desde cero
+async function startRadio() {
+  toast('📻 Iniciando radio…');
+  const { data } = await sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)').order('created_at', { ascending: false }).limit(80);
+  let pool = (data || []).slice();
+  if (!pool.length) { toast('Aún no hay pistas para la radio'); return; }
+  for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
+  state.tracks = pool;
+  state.queue = pool.map(t => t.id);
+  state._radioToasted = false;
+  playTrack(pool[0]);
+  openNowPlaying();
 }
 function updateCardWave(pct) {
   if (!state.current?.id) return;
