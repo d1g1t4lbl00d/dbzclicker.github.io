@@ -1880,6 +1880,8 @@ async function openFollowList(userId, mode) {
   }
   body.innerHTML = '';
   people.forEach(p => {
+    const isSelf = p.id === state.user.id;
+    const f = state.follows.has(p.id);
     const row = el(`
       <div class="follow-row">
         ${avatarHTML(p)}
@@ -1887,8 +1889,27 @@ async function openFollowList(userId, mode) {
           <div class="fr-name">${esc(p.display_name || p.username)}${p.is_admin ? ' <span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c">MOD</span>' : ''}</div>
           <div class="fr-handle">@${esc(p.username)}</div>
         </div>
+        ${isSelf ? '' : `<div class="fr-actions">
+          <button class="btn sm ${f ? '' : 'primary'}" data-act="follow">${f ? 'Siguiendo ✓' : '+ Seguir'}</button>
+          <button class="btn sm icon-only" data-act="msg" title="Mensaje"><svg style="width:15px;height:15px" fill="none" stroke="currentColor"><use href="#i-mail"/></svg></button>
+        </div>`}
       </div>`);
     row.onclick = () => { m.remove(); openProfile(p.id); };
+    const msgBtn = row.querySelector('[data-act="msg"]');
+    if (msgBtn) msgBtn.onclick = (e) => { e.stopPropagation(); m.remove(); openDM(p.id); };
+    const followBtn = row.querySelector('[data-act="follow"]');
+    if (followBtn) followBtn.onclick = async (e) => {
+      e.stopPropagation();
+      if (state.follows.has(p.id)) {
+        state.follows.delete(p.id);
+        await sb.from('follows').delete().eq('follower_id', state.user.id).eq('following_id', p.id);
+        followBtn.classList.add('primary'); followBtn.textContent = '+ Seguir';
+      } else {
+        state.follows.add(p.id);
+        await sb.from('follows').insert({ follower_id: state.user.id, following_id: p.id });
+        followBtn.classList.remove('primary'); followBtn.textContent = 'Siguiendo ✓';
+      }
+    };
     body.appendChild(row);
   });
 }
