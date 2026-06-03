@@ -18,6 +18,7 @@ const state = {
   profile: null,       // fila profiles propia
   tracks: [],          // pistas cargadas en la vista actual
   likes: new Set(),    // track_ids que me gustan
+  reposts: new Set(),  // track_ids que he reposteado
   follows: new Set(),  // user_ids que sigo
   downloads: new Set(JSON.parse(localStorage.getItem('ub_downloads') || '[]')),
   view: 'feed',
@@ -169,7 +170,7 @@ async function onAuthenticated() {
   $('authScreen').classList.add('hidden');
   $('app').classList.remove('hidden');
   renderMe();
-  await Promise.all([loadLikes(), loadFollows()]);
+  await Promise.all([loadLikes(), loadReposts(), loadFollows()]);
   bindUI();
   initPlayer();
   initNowPlaying();
@@ -211,6 +212,10 @@ function renderMe() {
 async function loadLikes() {
   const { data } = await sb.from('likes').select('track_id').eq('user_id', state.user.id);
   state.likes = new Set((data||[]).map(r => r.track_id));
+}
+async function loadReposts() {
+  const { data } = await sb.from('reposts').select('track_id').eq('user_id', state.user.id);
+  state.reposts = new Set((data||[]).map(r => r.track_id));
 }
 async function loadFollows() {
   const { data } = await sb.from('follows').select('following_id').eq('follower_id', state.user.id);
@@ -350,9 +355,26 @@ async function fetchTracks({ order='created_at', userId=null, limit=50 } = {}) {
 }
 async function fetchFollowingTracks() {
   if (state.follows.size === 0) return [];
-  const { data } = await sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)')
-    .in('user_id', [...state.follows]).order('created_at', { ascending: false }).limit(50);
-  return data || [];
+  const followed = [...state.follows];
+  const ownP = sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)')
+    .in('user_id', followed).order('created_at', { ascending: false }).limit(50);
+  const repP = sb.from('reposts')
+    .select('created_at, user_id, reposter:profiles!reposts_user_id_fkey(display_name,username), tracks(*, profiles!tracks_user_id_fkey(*))')
+    .in('user_id', followed).order('created_at', { ascending: false }).limit(50);
+  const [{ data: own }, { data: reps }] = await Promise.all([ownP, repP]);
+  const items = [];
+  (own || []).forEach(t => items.push({ track: t, ts: t.created_at }));
+  (reps || []).forEach(r => {
+    if (!r.tracks) return;
+    const t = { ...r.tracks };
+    t._repostedBy = r.reposter?.display_name || r.reposter?.username || 'alguien';
+    t._repostedById = r.user_id;
+    items.push({ track: t, ts: r.created_at });
+  });
+  items.sort((a, b) => new Date(b.ts) - new Date(a.ts));
+  const seen = new Set(); const out = [];
+  for (const it of items) { if (seen.has(it.track.id)) continue; seen.add(it.track.id); out.push(it.track); }
+  return out;
 }
 async function fetchFavorites() {
   if (state.likes.size === 0) return [];
@@ -466,6 +488,7 @@ function renderFeed(head, tracks, view) {
    ======================================================================= */
 function trackCard(t) {
   const liked = state.likes.has(t.id);
+  const reposted = state.reposts.has(t.id);
   const prof = t.profiles || {};
   const collabs = Array.isArray(t.collaborators) ? t.collaborators : [];
   const ft = collabs.length ? ` ft. ${collabs.map(c => `<a data-collab="${c.id}">${esc(c.display_name || c.username)}</a>`).join(', ')}` : '';
@@ -473,6 +496,7 @@ function trackCard(t) {
   const cov = t.cover_url ? czUrl(t.cover_url) : '';
   const card = el(`
     <div class="track ${cov ? 'has-bg' : ''}" data-id="${t.id}" ${cov ? `style="background-image:url('${cov}')"` : ''}>
+      ${t._repostedBy ? `<div class="repost-badge"><svg fill="none" stroke="currentColor"><use href="#i-repeat"/></svg> Reposteado por <a data-act="repostby">${esc(t._repostedBy)}</a></div>` : ''}
       <div class="t-head">
         <div class="t-titles">
           <div class="t-title">${esc(t.title)}</div>
@@ -485,8 +509,9 @@ function trackCard(t) {
         ${waveHTML(t)}
       </div>
       <div class="t-foot">
-        <span class="time"><svg style="width:12px;height:12px;vertical-align:-1px" fill="none" stroke="currentColor"><use href="#i-headphones"/></svg> ${t.plays||0} · <svg style="width:12px;height:12px;vertical-align:-2px" fill="currentColor" stroke="none"><use href="#i-heart"/></svg> <span class="likecount">${t.likes_count||0}</span> · ${fmtTime(t.duration)}</span>
+        <span class="time"><svg style="width:12px;height:12px;vertical-align:-1px" fill="none" stroke="currentColor"><use href="#i-headphones"/></svg> ${t.plays||0} · <svg style="width:12px;height:12px;vertical-align:-2px" fill="currentColor" stroke="none"><use href="#i-heart"/></svg> <span class="likecount">${t.likes_count||0}</span> · <svg style="width:12px;height:12px;vertical-align:-2px" fill="none" stroke="currentColor"><use href="#i-repeat"/></svg> <span class="repostcount">${t.reposts_count||0}</span> · ${fmtTime(t.duration)}</span>
         <button class="act like ${liked?'on':''}" data-act="like"><svg><use href="#i-heart"/></svg><span class="ln">${liked?'Te gusta':'Me gusta'}</span></button>
+        <button class="act repost ${reposted?'on':''}" data-act="repost"><svg fill="none" stroke="currentColor"><use href="#i-repeat"/></svg><span class="rn">${reposted?'Reposteado':'Resubir'}</span></button>
         <button class="act" data-act="toggleComments"><svg><use href="#i-comment"/></svg><span class="cn">Comentar</span></button>
         <button class="act" data-act="share"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg>Compartir</button>
         <button class="act" data-act="download"><svg><use href="#i-download"/></svg>Descargar</button>
@@ -574,6 +599,8 @@ async function handleTrackClick(e, t, card) {
   else if (act === 'like') toggleLike(t, card);
   else if (act === 'download') downloadTrack(t);
   else if (act === 'share') shareTrack(t);
+  else if (act === 'repost') toggleRepost(t, card);
+  else if (act === 'repostby') { if (t._repostedById) openProfile(t._repostedById); }
   else if (act === 'delete') deleteTrack(t, card);
   else if (act === 'edit') openEditTrack(t, card);
   else if (act === 'toggleComments') toggleComments(t, card);
@@ -662,6 +689,29 @@ async function toggleLike(t, card) {
   }
   if (cntEl) cntEl.textContent = t.likes_count;
   updateCounts();
+}
+
+/* ---- REPOST ---- */
+async function toggleRepost(t, card) {
+  if (typeof requireNotBanned === 'function' && !requireNotBanned()) return;
+  const btn = card.querySelector('[data-act="repost"]');
+  const cntEl = card.querySelector('.repostcount');
+  const reposted = state.reposts.has(t.id);
+  if (reposted) {
+    state.reposts.delete(t.id);
+    t.reposts_count = Math.max(0, (t.reposts_count || 0) - 1);
+    if (btn) { btn.classList.remove('on'); const r = btn.querySelector('.rn'); if (r) r.textContent = 'Resubir'; }
+    await sb.from('reposts').delete().eq('track_id', t.id).eq('user_id', state.user.id);
+    toast('Repost quitado');
+  } else {
+    state.reposts.add(t.id);
+    t.reposts_count = (t.reposts_count || 0) + 1;
+    if (btn) { btn.classList.add('on'); const r = btn.querySelector('.rn'); if (r) r.textContent = 'Reposteado'; }
+    await sb.from('reposts').insert({ track_id: t.id, user_id: state.user.id });
+    toast('🔁 Reposteado a tus seguidores');
+  }
+  // actualizar el contador en todas las copias de la pista
+  document.querySelectorAll(`.track[data-id="${t.id}"] .repostcount`).forEach(e => e.textContent = t.reposts_count);
 }
 
 /* ---- DESCARGA ---- */
