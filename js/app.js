@@ -2398,13 +2398,11 @@ async function checkForUpdate() {
     }
   } catch {}
 }
-let _lastUpdCheck = Date.now();
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible' && Date.now() - _lastUpdCheck > 120000) {
-    _lastUpdCheck = Date.now();
-    checkForUpdate();
-  }
-});
+// comprobar al cargar, al volver a la app, al recuperar foco y cada 45s
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkForUpdate(); });
+window.addEventListener('focus', checkForUpdate);
+window.addEventListener('online', checkForUpdate);
+setInterval(checkForUpdate, 45000);
 
 /* ----------------------------------------------------------------------- */
 initCookies();
