@@ -1917,9 +1917,19 @@ function renderSettings() {
         <button class="btn danger-btn" id="deleteAccount"><svg fill="none" stroke="#fff"><use href="#i-trash"/></svg> Eliminar mi cuenta y mis datos</button>
         <div class="auth-msg" id="delMsg"></div>
       </div>
+      <hr style="border:none;border-top:1px solid var(--line-soft);margin:20px 0" />
+      <div class="field"><label>Notificaciones</label>
+        <button class="btn" id="setPushBtn" style="width:100%"><svg fill="none" stroke="currentColor"><use href="#i-bell"/></svg> Activar avisos de chat</button>
+        <div class="sub" style="margin-top:6px">Recibe un aviso cuando te escriban, aunque tengas la app cerrada.</div>
+      </div>
       <div style="text-align:center;margin-top:16px"><a id="policyLink" style="font-size:12px;color:var(--ink-soft);cursor:pointer">Política de privacidad y cookies</a></div>
+      <div style="text-align:center;margin-top:10px;font-size:12px;color:var(--ink-soft)">UnderBro · versión ${APP_VERSION} · <a id="checkUpdate" style="cursor:pointer;text-decoration:underline">Buscar actualizaciones</a></div>
     </div>`;
   $('policyLink').onclick = showPrivacyPolicy;
+  const setPushBtn = $('setPushBtn');
+  if (typeof Notification !== 'undefined' && Notification.permission === 'granted') { setPushBtn.textContent = '🔔 Avisos activados'; setPushBtn.disabled = true; }
+  setPushBtn.onclick = enablePush;
+  $('checkUpdate').onclick = async () => { toast('Buscando actualización…'); await checkForUpdate(); setTimeout(() => location.reload(), 700); };
   $('openCustomize').onclick = openProfileCustomizer;
   $('settingsLogout').onclick = logout;
   $('deleteAccount').onclick = deleteAccount;
