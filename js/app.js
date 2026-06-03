@@ -1630,10 +1630,13 @@ async function openProfile(userId) {
     fetchTracks({ order: 'created_at', userId }),
     sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)').contains('collaborators', [{ id: userId }]).order('created_at', { ascending: false }),
   ]);
-  // pistas propias y "feats" (canciones donde OTROS lo añadieron como colaborador), por separado
+  // pistas propias y "feats" (cualquier colaboración que te involucra: tuyas con invitados
+  // y pistas de otros donde te añadieron como colaborador)
   const myTracks = (ownTracks || []).slice();
-  const featTracks = ((collabRes && collabRes.data) || [])
-    .filter(t => t.user_id !== userId && !myTracks.some(o => o.id === t.id));
+  const myCollabs = myTracks.filter(t => Array.isArray(t.collaborators) && t.collaborators.length > 0);
+  const collabSeen = new Set(myCollabs.map(t => t.id));
+  const othersFeat = ((collabRes && collabRes.data) || []).filter(t => t.user_id !== userId && !collabSeen.has(t.id));
+  const featTracks = [...myCollabs, ...othersFeat].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   const isMe = userId === state.user.id;
   const followsHim = state.follows.has(userId);
   const theme = (prof.theme && typeof prof.theme === 'object') ? prof.theme : {};
@@ -1694,7 +1697,7 @@ async function openProfile(userId) {
   else myTracks.forEach(t => list.appendChild(trackCard(t)));
 
   const featEl = $('featList');
-  if (!featTracks.length) featEl.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-people"/></svg><p>Sin colaboraciones todavía. Cuando alguien te añada como <b>ft.</b> en una pista, aparecerá aquí.</p></div>`;
+  if (!featTracks.length) featEl.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-people"/></svg><p>Sin colaboraciones todavía. Aquí aparecen las canciones en colaboración: las tuyas con invitados (<b>ft.</b>) y las de otros donde te añaden.</p></div>`;
   else featTracks.forEach(t => featEl.appendChild(trackCard(t)));
 
   // cola de reproducción inicial = pestaña Pistas
