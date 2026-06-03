@@ -176,6 +176,7 @@ async function onAuthenticated() {
   initChat();
   initPresence();
   initDM();
+  setupPush();
   loadNotifBadge();
   switchView('feed');
 }
@@ -707,11 +708,24 @@ function initPlayer() {
     $('pCur').textContent = fmtTime(audio.currentTime);
     updateCardWave(pct);
     updateNpProgress(pct);
+    updateMediaPositionState();
   });
-  audio.addEventListener('loadedmetadata', () => { $('pDur').textContent = fmtTime(audio.duration); if (npIsOpen()) $('npDur').textContent = fmtTime(audio.duration); });
+  audio.addEventListener('loadedmetadata', () => { $('pDur').textContent = fmtTime(audio.duration); if (npIsOpen()) $('npDur').textContent = fmtTime(audio.duration); updateMediaPositionState(); });
   audio.addEventListener('ended', () => step(1));
-  audio.addEventListener('play', () => { setPlayIcon(true); showEq(true); markPlayingCard(); setNpPlayIcon(true); });
-  audio.addEventListener('pause', () => { setPlayIcon(false); showEq(false); setNpPlayIcon(false); document.querySelectorAll('.track.playing').forEach(c => c.classList.remove('playing')); });
+  audio.addEventListener('play', () => { setPlayIcon(true); showEq(true); markPlayingCard(); setNpPlayIcon(true); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; });
+  audio.addEventListener('pause', () => { setPlayIcon(false); showEq(false); setNpPlayIcon(false); document.querySelectorAll('.track.playing').forEach(c => c.classList.remove('playing')); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; });
+
+  // controles del sistema (pantalla de bloqueo / notificación de reproducción)
+  if ('mediaSession' in navigator) {
+    const ms = navigator.mediaSession;
+    ms.setActionHandler('play', () => audio.play());
+    ms.setActionHandler('pause', () => audio.pause());
+    ms.setActionHandler('previoustrack', () => step(-1));
+    ms.setActionHandler('nexttrack', () => step(1));
+    try { ms.setActionHandler('seekbackward', (d) => { audio.currentTime = Math.max(0, audio.currentTime - (d.seekOffset || 10)); }); } catch {}
+    try { ms.setActionHandler('seekforward', (d) => { if (audio.duration) audio.currentTime = Math.min(audio.duration, audio.currentTime + (d.seekOffset || 10)); }); } catch {}
+    try { ms.setActionHandler('seekto', (d) => { if (d.seekTime != null) audio.currentTime = d.seekTime; }); } catch {}
+  }
 
   // seek preciso (pointer events: ratón + táctil unificados) con vista previa
   const seek = $('pSeek'), fill = $('pFill'), knob = $('pKnob'), ghost = $('pGhost'), tip = $('pTip');
@@ -824,6 +838,30 @@ function setPlayIcon(playing) {
 }
 function togglePlay() { if (audio.paused) audio.play(); else audio.pause(); }
 
+// metadatos para los controles del sistema (carátula, título, artista)
+function updateMediaSession() {
+  if (!('mediaSession' in navigator) || !state.current) return;
+  const t = state.current;
+  const artist = t.profiles?.display_name || t.profiles?.username || t.artist || 'UnderBro';
+  const artwork = t.cover_url
+    ? [96, 192, 256, 384, 512].map(s => ({ src: t.cover_url, sizes: `${s}x${s}`, type: 'image/jpeg' }))
+    : [];
+  try {
+    navigator.mediaSession.metadata = new MediaMetadata({ title: t.title || 'Pista', artist, album: 'UnderBro', artwork });
+  } catch {}
+}
+function updateMediaPositionState() {
+  if (!('mediaSession' in navigator) || !('setPositionState' in navigator.mediaSession)) return;
+  if (!audio || !audio.duration || !isFinite(audio.duration)) return;
+  try {
+    navigator.mediaSession.setPositionState({
+      duration: audio.duration,
+      playbackRate: audio.playbackRate || 1,
+      position: Math.min(Math.max(audio.currentTime, 0), audio.duration),
+    });
+  } catch {}
+}
+
 async function playTrack(t) {
   if (state.current?.id === t.id) { togglePlay(); return; }
   state.current = t;
@@ -831,6 +869,7 @@ async function playTrack(t) {
   $('pTitle').textContent = t.title;
   $('pArtist').textContent = (t.profiles?.display_name || t.profiles?.username || t.artist || '');
   $('pCover').innerHTML = t.cover_url ? `<img src="${esc(t.cover_url)}" alt="" />` : `<svg width="22" height="22" fill="none" stroke="#fff" style="margin:15px"><use href="#i-music"/></svg>`;
+  updateMediaSession();
   if (npIsOpen()) syncNowPlaying();
   audio.src = t.audio_url;
   try { await audio.play(); } catch {}
@@ -2243,7 +2282,8 @@ function convoRow(c, p) {
 }
 async function renderMessages() {
   setActiveNav('messages');
-  $('main').innerHTML = `<div class="main-head"><div><h2>Chats</h2><div class="sub">Tus conversaciones</div></div></div><div id="convoList" class="loading"><div class="spinner"></div></div>`;
+  $('main').innerHTML = `<div class="main-head"><div><h2>Chats</h2><div class="sub">Tus conversaciones</div></div><div id="pushBtnWrap" class="push-btn-wrap"></div></div><div id="convoList" class="loading"><div class="spinner"></div></div>`;
+  renderPushButton();
   const { data } = await sb.from('direct_messages').select('*')
     .or(`sender_id.eq.${state.user.id},recipient_id.eq.${state.user.id}`)
     .order('created_at', { ascending: false }).limit(400);
@@ -2382,6 +2422,67 @@ function showPrivacyPolicy() {
       <p>Sube solo contenido sobre el que tengas derechos. El contenido que infrinja derechos o las normas puede ser retirado por moderación.</p>
       <p style="color:var(--ink-soft);font-size:12px;margin-top:14px">Última actualización: ${new Date().toLocaleDateString('es-ES')}.</p>
     </div>`);
+}
+
+/* =======================================================================
+   NOTIFICACIONES PUSH (avisos de chat aunque la app esté cerrada)
+   ======================================================================= */
+const VAPID_PUBLIC_KEY = 'BBJ5UnpZOyR3TkdAjWbqtxZcmJAz4N2Q-3ewRRnRoVGCz_ZdPV__mnX_xGAd165aLrwzGoyFTVUwLAqcCWo8xaw';
+let swRegistration = null;
+
+function pushSupported() {
+  return 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+}
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const raw = atob(base64);
+  const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+async function setupPush() {
+  if (!pushSupported()) return;
+  try { swRegistration = await navigator.serviceWorker.register('/sw.js'); } catch (_) { return; }
+  if (Notification.permission === 'granted') { try { await subscribeAndSave(); } catch (_) {} }
+}
+async function subscribeAndSave() {
+  if (!swRegistration) swRegistration = await navigator.serviceWorker.ready;
+  let sub = await swRegistration.pushManager.getSubscription();
+  if (!sub) {
+    sub = await swRegistration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+    });
+  }
+  await sb.from('push_subscriptions').upsert(
+    { user_id: state.user.id, endpoint: sub.endpoint, subscription: sub.toJSON() },
+    { onConflict: 'endpoint' }
+  );
+  return sub;
+}
+async function enablePush() {
+  if (!pushSupported()) { toast('Tu navegador no soporta notificaciones'); return; }
+  try {
+    const perm = await Notification.requestPermission();
+    if (perm !== 'granted') { toast('Permiso de notificaciones denegado'); renderPushButton(); return; }
+    await setupPush();
+    await subscribeAndSave();
+    toast('🔔 Notificaciones activadas');
+  } catch (_) { toast('No se pudieron activar las notificaciones'); }
+  renderPushButton();
+}
+function renderPushButton() {
+  const wrap = document.getElementById('pushBtnWrap');
+  if (!wrap) return;
+  if (!pushSupported() || Notification.permission === 'granted') { wrap.innerHTML = ''; return; }
+  if (Notification.permission === 'denied') {
+    wrap.innerHTML = `<span class="push-hint">🔕 Notificaciones bloqueadas en el navegador</span>`;
+    return;
+  }
+  wrap.innerHTML = `<button class="btn primary" id="enablePushBtn"><svg fill="none" stroke="#fff"><use href="#i-bell"/></svg> Activar avisos</button>`;
+  const b = document.getElementById('enablePushBtn');
+  if (b) b.onclick = enablePush;
 }
 
 /* =======================================================================
