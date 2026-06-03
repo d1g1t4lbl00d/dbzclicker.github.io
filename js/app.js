@@ -1673,7 +1673,7 @@ async function openProfile(userId) {
     sb.from('follows').select('follower_id', { count:'exact', head:true }).eq('following_id', userId),
     sb.from('follows').select('following_id', { count:'exact', head:true }).eq('follower_id', userId),
     fetchTracks({ order: 'created_at', userId }),
-    sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)').contains('collaborators', [{ id: userId }]).order('created_at', { ascending: false }),
+    sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)').contains('collaborators', JSON.stringify([{ id: userId }])).order('created_at', { ascending: false }),
   ]);
   // pistas propias y "feats" (cualquier colaboración que te involucra: tuyas con invitados
   // y pistas de otros donde te añadieron como colaborador)
