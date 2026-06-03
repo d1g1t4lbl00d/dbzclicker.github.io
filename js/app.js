@@ -1101,7 +1101,7 @@ function openPhotoUploadModal() {
 }
 
 async function fetchPosts({ userId = null, limit = 50 } = {}) {
-  let q = sb.from('posts').select('*, profiles(*)');
+  let q = sb.from('posts').select('*, profiles!posts_user_id_fkey(*)');
   if (userId) q = q.eq('user_id', userId);
   q = q.order('created_at', { ascending: false }).limit(limit);
   const { data, error } = await q;
@@ -1197,8 +1197,43 @@ async function deletePost(p, card) {
   const { error } = await sb.from('posts').delete().eq('id', p.id);
   if (error) { toast('No se pudo borrar'); return; }
   try { const path = storagePathFromUrl(p.image_url, 'posts'); if (path) await sb.storage.from('posts').remove([path]); } catch {}
+  const modal = card.closest('.modal-backdrop');
   card.remove();
+  document.querySelector(`.pg-item[data-id="${p.id}"]`)?.remove();
+  if (modal) modal.remove();
   toast('Publicación borrada');
+}
+
+// Cuadrícula de fotos en el perfil (estilo Instagram)
+async function loadProfilePosts(userId, grid) {
+  grid.innerHTML = `<div class="loading" style="grid-column:1/-1"><div class="spinner"></div></div>`;
+  let posts = [];
+  try { posts = await fetchPosts({ userId }); } catch (e) { console.error(e); }
+  if (!posts.length) {
+    grid.innerHTML = `<div class="empty" style="grid-column:1/-1"><svg fill="none"><use href="#i-camera"/></svg><p>Sin fotos todavía.</p></div>`;
+    return;
+  }
+  grid.innerHTML = '';
+  posts.forEach(p => {
+    const item = el(`
+      <div class="pg-item" data-id="${p.id}">
+        <img src="${esc(p.image_url)}" alt="" loading="lazy" />
+        <div class="pg-stats"><span><svg viewBox="0 0 24 24"><use href="#i-heart"/></svg> ${p.likes_count || 0}</span></div>
+      </div>`);
+    item.onclick = () => openPostModal(p);
+    grid.appendChild(item);
+  });
+}
+
+// Abre una publicación a tamaño completo (con likes y comentarios)
+async function openPostModal(p) {
+  let liked = false;
+  try {
+    const { data } = await sb.from('post_likes').select('post_id').eq('post_id', p.id).eq('user_id', state.user.id).maybeSingle();
+    liked = !!data;
+  } catch {}
+  const m = openModal(`<div class="modal-head"><h3>Publicación</h3><button class="close">&times;</button></div><div class="modal-body" id="postModalBody"></div>`);
+  m.querySelector('#postModalBody').appendChild(postCard(p, liked));
 }
 
 async function togglePostComments(p, card) {
@@ -1206,7 +1241,7 @@ async function togglePostComments(p, card) {
   if (!box.classList.contains('hidden')) { box.classList.add('hidden'); return; }
   box.classList.remove('hidden');
   box.innerHTML = `<div class="loading" style="padding:14px"><div class="spinner"></div></div>`;
-  const { data } = await sb.from('post_comments').select('*, profiles(*)').eq('post_id', p.id).order('created_at', { ascending: true });
+  const { data } = await sb.from('post_comments').select('*, profiles!post_comments_user_id_fkey(*)').eq('post_id', p.id).order('created_at', { ascending: true });
   renderPostComments(box, p, data || []);
 }
 
@@ -1240,7 +1275,7 @@ function renderPostComments(box, p, comments) {
     const input = form.querySelector('input');
     const body = input.value.trim(); if (!body) return;
     input.value = '';
-    const { data, error } = await sb.from('post_comments').insert({ post_id: p.id, user_id: state.user.id, body }).select('*, profiles(*)').single();
+    const { data, error } = await sb.from('post_comments').insert({ post_id: p.id, user_id: state.user.id, body }).select('*, profiles!post_comments_user_id_fkey(*)').single();
     if (error) { toast('No se pudo comentar'); return; }
     renderPostComments(box, p, [...comments, data]);
   });
@@ -1487,8 +1522,12 @@ async function openProfile(userId) {
           ${(!isMe && state.profile.is_admin && !prof.is_admin) ? `<button class="btn danger-btn" id="delUserBtn"><svg fill="none" stroke="#fff"><use href="#i-trash"/></svg> Eliminar usuario</button>` : ''}
         </div>
       </div>
-      <div class="main-head"><h2>Pistas</h2></div>
+      <div class="profile-tabs" id="profileTabs">
+        <button class="active" data-ptab="tracks"><svg fill="none" stroke="currentColor"><use href="#i-music"/></svg> Pistas <span class="ptab-n">${tracks.length}</span></button>
+        <button data-ptab="posts"><svg fill="none" stroke="currentColor"><use href="#i-camera"/></svg> Fotos</button>
+      </div>
       <div id="feedList" class="feed-list"></div>
+      <div id="postGrid" class="post-grid hidden"></div>
     </div>`;
   $('profileBack').onclick = () => switchView(backTo);
   if (font) loadFont(font);
@@ -1500,6 +1539,17 @@ async function openProfile(userId) {
   const list = $('feedList');
   if (!tracks.length) list.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-music"/></svg><p>Sin pistas todavía.</p></div>`;
   else { state.tracks = tracks; state.queue = tracks.map(t=>t.id); tracks.forEach(t => list.appendChild(trackCard(t))); }
+
+  // pestañas Pistas / Fotos (cuadrícula estilo Instagram)
+  const tabsEl = $('profileTabs'), gridEl = $('postGrid');
+  let postsLoaded = false;
+  tabsEl.querySelectorAll('button').forEach(b => b.onclick = () => {
+    tabsEl.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
+    const isPosts = b.dataset.ptab === 'posts';
+    list.classList.toggle('hidden', isPosts);
+    gridEl.classList.toggle('hidden', !isPosts);
+    if (isPosts && !postsLoaded) { postsLoaded = true; loadProfilePosts(userId, gridEl); }
+  });
 
   if (isMe) $('editProfBtn').onclick = () => switchView('settings');
   const msgBtn = $('msgBtn');

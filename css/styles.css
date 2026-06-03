@@ -724,7 +724,7 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
 /* ===== personalización avanzada: fuentes, frase, brillos, efectos, tarjetas ===== */
 .profile-view { position: relative; }
 .profile-view > .pfx { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
-.profile-banner, .profile-head, .profile-view .main-head, .profile-view #feedList, .profile-tagline, .profile-back { position: relative; z-index: 1; }
+.profile-banner, .profile-head, .profile-view .main-head, .profile-view #feedList, .profile-view #postGrid, .profile-view .profile-tabs, .profile-tagline, .profile-back { position: relative; z-index: 1; }
 .profile-back { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--line); background: var(--glass); backdrop-filter: blur(8px); border-radius: 30px; padding: 8px 15px 8px 11px; font-weight: 650; font-size: 13px; color: var(--ink-2); margin-bottom: 14px; box-shadow: var(--sh-1); transition: transform .14s var(--ease), box-shadow .18s; }
 .profile-back:hover { background: #fff; transform: translateX(-2px); box-shadow: var(--sh-2); }
 .profile-back:active { transform: scale(.96); }
@@ -945,3 +945,22 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
 /* previsualización de la foto en el modal de subida */
 .post-photo-prev { margin-top: 10px; border-radius: var(--r); overflow: hidden; border: 1px solid var(--line); }
 .post-photo-prev img { width: 100%; max-height: 320px; object-fit: cover; display: block; }
+
+/* pestañas del perfil (Pistas / Fotos) */
+.profile-tabs { display: flex; gap: 4px; margin: 4px 0 14px; border-bottom: 1px solid var(--line-soft); }
+.profile-tabs button { display: inline-flex; align-items: center; gap: 6px; border: none; background: none; padding: 10px 14px; font-size: 13px; font-weight: 700; color: var(--ink-soft); border-bottom: 2px solid transparent; margin-bottom: -1px; cursor: pointer; transition: color .15s, border-color .15s; }
+.profile-tabs button svg { width: 15px; height: 15px; stroke: currentColor; }
+.profile-tabs button:hover { color: var(--ink-2); }
+.profile-tabs button.active { color: var(--accent, var(--blue-deep)); border-bottom-color: var(--accent, var(--blue-deep)); }
+.profile-tabs .ptab-n { font-size: 11px; color: var(--ink-faint); font-weight: 700; }
+
+/* cuadrícula de fotos (estilo Instagram) */
+.post-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; }
+.pg-item { position: relative; aspect-ratio: 1 / 1; overflow: hidden; cursor: pointer; background: #0c1020; border-radius: 6px; animation: fadeIn .3s; }
+.pg-item img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .25s var(--ease); }
+.pg-item:hover img { transform: scale(1.06); }
+.pg-stats { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 14px; background: rgba(12,16,32,.42); color: #fff; font-weight: 750; font-size: 13px; opacity: 0; transition: opacity .2s; }
+.pg-item:hover .pg-stats { opacity: 1; }
+.pg-stats span { display: inline-flex; align-items: center; gap: 5px; }
+.pg-stats svg { width: 16px; height: 16px; fill: #fff; stroke: #fff; }
+@media (max-width: 480px) { .post-grid { gap: 3px; } }
