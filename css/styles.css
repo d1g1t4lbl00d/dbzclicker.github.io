@@ -817,8 +817,8 @@ img { display: block; }
 }
 
 /* ---- perfil personalizable ---- */
-.profile-view { min-height: calc(100dvh - var(--topbar-h)); margin: -22px -26px 0; padding: 22px 26px calc(var(--player-h) + 30px); }
-@media (max-width: 720px) { .profile-view { min-height: calc(100dvh - var(--topbar-h) - 14px); margin: -14px -13px 0; padding: 14px 13px calc(var(--nav-h) + 94px + env(safe-area-inset-bottom,0px)); } }
+.profile-view { min-height: calc(100dvh - var(--topbar-h)); margin: -22px -26px calc(-1 * (var(--player-h) + 30px)); padding: 22px 26px calc(var(--player-h) + 30px); }
+@media (max-width: 720px) { .profile-view { min-height: calc(100dvh - var(--topbar-h) - 14px); margin: -14px -13px calc(-1 * (var(--nav-h) + 94px + env(safe-area-inset-bottom,0px))); padding: 14px 13px calc(var(--nav-h) + 94px + env(safe-area-inset-bottom,0px)); } }
 .profile-banner { height: 170px; border-radius: var(--r-lg); background-size: cover; background-position: center; box-shadow: var(--sh-1); margin-bottom: -54px; position: relative; overflow: hidden; }
 .profile-banner::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(0,0,0,0), rgba(0,0,0,.18)); }
 .profile-head.has-banner { align-items: flex-end; }
