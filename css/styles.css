@@ -903,12 +903,13 @@ img { display: block; }
 
 /* ---- Insignias (badges) ---- */
 .bdg { display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px; padding: 0 5px; border-radius: 8px; font-size: 11px; font-weight: 800; line-height: 1; vertical-align: 1px; }
-.bdg-alpha { background: rgba(0,0,0,.34); color: #fff; min-width: 0; padding: 1px 5px; font-size: 9px; font-weight: 700; letter-spacing: .3px; vertical-align: super; }
-:root[data-theme="dark"] .bdg-alpha { background: rgba(255,255,255,.20); color: rgba(255,255,255,.92); }
+.bdg-alpha { background: none; color: rgba(0,0,0,.45); min-width: 0; padding: 0; height: auto; font-size: 9px; font-weight: 800; letter-spacing: .2px; vertical-align: super; margin-left: -2px; }
+:root[data-theme="dark"] .bdg-alpha { background: none; color: rgba(255,255,255,.5); }
 .bdg-tester { background: linear-gradient(135deg, #ffd76a, #f0a52e); color: #5a3a00; box-shadow: 0 1px 5px rgba(240,165,46,.5); }
 /* en tamaño grande (Estudio / animación) la Alpha sí se ve definida */
-.bdg-alpha.big { vertical-align: baseline; border: 1px solid rgba(255,255,255,.22); }
-.profile-badges .bdg-alpha { vertical-align: middle; font-size: 11px; }
+.bdg-alpha.big { vertical-align: baseline; margin-left: 0; background: rgba(127,127,127,.18); border: 1px solid rgba(127,127,127,.3); color: var(--ink); }
+:root[data-theme="dark"] .bdg-alpha.big { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.25); color: #fff; }
+.profile-badges .bdg-alpha { vertical-align: middle; font-size: 12px; margin-left: 0; }
 .profile-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px; }
 .profile-badges .bdg { height: 23px; padding: 0 10px; font-size: 13px; gap: 5px; }
 .profile-badges .bdg-txt { font-size: 11.5px; font-weight: 700; }
