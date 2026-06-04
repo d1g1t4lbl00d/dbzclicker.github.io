@@ -51,6 +51,50 @@
   --nav-h: 60px;
 }
 
+/* ===================================================================== MODO OSCURO */
+:root[data-theme="dark"] {
+  --ink:         #e7ebf3;
+  --ink-2:       #cdd5e4;
+  --ink-soft:    #8a94aa;
+  --ink-faint:   #5e6880;
+  --bg:          #0f1218;
+  --bg-2:        #0a0d12;
+  --panel:       #171b22;
+  --panel-2:     #1f242e;
+  --glass:       rgba(20,24,31,.74);
+  --line:        #2a3140;
+  --line-soft:   #232a36;
+  --blue-deep:   #9fb6e6;
+  --sh-1: 0 1px 2px rgba(0,0,0,.4), 0 2px 6px rgba(0,0,0,.32);
+  --sh-2: 0 2px 6px rgba(0,0,0,.4), 0 10px 28px rgba(0,0,0,.5);
+  --sh-3: 0 8px 20px rgba(0,0,0,.5), 0 24px 60px rgba(0,0,0,.62);
+  color-scheme: dark;
+}
+:root[data-theme="dark"] body {
+  background:
+    radial-gradient(1100px 520px at 78% -8%, rgba(139,127,224,.12), transparent 60%),
+    radial-gradient(1000px 520px at 12% 0%, rgba(86,197,208,.08), transparent 55%),
+    linear-gradient(180deg, #12161e 0%, var(--bg) 46%, var(--bg-2) 100%);
+}
+:root[data-theme="dark"] .btn {
+  background: linear-gradient(180deg, #242b37 0%, #1b212b 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.05), var(--sh-1);
+  color: var(--ink-2);
+}
+:root[data-theme="dark"] .btn::after { background: linear-gradient(90deg, transparent, rgba(255,255,255,.08), transparent); }
+:root[data-theme="dark"] input:focus,
+:root[data-theme="dark"] textarea:focus,
+:root[data-theme="dark"] .field input:focus,
+:root[data-theme="dark"] .modal-body .field textarea:focus { background: var(--panel-2); }
+:root[data-theme="dark"] .auth-head { background: linear-gradient(180deg, #1b212b, #171b22); }
+:root[data-theme="dark"] .auth-tabs button.active,
+:root[data-theme="dark"] .tabs button.active { background: var(--panel); color: var(--blue); }
+:root[data-theme="dark"] .dm-bubble.them { background: var(--panel-2); border-color: var(--line); color: var(--ink); }
+:root[data-theme="dark"] .t-genre { background: linear-gradient(180deg, #232c3d, #1b2230); border-color: #2c3550; color: #9fb6e6; }
+:root[data-theme="dark"] .profile-back:hover { background: var(--panel-2); }
+:root[data-theme="dark"] input[type=color] { background: var(--panel-2); }
+:root[data-theme="dark"] ::selection { background: rgba(126,159,214,.4); }
+
 * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
 html, body { height: 100%; }
 html { -webkit-text-size-adjust: 100%; text-size-adjust: 100%; }

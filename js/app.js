@@ -30,6 +30,15 @@ const state = {
   online: [],          // usuarios online
 };
 
+/* ---- TEMA (claro / oscuro) ---- */
+function currentTheme() { return document.documentElement.getAttribute('data-theme') || 'light'; }
+function setTheme(theme) {
+  document.documentElement.setAttribute('data-theme', theme);
+  try { localStorage.setItem('ub_theme', theme); } catch (_) {}
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', theme === 'dark' ? '#0f1218' : '#5f7fb8');
+}
+
 // ---------------------------------------------------------------- helpers
 const $ = (id) => document.getElementById(id);
 const el = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
@@ -2599,6 +2608,11 @@ function renderSettings() {
         <div class="auth-msg" id="delMsg"></div>
       </div>
       <hr style="border:none;border-top:1px solid var(--line-soft);margin:20px 0" />
+      <div class="field"><label>Apariencia</label>
+        <button class="btn" id="setThemeBtn" style="width:100%"></button>
+        <div class="sub" style="margin-top:6px">Cambia entre tema claro y oscuro.</div>
+      </div>
+      <hr style="border:none;border-top:1px solid var(--line-soft);margin:20px 0" />
       <div class="field"><label>Notificaciones</label>
         <button class="btn" id="setPushBtn" style="width:100%"><svg fill="none" stroke="currentColor"><use href="#i-bell"/></svg> Activar avisos de chat</button>
         <div class="sub" style="margin-top:6px">Recibe un aviso cuando te escriban, aunque tengas la app cerrada.</div>
@@ -2607,6 +2621,10 @@ function renderSettings() {
       <div style="text-align:center;margin-top:10px;font-size:12px;color:var(--ink-soft)">UnderBro · versión ${APP_VERSION} · <a id="checkUpdate" style="cursor:pointer;text-decoration:underline">Buscar actualizaciones</a></div>
     </div>`;
   $('policyLink').onclick = showPrivacyPolicy;
+  const themeBtn = $('setThemeBtn');
+  const paintThemeBtn = () => { themeBtn.innerHTML = currentTheme() === 'dark' ? '☀️ Cambiar a tema claro' : '🌙 Cambiar a tema oscuro'; };
+  paintThemeBtn();
+  themeBtn.onclick = () => { setTheme(currentTheme() === 'dark' ? 'light' : 'dark'); paintThemeBtn(); };
   const setPushBtn = $('setPushBtn');
   if (typeof Notification !== 'undefined' && Notification.permission === 'granted') { setPushBtn.textContent = '🔔 Avisos activados'; setPushBtn.disabled = true; }
   setPushBtn.onclick = enablePush;
@@ -3232,6 +3250,7 @@ window.addEventListener('online', checkForUpdate);
 setInterval(checkForUpdate, 45000);
 
 /* ----------------------------------------------------------------------- */
+setTheme(currentTheme());
 initCookies();
 init();
 checkForUpdate();
