@@ -901,6 +901,39 @@ img { display: block; }
 .vbadge { width: 15px; height: 15px; color: var(--blue-2); vertical-align: -2px; display: inline-block; }
 .person-name .vbadge, .fr-name .vbadge { width: 14px; height: 14px; }
 
+/* ---- Insignias (badges) ---- */
+.bdg { display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px; padding: 0 5px; border-radius: 8px; font-size: 11px; font-weight: 800; line-height: 1; vertical-align: 1px; }
+.bdg-alpha { background: linear-gradient(135deg, #6f8fc6, #8b7fe0); color: #fff; }
+.bdg-tester { background: linear-gradient(135deg, #ffd76a, #f0a52e); color: #5a3a00; box-shadow: 0 1px 5px rgba(240,165,46,.5); }
+.profile-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px; }
+.profile-badges .bdg { height: 23px; padding: 0 10px; font-size: 13px; gap: 5px; }
+.profile-badges .bdg-txt { font-size: 11.5px; font-weight: 700; }
+.badge-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+.badge-item { display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 15px 10px; border: 1px solid var(--line-soft); border-radius: 14px; background: var(--panel-2); cursor: pointer; transition: transform .14s, box-shadow .14s, border-color .14s; color: inherit; }
+.badge-item:not(.locked):hover { transform: translateY(-2px); box-shadow: var(--sh-2); }
+.badge-item.active { border-color: var(--accent); box-shadow: 0 0 0 2px rgba(95,127,184,.25); }
+.badge-item.locked { opacity: .55; cursor: default; }
+.badge-item.locked .bdg { filter: grayscale(1); }
+.bi-name { font-weight: 750; font-size: 13px; color: var(--ink); }
+.bi-state { font-size: 11px; color: var(--ink-soft); text-align: center; }
+.bdg.big { width: 56px; height: 56px; min-width: 56px; border-radius: 16px; font-size: 30px; padding: 0; }
+
+/* animación de desbloqueo */
+.badge-pop { position: fixed; inset: 0; z-index: 300; display: grid; place-items: center; background: rgba(8,10,14,.66); backdrop-filter: blur(4px); opacity: 0; transition: opacity .3s; overflow: hidden; }
+.badge-pop.show { opacity: 1; }
+.bp-card { position: relative; z-index: 2; text-align: center; padding: 30px 28px; transform: scale(.6); opacity: 0; transition: transform .45s cubic-bezier(.2,1.3,.4,1), opacity .3s; }
+.badge-pop.show .bp-card { transform: scale(1); opacity: 1; }
+.bp-badge { width: 88px; height: 88px; min-width: 88px; border-radius: 24px; font-size: 48px; margin: 0 auto 16px; box-shadow: 0 14px 44px rgba(0,0,0,.5); animation: bpFloat 2.4s ease-in-out infinite; }
+.bp-kicker { color: #cdd5e4; font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 800; }
+.bp-name { color: #fff; font-size: 30px; font-weight: 850; margin: 2px 0 8px; }
+.bp-desc { color: #aeb7c8; font-size: 13px; max-width: 290px; margin: 0 auto; line-height: 1.45; }
+.bp-tap { color: #7e8aa0; font-size: 11px; margin-top: 18px; }
+@keyframes bpFloat { 0%,100% { transform: translateY(0) rotate(-3deg); } 50% { transform: translateY(-8px) rotate(3deg); } }
+.bp-confetti { position: absolute; inset: 0; z-index: 1; pointer-events: none; }
+.bp-confetti i { position: absolute; top: -14px; width: 9px; height: 14px; border-radius: 2px; opacity: .92; animation: bpFall linear forwards; }
+@keyframes bpFall { 0% { transform: translateY(-20px) rotate(0); } 100% { transform: translateY(106vh) rotate(560deg); } }
+@media (prefers-reduced-motion: reduce) { .bp-badge { animation: none; } .bp-confetti { display: none; } }
+
 /* ---- Estudio (panel del artista) ---- */
 .dash-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 22px; }
 .kpi { background: var(--panel); border: 1px solid var(--line-soft); border-radius: 14px; padding: 14px 16px; box-shadow: var(--sh-1); }
