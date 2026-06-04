@@ -892,6 +892,45 @@ img { display: block; }
 .ev-detail-desc { margin: 10px 0 14px; color: var(--ink-2); white-space: pre-wrap; line-height: 1.5; }
 .ev-detail-actions { display: flex; gap: 8px; }
 .modal-body .ev-detail-actions .btn, .modal-body .ev-detail-actions .btn.primary { width: auto; margin-top: 0; }
+
+/* ---- Estudio (panel del artista) ---- */
+.dash-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 22px; }
+.kpi { background: var(--panel); border: 1px solid var(--line-soft); border-radius: 14px; padding: 14px 16px; box-shadow: var(--sh-1); }
+.kpi-n { font-size: 26px; font-weight: 820; letter-spacing: -.5px; color: var(--ink); }
+.kpi-l { font-size: 12px; color: var(--ink-soft); display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.kpi-l svg { width: 13px; height: 13px; }
+.dash-section { background: var(--panel); border: 1px solid var(--line-soft); border-radius: 16px; padding: 16px 18px; margin-bottom: 16px; box-shadow: var(--sh-1); }
+.dash-section h3 { font-size: 14px; font-weight: 750; color: var(--ink); margin-bottom: 14px; }
+.dash-sec-head { display: flex; align-items: center; justify-content: space-between; }
+.dash-sec-head h3 { margin-bottom: 0; }
+.dash-hint, .dash-note { color: var(--ink-soft); font-weight: 500; font-size: 12px; }
+.dash-note { margin-top: 10px; line-height: 1.4; }
+.dash-chart { display: flex; align-items: flex-end; gap: 5px; height: 120px; }
+.dc-col { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 5px; height: 100%; justify-content: flex-end; }
+.dc-bar { width: 100%; max-width: 22px; background: var(--accent-grad); border-radius: 5px 5px 2px 2px; min-height: 3px; transition: height .4s var(--ease); }
+.dc-x { font-size: 9.5px; color: var(--ink-faint); }
+.dash-income .inc-row { display: flex; justify-content: space-between; align-items: center; font-size: 13px; color: var(--ink-2); margin-bottom: 8px; gap: 10px; }
+.dash-income .inc-row input { width: 110px; padding: 7px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--panel-2); color: var(--ink); text-align: right; }
+.inc-card { background: var(--panel-2); border: 1px solid var(--line-soft); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+.inc-card.alt { background: linear-gradient(135deg, rgba(95,127,184,.14), rgba(139,127,224,.12)); }
+.inc-big { font-size: 24px; font-weight: 820; color: var(--ink); }
+.inc-sub { font-size: 12px; color: var(--ink-soft); margin-top: 2px; }
+.dash-socials { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.social-card { display: flex; align-items: center; gap: 10px; padding: 11px 13px; border: 1px solid var(--line-soft); border-radius: 12px; text-decoration: none; color: inherit; background: var(--panel-2); transition: transform .14s, box-shadow .14s; }
+.social-card:hover { transform: translateY(-2px); box-shadow: var(--sh-2); }
+.social-card.empty { opacity: .6; }
+.sc-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--sc); flex-shrink: 0; }
+.sc-name { font-weight: 700; font-size: 13px; color: var(--ink); }
+.sc-n { font-size: 11.5px; color: var(--ink-soft); }
+.dash-top { display: flex; flex-direction: column; gap: 4px; }
+.dt-row { display: flex; align-items: center; gap: 11px; padding: 7px 6px; border-radius: 10px; cursor: pointer; }
+.dt-row:hover { background: rgba(95,127,184,.10); }
+.dt-rank { width: 18px; text-align: center; font-weight: 800; color: var(--ink-faint); font-size: 13px; }
+.dt-cover { width: 38px; height: 38px; border-radius: 8px; background: #5f7fb8 center/cover; flex-shrink: 0; }
+.dt-title { flex: 1; min-width: 0; font-weight: 650; font-size: 13.5px; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dt-stat { font-size: 12px; color: var(--ink-soft); display: flex; align-items: center; gap: 4px; }
+.dt-stat svg { width: 12px; height: 12px; }
+.modal-body .field input[data-su], .modal-body .field input[data-sf] { width: 100%; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--panel-2); }
 .profile-head .pactions { margin-left: auto; display: flex; flex-direction: column; gap: 8px; align-items: stretch; min-width: 150px; }
 .profile-head .pactions .btn { justify-content: center; }
 @media (max-width: 720px) {
