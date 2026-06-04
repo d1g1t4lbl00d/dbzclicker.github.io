@@ -2562,7 +2562,7 @@ async function renderEvents() {
   setActiveNav('events');
   const main = $('main');
   main.innerHTML = `<div class="main-head"><div><h2>Eventos</h2><div class="sub">Conciertos, quedadas y fechas de la comunidad</div></div><button class="btn primary" id="newEventBtn"><svg fill="none" stroke="#fff"><use href="#i-plus"/></svg> Crear</button></div><div id="evList"><div class="loading" style="padding:30px"><div class="spinner"></div></div></div>`;
-  $('newEventBtn').onclick = createEventModal;
+  $('newEventBtn').onclick = () => createEventModal();
   const since = new Date(Date.now() - 6 * 3600 * 1000).toISOString();
   const { data } = await sb.from('events').select('*, profiles!events_user_id_fkey(*)').gte('starts_at', since).order('starts_at', { ascending: true }).limit(80);
   const list = $('evList');
