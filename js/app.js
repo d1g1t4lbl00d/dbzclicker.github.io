@@ -238,6 +238,13 @@ function renderMe() {
   $('meName').innerHTML = esc(state.profile.display_name || state.profile.username) + verifiedBadge(state.profile) +
     (state.profile.is_admin ? ' <span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c;padding:1px 7px">MOD</span>' : '');
   $('meAvatar').outerHTML = avatarHTML(state.profile).replace('class="avatar ', 'id="meAvatar" class="avatar ');
+  // avatar del orbe central "Yo"
+  const orb = $('orbAv');
+  if (orb) {
+    const av = state.profile.avatar_url;
+    if (av) { orb.style.backgroundImage = `url('${czUrl(av)}')`; orb.textContent = ''; }
+    else { orb.style.backgroundImage = 'none'; orb.textContent = initials(state.profile.display_name || state.profile.username || '?'); }
+  }
 }
 
 async function loadLikes() {
@@ -1761,6 +1768,30 @@ async function deletePost(p, card) {
 }
 
 // Cuadrícula de fotos en el perfil (estilo Instagram)
+async function loadProfileEvents(userId, container) {
+  container.innerHTML = `<div class="loading" style="padding:24px"><div class="spinner"></div></div>`;
+  const [createdRes, savedRes] = await Promise.all([
+    sb.from('events').select('*, profiles!events_user_id_fkey(*)').eq('user_id', userId).order('starts_at', { ascending: false }),
+    sb.from('event_saves').select('events(*, profiles!events_user_id_fkey(*))').eq('user_id', userId).order('created_at', { ascending: false }),
+  ]);
+  const created = createdRes.data || [];
+  const createdIds = new Set(created.map(e => e.id));
+  const saved = (savedRes.data || []).map(r => r.events).filter(e => e && !createdIds.has(e.id));
+  if (!created.length && !saved.length) {
+    container.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-calendar"/></svg><p>Sin eventos todavía.</p></div>`;
+    return;
+  }
+  container.innerHTML = '';
+  if (created.length) {
+    container.appendChild(el(`<div class="prof-ev-head">🎤 Organiza</div>`));
+    const w = el(`<div class="ev-list"></div>`); created.forEach(ev => w.appendChild(eventCard(ev))); container.appendChild(w);
+  }
+  if (saved.length) {
+    container.appendChild(el(`<div class="prof-ev-head">🎟️ Va a ir</div>`));
+    const w = el(`<div class="ev-list"></div>`); saved.forEach(ev => w.appendChild(eventCard(ev))); container.appendChild(w);
+  }
+}
+
 async function loadProfilePosts(userId, grid) {
   grid.innerHTML = `<div class="loading" style="grid-column:1/-1"><div class="spinner"></div></div>`;
   let posts = [];
@@ -2088,10 +2119,12 @@ async function openProfile(userId) {
         <button class="active" data-ptab="tracks"><svg fill="none" stroke="currentColor"><use href="#i-music"/></svg> Pistas <span class="ptab-n">${myTracks.length}</span></button>
         <button data-ptab="posts"><svg fill="none" stroke="currentColor"><use href="#i-camera"/></svg> Fotos</button>
         <button data-ptab="feats"><svg fill="none" stroke="currentColor"><use href="#i-people"/></svg> Feats <span class="ptab-n">${featTracks.length}</span></button>
+        <button data-ptab="events"><svg fill="none" stroke="currentColor"><use href="#i-calendar"/></svg> Eventos</button>
       </div>
       <div id="feedList" class="feed-list"></div>
       <div id="postGrid" class="post-grid hidden"></div>
       <div id="featList" class="feed-list hidden"></div>
+      <div id="profEvents" class="hidden"></div>
     </div>`;
   $('profileBack').onclick = () => switchView(backTo);
   if (font) loadFont(font);
@@ -2111,18 +2144,20 @@ async function openProfile(userId) {
   // cola de reproducción inicial = pestaña Pistas
   state.tracks = myTracks; state.queue = myTracks.map(t => t.id);
 
-  // pestañas Pistas / Fotos / Feats
-  const tabsEl = $('profileTabs'), gridEl = $('postGrid');
-  let postsLoaded = false;
+  // pestañas Pistas / Fotos / Feats / Eventos
+  const tabsEl = $('profileTabs'), gridEl = $('postGrid'), evEl = $('profEvents');
+  let postsLoaded = false, eventsLoaded = false;
   tabsEl.querySelectorAll('button').forEach(b => b.onclick = () => {
     tabsEl.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
     const tab = b.dataset.ptab;
     list.classList.toggle('hidden', tab !== 'tracks');
     gridEl.classList.toggle('hidden', tab !== 'posts');
     featEl.classList.toggle('hidden', tab !== 'feats');
+    evEl.classList.toggle('hidden', tab !== 'events');
     if (tab === 'tracks') { state.tracks = myTracks; state.queue = myTracks.map(t => t.id); }
     else if (tab === 'feats') { state.tracks = featTracks; state.queue = featTracks.map(t => t.id); }
     if (tab === 'posts' && !postsLoaded) { postsLoaded = true; loadProfilePosts(userId, gridEl); }
+    if (tab === 'events' && !eventsLoaded) { eventsLoaded = true; loadProfileEvents(userId, evEl); }
   });
 
   // estadísticas clicables: pistas → pestaña Pistas · seguidores/siguiendo → lista
