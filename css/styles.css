@@ -729,6 +729,17 @@ img { display: block; }
 .follow-row .fr-actions { display: flex; gap: 6px; flex-shrink: 0; }
 /* evitar que la regla .modal-body .btn.primary estire los botones de las filas */
 .modal-body .follow-row .btn, .modal-body .follow-row .btn.primary { width: auto; margin-top: 0; padding: 8px 14px; }
+/* ---- Menciones @usuario ---- */
+.mention { color: var(--accent); font-weight: 600; cursor: pointer; text-decoration: none; }
+.mention:hover { text-decoration: underline; }
+.dm-bubble.me .mention { color: #fff; text-decoration: underline; }
+.mention-dd { position: fixed; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 34px rgba(0,0,0,.22); max-height: 240px; overflow-y: auto; z-index: 9999; padding: 5px; }
+.mention-dd-item { display: flex; align-items: center; gap: 9px; padding: 6px 8px; border-radius: 9px; cursor: pointer; }
+.mention-dd-item:hover { background: rgba(95,127,184,.14); }
+.mention-dd-item .avatar { width: 30px !important; height: 30px !important; font-size: 12px !important; flex-shrink: 0; }
+.mention-dd-item .mdd-txt { min-width: 0; line-height: 1.25; }
+.mention-dd-item b { font-size: 13px; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mention-dd-item span { font-size: 11px; color: var(--ink-soft); display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .share-photo-prev { margin-bottom: 12px; text-align: center; }
 .share-photo-prev img { max-height: 180px; max-width: 100%; border-radius: 12px; }
 .share-meta { margin-bottom: 12px; font-size: 14px; }
