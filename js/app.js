@@ -509,7 +509,7 @@ function trackCard(t) {
   const reposted = state.reposts.has(t.id);
   const prof = t.profiles || {};
   const collabs = Array.isArray(t.collaborators) ? t.collaborators : [];
-  const ft = collabs.length ? ` ft. ${collabs.map(c => `<a data-collab="${c.id}">${esc(c.display_name || c.username)}</a>`).join(', ')}` : '';
+  const ft = collabs.length ? ` ft. ${collabs.map(c => `<a data-collab="${esc(c.id)}">${esc(c.display_name || c.username)}</a>`).join(', ')}` : '';
   const mine = t.user_id === state.user.id;
   const cov = t.cover_url ? czUrl(t.cover_url) : '';
   const card = el(`
@@ -606,7 +606,7 @@ function openEditTrack(t, card) {
 // dibuja el waveform real (si existe) o uno de respaldo
 function waveHTML(t) {
   const peaks = Array.isArray(t.waveform) && t.waveform.length ? t.waveform : waveBars(t.id, 80);
-  const bars = peaks.map((h, i) => `<div class="bar" data-i="${i}" style="--h:${h}%;--d:${((i * 37) % 23) * 0.045}s"></div>`).join('');
+  const bars = peaks.map((h, i) => `<div class="bar" data-i="${i}" style="--h:${czNum(h)}%;--d:${((i * 37) % 23) * 0.045}s"></div>`).join('');
   return `<div class="wave" data-act="seekwave">${bars}</div>`;
 }
 
@@ -1062,7 +1062,7 @@ function syncNowPlaying() {
   $('npCover').innerHTML = t.cover_url ? `<img src="${esc(t.cover_url)}" alt="" />` : `<svg fill="none" stroke="#fff"><use href="#i-music"/></svg>`;
   $('npBg').style.backgroundImage = t.cover_url ? `url("${esc(t.cover_url)}")` : 'none';
   const npPeaks = Array.isArray(t.waveform) && t.waveform.length ? t.waveform : waveBars(t.id, 80);
-  $('npWave').innerHTML = npPeaks.map(h => `<div class="bar" style="--h:${h}%"></div>`).join('');
+  $('npWave').innerHTML = npPeaks.map(h => `<div class="bar" style="--h:${czNum(h)}%"></div>`).join('');
   $('npCur').textContent = fmtTime(audio.currentTime);
   $('npDur').textContent = fmtTime(audio.duration || t.duration);
   setNpPlayIcon(!audio.paused);
@@ -1768,6 +1768,7 @@ function renderPostComments(box, p, comments) {
 // saneamiento de la personalización (evita inyección en estilos/enlaces)
 function czColor(c) { return (typeof c === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(c)) ? c : ''; }
 function czUrl(u) { return (typeof u === 'string') ? u.replace(/["')\\<>]/g, '') : ''; }
+function czNum(v) { const n = Number(v); return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 0; }
 function czHref(u) { if (typeof u !== 'string' || !u) return '#'; return /^https?:\/\//i.test(u) ? u : 'https://' + u.replace(/^\/+/, ''); }
 function bgStyle(theme) {
   const bg = (theme && theme.bg) ? theme.bg : {};
@@ -2216,10 +2217,10 @@ async function renderPlaylists() {
   lists.forEach(pl => grid.appendChild(playlistCard(pl)));
 }
 function playlistCovers(pl) {
-  if (pl.cover_url) return `<div class="pl-cover" style="background-image:url('${esc(pl.cover_url)}')"></div>`;
+  if (pl.cover_url) return `<div class="pl-cover" style="background-image:url('${czUrl(pl.cover_url)}')"></div>`;
   const covers = (pl.playlist_tracks || []).map(x => x.tracks?.cover_url).filter(Boolean).slice(0, 4);
   if (!covers.length) return `<div class="pl-cover pl-cover-empty"><svg fill="none" stroke="#fff"><use href="#i-list"/></svg></div>`;
-  return `<div class="pl-cover pl-cover-grid">${covers.map(c => `<div style="background-image:url('${esc(c)}')"></div>`).join('')}</div>`;
+  return `<div class="pl-cover pl-cover-grid">${covers.map(c => `<div style="background-image:url('${czUrl(c)}')"></div>`).join('')}</div>`;
 }
 function playlistCard(pl) {
   const n = (pl.playlist_tracks || []).length;
@@ -2406,7 +2407,7 @@ function pickTrackModal(cb) {
     if (!list.length) { results.innerHTML = `<div class="empty" style="padding:14px"><p>Sin resultados.</p></div>`; return; }
     results.innerHTML = '';
     list.forEach(t => {
-      const row = el(`<div class="follow-row"><div class="st-tc-cover" style="${t.cover_url ? `background-image:url('${esc(t.cover_url)}')` : ''}"></div><div class="fr-info"><div class="fr-name">${esc(t.title)}</div><div class="fr-handle">${esc(t.profiles?.display_name || t.profiles?.username || t.artist || '')}</div></div></div>`);
+      const row = el(`<div class="follow-row"><div class="st-tc-cover" style="${t.cover_url ? `background-image:url('${czUrl(t.cover_url)}')` : ''}"></div><div class="fr-info"><div class="fr-name">${esc(t.title)}</div><div class="fr-handle">${esc(t.profiles?.display_name || t.profiles?.username || t.artist || '')}</div></div></div>`);
       row.onclick = () => { cb(t); m.remove(); };
       results.appendChild(row);
     });
@@ -2449,7 +2450,7 @@ function openAddStory() {
   };
   m.querySelector('#stTrackBtn').onclick = () => pickTrackModal((t) => {
     pickedTrack = t;
-    chip.innerHTML = `<div class="st-track-chip"><div class="st-tc-cover" style="${t.cover_url ? `background-image:url('${esc(t.cover_url)}')` : ''}"></div><div class="st-tc-info"><b>${esc(t.title)}</b><span>${esc(t.profiles?.display_name || t.profiles?.username || t.artist || '')}</span></div><button class="st-tc-x" type="button" aria-label="Quitar">&times;</button></div>`;
+    chip.innerHTML = `<div class="st-track-chip"><div class="st-tc-cover" style="${t.cover_url ? `background-image:url('${czUrl(t.cover_url)}')` : ''}"></div><div class="st-tc-info"><b>${esc(t.title)}</b><span>${esc(t.profiles?.display_name || t.profiles?.username || t.artist || '')}</span></div><button class="st-tc-x" type="button" aria-label="Quitar">&times;</button></div>`;
     chip.querySelector('.st-tc-x').onclick = () => { pickedTrack = null; chip.innerHTML = ''; };
   });
   function addLinkRow() {
@@ -2574,7 +2575,7 @@ async function renderEvents() {
 function eventCard(ev) {
   const saved = state.eventSaves.has(ev.id);
   const cover = ev.flyer_url
-    ? `<div class="ev-flyer" style="background-image:url('${esc(ev.flyer_url)}')"></div>`
+    ? `<div class="ev-flyer" style="background-image:url('${czUrl(ev.flyer_url)}')"></div>`
     : `<div class="ev-flyer ev-flyer-empty"><svg fill="none" stroke="#fff"><use href="#i-calendar"/></svg></div>`;
   const card = el(`
     <div class="ev-card" data-id="${ev.id}">
@@ -3000,7 +3001,7 @@ function bubbleHTML(msg) {
       isTrack = true;
       let meta = {}; try { meta = JSON.parse(msg.attachment_name || '{}'); } catch (_) {}
       const cover = meta.cover_url
-        ? `<div class="dm-track-cover" style="background-image:url('${esc(meta.cover_url)}')"></div>`
+        ? `<div class="dm-track-cover" style="background-image:url('${czUrl(meta.cover_url)}')"></div>`
         : `<div class="dm-track-cover"><svg fill="none" stroke="#fff"><use href="#i-music"/></svg></div>`;
       media = `<div class="dm-track" data-track-id="${esc(meta.id || '')}">
         ${cover}
