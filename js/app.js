@@ -332,6 +332,7 @@ async function switchView(view) {
   if (view === 'posts') return renderPosts();
   if (view === 'search') return renderSearch();
   if (view === 'playlists') return renderPlaylists();
+  if (view === 'dashboard') return renderDashboard();
   if (view === 'events') return renderEvents();
   if (view === 'radio') return startRadio();
 
@@ -2546,6 +2547,175 @@ async function markStoryViewed(id) {
   if (state._storySeen && state._storySeen.has(id)) return;
   if (state._storySeen) state._storySeen.add(id);
   try { await sb.from('story_views').upsert({ story_id: id, viewer_id: state.user.id }, { onConflict: 'story_id,viewer_id' }); } catch (_) {}
+}
+
+/* =======================================================================
+   ESTUDIO — panel del artista (stats internas + ingresos estimados + redes)
+   ======================================================================= */
+const SOCIAL_DEFS = [
+  { key: 'spotify', label: 'Spotify', color: '#1db954' },
+  { key: 'instagram', label: 'Instagram', color: '#e1306c' },
+  { key: 'youtube', label: 'YouTube', color: '#ff0000' },
+  { key: 'tiktok', label: 'TikTok', color: '#69C9D0' },
+  { key: 'soundcloud', label: 'SoundCloud', color: '#ff5500' },
+];
+function nfmt(n) { n = Number(n) || 0; if (n >= 1e6) return (n / 1e6).toFixed(1).replace('.0', '') + 'M'; if (n >= 1e3) return (n / 1e3).toFixed(1).replace('.0', '') + 'K'; return String(n); }
+
+async function renderDashboard() {
+  setActiveNav('dashboard');
+  const main = $('main');
+  main.innerHTML = `<div class="main-head"><div><h2>Estudio</h2><div class="sub">Tu panel de artista</div></div></div><div id="dashBody"><div class="loading" style="padding:30px"><div class="spinner"></div></div></div>`;
+  const uid = state.user.id;
+  const [tracksRes, followersRes, followingRes, postsRes] = await Promise.all([
+    sb.from('tracks').select('id,title,cover_url,plays,likes_count,reposts_count,created_at').eq('user_id', uid).order('plays', { ascending: false }),
+    sb.from('follows').select('created_at').eq('following_id', uid),
+    sb.from('follows').select('follower_id', { count: 'exact', head: true }).eq('follower_id', uid),
+    sb.from('posts').select('id', { count: 'exact', head: true }).eq('user_id', uid),
+  ]);
+  const tracks = tracksRes.data || [];
+  const followerDates = (followersRes.data || []).map(r => r.created_at);
+  const totalPlays = tracks.reduce((a, t) => a + (t.plays || 0), 0);
+  const totalLikes = tracks.reduce((a, t) => a + (t.likes_count || 0), 0);
+  const totalReposts = tracks.reduce((a, t) => a + (t.reposts_count || 0), 0);
+  const followers = followerDates.length;
+  const following = followingRes.count || 0;
+  const posts = postsRes.count || 0;
+  const socials = (state.profile.socials && typeof state.profile.socials === 'object') ? state.profile.socials : {};
+
+  // alcance total (UnderBro + redes externas manuales)
+  let externalReach = 0;
+  SOCIAL_DEFS.forEach(s => { externalReach += Number(socials[s.key]?.followers) || 0; });
+  const totalReach = followers + externalReach;
+
+  // ingresos estimados
+  const rate = parseFloat(localStorage.getItem('ub_rate') || '0.004');
+  const monthlyStreams = Number(socials.monthlyStreams) || 0;
+  const estUnderbro = totalPlays * rate;
+  const estMonthly = monthlyStreams * rate;
+
+  // crecimiento de seguidores (últimos 14 días)
+  const days = 14, buckets = new Array(days).fill(0), labels = [];
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  for (let i = 0; i < days; i++) { const d = new Date(today); d.setDate(d.getDate() - (days - 1 - i)); labels.push(d); }
+  followerDates.forEach(iso => {
+    const d = new Date(iso); d.setHours(0, 0, 0, 0);
+    const idx = Math.round((d - labels[0]) / 86400000);
+    if (idx >= 0 && idx < days) buckets[idx]++;
+  });
+  const maxB = Math.max(1, ...buckets);
+  const newLast14 = buckets.reduce((a, b) => a + b, 0);
+
+  const body = $('dashBody');
+  body.innerHTML = `
+    <div class="dash-kpis">
+      <div class="kpi"><div class="kpi-n">${nfmt(totalPlays)}</div><div class="kpi-l"><svg fill="none" stroke="currentColor"><use href="#i-headphones"/></svg> Reproducciones</div></div>
+      <div class="kpi"><div class="kpi-n">${nfmt(followers)}</div><div class="kpi-l"><svg fill="none" stroke="currentColor"><use href="#i-people"/></svg> Seguidores</div></div>
+      <div class="kpi"><div class="kpi-n">${nfmt(totalLikes)}</div><div class="kpi-l"><svg fill="none" stroke="currentColor"><use href="#i-heart"/></svg> Me gusta</div></div>
+      <div class="kpi"><div class="kpi-n">${nfmt(totalReposts)}</div><div class="kpi-l"><svg fill="none" stroke="currentColor"><use href="#i-repeat"/></svg> Reposts</div></div>
+      <div class="kpi"><div class="kpi-n">${nfmt(tracks.length)}</div><div class="kpi-l"><svg fill="none" stroke="currentColor"><use href="#i-music"/></svg> Pistas</div></div>
+      <div class="kpi"><div class="kpi-n">${nfmt(totalReach)}</div><div class="kpi-l"><svg fill="none" stroke="currentColor"><use href="#i-globe"/></svg> Alcance total</div></div>
+    </div>
+
+    <div class="dash-section">
+      <h3>Seguidores nuevos (últimos 14 días) · +${newLast14}</h3>
+      <div class="dash-chart">
+        ${buckets.map((b, i) => `<div class="dc-col" title="${labels[i].toLocaleDateString('es-ES',{day:'numeric',month:'short'})}: ${b}"><div class="dc-bar" style="height:${Math.round((b / maxB) * 100)}%"></div><span class="dc-x">${labels[i].getDate()}</span></div>`).join('')}
+      </div>
+    </div>
+
+    <div class="dash-section">
+      <h3>Ingresos estimados <span class="dash-hint">(orientativo)</span></h3>
+      <div class="dash-income">
+        <div class="inc-row"><span>Tarifa por reproducción</span><span><input type="number" id="incRate" step="0.001" min="0" value="${rate}" /> €</span></div>
+        <div class="inc-card">
+          <div><div class="inc-big">${estUnderbro.toFixed(2)} €</div><div class="inc-sub">Valor de tus ${nfmt(totalPlays)} reproducciones en UnderBro</div></div>
+        </div>
+        <div class="inc-row"><span>Tus escuchas mensuales (Spotify u otra)</span><span><input type="number" id="incStreams" min="0" value="${monthlyStreams}" placeholder="0" /></span></div>
+        <div class="inc-card alt">
+          <div><div class="inc-big">${estMonthly.toFixed(2)} € / mes</div><div class="inc-sub">Estimación con ${nfmt(monthlyStreams)} escuchas/mes</div></div>
+        </div>
+        <p class="dash-note">⚠️ Es una estimación. Las plataformas no dan los ingresos reales por API; los datos exactos están en tu distribuidor.</p>
+      </div>
+    </div>
+
+    <div class="dash-section">
+      <div class="dash-sec-head"><h3>Tus redes</h3><button class="btn sm" id="editSocialsBtn"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg> Editar</button></div>
+      <div class="dash-socials">
+        ${SOCIAL_DEFS.map(s => {
+          const v = socials[s.key] || {};
+          const has = v.followers != null || v.url;
+          return `<a class="social-card ${has ? '' : 'empty'}" ${v.url ? `href="${esc(czHref(v.url))}" target="_blank" rel="noopener noreferrer"` : ''} style="--sc:${s.color}">
+            <div class="sc-dot"></div>
+            <div class="sc-info"><div class="sc-name">${s.label}</div><div class="sc-n">${v.followers != null ? nfmt(v.followers) + ' seguidores' : 'Sin conectar'}</div></div>
+          </a>`;
+        }).join('')}
+      </div>
+    </div>
+
+    <div class="dash-section">
+      <h3>Top pistas</h3>
+      <div class="dash-top">
+        ${tracks.slice(0, 8).map((t, i) => `
+          <div class="dt-row" data-tid="${t.id}">
+            <span class="dt-rank">${i + 1}</span>
+            <div class="dt-cover" style="${t.cover_url ? `background-image:url('${czUrl(t.cover_url)}')` : ''}"></div>
+            <div class="dt-title">${esc(t.title)}</div>
+            <span class="dt-stat"><svg fill="none" stroke="currentColor"><use href="#i-headphones"/></svg> ${nfmt(t.plays || 0)}</span>
+            <span class="dt-stat"><svg fill="currentColor" stroke="none"><use href="#i-heart"/></svg> ${nfmt(t.likes_count || 0)}</span>
+          </div>`).join('') || '<div class="empty"><p>Aún no has subido pistas.</p></div>'}
+      </div>
+    </div>`;
+
+  // interacciones
+  const rateInput = body.querySelector('#incRate');
+  const streamsInput = body.querySelector('#incStreams');
+  const recalc = () => {
+    const r = parseFloat(rateInput.value) || 0;
+    localStorage.setItem('ub_rate', String(r));
+    body.querySelectorAll('.inc-big')[0].textContent = (totalPlays * r).toFixed(2) + ' €';
+    body.querySelectorAll('.inc-big')[1].textContent = ((Number(streamsInput.value) || 0) * r).toFixed(2) + ' € / mes';
+  };
+  rateInput.oninput = recalc;
+  streamsInput.oninput = recalc;
+  streamsInput.onchange = async () => {
+    const ns = Number(streamsInput.value) || 0;
+    const newSocials = { ...socials, monthlyStreams: ns };
+    state.profile.socials = newSocials;
+    await sb.from('profiles').update({ socials: newSocials }).eq('id', uid);
+  };
+  body.querySelector('#editSocialsBtn').onclick = () => editSocialsModal(() => renderDashboard());
+  body.querySelectorAll('.dt-row').forEach(r => r.onclick = () => { const t = tracks.find(x => x.id === r.dataset.tid); if (t) openProfile(uid); });
+}
+
+function editSocialsModal(onSaved) {
+  const socials = (state.profile.socials && typeof state.profile.socials === 'object') ? state.profile.socials : {};
+  const m = openModal(`
+    <div class="modal-head"><h3>Tus redes</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <p class="dash-note" style="margin-bottom:14px">Pon el enlace y tus seguidores de cada red. Más adelante se podrán conectar automáticamente.</p>
+      ${SOCIAL_DEFS.map(s => {
+        const v = socials[s.key] || {};
+        return `<div class="field"><label>${s.label}</label>
+          <input type="url" data-su="${s.key}" placeholder="Enlace (https://...)" value="${esc(v.url || '')}" style="margin-bottom:6px" />
+          <input type="number" data-sf="${s.key}" min="0" placeholder="Nº de seguidores" value="${v.followers != null ? esc(v.followers) : ''}" />
+        </div>`;
+      }).join('')}
+      <button class="btn primary" id="saveSocials" style="width:100%">Guardar</button>
+      <div class="auth-msg" id="socMsg"></div>
+    </div>`);
+  m.querySelector('#saveSocials').onclick = async () => {
+    const out = { monthlyStreams: Number(socials.monthlyStreams) || 0 };
+    SOCIAL_DEFS.forEach(s => {
+      const url = m.querySelector(`[data-su="${s.key}"]`).value.trim();
+      const fol = m.querySelector(`[data-sf="${s.key}"]`).value.trim();
+      if (url || fol) out[s.key] = { url: url || '', followers: fol ? Number(fol) : null };
+    });
+    const { error } = await sb.from('profiles').update({ socials: out }).eq('id', state.user.id);
+    if (error) { m.querySelector('#socMsg').textContent = 'No se pudo guardar'; return; }
+    state.profile.socials = out;
+    m.remove(); toast('Redes actualizadas');
+    if (onSaved) onSaved();
+  };
 }
 
 /* =======================================================================
