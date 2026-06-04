@@ -202,6 +202,7 @@ async function onAuthenticated() {
   renderMe();
   await Promise.all([loadLikes(), loadReposts(), loadEventSaves(), loadFollows()]);
   bindUI();
+  initSwipeNav();
   initPlayer();
   initNowPlaying();
   initChat();
@@ -380,6 +381,61 @@ async function switchView(view) {
 
   state.tracks = tracks;
   renderFeed(head, tracks, view);
+}
+
+/* =======================================================================
+   NAVEGACIÓN POR GESTOS (deslizar entre pantallas, solo móvil)
+   ======================================================================= */
+const SWIPE_SEQ = ['following', 'trending', 'new', 'posts', 'chat'];
+function setBnavActive(bnav) {
+  document.querySelectorAll('#bottomNav button').forEach(x => x.classList.toggle('active', x.dataset.bnav === bnav));
+}
+function curScreenIdx() {
+  if (state.view === 'feed') return SWIPE_SEQ.indexOf(state.tab);
+  if (state.view === 'posts') return SWIPE_SEQ.indexOf('posts');
+  if (state.view === 'messages') return SWIPE_SEQ.indexOf('chat');
+  return -1;
+}
+function gotoScreenIdx(i) {
+  if (i < 0 || i >= SWIPE_SEQ.length) return;
+  const key = SWIPE_SEQ[i];
+  if (i <= 2) {
+    state.tab = key;
+    document.querySelectorAll('#feedTabs button').forEach(x => x.classList.toggle('active', x.dataset.tab === key));
+    setBnavActive('feed');
+    switchView('feed');
+  } else if (key === 'posts') { setBnavActive('posts'); switchView('posts'); }
+  else if (key === 'chat') { setBnavActive('chat'); switchView('messages'); }
+}
+function initSwipeNav() {
+  if (initSwipeNav._done) return; initSwipeNav._done = true;
+  const EXCLUDE = '.seek, .vol-slider, .wave, #npWave, .stories-bar, .dm-bubble, .dm-thread, .pl-cover-grid, input, textarea, select, .mention-dd, .post-grid';
+  let sx = 0, sy = 0, st = 0, ignore = true, moved = false;
+  const overlayOpen = () =>
+    document.querySelector('.modal-backdrop, .story-viewer, .right.open') ||
+    (typeof npIsOpen === 'function' && npIsOpen()) ||
+    $('dmScreen')?.classList.contains('open') ||
+    $('sidebar')?.classList.contains('open');
+  document.addEventListener('touchstart', (e) => {
+    if (window.innerWidth > 720 || e.touches.length !== 1 || overlayOpen()) { ignore = true; return; }
+    const t = e.target;
+    if (t && t.closest && t.closest(EXCLUDE)) { ignore = true; return; }
+    ignore = false; moved = false;
+    sx = e.touches[0].clientX; sy = e.touches[0].clientY; st = Date.now();
+  }, { passive: true });
+  document.addEventListener('touchmove', (e) => {
+    if (ignore) return;
+    const dx = e.touches[0].clientX - sx, dy = e.touches[0].clientY - sy;
+    if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.4) moved = true;
+  }, { passive: true });
+  document.addEventListener('touchend', (e) => {
+    if (ignore || !moved) return;
+    const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+    if (Math.abs(dx) < 60 || Math.abs(dx) <= Math.abs(dy) * 1.6 || Date.now() - st > 700) return;
+    const cur = curScreenIdx();
+    if (cur < 0) return;
+    gotoScreenIdx(cur + (dx < 0 ? 1 : -1));
+  }, { passive: true });
 }
 
 async function fetchTracks({ order='created_at', userId=null, limit=50 } = {}) {
