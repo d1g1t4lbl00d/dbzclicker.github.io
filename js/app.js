@@ -20,6 +20,7 @@ const state = {
   likes: new Set(),    // track_ids que me gustan
   reposts: new Set(),  // track_ids que he reposteado
   eventSaves: new Set(),// event_ids que he guardado
+  badges: new Set(),   // insignias que poseo
   follows: new Set(),  // user_ids que sigo
   downloads: new Set(JSON.parse(localStorage.getItem('ub_downloads') || '[]')),
   view: 'feed',
@@ -42,6 +43,45 @@ function setTheme(theme) {
 
 /* ---- insignia de verificado / fundador ---- */
 function verifiedBadge(p) { return (p && p.verified) ? ' <svg class="vbadge" viewBox="0 0 24 24" aria-label="Verificado"><use href="#i-verify"/></svg>' : ''; }
+
+/* ---- SISTEMA DE INSIGNIAS ---- */
+const BADGES = {
+  alpha:  { name: 'Alpha',  glyph: 'α', cls: 'bdg-alpha',  desc: 'Estuviste en la fase Alpha de UnderBro.' },
+  tester: { name: 'Tester', glyph: '★', cls: 'bdg-tester', desc: 'Invitaste a alguien a UnderBro. ¡Gracias por hacerla crecer!' },
+};
+function displayBadgeHtml(p) {
+  const key = (p && p.displayed_badge) || 'alpha';
+  const b = BADGES[key];
+  return b ? ` <span class="bdg ${b.cls}" title="${esc(b.name)}">${b.glyph}</span>` : '';
+}
+async function loadBadges() {
+  const { data } = await sb.from('user_badges').select('badge').eq('user_id', state.user.id);
+  state.badges = new Set((data || []).map(r => r.badge));
+  let seen = []; try { seen = JSON.parse(localStorage.getItem('ub_badges_seen') || '[]'); } catch (_) {}
+  const seenSet = new Set(seen);
+  const fresh = [...state.badges].filter(b => BADGES[b] && !seenSet.has(b));
+  if (fresh.length) {
+    localStorage.setItem('ub_badges_seen', JSON.stringify([...state.badges]));
+    badgeUnlockQueue(fresh);
+  }
+}
+function badgeUnlockQueue(keys) {
+  let i = 0;
+  const next = () => { if (i >= keys.length) return; badgeUnlockAnim(keys[i++], next); };
+  setTimeout(next, 600);
+}
+function badgeUnlockAnim(key, onDone) {
+  const b = BADGES[key]; if (!b) { if (onDone) onDone(); return; }
+  const colors = ['#6fb6e0', '#8b7fe0', '#56c5d0', '#ffd166', '#ff6f9c', '#6f8fc6'];
+  const confetti = Array.from({ length: 26 }, (_, i) => `<i style="left:${(Math.random() * 100).toFixed(1)}%;background:${colors[i % colors.length]};animation-delay:${(Math.random() * 0.5).toFixed(2)}s;animation-duration:${(1.6 + Math.random() * 1.3).toFixed(2)}s"></i>`).join('');
+  const ov = el(`<div class="badge-pop"><div class="bp-confetti">${confetti}</div><div class="bp-card"><div class="bdg ${b.cls} bp-badge">${b.glyph}</div><div class="bp-kicker">¡Insignia desbloqueada!</div><div class="bp-name">${esc(b.name)}</div><div class="bp-desc">${esc(b.desc)}</div><div class="bp-tap">toca para cerrar</div></div></div>`);
+  document.body.appendChild(ov);
+  requestAnimationFrame(() => ov.classList.add('show'));
+  let closed = false;
+  const close = () => { if (closed) return; closed = true; ov.classList.remove('show'); setTimeout(() => { ov.remove(); if (onDone) onDone(); }, 320); };
+  ov.addEventListener('click', close);
+  setTimeout(close, 4200);
+}
 
 /* ---- referidos (marketing) ---- */
 try { const _r = new URLSearchParams(location.search).get('ref'); if (_r) localStorage.setItem('ub_ref', _r.slice(0, 40)); } catch (_) {}
@@ -200,7 +240,7 @@ async function onAuthenticated() {
   $('authScreen').classList.add('hidden');
   $('app').classList.remove('hidden');
   renderMe();
-  await Promise.all([loadLikes(), loadReposts(), loadEventSaves(), loadFollows()]);
+  await Promise.all([loadLikes(), loadReposts(), loadEventSaves(), loadFollows(), loadBadges()]);
   bindUI();
   initSwipeNav();
   initPlayer();
@@ -235,7 +275,7 @@ async function ensureProfile() {
 }
 
 function renderMe() {
-  $('meName').innerHTML = esc(state.profile.display_name || state.profile.username) + verifiedBadge(state.profile) +
+  $('meName').innerHTML = esc(state.profile.display_name || state.profile.username) + verifiedBadge(state.profile) + displayBadgeHtml(state.profile) +
     (state.profile.is_admin ? ' <span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c;padding:1px 7px">MOD</span>' : '');
   $('meAvatar').outerHTML = avatarHTML(state.profile).replace('class="avatar ', 'id="meAvatar" class="avatar ');
   // avatar del orbe central "Yo"
@@ -602,7 +642,7 @@ function trackCard(t) {
       <div class="t-head">
         <div class="t-titles">
           <div class="t-title">${esc(t.title)}</div>
-          <div class="t-artist">por <a data-act="profile">${esc(prof.display_name || prof.username || t.artist || 'anónimo')}</a>${verifiedBadge(prof)}${ft}</div>
+          <div class="t-artist">por <a data-act="profile">${esc(prof.display_name || prof.username || t.artist || 'anónimo')}</a>${verifiedBadge(prof)}${displayBadgeHtml(prof)}${ft}</div>
         </div>
         ${t.genre ? `<span class="t-genre">${esc(t.genre)}</span>` : ''}
       </div>
@@ -2062,12 +2102,15 @@ async function openProfile(userId) {
   main.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
   const { data: prof } = await sb.from('profiles').select('*').eq('id', userId).single();
   if (!prof) { main.innerHTML = '<div class="empty">Perfil no encontrado.</div>'; return; }
-  const [{ count: followers }, { count: following }, ownTracks, collabRes] = await Promise.all([
+  const [{ count: followers }, { count: following }, ownTracks, collabRes, badgesRes] = await Promise.all([
     sb.from('follows').select('follower_id', { count:'exact', head:true }).eq('following_id', userId),
     sb.from('follows').select('following_id', { count:'exact', head:true }).eq('follower_id', userId),
     fetchTracks({ order: 'created_at', userId }),
     sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)').contains('collaborators', JSON.stringify([{ id: userId }])).order('created_at', { ascending: false }),
+    sb.from('user_badges').select('badge').eq('user_id', userId),
   ]);
+  const profBadges = (badgesRes.data || []).map(r => r.badge).filter(b => BADGES[b]);
+  const profBadgesHtml = profBadges.length ? `<div class="profile-badges">${profBadges.map(k => `<span class="bdg ${BADGES[k].cls}" title="${esc(BADGES[k].name)}">${BADGES[k].glyph} <span class="bdg-txt">${esc(BADGES[k].name)}</span></span>`).join('')}</div>` : '';
   // pistas propias y "feats" (cualquier colaboración que te involucra: tuyas con invitados
   // y pistas de otros donde te añadieron como colaborador)
   const myTracks = (ownTracks || []).slice();
@@ -2095,8 +2138,9 @@ async function openProfile(userId) {
       <div class="profile-head ${banner ? 'has-banner' : ''}">
         ${avatarHTML(prof)}
         <div style="flex:1;min-width:0">
-          <h2 class="accent-name">${esc(prof.display_name || prof.username)}${verifiedBadge(prof)} ${prof.is_admin?'<span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c;vertical-align:middle">MOD</span>':''} ${prof.banned?'<span class="t-genre" style="background:#fae3e0;border-color:#f0c2bc;color:#c0533f;vertical-align:middle">baneado</span>':''}</h2>
+          <h2 class="accent-name">${esc(prof.display_name || prof.username)}${verifiedBadge(prof)}${displayBadgeHtml(prof)} ${prof.is_admin?'<span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c;vertical-align:middle">MOD</span>':''} ${prof.banned?'<span class="t-genre" style="background:#fae3e0;border-color:#f0c2bc;color:#c0533f;vertical-align:middle">baneado</span>':''}</h2>
           <div style="color:var(--ink-soft)">@${esc(prof.username)}</div>
+          ${profBadgesHtml}
           ${tagline ? `<div class="profile-tagline">${esc(tagline)}</div>` : ''}
           ${prof.bio ? `<p style="margin-top:6px;max-width:520px">${esc(prof.bio)}</p>` : ''}
           <div class="pstats">
@@ -2228,7 +2272,7 @@ async function renderPeople() {
         <div class="person-top">
           ${avatarHTML(p)}
           <div class="person-info">
-            <div class="person-name">${esc(p.display_name||p.username)}${verifiedBadge(p)}${p.is_admin?' <span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c">MOD</span>':''}${p.banned?' <span class="t-genre" style="background:#fae3e0;border-color:#f0c2bc;color:#c0533f">baneado</span>':''}</div>
+            <div class="person-name">${esc(p.display_name||p.username)}${verifiedBadge(p)}${displayBadgeHtml(p)}${p.is_admin?' <span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c">MOD</span>':''}${p.banned?' <span class="t-genre" style="background:#fae3e0;border-color:#f0c2bc;color:#c0533f">baneado</span>':''}</div>
             <div class="person-handle">@${esc(p.username)}</div>
             ${p.bio?`<div class="person-bio">${esc(p.bio)}</div>`:''}
           </div>
@@ -2750,6 +2794,23 @@ async function renderDashboard() {
     </div>
 
     <div class="dash-section">
+      <h3>Insignias</h3>
+      <p class="dash-hint" style="margin:6px 0 12px">La que elijas se mostrará junto a tu nombre y en tu perfil.</p>
+      <div class="badge-grid">
+        ${Object.keys(BADGES).map(key => {
+          const b = BADGES[key];
+          const owned = state.badges.has(key);
+          const active = (state.profile.displayed_badge || 'alpha') === key;
+          return `<button class="badge-item ${owned ? '' : 'locked'} ${active ? 'active' : ''}" data-badge="${key}" ${owned ? '' : 'disabled'}>
+            <span class="bdg ${b.cls} big">${b.glyph}</span>
+            <span class="bi-name">${b.name}</span>
+            <span class="bi-state">${owned ? (active ? '✓ En tu nombre' : 'Mostrar esta') : '🔒 Invita a un amigo'}</span>
+          </button>`;
+        }).join('')}
+      </div>
+    </div>
+
+    <div class="dash-section">
       <div class="dash-sec-head"><h3>Tus redes y enlaces</h3><button class="btn sm" id="editLinksBtn"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg> Editar</button></div>
       <p class="dash-hint" style="margin:6px 0 12px">Los mismos que se ven en tu perfil. Si añades tu Spotify, se reproducirá abajo.</p>
       <div class="dash-socials">
@@ -2785,6 +2846,16 @@ async function renderDashboard() {
   body.querySelector('#shareInvite').onclick = () => { if (navigator.share) navigator.share({ title: 'Únete a UnderBro', text: 'Sígueme en UnderBro 🎧', url: inviteUrl }).catch(() => {}); else { navigator.clipboard?.writeText(inviteUrl); toast('Enlace copiado'); } };
   body.querySelector('#editLinksBtn').onclick = () => editLinksModal(() => renderDashboard());
   body.querySelectorAll('.dt-row').forEach(r => r.onclick = () => { const t = tracks.find(x => x.id === r.dataset.tid); if (t) openProfile(uid); });
+  body.querySelectorAll('.badge-item:not(.locked)').forEach(bi => bi.onclick = async () => {
+    const key = bi.dataset.badge;
+    if ((state.profile.displayed_badge || 'alpha') === key) return;
+    const { error } = await sb.from('profiles').update({ displayed_badge: key }).eq('id', uid);
+    if (error) { toast('No se pudo cambiar la insignia'); return; }
+    state.profile.displayed_badge = key;
+    toast('✨ Insignia actualizada');
+    renderMe();
+    renderDashboard();
+  });
 }
 
 function editLinksModal(onSaved) {
