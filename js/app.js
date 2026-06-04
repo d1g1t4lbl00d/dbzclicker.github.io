@@ -2671,26 +2671,41 @@ async function markStoryViewed(id) {
 }
 
 /* =======================================================================
-   ESTUDIO — panel del artista (stats internas + ingresos estimados + redes)
+   ESTUDIO — panel del artista (stats internas + redes/enlaces del perfil)
    ======================================================================= */
-const SOCIAL_DEFS = [
-  { key: 'spotify', label: 'Spotify', color: '#1db954' },
-  { key: 'instagram', label: 'Instagram', color: '#e1306c' },
-  { key: 'youtube', label: 'YouTube', color: '#ff0000' },
-  { key: 'tiktok', label: 'TikTok', color: '#69C9D0' },
-  { key: 'soundcloud', label: 'SoundCloud', color: '#ff5500' },
-];
 function nfmt(n) { n = Number(n) || 0; if (n >= 1e6) return (n / 1e6).toFixed(1).replace('.0', '') + 'M'; if (n >= 1e3) return (n / 1e3).toFixed(1).replace('.0', '') + 'K'; return String(n); }
+function platformOf(url) {
+  const u = (url || '').toLowerCase();
+  if (u.includes('spotify')) return { name: 'Spotify', color: '#1db954' };
+  if (u.includes('instagram')) return { name: 'Instagram', color: '#e1306c' };
+  if (u.includes('youtu')) return { name: 'YouTube', color: '#ff0000' };
+  if (u.includes('tiktok')) return { name: 'TikTok', color: '#69C9D0' };
+  if (u.includes('soundcloud')) return { name: 'SoundCloud', color: '#ff5500' };
+  if (u.includes('twitter') || /\/\/(x\.com|x\.)/.test(u)) return { name: 'X', color: '#1d9bf0' };
+  if (u.includes('music.apple')) return { name: 'Apple Music', color: '#fa57c1' };
+  return null;
+}
+function hostOf(url) { try { return new URL(/^https?:\/\//.test(url) ? url : 'https://' + url).hostname.replace(/^www\./, ''); } catch (_) { return url; } }
+function spotifyEmbedHtml(links) {
+  const sp = (links || []).map(l => l.url).find(u => /open\.spotify\.com|spotify:/.test((u || '').toLowerCase()));
+  if (!sp) return '';
+  let type = '', id = '';
+  let m = sp.match(/spotify\.com\/(?:intl-[a-z]+\/)?(artist|album|track|playlist|show|episode)\/([a-zA-Z0-9]+)/i);
+  if (m) { type = m[1].toLowerCase(); id = m[2]; }
+  else { const u = sp.match(/spotify:(artist|album|track|playlist|show|episode):([a-zA-Z0-9]+)/i); if (u) { type = u[1].toLowerCase(); id = u[2]; } }
+  if (!type || !id) return '';
+  const h = (type === 'track' || type === 'episode') ? 152 : 352;
+  return `<div class="dash-section"><h3>Tu Spotify</h3><iframe class="spotify-embed" src="https://open.spotify.com/embed/${type}/${esc(id)}?utm_source=underbro" width="100%" height="${h}" style="border:0;border-radius:14px" allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy"></iframe></div>`;
+}
 
 async function renderDashboard() {
   setActiveNav('dashboard');
   const main = $('main');
   main.innerHTML = `<div class="main-head"><div><h2>Estudio</h2><div class="sub">Tu panel de artista</div></div></div><div id="dashBody"><div class="loading" style="padding:30px"><div class="spinner"></div></div></div>`;
   const uid = state.user.id;
-  const [tracksRes, followersRes, followingRes, postsRes, refRes] = await Promise.all([
+  const [tracksRes, followersRes, postsRes, refRes] = await Promise.all([
     sb.from('tracks').select('id,title,cover_url,plays,likes_count,reposts_count,created_at').eq('user_id', uid).order('plays', { ascending: false }),
     sb.from('follows').select('created_at').eq('following_id', uid),
-    sb.from('follows').select('follower_id', { count: 'exact', head: true }).eq('follower_id', uid),
     sb.from('posts').select('id', { count: 'exact', head: true }).eq('user_id', uid),
     sb.from('profiles').select('id', { count: 'exact', head: true }).eq('referred_by', uid),
   ]);
@@ -2702,20 +2717,8 @@ async function renderDashboard() {
   const totalLikes = tracks.reduce((a, t) => a + (t.likes_count || 0), 0);
   const totalReposts = tracks.reduce((a, t) => a + (t.reposts_count || 0), 0);
   const followers = followerDates.length;
-  const following = followingRes.count || 0;
-  const posts = postsRes.count || 0;
-  const socials = (state.profile.socials && typeof state.profile.socials === 'object') ? state.profile.socials : {};
-
-  // alcance total (UnderBro + redes externas manuales)
-  let externalReach = 0;
-  SOCIAL_DEFS.forEach(s => { externalReach += Number(socials[s.key]?.followers) || 0; });
-  const totalReach = followers + externalReach;
-
-  // ingresos estimados
-  const rate = parseFloat(localStorage.getItem('ub_rate') || '0.004');
-  const monthlyStreams = Number(socials.monthlyStreams) || 0;
-  const estUnderbro = totalPlays * rate;
-  const estMonthly = monthlyStreams * rate;
+  const theme = (state.profile.theme && typeof state.profile.theme === 'object') ? state.profile.theme : {};
+  const links = Array.isArray(theme.links) ? theme.links : [];
 
   // crecimiento de seguidores (últimos 14 días)
   const days = 14, buckets = new Array(days).fill(0), labels = [];
@@ -2737,7 +2740,6 @@ async function renderDashboard() {
       <div class="kpi"><div class="kpi-n">${nfmt(totalLikes)}</div><div class="kpi-l"><svg fill="none" stroke="currentColor"><use href="#i-heart"/></svg> Me gusta</div></div>
       <div class="kpi"><div class="kpi-n">${nfmt(totalReposts)}</div><div class="kpi-l"><svg fill="none" stroke="currentColor"><use href="#i-repeat"/></svg> Reposts</div></div>
       <div class="kpi"><div class="kpi-n">${nfmt(tracks.length)}</div><div class="kpi-l"><svg fill="none" stroke="currentColor"><use href="#i-music"/></svg> Pistas</div></div>
-      <div class="kpi"><div class="kpi-n">${nfmt(totalReach)}</div><div class="kpi-l"><svg fill="none" stroke="currentColor"><use href="#i-globe"/></svg> Alcance total</div></div>
     </div>
 
     <div class="dash-section">
@@ -2748,39 +2750,20 @@ async function renderDashboard() {
     </div>
 
     <div class="dash-section">
-      <h3>Ingresos estimados <span class="dash-hint">(orientativo)</span></h3>
-      <div class="dash-income">
-        <div class="inc-row"><span>Tarifa por reproducción</span><span><input type="number" id="incRate" step="0.001" min="0" value="${rate}" /> €</span></div>
-        <div class="inc-card">
-          <div><div class="inc-big">${estUnderbro.toFixed(2)} €</div><div class="inc-sub">Valor de tus ${nfmt(totalPlays)} reproducciones en UnderBro</div></div>
-        </div>
-        <div class="inc-row"><span>Tus escuchas mensuales (Spotify u otra)</span><span><input type="number" id="incStreams" min="0" value="${monthlyStreams}" placeholder="0" /></span></div>
-        <div class="inc-card alt">
-          <div><div class="inc-big">${estMonthly.toFixed(2)} € / mes</div><div class="inc-sub">Estimación con ${nfmt(monthlyStreams)} escuchas/mes</div></div>
-        </div>
-        <p class="dash-note">⚠️ Es una estimación. Las plataformas no dan los ingresos reales por API; los datos exactos están en tu distribuidor.</p>
+      <div class="dash-sec-head"><h3>Tus redes y enlaces</h3><button class="btn sm" id="editLinksBtn"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg> Editar</button></div>
+      <p class="dash-hint" style="margin:6px 0 12px">Los mismos que se ven en tu perfil. Si añades tu Spotify, se reproducirá abajo.</p>
+      <div class="dash-socials">
+        ${links.length ? links.map(l => { const p = platformOf(l.url); return `<a class="social-card" href="${esc(czHref(l.url))}" target="_blank" rel="noopener noreferrer" style="--sc:${p ? p.color : '#5f7fb8'}"><div class="sc-dot"></div><div class="sc-info"><div class="sc-name">${esc(l.label || (p ? p.name : 'Enlace'))}</div><div class="sc-n">${esc(hostOf(l.url))}</div></div></a>`; }).join('') : '<div class="empty" style="padding:14px;grid-column:1/-1"><p>Aún no has añadido enlaces. Pulsa <b>Editar</b> para poner tus redes.</p></div>'}
       </div>
     </div>
+
+    ${spotifyEmbedHtml(links)}
 
     <div class="dash-section">
       <h3>Invita y crece · <span style="color:var(--accent)">${invitedCount}</span> ${invitedCount === 1 ? 'invitado' : 'invitados'}</h3>
       <p class="dash-hint" style="margin-bottom:10px">Comparte tu enlace. Quien entre por él contará como invitación tuya.</p>
       <div class="share-link"><input type="text" id="inviteUrl" readonly value="${esc(inviteUrl)}" /><button class="btn sm primary" id="copyInvite">Copiar</button></div>
       <button class="btn" id="shareInvite" style="width:100%;margin-top:8px"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg> Compartir invitación</button>
-    </div>
-
-    <div class="dash-section">
-      <div class="dash-sec-head"><h3>Tus redes</h3><button class="btn sm" id="editSocialsBtn"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg> Editar</button></div>
-      <div class="dash-socials">
-        ${SOCIAL_DEFS.map(s => {
-          const v = socials[s.key] || {};
-          const has = v.followers != null || v.url;
-          return `<a class="social-card ${has ? '' : 'empty'}" ${v.url ? `href="${esc(czHref(v.url))}" target="_blank" rel="noopener noreferrer"` : ''} style="--sc:${s.color}">
-            <div class="sc-dot"></div>
-            <div class="sc-info"><div class="sc-name">${s.label}</div><div class="sc-n">${v.followers != null ? nfmt(v.followers) + ' seguidores' : 'Sin conectar'}</div></div>
-          </a>`;
-        }).join('')}
-      </div>
     </div>
 
     <div class="dash-section">
@@ -2797,57 +2780,43 @@ async function renderDashboard() {
       </div>
     </div>`;
 
-  // interacciones
-  const rateInput = body.querySelector('#incRate');
-  const streamsInput = body.querySelector('#incStreams');
-  const recalc = () => {
-    const r = parseFloat(rateInput.value) || 0;
-    localStorage.setItem('ub_rate', String(r));
-    body.querySelectorAll('.inc-big')[0].textContent = (totalPlays * r).toFixed(2) + ' €';
-    body.querySelectorAll('.inc-big')[1].textContent = ((Number(streamsInput.value) || 0) * r).toFixed(2) + ' € / mes';
-  };
-  rateInput.oninput = recalc;
-  streamsInput.oninput = recalc;
-  streamsInput.onchange = async () => {
-    const ns = Number(streamsInput.value) || 0;
-    const newSocials = { ...socials, monthlyStreams: ns };
-    state.profile.socials = newSocials;
-    await sb.from('profiles').update({ socials: newSocials }).eq('id', uid);
-  };
   const copyInvite = body.querySelector('#copyInvite');
   copyInvite.onclick = async () => { try { await navigator.clipboard.writeText(inviteUrl); } catch { const i = body.querySelector('#inviteUrl'); i.select(); try { document.execCommand('copy'); } catch {} } copyInvite.textContent = 'Copiado ✓'; toast('Enlace de invitación copiado'); };
   body.querySelector('#shareInvite').onclick = () => { if (navigator.share) navigator.share({ title: 'Únete a UnderBro', text: 'Sígueme en UnderBro 🎧', url: inviteUrl }).catch(() => {}); else { navigator.clipboard?.writeText(inviteUrl); toast('Enlace copiado'); } };
-  body.querySelector('#editSocialsBtn').onclick = () => editSocialsModal(() => renderDashboard());
+  body.querySelector('#editLinksBtn').onclick = () => editLinksModal(() => renderDashboard());
   body.querySelectorAll('.dt-row').forEach(r => r.onclick = () => { const t = tracks.find(x => x.id === r.dataset.tid); if (t) openProfile(uid); });
 }
 
-function editSocialsModal(onSaved) {
-  const socials = (state.profile.socials && typeof state.profile.socials === 'object') ? state.profile.socials : {};
+function editLinksModal(onSaved) {
+  const theme = (state.profile.theme && typeof state.profile.theme === 'object') ? JSON.parse(JSON.stringify(state.profile.theme)) : {};
+  const links = Array.isArray(theme.links) ? theme.links.slice() : [];
   const m = openModal(`
-    <div class="modal-head"><h3>Tus redes</h3><button class="close">&times;</button></div>
+    <div class="modal-head"><h3>Tus redes y enlaces</h3><button class="close">&times;</button></div>
     <div class="modal-body">
-      <p class="dash-note" style="margin-bottom:14px">Pon el enlace y tus seguidores de cada red. Más adelante se podrán conectar automáticamente.</p>
-      ${SOCIAL_DEFS.map(s => {
-        const v = socials[s.key] || {};
-        return `<div class="field"><label>${s.label}</label>
-          <input type="url" data-su="${s.key}" placeholder="Enlace (https://...)" value="${esc(v.url || '')}" style="margin-bottom:6px" />
-          <input type="number" data-sf="${s.key}" min="0" placeholder="Nº de seguidores" value="${v.followers != null ? esc(v.followers) : ''}" />
-        </div>`;
-      }).join('')}
-      <button class="btn primary" id="saveSocials" style="width:100%">Guardar</button>
-      <div class="auth-msg" id="socMsg"></div>
+      <p class="dash-note" style="margin-bottom:12px">Estos enlaces aparecen también en tu perfil. Pega la URL (Spotify, Instagram, YouTube, TikTok…).</p>
+      <div id="linkRows"></div>
+      <button class="btn sm" id="addLinkRow" type="button">＋ Añadir enlace</button>
+      <button class="btn primary" id="saveLinks" style="width:100%;margin-top:12px">Guardar</button>
+      <div class="auth-msg" id="lnMsg"></div>
     </div>`);
-  m.querySelector('#saveSocials').onclick = async () => {
-    const out = { monthlyStreams: Number(socials.monthlyStreams) || 0 };
-    SOCIAL_DEFS.forEach(s => {
-      const url = m.querySelector(`[data-su="${s.key}"]`).value.trim();
-      const fol = m.querySelector(`[data-sf="${s.key}"]`).value.trim();
-      if (url || fol) out[s.key] = { url: url || '', followers: fol ? Number(fol) : null };
-    });
-    const { error } = await sb.from('profiles').update({ socials: out }).eq('id', state.user.id);
-    if (error) { m.querySelector('#socMsg').textContent = 'No se pudo guardar'; return; }
-    state.profile.socials = out;
-    m.remove(); toast('Redes actualizadas');
+  const rows = m.querySelector('#linkRows');
+  function addRow(label = '', url = '') {
+    const row = el(`<div class="st-link-row"><input type="text" class="st-link-label ln-label" maxlength="24" placeholder="Nombre (Spotify…)" value="${esc(label)}" /><input type="url" class="st-link-url ln-url" placeholder="https://..." value="${esc(url)}" /><button class="st-link-x" type="button" aria-label="Quitar">&times;</button></div>`);
+    row.querySelector('.st-link-x').onclick = () => row.remove();
+    rows.appendChild(row);
+  }
+  links.forEach(l => addRow(l.label, l.url));
+  if (!links.length) addRow();
+  m.querySelector('#addLinkRow').onclick = () => addRow();
+  m.querySelector('#saveLinks').onclick = async () => {
+    const newLinks = [...rows.querySelectorAll('.st-link-row')]
+      .map(r => ({ label: r.querySelector('.ln-label').value.trim() || 'Enlace', url: czHref(r.querySelector('.ln-url').value.trim()) }))
+      .filter(l => l.url && l.url !== '#');
+    theme.links = newLinks;
+    const { error } = await sb.from('profiles').update({ theme }).eq('id', state.user.id);
+    if (error) { m.querySelector('#lnMsg').textContent = 'No se pudo guardar'; return; }
+    state.profile.theme = theme;
+    m.remove(); toast('Enlaces actualizados');
     if (onSaved) onSaved();
   };
 }
