@@ -893,6 +893,10 @@ img { display: block; }
 .ev-detail-actions { display: flex; gap: 8px; }
 .modal-body .ev-detail-actions .btn, .modal-body .ev-detail-actions .btn.primary { width: auto; margin-top: 0; }
 
+.prof-ev-head { font-size: 13px; font-weight: 750; color: var(--ink-soft); margin: 6px 2px 10px; }
+.prof-ev-head:not(:first-child) { margin-top: 18px; }
+#profEvents .ev-list { margin-bottom: 4px; }
+
 /* ---- Insignia verificado ---- */
 .vbadge { width: 15px; height: 15px; color: var(--blue-2); vertical-align: -2px; display: inline-block; }
 .person-name .vbadge, .fr-name .vbadge { width: 14px; height: 14px; }
@@ -1144,9 +1148,20 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
   .bottom-nav button svg { width: 23px; height: 23px; stroke: var(--ink-soft); transition: stroke .15s, transform .15s var(--ease); }
   .bottom-nav button.active { color: var(--blue-deep); }
   .bottom-nav button.active svg { stroke: var(--blue-deep); transform: translateY(-1px); }
-  .bottom-nav .nav-upload { margin-top: -24px; }
-  .bottom-nav .nav-upload .u-fab { width: 54px; height: 54px; border-radius: 50%; background: var(--accent-grad); display: grid; place-items: center; box-shadow: var(--sh-blue); border: 3px solid var(--panel); }
-  .bottom-nav .nav-upload .u-fab svg { width: 26px; height: 26px; stroke: #fff; }
+  /* Orbe central "Yo" — bola mágica */
+  .bottom-nav .nav-orb { margin-top: -26px; overflow: visible; }
+  .bottom-nav .nav-orb .orb { width: 58px; height: 58px; border-radius: 50%; position: relative; display: grid; place-items: center; animation: orbFloat 3.4s ease-in-out infinite; }
+  .bottom-nav .nav-orb .orb-ring { position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(from 0deg, #6fb6e0, #8b7fe0, #56c5d0, #6f8fc6, #9d8fe6, #6fb6e0); animation: orbSpin 5s linear infinite; box-shadow: 0 8px 24px rgba(95,127,184,.5); }
+  .bottom-nav .nav-orb .orb-ring::after { content: ""; position: absolute; inset: -7px; border-radius: 50%; background: radial-gradient(circle, rgba(111,143,198,.5), transparent 70%); animation: orbGlow 2.6s ease-in-out infinite; z-index: -1; }
+  .bottom-nav .nav-orb .orb-av { position: relative; z-index: 1; width: 50px; height: 50px; border-radius: 50%; border: 3px solid var(--panel); background: var(--panel-2) center/cover no-repeat; display: grid; place-items: center; font-weight: 800; font-size: 17px; color: var(--blue-2); overflow: hidden; }
+  .bottom-nav .nav-orb .orb-label { font-size: 10px; font-weight: 700; color: var(--ink-soft); margin-top: 2px; }
+  .bottom-nav .nav-orb.active .orb-label { color: var(--blue-deep); }
+  .bottom-nav .nav-orb.active .orb-av { border-color: var(--blue); }
+  .bottom-nav .nav-orb:active .orb { transform: scale(.92); }
+  @keyframes orbSpin { to { transform: rotate(360deg); } }
+  @keyframes orbFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+  @keyframes orbGlow { 0%,100% { opacity: .45; transform: scale(1); } 50% { opacity: .9; transform: scale(1.15); } }
+  @media (prefers-reduced-motion: reduce) { .bottom-nav .nav-orb .orb, .bottom-nav .nav-orb .orb-ring, .bottom-nav .nav-orb .orb-ring::after { animation: none; } }
   .bottom-nav button .badge { position: absolute; top: 2px; right: 50%; margin-right: -22px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: #e2674f; color: #fff; font-size: 9px; font-weight: 800; display: grid; place-items: center; }
 
   /* DRAWERS por encima de la nav, con safe-area */
