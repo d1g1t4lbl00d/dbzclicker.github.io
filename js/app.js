@@ -814,6 +814,68 @@ async function toggleComments(t, card) {
   const { data } = await sb.from('comments').select('*, profiles(*)').eq('track_id', t.id).order('created_at', { ascending: true });
   renderComments(box, t, data || []);
 }
+/* =======================================================================
+   MENCIONES @usuario (enlazar + autocompletar)
+   ======================================================================= */
+function linkifyMentions(text) {
+  return esc(text || '').replace(/(^|[^a-zA-Z0-9_@])@([a-zA-Z0-9_.]{2,30})/g,
+    (mm, pre, name) => `${pre}<a class="mention" data-mention="${name}">@${name}</a>`);
+}
+async function openProfileByUsername(username) {
+  const clean = String(username || '').replace(/^@/, '').replace(/\.+$/, '');
+  const { data } = await sb.from('profiles').select('id').ilike('username', clean).maybeSingle();
+  if (data) openProfile(data.id); else toast('Usuario @' + clean + ' no encontrado');
+}
+// un único listener delegado para todas las menciones
+document.addEventListener('click', (e) => {
+  const mEl = e.target.closest('.mention');
+  if (!mEl) return;
+  e.preventDefault(); e.stopPropagation();
+  openProfileByUsername(mEl.dataset.mention);
+});
+// autocompletado al escribir @ en un input/textarea
+function attachMentionAutocomplete(input) {
+  if (!input || input.dataset.mentionAc) return;
+  input.dataset.mentionAc = '1';
+  let dd = null, reqId = 0;
+  const close = () => { if (dd) { dd.remove(); dd = null; } };
+  const place = () => {
+    if (!dd) return;
+    const r = input.getBoundingClientRect();
+    dd.style.left = Math.max(8, r.left) + 'px';
+    dd.style.width = Math.min(r.width, 300) + 'px';
+    dd.style.bottom = (window.innerHeight - r.top + 6) + 'px';
+  };
+  input.addEventListener('input', async () => {
+    const pos = input.selectionStart;
+    const m = input.value.slice(0, pos).match(/@([a-zA-Z0-9_.]{1,30})$/);
+    if (!m) { close(); return; }
+    const q = m[1]; const my = ++reqId;
+    const { data } = await sb.from('profiles').select('id,username,display_name,avatar_url').ilike('username', q + '%').limit(6);
+    if (my !== reqId) return;
+    const list = data || [];
+    if (!list.length) { close(); return; }
+    close();
+    dd = el(`<div class="mention-dd"></div>`);
+    list.forEach(u => {
+      const item = el(`<div class="mention-dd-item">${avatarHTML(u, '')}<div class="mdd-txt"><b>@${esc(u.username)}</b><span>${esc(u.display_name || '')}</span></div></div>`);
+      item.onmousedown = (ev) => {
+        ev.preventDefault();
+        const before = input.value.slice(0, pos - m[0].length);
+        const after = input.value.slice(pos);
+        const ins = '@' + u.username + ' ';
+        input.value = before + ins + after;
+        const np = (before + ins).length;
+        input.setSelectionRange(np, np); input.focus(); close();
+      };
+      dd.appendChild(item);
+    });
+    document.body.appendChild(dd); place();
+  });
+  input.addEventListener('blur', () => setTimeout(close, 160));
+  window.addEventListener('resize', place);
+}
+
 function renderComments(box, t, comments) {
   box.innerHTML = comments.map(c => {
     const canDel = c.user_id === state.user.id || state.profile.is_admin;
@@ -824,7 +886,7 @@ function renderComments(box, t, comments) {
         <div class="c-line"><b class="c-name" data-uid="${c.user_id}">${esc(c.profiles?.display_name || c.profiles?.username || 'anónimo')}</b>
         <span class="c-time">${timeAgo(c.created_at)}</span>
         ${canDel ? `<button class="c-del" data-del-comment="${c.id}" title="Borrar comentario">✕</button>` : ''}</div>
-        <p>${esc(c.body)}</p>
+        <p>${linkifyMentions(c.body)}</p>
       </div>
     </div>`;
   }).join('') || '<p class="c-hint">Sé el primero en comentar.</p>';
@@ -837,7 +899,8 @@ function renderComments(box, t, comments) {
       renderComments(box, t, comments.filter(x => x.id !== id));
     };
   });
-  const form = el(`<form class="comment-form"><input type="text" placeholder="Añade un comentario..." maxlength="400" required /><button class="comment-send" type="submit" aria-label="Enviar"><svg fill="none" stroke="#fff"><use href="#i-send"/></svg></button></form>`);
+  const form = el(`<form class="comment-form"><input type="text" placeholder="Añade un comentario... (@ para mencionar)" maxlength="400" required /><button class="comment-send" type="submit" aria-label="Enviar"><svg fill="none" stroke="#fff"><use href="#i-send"/></svg></button></form>`);
+  attachMentionAutocomplete(form.querySelector('input'));
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!requireNotBanned()) return;
@@ -1519,7 +1582,7 @@ function postCard(p, liked) {
         </div>` : ''}
       </div>
       <div class="post-img"><img src="${esc(p.image_url)}" alt="" loading="lazy" data-act="zoom" /></div>
-      ${p.caption ? `<div class="post-caption"><b data-act="profile">@${esc(prof.username || '')}</b> ${esc(p.caption)}</div>` : ''}
+      ${p.caption ? `<div class="post-caption"><b data-act="profile">@${esc(prof.username || '')}</b> ${linkifyMentions(p.caption)}</div>` : ''}
       <div class="t-foot">
         <span class="time"><svg style="width:12px;height:12px;vertical-align:-2px" fill="currentColor" stroke="none"><use href="#i-heart"/></svg> <span class="likecount">${p.likes_count || 0}</span></span>
         <button class="act like ${liked ? 'on' : ''}" data-act="like"><svg><use href="#i-heart"/></svg><span class="ln">${liked ? 'Te gusta' : 'Me gusta'}</span></button>
@@ -1656,7 +1719,7 @@ function renderPostComments(box, p, comments) {
         <div class="c-line"><b class="c-name" data-uid="${c.user_id}">${esc(c.profiles?.display_name || c.profiles?.username || 'anónimo')}</b>
         <span class="c-time">${timeAgo(c.created_at)}</span>
         ${canDel ? `<button class="c-del" data-del-comment="${c.id}" title="Borrar comentario">✕</button>` : ''}</div>
-        <p>${esc(c.body)}</p>
+        <p>${linkifyMentions(c.body)}</p>
       </div>
     </div>`;
   }).join('') || '<p class="c-hint">Sé el primero en comentar.</p>';
@@ -1669,7 +1732,8 @@ function renderPostComments(box, p, comments) {
       renderPostComments(box, p, comments.filter(x => x.id !== id));
     };
   });
-  const form = el(`<form class="comment-form"><input type="text" placeholder="Añade un comentario..." maxlength="400" required /><button class="comment-send" type="submit" aria-label="Enviar"><svg fill="none" stroke="#fff"><use href="#i-send"/></svg></button></form>`);
+  const form = el(`<form class="comment-form"><input type="text" placeholder="Añade un comentario... (@ para mencionar)" maxlength="400" required /><button class="comment-send" type="submit" aria-label="Enviar"><svg fill="none" stroke="#fff"><use href="#i-send"/></svg></button></form>`);
+  attachMentionAutocomplete(form.querySelector('input'));
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!requireNotBanned()) return;
@@ -2647,6 +2711,7 @@ async function renderNotifications() {
    ======================================================================= */
 async function initChat() {
   const box = $('chatMsgs');
+  attachMentionAutocomplete($('chatInput'));
   const { data } = await sb.from('messages').select('*, profiles(*)').order('created_at', { ascending: false }).limit(40);
   const msgs = (data||[]).reverse();
   box.innerHTML = '';
@@ -2680,7 +2745,7 @@ async function initChat() {
 function appendChatMsg(m) {
   const box = $('chatMsgs');
   const canDel = m.user_id === state.user.id || state.profile.is_admin;
-  const row = el(`<div class="chat-msg" data-mid="${m.id}"><span class="who" data-uid="${m.user_id}">${esc(m.profiles?.display_name||m.profiles?.username||'anónimo')}</span><span class="when">${timeAgo(m.created_at)}</span>${canDel?`<button class="act sm" data-del-msg style="float:right;padding:0 5px" title="Borrar mensaje">✕</button>`:''}<p>${esc(m.body)}</p></div>`);
+  const row = el(`<div class="chat-msg" data-mid="${m.id}"><span class="who" data-uid="${m.user_id}">${esc(m.profiles?.display_name||m.profiles?.username||'anónimo')}</span><span class="when">${timeAgo(m.created_at)}</span>${canDel?`<button class="act sm" data-del-msg style="float:right;padding:0 5px" title="Borrar mensaje">✕</button>`:''}<p>${linkifyMentions(m.body)}</p></div>`);
   const who = row.querySelector('.who');
   who.onclick = () => openProfile(m.user_id);
   who.style.cursor = 'pointer';
@@ -2699,6 +2764,7 @@ function scrollChat() { const b = $('chatMsgs'); b.scrollTop = b.scrollHeight; }
    ======================================================================= */
 async function initDM() {
   await refreshDmBadge();
+  attachMentionAutocomplete($('dmInput'));
   // controles de la pantalla de chat (persistente)
   $('dmBack').onclick = closeDmScreen;
   $('dmAttach').onclick = () => $('dmFile').click();
@@ -2747,7 +2813,7 @@ function bubbleHTML(msg) {
     }
     else media = `<a class="dm-filechip" href="${esc(msg.attachment_url)}" target="_blank" rel="noopener"><svg fill="none"><use href="#i-file"/></svg><span class="fn">${esc(msg.attachment_name || 'archivo')}</span></a>`;
   }
-  const cap = (msg.body && !isTrack) ? `<div class="dm-cap">${esc(msg.body)}</div>` : '';
+  const cap = (msg.body && !isTrack) ? `<div class="dm-cap">${linkifyMentions(msg.body)}</div>` : '';
   const time = new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   return `<div class="dm-bubble ${mine ? 'me' : 'them'} ${media ? 'has-media' : ''}">${media}${cap}<span class="t">${time}</span></div>`;
 }
