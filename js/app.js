@@ -40,6 +40,25 @@ function setTheme(theme) {
   if (meta) meta.setAttribute('content', theme === 'dark' ? '#0f1218' : '#5f7fb8');
 }
 
+/* ---- insignia de verificado / fundador ---- */
+function verifiedBadge(p) { return (p && p.verified) ? ' <svg class="vbadge" viewBox="0 0 24 24" aria-label="Verificado"><use href="#i-verify"/></svg>' : ''; }
+
+/* ---- referidos (marketing) ---- */
+try { const _r = new URLSearchParams(location.search).get('ref'); if (_r) localStorage.setItem('ub_ref', _r.slice(0, 40)); } catch (_) {}
+async function applyReferral() {
+  if (!state.profile || state.profile.referred_by) return;
+  const ref = localStorage.getItem('ub_ref');
+  if (!ref) return;
+  localStorage.removeItem('ub_ref');
+  try {
+    const { data } = await sb.from('profiles').select('id').ilike('username', ref).maybeSingle();
+    if (data && data.id && data.id !== state.user.id) {
+      await sb.from('profiles').update({ referred_by: data.id }).eq('id', state.user.id);
+      state.profile.referred_by = data.id;
+    }
+  } catch (_) {}
+}
+
 // ---------------------------------------------------------------- helpers
 const $ = (id) => document.getElementById(id);
 const el = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
@@ -177,6 +196,7 @@ async function onAuthenticated() {
   state.user = session.user;
   // cargar / asegurar perfil
   await ensureProfile();
+  applyReferral();
   $('authScreen').classList.add('hidden');
   $('app').classList.remove('hidden');
   renderMe();
@@ -214,7 +234,7 @@ async function ensureProfile() {
 }
 
 function renderMe() {
-  $('meName').innerHTML = esc(state.profile.display_name || state.profile.username) +
+  $('meName').innerHTML = esc(state.profile.display_name || state.profile.username) + verifiedBadge(state.profile) +
     (state.profile.is_admin ? ' <span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c;padding:1px 7px">MOD</span>' : '');
   $('meAvatar').outerHTML = avatarHTML(state.profile).replace('class="avatar ', 'id="meAvatar" class="avatar ');
 }
@@ -519,7 +539,7 @@ function trackCard(t) {
       <div class="t-head">
         <div class="t-titles">
           <div class="t-title">${esc(t.title)}</div>
-          <div class="t-artist">por <a data-act="profile">${esc(prof.display_name || prof.username || t.artist || 'anónimo')}</a>${ft}</div>
+          <div class="t-artist">por <a data-act="profile">${esc(prof.display_name || prof.username || t.artist || 'anónimo')}</a>${verifiedBadge(prof)}${ft}</div>
         </div>
         ${t.genre ? `<span class="t-genre">${esc(t.genre)}</span>` : ''}
       </div>
@@ -1988,7 +2008,7 @@ async function openProfile(userId) {
       <div class="profile-head ${banner ? 'has-banner' : ''}">
         ${avatarHTML(prof)}
         <div style="flex:1;min-width:0">
-          <h2 class="accent-name">${esc(prof.display_name || prof.username)} ${prof.is_admin?'<span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c;vertical-align:middle">MOD</span>':''} ${prof.banned?'<span class="t-genre" style="background:#fae3e0;border-color:#f0c2bc;color:#c0533f;vertical-align:middle">baneado</span>':''}</h2>
+          <h2 class="accent-name">${esc(prof.display_name || prof.username)}${verifiedBadge(prof)} ${prof.is_admin?'<span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c;vertical-align:middle">MOD</span>':''} ${prof.banned?'<span class="t-genre" style="background:#fae3e0;border-color:#f0c2bc;color:#c0533f;vertical-align:middle">baneado</span>':''}</h2>
           <div style="color:var(--ink-soft)">@${esc(prof.username)}</div>
           ${tagline ? `<div class="profile-tagline">${esc(tagline)}</div>` : ''}
           ${prof.bio ? `<p style="margin-top:6px;max-width:520px">${esc(prof.bio)}</p>` : ''}
@@ -2004,6 +2024,7 @@ async function openProfile(userId) {
                   : `<button class="btn ${followsHim?'':'primary'}" id="followBtn">${followsHim?'Siguiendo ✓':'+ Seguir'}</button>`}
           ${!isMe ? `<button class="btn" id="msgBtn"><svg fill="none" stroke="currentColor"><use href="#i-mail"/></svg> Mensaje</button>` : ''}
           ${(!isMe && state.profile.is_admin && !prof.is_admin) ? `<button class="btn" id="banBtn" style="border-color:#e3b7b0;color:#c0533f">${prof.banned?'Desbanear':'Banear usuario'}</button>` : ''}
+          ${(!isMe && state.profile.is_admin) ? `<button class="btn" id="verifyBtn"><svg fill="none" stroke="currentColor"><use href="#i-verify"/></svg> ${prof.verified?'Quitar verificación':'Verificar'}</button>` : ''}
           ${(!isMe && state.profile.is_admin && !prof.is_admin) ? `<button class="btn danger-btn" id="delUserBtn"><svg fill="none" stroke="#fff"><use href="#i-trash"/></svg> Eliminar usuario</button>` : ''}
         </div>
       </div>
@@ -2074,6 +2095,15 @@ async function openProfile(userId) {
     banBtn.textContent = newVal ? 'Desbanear' : 'Banear usuario';
     toast(newVal ? 'Usuario baneado' : 'Usuario desbaneado');
   };
+  const verifyBtn = $('verifyBtn');
+  if (verifyBtn) verifyBtn.onclick = async () => {
+    const newVal = !prof.verified;
+    const { error } = await sb.from('profiles').update({ verified: newVal }).eq('id', userId);
+    if (error) { toast('No se pudo actualizar'); return; }
+    prof.verified = newVal;
+    verifyBtn.textContent = newVal ? 'Quitar verificación' : 'Verificar';
+    toast(newVal ? '✔ Usuario verificado' : 'Verificación quitada');
+  };
   if (!isMe) $('followBtn').onclick = async () => {
     const btn = $('followBtn');
     if (state.follows.has(userId)) {
@@ -2107,7 +2137,7 @@ async function renderPeople() {
         <div class="person-top">
           ${avatarHTML(p)}
           <div class="person-info">
-            <div class="person-name">${esc(p.display_name||p.username)}${p.is_admin?' <span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c">MOD</span>':''}${p.banned?' <span class="t-genre" style="background:#fae3e0;border-color:#f0c2bc;color:#c0533f">baneado</span>':''}</div>
+            <div class="person-name">${esc(p.display_name||p.username)}${verifiedBadge(p)}${p.is_admin?' <span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c">MOD</span>':''}${p.banned?' <span class="t-genre" style="background:#fae3e0;border-color:#f0c2bc;color:#c0533f">baneado</span>':''}</div>
             <div class="person-handle">@${esc(p.username)}</div>
             ${p.bio?`<div class="person-bio">${esc(p.bio)}</div>`:''}
           </div>
@@ -2566,12 +2596,15 @@ async function renderDashboard() {
   const main = $('main');
   main.innerHTML = `<div class="main-head"><div><h2>Estudio</h2><div class="sub">Tu panel de artista</div></div></div><div id="dashBody"><div class="loading" style="padding:30px"><div class="spinner"></div></div></div>`;
   const uid = state.user.id;
-  const [tracksRes, followersRes, followingRes, postsRes] = await Promise.all([
+  const [tracksRes, followersRes, followingRes, postsRes, refRes] = await Promise.all([
     sb.from('tracks').select('id,title,cover_url,plays,likes_count,reposts_count,created_at').eq('user_id', uid).order('plays', { ascending: false }),
     sb.from('follows').select('created_at').eq('following_id', uid),
     sb.from('follows').select('follower_id', { count: 'exact', head: true }).eq('follower_id', uid),
     sb.from('posts').select('id', { count: 'exact', head: true }).eq('user_id', uid),
+    sb.from('profiles').select('id', { count: 'exact', head: true }).eq('referred_by', uid),
   ]);
+  const invitedCount = refRes.count || 0;
+  const inviteUrl = `${location.origin}/?ref=${encodeURIComponent(state.profile.username || '')}`;
   const tracks = tracksRes.data || [];
   const followerDates = (followersRes.data || []).map(r => r.created_at);
   const totalPlays = tracks.reduce((a, t) => a + (t.plays || 0), 0);
@@ -2639,6 +2672,13 @@ async function renderDashboard() {
     </div>
 
     <div class="dash-section">
+      <h3>Invita y crece · <span style="color:var(--accent)">${invitedCount}</span> ${invitedCount === 1 ? 'invitado' : 'invitados'}</h3>
+      <p class="dash-hint" style="margin-bottom:10px">Comparte tu enlace. Quien entre por él contará como invitación tuya.</p>
+      <div class="share-link"><input type="text" id="inviteUrl" readonly value="${esc(inviteUrl)}" /><button class="btn sm primary" id="copyInvite">Copiar</button></div>
+      <button class="btn" id="shareInvite" style="width:100%;margin-top:8px"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg> Compartir invitación</button>
+    </div>
+
+    <div class="dash-section">
       <div class="dash-sec-head"><h3>Tus redes</h3><button class="btn sm" id="editSocialsBtn"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg> Editar</button></div>
       <div class="dash-socials">
         ${SOCIAL_DEFS.map(s => {
@@ -2683,6 +2723,9 @@ async function renderDashboard() {
     state.profile.socials = newSocials;
     await sb.from('profiles').update({ socials: newSocials }).eq('id', uid);
   };
+  const copyInvite = body.querySelector('#copyInvite');
+  copyInvite.onclick = async () => { try { await navigator.clipboard.writeText(inviteUrl); } catch { const i = body.querySelector('#inviteUrl'); i.select(); try { document.execCommand('copy'); } catch {} } copyInvite.textContent = 'Copiado ✓'; toast('Enlace de invitación copiado'); };
+  body.querySelector('#shareInvite').onclick = () => { if (navigator.share) navigator.share({ title: 'Únete a UnderBro', text: 'Sígueme en UnderBro 🎧', url: inviteUrl }).catch(() => {}); else { navigator.clipboard?.writeText(inviteUrl); toast('Enlace copiado'); } };
   body.querySelector('#editSocialsBtn').onclick = () => editSocialsModal(() => renderDashboard());
   body.querySelectorAll('.dt-row').forEach(r => r.onclick = () => { const t = tracks.find(x => x.id === r.dataset.tid); if (t) openProfile(uid); });
 }
