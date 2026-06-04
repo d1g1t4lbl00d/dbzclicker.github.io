@@ -893,6 +893,10 @@ img { display: block; }
 .ev-detail-actions { display: flex; gap: 8px; }
 .modal-body .ev-detail-actions .btn, .modal-body .ev-detail-actions .btn.primary { width: auto; margin-top: 0; }
 
+/* ---- Insignia verificado ---- */
+.vbadge { width: 15px; height: 15px; color: var(--blue-2); vertical-align: -2px; display: inline-block; }
+.person-name .vbadge, .fr-name .vbadge { width: 14px; height: 14px; }
+
 /* ---- Estudio (panel del artista) ---- */
 .dash-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; margin-bottom: 22px; }
 .kpi { background: var(--panel); border: 1px solid var(--line-soft); border-radius: 14px; padding: 14px 16px; box-shadow: var(--sh-1); }
