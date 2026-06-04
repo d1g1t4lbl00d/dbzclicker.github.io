@@ -82,6 +82,7 @@
   color: var(--ink-2);
 }
 :root[data-theme="dark"] .btn::after { background: linear-gradient(90deg, transparent, rgba(255,255,255,.08), transparent); }
+:root[data-theme="dark"] .icon-btn { background: linear-gradient(180deg, #242b37, #1b212b); color: var(--ink-2); }
 :root[data-theme="dark"] input:focus,
 :root[data-theme="dark"] textarea:focus,
 :root[data-theme="dark"] .field input:focus,
