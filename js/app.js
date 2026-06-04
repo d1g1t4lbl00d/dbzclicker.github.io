@@ -19,6 +19,7 @@ const state = {
   tracks: [],          // pistas cargadas en la vista actual
   likes: new Set(),    // track_ids que me gustan
   reposts: new Set(),  // track_ids que he reposteado
+  eventSaves: new Set(),// event_ids que he guardado
   follows: new Set(),  // user_ids que sigo
   downloads: new Set(JSON.parse(localStorage.getItem('ub_downloads') || '[]')),
   view: 'feed',
@@ -179,7 +180,7 @@ async function onAuthenticated() {
   $('authScreen').classList.add('hidden');
   $('app').classList.remove('hidden');
   renderMe();
-  await Promise.all([loadLikes(), loadReposts(), loadFollows()]);
+  await Promise.all([loadLikes(), loadReposts(), loadEventSaves(), loadFollows()]);
   bindUI();
   initPlayer();
   initNowPlaying();
@@ -225,6 +226,10 @@ async function loadLikes() {
 async function loadReposts() {
   const { data } = await sb.from('reposts').select('track_id').eq('user_id', state.user.id);
   state.reposts = new Set((data||[]).map(r => r.track_id));
+}
+async function loadEventSaves() {
+  const { data } = await sb.from('event_saves').select('event_id').eq('user_id', state.user.id);
+  state.eventSaves = new Set((data||[]).map(r => r.event_id));
 }
 async function loadFollows() {
   const { data } = await sb.from('follows').select('following_id').eq('follower_id', state.user.id);
@@ -327,6 +332,7 @@ async function switchView(view) {
   if (view === 'posts') return renderPosts();
   if (view === 'search') return renderSearch();
   if (view === 'playlists') return renderPlaylists();
+  if (view === 'events') return renderEvents();
   if (view === 'radio') return startRadio();
 
   main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
@@ -2539,6 +2545,179 @@ async function markStoryViewed(id) {
   if (state._storySeen && state._storySeen.has(id)) return;
   if (state._storySeen) state._storySeen.add(id);
   try { await sb.from('story_views').upsert({ story_id: id, viewer_id: state.user.id }, { onConflict: 'story_id,viewer_id' }); } catch (_) {}
+}
+
+/* =======================================================================
+   EVENTOS (tablón) — flyer + fecha/hora + lugar + guardar con aviso
+   ======================================================================= */
+function fmtEventDate(iso) {
+  try { return new Date(iso).toLocaleString('es-ES', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); }
+  catch (_) { return iso; }
+}
+function fmtEventFull(iso) {
+  try { return new Date(iso).toLocaleString('es-ES', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }); }
+  catch (_) { return iso; }
+}
+async function renderEvents() {
+  setActiveNav('events');
+  const main = $('main');
+  main.innerHTML = `<div class="main-head"><div><h2>Eventos</h2><div class="sub">Conciertos, quedadas y fechas de la comunidad</div></div><button class="btn primary" id="newEventBtn"><svg fill="none" stroke="#fff"><use href="#i-plus"/></svg> Crear</button></div><div id="evList"><div class="loading" style="padding:30px"><div class="spinner"></div></div></div>`;
+  $('newEventBtn').onclick = createEventModal;
+  const since = new Date(Date.now() - 6 * 3600 * 1000).toISOString();
+  const { data } = await sb.from('events').select('*, profiles!events_user_id_fkey(*)').gte('starts_at', since).order('starts_at', { ascending: true }).limit(80);
+  const list = $('evList');
+  const evs = data || [];
+  if (!evs.length) { list.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-calendar"/></svg><p>No hay eventos próximos. ¡Crea el primero con el botón <b>Crear</b>!</p></div>`; return; }
+  list.className = 'ev-list'; list.innerHTML = '';
+  evs.forEach(ev => list.appendChild(eventCard(ev)));
+}
+function eventCard(ev) {
+  const saved = state.eventSaves.has(ev.id);
+  const cover = ev.flyer_url
+    ? `<div class="ev-flyer" style="background-image:url('${esc(ev.flyer_url)}')"></div>`
+    : `<div class="ev-flyer ev-flyer-empty"><svg fill="none" stroke="#fff"><use href="#i-calendar"/></svg></div>`;
+  const card = el(`
+    <div class="ev-card" data-id="${ev.id}">
+      ${cover}
+      <div class="ev-info">
+        <div class="ev-date"><svg fill="none" stroke="currentColor"><use href="#i-clock"/></svg> ${esc(fmtEventDate(ev.starts_at))}</div>
+        <div class="ev-title">${esc(ev.title)}</div>
+        ${ev.location ? `<div class="ev-loc"><svg fill="none" stroke="currentColor"><use href="#i-pin"/></svg> ${esc(ev.location)}</div>` : ''}
+        <div class="ev-foot">
+          <button class="btn sm ${saved ? '' : 'primary'}" data-ev-save><svg fill="none" stroke="currentColor"><use href="#i-bookmark"/></svg> <span>${saved ? 'Guardado' : 'Guardar'}</span></button>
+          <span class="ev-saves"><b>${ev.saves_count || 0}</b> guardados</span>
+        </div>
+      </div>
+    </div>`);
+  card.addEventListener('click', (e) => {
+    if (e.target.closest('[data-ev-save]')) { e.stopPropagation(); toggleEventSave(ev, card); return; }
+    openEvent(ev.id);
+  });
+  return card;
+}
+async function toggleEventSave(ev, card) {
+  const btn = card.querySelector('[data-ev-save]');
+  const saved = state.eventSaves.has(ev.id);
+  if (saved) {
+    state.eventSaves.delete(ev.id);
+    ev.saves_count = Math.max(0, (ev.saves_count || 0) - 1);
+    if (btn) { btn.classList.add('primary'); btn.querySelector('span').textContent = 'Guardar'; }
+    await sb.from('event_saves').delete().eq('event_id', ev.id).eq('user_id', state.user.id);
+  } else {
+    state.eventSaves.add(ev.id);
+    ev.saves_count = (ev.saves_count || 0) + 1;
+    if (btn) { btn.classList.remove('primary'); btn.querySelector('span').textContent = 'Guardado'; }
+    await sb.from('event_saves').insert({ event_id: ev.id, user_id: state.user.id });
+    toast('🔖 Guardado · te avisaremos cuando se acerque');
+    // asegurar que pueda recibir el aviso
+    if (pushSupported() && typeof Notification !== 'undefined' && Notification.permission === 'default') enablePush();
+  }
+  document.querySelectorAll(`.ev-card[data-id="${ev.id}"] .ev-saves b, .ev-detail[data-id="${ev.id}"] .ev-saves b`).forEach(e => e.textContent = ev.saves_count);
+}
+async function openEvent(id) {
+  const m = openModal(`<div class="modal-head"><h3>Evento</h3><button class="close">&times;</button></div><div class="modal-body" id="evDetailBody"><div class="loading" style="padding:24px"><div class="spinner"></div></div></div>`);
+  const body = m.querySelector('#evDetailBody');
+  const { data: ev } = await sb.from('events').select('*, profiles!events_user_id_fkey(*)').eq('id', id).maybeSingle();
+  if (!ev) { body.innerHTML = '<div class="empty"><p>Este evento ya no existe.</p></div>'; return; }
+  const isOwner = ev.user_id === state.user.id;
+  const saved = state.eventSaves.has(ev.id);
+  const who = ev.profiles?.display_name || ev.profiles?.username || '';
+  body.innerHTML = `
+    <div class="ev-detail" data-id="${ev.id}">
+      ${ev.flyer_url ? `<div class="ev-detail-flyer"><img src="${esc(ev.flyer_url)}" alt="" /></div>` : ''}
+      <h2 class="ev-detail-title">${esc(ev.title)}</h2>
+      <div class="ev-detail-row"><svg fill="none" stroke="currentColor"><use href="#i-clock"/></svg> ${esc(fmtEventFull(ev.starts_at))}${ev.ends_at ? ' → ' + esc(fmtEventFull(ev.ends_at)) : ''}</div>
+      ${ev.location ? `<div class="ev-detail-row"><svg fill="none" stroke="currentColor"><use href="#i-pin"/></svg> ${esc(ev.location)}</div>` : ''}
+      <div class="ev-detail-row"><svg fill="none" stroke="currentColor"><use href="#i-people"/></svg> Publicado por <a id="evOwner">${esc(who)}</a> · <span class="ev-saves"><b>${ev.saves_count || 0}</b> guardados</span></div>
+      ${ev.description ? `<p class="ev-detail-desc">${linkifyMentions(ev.description)}</p>` : ''}
+      ${ev.link ? `<a class="btn" href="${esc(czHref(ev.link))}" target="_blank" rel="noopener noreferrer" style="width:100%;margin-bottom:10px"><svg fill="none" stroke="currentColor"><use href="#i-globe"/></svg> Más info / entradas</a>` : ''}
+      <div class="ev-detail-actions">
+        <button class="btn primary" id="evSaveBtn" style="flex:1">${saved ? '🔖 Guardado' : '🔖 Guardar y avisarme'}</button>
+        ${isOwner ? `<button class="btn" id="evEditBtn"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg></button><button class="btn danger-btn" id="evDelBtn"><svg fill="none" stroke="#fff"><use href="#i-trash"/></svg></button>` : ''}
+      </div>
+    </div>`;
+  const evOwner = body.querySelector('#evOwner'); if (evOwner) evOwner.onclick = () => { m.remove(); openProfile(ev.user_id); };
+  const saveBtn = body.querySelector('#evSaveBtn');
+  const paintSave = () => { saveBtn.textContent = state.eventSaves.has(ev.id) ? '🔖 Guardado' : '🔖 Guardar y avisarme'; saveBtn.classList.toggle('primary', !state.eventSaves.has(ev.id)); };
+  saveBtn.onclick = async () => { await toggleEventSave(ev, m.querySelector('.ev-detail')); paintSave(); };
+  if (isOwner) {
+    body.querySelector('#evEditBtn').onclick = () => { m.remove(); createEventModal(ev); };
+    body.querySelector('#evDelBtn').onclick = async () => {
+      if (!confirm('¿Eliminar este evento?')) return;
+      await sb.from('events').delete().eq('id', ev.id);
+      m.remove(); toast('Evento eliminado'); if (state.view === 'events') renderEvents();
+    };
+  }
+}
+function createEventModal(existing) {
+  const editing = !!existing;
+  const toLocal = (iso) => { try { const d = new Date(iso); const off = d.getTimezoneOffset(); return new Date(d.getTime() - off * 60000).toISOString().slice(0, 16); } catch (_) { return ''; } };
+  let flyerFile = null;
+  const m = openModal(`
+    <div class="modal-head"><h3>${editing ? 'Editar evento' : 'Nuevo evento'}</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <div class="cover-pick" id="evDz">
+        <div class="cover-prev" id="evPrev">${existing?.flyer_url ? `<img src="${esc(existing.flyer_url)}" alt="" />` : `<svg width="24" height="24" fill="none" stroke="currentColor"><use href="#i-image"/></svg>`}</div>
+        <div class="cover-pick-txt"><b id="evPickTxt">${existing?.flyer_url ? 'Cambiar flyer' : 'Sube el flyer'}</b><span>Cartel del evento (imagen)</span></div>
+      </div>
+      <input type="file" id="evFile" accept="image/*" hidden />
+      <div class="field"><label>Título *</label><input type="text" id="evTitle" maxlength="100" value="${esc(existing?.title || '')}" placeholder="Nombre del evento" /></div>
+      <div class="field"><label>Fecha y hora *</label><input type="datetime-local" id="evStart" value="${existing ? toLocal(existing.starts_at) : ''}" /></div>
+      <div class="field"><label>Fin (opcional)</label><input type="datetime-local" id="evEnd" value="${existing?.ends_at ? toLocal(existing.ends_at) : ''}" /></div>
+      <div class="field"><label>Lugar</label><input type="text" id="evLoc" maxlength="140" value="${esc(existing?.location || '')}" placeholder="Sala, ciudad, dirección…" /></div>
+      <div class="field"><label>Descripción</label><textarea id="evDesc" maxlength="800" placeholder="Line-up, precio, detalles…">${esc(existing?.description || '')}</textarea></div>
+      <div class="field"><label>Enlace (entradas/info, opcional)</label><input type="url" id="evLink" value="${esc(existing?.link || '')}" placeholder="https://..." /></div>
+      <button class="btn primary" id="evPublish" style="width:100%">${editing ? 'Guardar cambios' : 'Publicar evento'}</button>
+      <div class="auth-msg" id="evMsg"></div>
+    </div>`);
+  const fileInput = m.querySelector('#evFile');
+  m.querySelector('#evDz').onclick = () => fileInput.click();
+  fileInput.onchange = () => {
+    const f = fileInput.files[0]; if (!f) return;
+    flyerFile = f;
+    m.querySelector('#evPrev').innerHTML = `<img src="${URL.createObjectURL(f)}" alt="" />`;
+    m.querySelector('#evPickTxt').textContent = 'Cambiar flyer';
+  };
+  m.querySelector('#evPublish').onclick = async () => {
+    const title = m.querySelector('#evTitle').value.trim();
+    const startVal = m.querySelector('#evStart').value;
+    if (!title) { m.querySelector('#evMsg').textContent = 'Pon un título'; return; }
+    if (!startVal) { m.querySelector('#evMsg').textContent = 'Pon la fecha y hora'; return; }
+    const btn = m.querySelector('#evPublish'); btn.disabled = true; btn.textContent = 'Guardando…';
+    try {
+      let flyer_url = existing?.flyer_url || null;
+      if (flyerFile) {
+        const ext = (flyerFile.name.split('.').pop() || 'jpg').toLowerCase();
+        const path = `${state.user.id}/event_${Date.now()}.${ext}`;
+        const up = await sb.storage.from('posts').upload(path, flyerFile, { contentType: flyerFile.type, upsert: false });
+        if (up.error) throw up.error;
+        flyer_url = sb.storage.from('posts').getPublicUrl(path).data.publicUrl;
+      }
+      const endVal = m.querySelector('#evEnd').value;
+      const payload = {
+        title,
+        flyer_url,
+        starts_at: new Date(startVal).toISOString(),
+        ends_at: endVal ? new Date(endVal).toISOString() : null,
+        location: m.querySelector('#evLoc').value.trim(),
+        description: m.querySelector('#evDesc').value.trim(),
+        link: m.querySelector('#evLink').value.trim() || null,
+      };
+      if (editing) {
+        const { error } = await sb.from('events').update(payload).eq('id', existing.id);
+        if (error) throw error;
+      } else {
+        payload.user_id = state.user.id;
+        const { error } = await sb.from('events').insert(payload);
+        if (error) throw error;
+      }
+      m.remove(); toast(editing ? 'Evento actualizado' : '🎟️ Evento publicado');
+      if (state.view === 'events') renderEvents();
+    } catch (e) {
+      m.querySelector('#evMsg').textContent = 'No se pudo guardar el evento';
+      btn.disabled = false; btn.textContent = editing ? 'Guardar cambios' : 'Publicar evento';
+    }
+  };
 }
 
 /* =======================================================================
