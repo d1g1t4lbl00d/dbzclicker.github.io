@@ -729,6 +729,8 @@ img { display: block; }
 .follow-row .fr-actions { display: flex; gap: 6px; flex-shrink: 0; }
 /* evitar que la regla .modal-body .btn.primary estire los botones de las filas */
 .modal-body .follow-row .btn, .modal-body .follow-row .btn.primary { width: auto; margin-top: 0; padding: 8px 14px; }
+.share-photo-prev { margin-bottom: 12px; text-align: center; }
+.share-photo-prev img { max-height: 180px; max-width: 100%; border-radius: 12px; }
 .share-meta { margin-bottom: 12px; font-size: 14px; }
 .share-meta span { color: var(--ink-soft); }
 .share-link { display: flex; gap: 8px; margin-bottom: 12px; }

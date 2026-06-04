@@ -643,41 +643,84 @@ function shareTrack(t) {
   };
   const ns = m.querySelector('#nativeShare');
   if (ns) ns.onclick = () => { navigator.share({ title, text: title, url }).catch(() => {}); };
-  m.querySelector('#shareToChat').onclick = () => { m.remove(); shareToChatPicker(t, url, title); };
+  m.querySelector('#shareToChat').onclick = () => { m.remove(); shareToChatPicker(t); };
 }
-async function shareToChatPicker(t, url, title) {
+/* ---- COMPARTIR FOTO ---- */
+function postShareUrl(p) { return `${location.origin}/?post=${p.id}`; }
+function sharePost(p) {
+  const url = postShareUrl(p);
+  const who = p.profiles?.display_name || p.profiles?.username || 'UnderBro';
+  const title = `Foto de ${who}`;
+  const m = openModal(`
+    <div class="modal-head"><h3>Compartir foto</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <div class="share-photo-prev"><img src="${esc(p.image_url)}" alt="" /></div>
+      <div class="share-link"><input type="text" id="shareUrl" readonly value="${esc(url)}" /><button class="btn sm primary" id="copyLink">Copiar</button></div>
+      <div class="share-actions">
+        ${navigator.share ? `<button class="btn" id="nativeShare"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg> Compartir…</button>` : ''}
+        <button class="btn" id="shareToChat"><svg fill="none" stroke="currentColor"><use href="#i-mail"/></svg> Enviar por chat</button>
+      </div>
+    </div>`);
+  const copyBtn = m.querySelector('#copyLink');
+  copyBtn.onclick = async () => {
+    try { await navigator.clipboard.writeText(url); }
+    catch { const i = m.querySelector('#shareUrl'); i.select(); try { document.execCommand('copy'); } catch {} }
+    copyBtn.textContent = 'Copiado ✓'; toast('Enlace copiado');
+  };
+  const ns = m.querySelector('#nativeShare');
+  if (ns) ns.onclick = () => { navigator.share({ title, text: title, url }).catch(() => {}); };
+  m.querySelector('#shareToChat').onclick = () => {
+    m.remove();
+    openSharePicker(() => ({ body: p.caption ? p.caption.slice(0, 80) : '', attachment_type: 'image', attachment_url: p.image_url, attachment_name: 'foto' }), 'Foto enviada');
+  };
+}
+// Selector de chat genérico para compartir: makeMessage() devuelve los campos del DM
+async function openSharePicker(makeMessage, sentLabel) {
   const m = openModal(`<div class="modal-head"><h3>Enviar a…</h3><button class="close">&times;</button></div><div class="modal-body" id="shareChatBody"><div class="loading" style="padding:24px"><div class="spinner"></div></div></div>`);
   const body = m.querySelector('#shareChatBody');
   const { data } = await sb.from('follows').select('profiles!follows_following_id_fkey(*)').eq('follower_id', state.user.id);
   const people = (data || []).map(r => r.profiles).filter(Boolean);
-  if (!people.length) { body.innerHTML = `<div class="empty"><p>Sigue a alguien para poder enviarle pistas por chat.</p></div>`; return; }
+  if (!people.length) { body.innerHTML = `<div class="empty"><p>Sigue a alguien para poder enviarle contenido por chat.</p></div>`; return; }
   body.innerHTML = '';
   people.forEach(p => {
     const row = el(`<div class="follow-row">${avatarHTML(p)}<div class="fr-info"><div class="fr-name">${esc(p.display_name || p.username)}</div><div class="fr-handle">@${esc(p.username)}</div></div><div class="fr-actions"><button class="btn sm primary" data-send>Enviar</button></div></div>`);
     row.querySelector('[data-send]').onclick = async (e) => {
       const btn = e.currentTarget; btn.disabled = true; btn.textContent = 'Enviando…';
-      const meta = JSON.stringify({ id: t.id, title: t.title, artist: (t.profiles?.display_name || t.profiles?.username || t.artist || ''), cover_url: t.cover_url || '' });
-      const { error } = await sb.from('direct_messages').insert({
-        sender_id: state.user.id, recipient_id: p.id,
-        body: `🎵 ${t.title}`,
-        attachment_type: 'track', attachment_url: t.audio_url, attachment_name: meta,
-      });
+      const { error } = await sb.from('direct_messages').insert({ sender_id: state.user.id, recipient_id: p.id, ...makeMessage() });
       if (error) { toast('No se pudo enviar'); btn.disabled = false; btn.textContent = 'Enviar'; return; }
       btn.textContent = 'Enviado ✓';
-      toast('Pista enviada a ' + (p.display_name || p.username));
+      toast((sentLabel || 'Enviado') + ' a ' + (p.display_name || p.username));
     };
     body.appendChild(row);
   });
+}
+function shareToChatPicker(t) {
+  openSharePicker(() => ({
+    body: `🎵 ${t.title}`,
+    attachment_type: 'track',
+    attachment_url: t.audio_url,
+    attachment_name: JSON.stringify({ id: t.id, title: t.title, artist: (t.profiles?.display_name || t.profiles?.username || t.artist || ''), cover_url: t.cover_url || '' }),
+  }), 'Pista enviada');
 }
 // abrir una pista compartida por enlace (?track=ID)
 async function handleDeepLink() {
   const params = new URLSearchParams(location.search);
   const trackId = params.get('track');
-  if (!trackId) return;
+  const postId = params.get('post');
+  const playlistId = params.get('playlist');
+  if (!trackId && !postId && !playlistId) return;
   history.replaceState(null, '', location.pathname);
-  const { data } = await sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)').eq('id', trackId).maybeSingle();
-  if (data) { state.tracks = [data]; state.queue = [data.id]; playTrack(data); openNowPlaying(); }
-  else toast('La pista no existe o fue eliminada');
+  if (trackId) {
+    const { data } = await sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)').eq('id', trackId).maybeSingle();
+    if (data) { state.tracks = [data]; state.queue = [data.id]; playTrack(data); openNowPlaying(); }
+    else toast('La pista no existe o fue eliminada');
+  } else if (postId) {
+    const { data } = await sb.from('posts').select('*, profiles!posts_user_id_fkey(*)').eq('id', postId).maybeSingle();
+    if (data) openPostModal(data);
+    else toast('La foto no existe o fue eliminada');
+  } else if (playlistId) {
+    openPlaylist(playlistId);
+  }
 }
 
 /* ---- LIKES ---- */
@@ -1481,6 +1524,7 @@ function postCard(p, liked) {
         <span class="time"><svg style="width:12px;height:12px;vertical-align:-2px" fill="currentColor" stroke="none"><use href="#i-heart"/></svg> <span class="likecount">${p.likes_count || 0}</span></span>
         <button class="act like ${liked ? 'on' : ''}" data-act="like"><svg><use href="#i-heart"/></svg><span class="ln">${liked ? 'Te gusta' : 'Me gusta'}</span></button>
         <button class="act" data-act="toggleComments"><svg><use href="#i-comment"/></svg>Comentar</button>
+        <button class="act" data-act="share"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg>Compartir</button>
       </div>
       <div class="comments hidden" data-comments></div>
     </div>`);
@@ -1496,6 +1540,7 @@ function handlePostClick(e, p, card) {
   else if (act === 'edit') openEditPost(p, card);
   else if (act === 'delete') deletePost(p, card);
   else if (act === 'toggleComments') togglePostComments(p, card);
+  else if (act === 'share') sharePost(p);
   else if (act === 'zoom') openImageViewer(p.image_url);
 }
 
