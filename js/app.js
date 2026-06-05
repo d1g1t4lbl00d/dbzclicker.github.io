@@ -396,6 +396,7 @@ async function switchView(view) {
   state.view = view;
   const main = $('main');
   $('feedTabs')?.classList.toggle('hidden', view !== 'feed');
+  main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
   if (['feed','feed-trending','all','favorites','mytracks','downloads','search'].includes(view)) setActiveNav(view === 'search' ? '' : view);
   else setActiveNav(view);
 
@@ -410,7 +411,6 @@ async function switchView(view) {
   if (view === 'events') return renderEvents();
   if (view === 'radio') return startRadio();
 
-  main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
   main.innerHTML = skeletonFeed();
   let tracks = [], head = { title: 'Stream', sub: '' };
 
@@ -460,6 +460,14 @@ function gotoScreenIdx(i) {
   } else if (key === 'posts') { setBnavActive('posts'); switchView('posts'); }
   else if (key === 'chat') { setBnavActive('chat'); switchView('messages'); }
 }
+/* ---- háptica: vibración breve al tocar controles (solo móvil) ---- */
+function haptic(ms) { try { if (navigator.vibrate && matchMedia('(pointer: coarse)').matches) navigator.vibrate(ms || 8); } catch (_) {} }
+const HAPTIC_SEL = '.btn, .icon-btn, .act, .play-lg, .nav-item, .bottom-nav button, .tabs button, .profile-tabs button, .pstat, .badge-item:not(.locked), .dm-track-play, .story-circle, .pl-card, .ev-card, .social-card, .dt-row, [data-ev-save], [data-send], [data-add], [data-bnav], [data-tab], [data-ptab], .mention';
+document.addEventListener('pointerdown', (e) => {
+  if (e.pointerType !== 'touch') return;
+  if (e.target.closest && e.target.closest(HAPTIC_SEL)) haptic(9);
+}, { passive: true });
+
 function initSwipeNav() {
   if (initSwipeNav._done) return; initSwipeNav._done = true;
   const EXCLUDE = '.seek, .vol-slider, .wave, #npWave, .stories-bar, .dm-bubble, .dm-thread, .pl-cover-grid, input, textarea, select, .mention-dd, .post-grid';
@@ -2184,6 +2192,7 @@ async function openProfile(userId) {
   const animCls = (theme.bg && theme.bg.type === 'gradient' && theme.bg.animated) ? 'bg-animated' : '';
   const tagline = (typeof theme.tagline === 'string') ? theme.tagline.slice(0, 140) : '';
   const backTo = ['feed','posts','people','messages','favorites','mytracks','all','downloads','notifications','search'].includes(state.view) ? state.view : 'feed';
+  main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
   main.innerHTML = `
     <div class="profile-view ${glowCls} ${cardsCls} ${animCls}" style="--accent:${accent};${fontVar}${bgStyle(theme)}">
       <button class="profile-back" id="profileBack"><svg fill="none" stroke="currentColor"><use href="#i-chevron-left"/></svg> Volver</button>
