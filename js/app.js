@@ -395,6 +395,7 @@ async function updateCounts() {
 async function switchView(view) {
   state.view = view;
   const main = $('main');
+  $('feedTabs')?.classList.toggle('hidden', view !== 'feed');
   if (['feed','feed-trending','all','favorites','mytracks','downloads','search'].includes(view)) setActiveNav(view === 'search' ? '' : view);
   else setActiveNav(view);
 
@@ -2148,6 +2149,7 @@ function openProfileCustomizer() {
 async function openProfile(userId) {
   const main = $('main');
   setActiveNav('');
+  $('feedTabs')?.classList.add('hidden');
   main.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
   const { data: prof } = await sb.from('profiles').select('*').eq('id', userId).single();
   if (!prof) { main.innerHTML = '<div class="empty">Perfil no encontrado.</div>'; return; }
@@ -2456,6 +2458,7 @@ function createPlaylistModal() {
 }
 async function openPlaylist(id) {
   const main = $('main'); setActiveNav('playlists'); state.view = 'playlist';
+  $('feedTabs')?.classList.add('hidden');
   main.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
   const { data: pl } = await sb.from('playlists').select('*, profiles!playlists_user_id_fkey(*)').eq('id', id).maybeSingle();
   if (!pl) { main.innerHTML = '<div class="empty">Playlist no encontrada.</div>'; return; }
