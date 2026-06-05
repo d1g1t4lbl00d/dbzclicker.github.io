@@ -265,8 +265,9 @@ img { display: block; }
 .brand .logo { font-size: 27px; }
 /* mini app-icon de marca (monograma sobre fondo de marca para que la U blanca lea en cualquier tema) */
 .brand-mark { flex-shrink: 0; width: 38px; height: 38px; border-radius: 11px; background: linear-gradient(160deg, #0c1226, #05060f); display: grid; place-items: center; box-shadow: inset 0 0 0 1px rgba(255,255,255,.07), 0 4px 14px rgba(62,87,252,.28); }
-.brand-mark img { width: 72%; height: auto; }
+.brand-mark img { width: 70%; height: auto; }
 .brand-mark.sm { width: 30px; height: 30px; border-radius: 9px; }
+.brand-mark.sm img { width: 72%; }
 .topbar-brand { display: none; }
 
 .topbar {
