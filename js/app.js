@@ -30,6 +30,13 @@ const state = {
   current: null,       // track en reproducción
   presence: null,      // canal de presencia
   online: [],          // usuarios online
+  dmPeer: null,        // id del interlocutor del chat abierto
+  dmPeerProfile: null, // perfil del interlocutor
+  dmMsgs: new Map(),   // id -> mensaje (conversación abierta)
+  dmReacts: new Map(), // message_id -> { emoji: Set(userIds) }
+  dmReplyTo: null,     // mensaje al que se está respondiendo
+  dmConv: null,        // canal realtime de la conversación abierta
+  dmPendingFile: null,
 };
 
 /* ---- TEMA (claro / oscuro) ---- */
@@ -3383,75 +3390,329 @@ function scrollChat() { const b = $('chatMsgs'); b.scrollTop = b.scrollHeight; }
 /* =======================================================================
    MENSAJES DIRECTOS (1 a 1)
    ======================================================================= */
-async function initDM() {
-  await refreshDmBadge();
+/* =======================================================================
+   CHAT DIRECTO (DM) — mensajería completa estilo WhatsApp
+   ======================================================================= */
+const DM_QUICK_EMOJI = ['❤️', '😂', '👍', '😮', '😢', '🙏'];
+const DM_EMOJIS = ['😀','😁','😂','🤣','😊','😍','😘','😎','🤩','🥳','😅','😆','😇','🙂','🙃','😉','😌','😋','😜','🤪','😝','🤗','🤔','🤨','😐','😶','😏','😒','🙄','😬','😴','😪','😮','😯','😲','😳','🥺','😢','😭','😤','😠','😡','🤬','🤯','😱','😨','😰','😥','🥶','🥵','🤤','🤥','🤐','🤢','🤮','🤧','😷','🤒','🤕','😈','👻','💀','👽','🤖','🎃','😺','🙈','🙉','🙊','💋','👍','👎','👌','✌️','🤞','🤟','🤘','👏','🙌','🙏','💪','🫶','👋','🤙','🖐️','✋','🤝','❤️','🧡','💛','💚','💙','💜','🖤','🤍','💔','💕','💞','💓','💗','💖','💘','💝','🔥','✨','⭐','🌟','💫','⚡','💯','🎉','🎊','🎵','🎶','🎁','🏆','👑','💎','🌈','☀️','🌙','⚽','🏀','🎮','🎧','🎤','🎸','🍻','🍕','☕','✅','❌','❓','❗'];
+
+let dmVoiceEl = null, dmMediaRec = null, dmRecChunks = [], dmRecStart = 0, dmRecTimer = null, dmRecStream = null;
+let dmTypingThrottle = 0, dmTypingStopTimer = null, dmTypingHideTimer = null;
+
+function initDM() {
+  refreshDmBadge();
   attachMentionAutocomplete($('dmInput'));
-  // controles de la pantalla de chat (persistente)
   $('dmBack').onclick = closeDmScreen;
   $('dmAttach').onclick = () => $('dmFile').click();
-  $('dmFile').onchange = () => { if ($('dmFile').files[0]) setDmPending($('dmFile').files[0]); };
+  $('dmFile').onchange = () => { const f = $('dmFile').files[0]; if (f) setDmPending(f); };
   $('dmForm').addEventListener('submit', sendDm);
+  $('dmEmoji').onclick = dmToggleEmoji;
+  $('dmMic').onclick = () => dmStartRec();
+  $('dmRecCancel').onclick = () => dmStopRec(false);
+  $('dmRecSend').onclick = () => dmStopRec(true);
+  $('dmSearchBtn').onclick = dmToggleSearch;
+  $('dmSearchClose').onclick = dmCloseSearch;
+  $('dmSearchInput').addEventListener('input', (e) => dmRunSearch(e.target.value));
+  $('dmMenuBtn').onclick = dmHeaderMenu;
+  $('dmScrollFab').onclick = () => dmScrollBottom();
+  $('dmThread').addEventListener('scroll', dmOnThreadScroll);
+  $('dmInput').addEventListener('input', dmTypingPing);
+  dmBuildEmojiPanel();
 
   sb.channel('dm-inbox-' + state.user.id)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'direct_messages', filter: `recipient_id=eq.${state.user.id}` }, async (payload) => {
       const msg = payload.new;
       if (state.dmPeer === msg.sender_id) {
-        dmAppendBubble(msg); markDmRead(msg.sender_id);
+        dmAppendMessage(msg, { scroll: true }); markDmRead(msg.sender_id); dmShowTyping(false);
       } else {
         refreshDmBadge();
         let p = null; try { ({ data: p } = await sb.from('profiles').select('username,display_name').eq('id', msg.sender_id).single()); } catch {}
-        toast('💬 ' + (p?.display_name || p?.username || 'Mensaje') + ': ' + (msg.body || '📎 Adjunto').slice(0, 38));
+        const snip = (msg.deleted ? 'mensaje' : (msg.body || mediaLabel(msg) || 'Adjunto')).slice(0, 38);
+        toast('💬 ' + (p?.display_name || p?.username || 'Mensaje') + ': ' + snip);
         if (state.view === 'messages') renderMessages();
       }
     })
     .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'direct_messages', filter: `recipient_id=eq.${state.user.id}` }, (payload) => {
-      const n = document.querySelector(`.dm-bubble[data-mid="${payload.new.id}"]`);
-      if (n) n.replaceWith(makeBubble(payload.new));
+      const m = payload.new;
+      if (state.dmMsgs.has(m.id)) { state.dmMsgs.set(m.id, m); replaceRow(m); }
     })
     .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'direct_messages', filter: `recipient_id=eq.${state.user.id}` }, (payload) => {
-      const n = document.querySelector(`.dm-bubble[data-mid="${payload.old.id}"]`);
-      if (n) n.remove();
+      const r = document.querySelector(`.dm-row[data-mid="${payload.old.id}"]`); if (r) r.remove();
     })
     .subscribe();
 }
+
+/* ---- helpers ---- */
+function dmConvKey(a, b) { return [a, b].sort().join(':'); }
+function dmTime(ts) { return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); }
+function dmDayKey(ts) { const d = new Date(ts); return d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate(); }
+function dmDayLabel(ts) {
+  const d = new Date(ts), now = new Date(); const y = new Date(now); y.setDate(now.getDate() - 1);
+  if (dmDayKey(ts) === dmDayKey(now)) return 'Hoy';
+  if (dmDayKey(ts) === dmDayKey(y)) return 'Ayer';
+  return d.toLocaleDateString([], { day: 'numeric', month: 'long', year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
+}
+function fmtDur(s) { s = Math.max(0, Math.floor(s || 0)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+function safeMeta(msg) { try { return JSON.parse(msg.attachment_name || '{}'); } catch { return {}; } }
+function mediaLabel(m) {
+  if (!m) return '';
+  if (m.attachment_type === 'image') return '📷 Foto';
+  if (m.attachment_type === 'video') return '🎬 Vídeo';
+  if (m.attachment_type === 'audio') return '🎙️ Nota de voz';
+  if (m.attachment_type === 'track') return '🎵 ' + (safeMeta(m).title || 'Pista');
+  if (m.attachment_url) return '📎 ' + (m.attachment_name || 'Archivo');
+  return '';
+}
+function dmStatusText() {
+  const p = state.dmPeerProfile; if (!p) return '';
+  const online = state.online.some(u => u.id === p.id);
+  return online ? '<span class="dot-online"></span> en línea' : '@' + esc(p.username || '');
+}
+
+/* ---- render de burbujas ---- */
+function quotedHTML(id) {
+  const q = state.dmMsgs.get(id);
+  const who = q ? (q.sender_id === state.user.id ? 'Tú' : (state.dmPeerProfile?.display_name || state.dmPeerProfile?.username || '')) : '';
+  const snip = q ? (q.deleted ? 'mensaje eliminado' : (q.body || mediaLabel(q))) : 'Mensaje';
+  return `<button class="dm-quote" data-jump="${esc(id)}"><span class="dq-who">${esc(who)}</span><span class="dq-snip">${esc((snip || '').slice(0, 90))}</span></button>`;
+}
+function statusTicks(msg) {
+  return msg.read
+    ? `<svg class="dm-tick read"><use href="#i-check-double"/></svg>`
+    : `<svg class="dm-tick"><use href="#i-check"/></svg>`;
+}
+function mediaHTML(msg) {
+  if (!msg.attachment_url) return '';
+  const t = msg.attachment_type;
+  if (t === 'image') return `<img class="dm-img" src="${esc(msg.attachment_url)}" alt="" data-full="${esc(msg.attachment_url)}" />`;
+  if (t === 'video') return `<video class="dm-video" src="${esc(msg.attachment_url)}" controls playsinline preload="metadata"></video>`;
+  if (t === 'audio') {
+    const secs = parseInt(msg.attachment_name, 10); const dur = isNaN(secs) ? '0:00' : fmtDur(secs);
+    return `<div class="dm-voice" data-audio="${esc(msg.attachment_url)}"><button class="dm-voice-play" data-vplay aria-label="Reproducir"><svg class="ci-play"><use href="#i-play"/></svg><svg class="ci-pause"><use href="#i-pause"/></svg></button><div class="dm-voice-bar"><div class="dm-voice-fill"></div></div><span class="dm-voice-time">${dur}</span></div>`;
+  }
+  if (t === 'track') {
+    const meta = safeMeta(msg);
+    const cover = meta.cover_url
+      ? `<div class="dm-track-cover" style="background-image:url('${czUrl(meta.cover_url)}')"></div>`
+      : `<div class="dm-track-cover"><svg fill="none" stroke="#fff"><use href="#i-music"/></svg></div>`;
+    return `<div class="dm-track" data-track-id="${esc(meta.id || '')}">${cover}<div class="dm-track-info"><div class="dm-track-title">${esc(meta.title || 'Pista')}</div><div class="dm-track-artist">${esc(meta.artist || '')}</div></div><button class="dm-track-play" data-dmplay aria-label="Reproducir"><svg class="ci-play"><use href="#i-play"/></svg><svg class="ci-pause"><use href="#i-pause"/></svg></button></div>`;
+  }
+  return `<a class="dm-filechip" href="${esc(msg.attachment_url)}" target="_blank" rel="noopener"><svg fill="none"><use href="#i-file"/></svg><span class="fn">${esc(msg.attachment_name || 'archivo')}</span></a>`;
+}
 function bubbleHTML(msg) {
   const mine = msg.sender_id === state.user.id;
-  let media = '';
-  let isTrack = false;
-  if (msg.attachment_url) {
-    if (msg.attachment_type === 'image') media = `<img class="dm-img" src="${esc(msg.attachment_url)}" alt="" data-full="${esc(msg.attachment_url)}" />`;
-    else if (msg.attachment_type === 'track') {
-      isTrack = true;
-      let meta = {}; try { meta = JSON.parse(msg.attachment_name || '{}'); } catch (_) {}
-      const cover = meta.cover_url
-        ? `<div class="dm-track-cover" style="background-image:url('${czUrl(meta.cover_url)}')"></div>`
-        : `<div class="dm-track-cover"><svg fill="none" stroke="#fff"><use href="#i-music"/></svg></div>`;
-      media = `<div class="dm-track" data-track-id="${esc(meta.id || '')}">
-        ${cover}
-        <div class="dm-track-info"><div class="dm-track-title">${esc(meta.title || 'Pista')}</div><div class="dm-track-artist">${esc(meta.artist || '')}</div></div>
-        <button class="dm-track-play" data-dmplay aria-label="Reproducir"><svg class="ci-play"><use href="#i-play"/></svg><svg class="ci-pause"><use href="#i-pause"/></svg></button>
-      </div>`;
-    }
-    else media = `<a class="dm-filechip" href="${esc(msg.attachment_url)}" target="_blank" rel="noopener"><svg fill="none"><use href="#i-file"/></svg><span class="fn">${esc(msg.attachment_name || 'archivo')}</span></a>`;
+  if (msg.deleted) {
+    return `<div class="dm-bubble ${mine ? 'me' : 'them'} dm-deleted"><svg class="dm-del-ico"><use href="#i-x"/></svg><i>Se eliminó este mensaje</i><span class="t">${dmTime(msg.created_at)}</span></div>`;
   }
+  const quote = msg.reply_to ? quotedHTML(msg.reply_to) : '';
+  const media = mediaHTML(msg);
+  const isTrack = msg.attachment_type === 'track';
   const cap = (msg.body && !isTrack) ? `<div class="dm-cap">${linkifyMentions(msg.body)}</div>` : '';
-  const time = new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  return `<div class="dm-bubble ${mine ? 'me' : 'them'} ${media ? 'has-media' : ''}">${media}${cap}<span class="t">${time}</span></div>`;
+  const edited = msg.edited ? `<span class="dm-edited">editado</span>` : '';
+  const ticks = mine ? statusTicks(msg) : '';
+  const meta = `<span class="t">${edited}${dmTime(msg.created_at)}${ticks}</span>`;
+  return `<div class="dm-bubble ${mine ? 'me' : 'them'} ${media ? 'has-media' : ''}">${quote}${media}${cap}${meta}</div>`;
+}
+function reactionsInner(messageId) {
+  const map = state.dmReacts.get(messageId); if (!map) return '';
+  const uid = state.user.id;
+  return Object.entries(map).filter(([, s]) => s.size).map(([e, s]) =>
+    `<button class="dm-react ${s.has(uid) ? 'mine' : ''}" data-emoji="${esc(e)}">${e}<span class="rc">${s.size}</span></button>`).join('');
 }
 function makeBubble(msg) {
-  const node = el(bubbleHTML(msg));
-  node.dataset.mid = msg.id;
-  const img = node.querySelector('.dm-img'); if (img) img.onclick = () => openImageViewer(img.dataset.full);
-  const dmPlay = node.querySelector('[data-dmplay]');
-  if (dmPlay) dmPlay.onclick = (e) => {
-    e.stopPropagation();
-    let meta = {}; try { meta = JSON.parse(msg.attachment_name || '{}'); } catch (_) {}
-    playSharedTrack(meta, msg.attachment_url);
-  };
-  if (msg.sender_id === state.user.id) attachSwipe(node, msg);
-  return node;
+  const mine = msg.sender_id === state.user.id;
+  const row = el(`<div class="dm-row ${mine ? 'me' : 'them'}"></div>`);
+  row.dataset.mid = msg.id; row.dataset.sender = msg.sender_id; row.dataset.ts = +new Date(msg.created_at);
+  row.appendChild(el(bubbleHTML(msg)));
+  const rx = el(`<div class="dm-reacts"></div>`); rx.innerHTML = reactionsInner(msg.id); row.appendChild(rx);
+  wireBubble(row, msg);
+  return row;
 }
-// reproduce una pista compartida en el chat (en el reproductor principal)
+function wireBubble(row, msg) {
+  const bub = row.querySelector('.dm-bubble');
+  const img = row.querySelector('.dm-img'); if (img) img.onclick = () => openImageViewer(img.dataset.full);
+  const vplay = row.querySelector('[data-vplay]'); if (vplay) vplay.onclick = (e) => { e.stopPropagation(); dmToggleVoice(row.querySelector('.dm-voice')); };
+  const dmPlay = row.querySelector('[data-dmplay]'); if (dmPlay) dmPlay.onclick = (e) => { e.stopPropagation(); playSharedTrack(safeMeta(msg), msg.attachment_url); };
+  const jump = row.querySelector('[data-jump]'); if (jump) jump.onclick = (e) => { e.stopPropagation(); dmJumpTo(jump.dataset.jump); };
+  wireReactChips(row, msg);
+  if (!msg.deleted) attachBubbleGestures(bub, msg);
+}
+function wireReactChips(row, msg) {
+  row.querySelectorAll('.dm-react').forEach(b => b.onclick = (e) => { e.stopPropagation(); toggleReaction(msg.id, b.dataset.emoji); });
+}
+function replaceRow(msg) {
+  const old = document.querySelector(`.dm-row[data-mid="${msg.id}"]`); if (!old) return;
+  const row = makeBubble(msg); if (old.classList.contains('cont')) row.classList.add('cont');
+  old.replaceWith(row);
+}
+function dmNearBottom() { const t = $('dmThread'); return t.scrollHeight - t.scrollTop - t.clientHeight < 140; }
+function dmScrollBottom(instant) {
+  const t = $('dmThread'); t.scrollTop = t.scrollHeight;
+  if (!instant) t.scrollTo({ top: t.scrollHeight, behavior: 'smooth' });
+  $('dmScrollFab').classList.add('hidden');
+}
+function dmOnThreadScroll() { $('dmScrollFab').classList.toggle('hidden', dmNearBottom()); }
+function dmAppendMessage(msg, { scroll = true } = {}) {
+  const thread = $('dmThread'); const empty = thread.querySelector('.dm-empty'); if (empty) empty.remove();
+  state.dmMsgs.set(msg.id, msg);
+  const day = dmDayKey(msg.created_at);
+  if (thread.dataset.lastDay !== day) { thread.appendChild(el(`<div class="dm-day">${esc(dmDayLabel(msg.created_at))}</div>`)); thread.dataset.lastDay = day; }
+  const rows = thread.querySelectorAll('.dm-row'); const prev = rows[rows.length - 1];
+  const contiguous = thread.lastElementChild && thread.lastElementChild.classList.contains('dm-row');
+  const wasNear = dmNearBottom();
+  const row = makeBubble(msg);
+  if (prev && contiguous && prev.dataset.sender === msg.sender_id && (+new Date(msg.created_at) - (+prev.dataset.ts)) < 300000) row.classList.add('cont');
+  thread.appendChild(row);
+  if (scroll && (wasNear || msg.sender_id === state.user.id)) dmScrollBottom(true);
+  else $('dmScrollFab').classList.toggle('hidden', dmNearBottom());
+  return row;
+}
+function renderThread(messages) {
+  const thread = $('dmThread'); thread.innerHTML = ''; thread.dataset.lastDay = '';
+  state.dmMsgs.clear();
+  if (!messages.length) { thread.innerHTML = `<div class="dm-empty"><svg fill="none"><use href="#i-comment"/></svg><p>Aún no hay mensajes.<br>¡Escribe el primero! 👋</p></div>`; return; }
+  messages.forEach(m => dmAppendMessage(m, { scroll: false }));
+  dmScrollBottom(true);
+}
+
+/* ---- gestos: deslizar para responder + mantener pulsado para menú ---- */
+function attachBubbleGestures(node, msg) {
+  let sx = 0, sy = 0, dx = 0, drag = false, moved = false, lpTimer = null;
+  const clearLp = () => { if (lpTimer) { clearTimeout(lpTimer); lpTimer = null; } };
+  node.addEventListener('pointerdown', (e) => {
+    sx = e.clientX; sy = e.clientY; dx = 0; drag = true; moved = false;
+    lpTimer = setTimeout(() => { clearLp(); if (!moved) { haptic(14); openMsgMenu(msg, node); } }, 480);
+  });
+  node.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const ddx = e.clientX - sx, ddy = e.clientY - sy;
+    if (Math.abs(ddx) > 6 || Math.abs(ddy) > 6) { moved = true; clearLp(); }
+    if (Math.abs(ddy) > Math.abs(ddx)) return;
+    dx = Math.max(0, Math.min(92, ddx));
+    node.style.transform = `translateX(${dx}px)`;
+    node.classList.toggle('reply-ready', dx > 52);
+  });
+  const end = () => {
+    if (!drag) return; drag = false; clearLp();
+    node.style.transition = 'transform .18s var(--ease)'; node.style.transform = '';
+    setTimeout(() => { node.style.transition = ''; }, 190);
+    if (dx > 52) { haptic(14); startReply(msg); }
+    node.classList.remove('reply-ready'); dx = 0;
+  };
+  node.addEventListener('pointerup', end);
+  node.addEventListener('pointercancel', end);
+  node.addEventListener('pointerleave', end);
+}
+function openMsgMenu(msg, node) {
+  const mine = msg.sender_id === state.user.id;
+  const quick = DM_QUICK_EMOJI.map(e => `<button class="as-react" data-e="${e}">${e}</button>`).join('') + `<button class="as-react more" data-more aria-label="Más emojis"><svg fill="none" stroke="currentColor"><use href="#i-plus"/></svg></button>`;
+  const items = [`<button class="as-item" data-a="reply"><svg fill="none" stroke="currentColor"><use href="#i-reply"/></svg> Responder</button>`];
+  if (msg.body) items.push(`<button class="as-item" data-a="copy"><svg fill="none" stroke="currentColor"><use href="#i-copy"/></svg> Copiar</button>`);
+  if (mine && msg.body) items.push(`<button class="as-item" data-a="edit"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg> Editar</button>`);
+  if (mine) items.push(`<button class="as-item danger" data-a="del"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg> Eliminar para todos</button>`);
+  const sheet = el(`<div class="modal-backdrop sheet"><div class="action-sheet"><div class="as-reactbar">${quick}</div>${items.join('')}<button class="as-item cancel" data-a="cancel">Cancelar</button></div></div>`);
+  const close = () => sheet.remove();
+  sheet.addEventListener('click', (e) => { if (e.target === sheet) close(); });
+  sheet.querySelectorAll('.as-react[data-e]').forEach(b => b.onclick = () => { close(); toggleReaction(msg.id, b.dataset.e); });
+  sheet.querySelector('[data-more]').onclick = () => { close(); openReactPicker(msg); };
+  sheet.querySelector('[data-a="cancel"]').onclick = close;
+  sheet.querySelector('[data-a="reply"]').onclick = () => { close(); startReply(msg); };
+  const cp = sheet.querySelector('[data-a="copy"]'); if (cp) cp.onclick = () => { close(); copyMessage(msg); };
+  const ed = sheet.querySelector('[data-a="edit"]'); if (ed) ed.onclick = () => { close(); editMessage(msg); };
+  const dl = sheet.querySelector('[data-a="del"]'); if (dl) dl.onclick = () => { close(); softDeleteMessage(msg); };
+  $('modalRoot').appendChild(sheet);
+}
+function openReactPicker(msg) {
+  const grid = DM_EMOJIS.map(e => `<button type="button" class="em" data-e="${e}">${e}</button>`).join('');
+  const sheet = el(`<div class="modal-backdrop sheet"><div class="action-sheet"><div class="as-emoji-grid">${grid}</div><button class="as-item cancel">Cancelar</button></div></div>`);
+  const close = () => sheet.remove();
+  sheet.addEventListener('click', (e) => { if (e.target === sheet) close(); });
+  sheet.querySelector('.cancel').onclick = close;
+  sheet.querySelectorAll('.em').forEach(b => b.onclick = () => { close(); toggleReaction(msg.id, b.dataset.e); });
+  $('modalRoot').appendChild(sheet);
+}
+function startReply(msg) {
+  state.dmReplyTo = msg;
+  const who = msg.sender_id === state.user.id ? 'Tú' : (state.dmPeerProfile?.display_name || state.dmPeerProfile?.username || '');
+  const snip = (msg.deleted ? 'mensaje eliminado' : (msg.body || mediaLabel(msg))) || '';
+  const bar = $('dmReplyBar');
+  bar.innerHTML = `<svg class="rb-ico"><use href="#i-reply"/></svg><div class="rb-main"><div class="rb-who">${esc(who)}</div><div class="rb-snip">${esc(snip.slice(0, 120))}</div></div><button class="rb-x" title="Cancelar"><svg><use href="#i-x"/></svg></button>`;
+  bar.classList.remove('hidden');
+  bar.querySelector('.rb-x').onclick = cancelReply;
+  $('dmInput').focus();
+}
+function cancelReply() { state.dmReplyTo = null; const bar = $('dmReplyBar'); if (bar) { bar.classList.add('hidden'); bar.innerHTML = ''; } }
+function copyMessage(msg) {
+  try { navigator.clipboard.writeText(msg.body || ''); toast('Copiado'); haptic(8); }
+  catch { toast('No se pudo copiar'); }
+}
+function editMessage(msg) {
+  const m = openModal(`
+    <div class="modal-head"><h3>Editar mensaje</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <div class="field"><textarea id="edBody" maxlength="2000">${esc(msg.body)}</textarea></div>
+      <button class="btn primary" id="edSave">Guardar cambios</button>
+    </div>`);
+  setTimeout(() => m.querySelector('#edBody')?.focus(), 60);
+  m.querySelector('#edSave').onclick = async () => {
+    const nb = m.querySelector('#edBody').value.trim();
+    if (!nb) { toast('El mensaje no puede quedar vacío'); return; }
+    const { error } = await sb.from('direct_messages').update({ body: nb, edited: true }).eq('id', msg.id);
+    if (error) { toast('No se pudo editar'); return; }
+    msg.body = nb; msg.edited = true; state.dmMsgs.set(msg.id, msg); replaceRow(msg);
+    m.remove(); toast('Mensaje editado');
+  };
+}
+async function softDeleteMessage(msg) {
+  if (!confirm('¿Eliminar este mensaje para todos?')) return;
+  const { error } = await sb.from('direct_messages').update({ deleted: true }).eq('id', msg.id);
+  if (error) { toast('No se pudo eliminar'); return; }
+  msg.deleted = true; state.dmMsgs.set(msg.id, msg); replaceRow(msg);
+}
+function dmJumpTo(id) {
+  const r = document.querySelector(`.dm-row[data-mid="${id}"]`); if (!r) return;
+  r.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  r.classList.add('dm-flash'); setTimeout(() => r.classList.remove('dm-flash'), 1200);
+}
+
+/* ---- reacciones ---- */
+async function dmLoadReactions(ids) {
+  if (!ids.length) return;
+  const { data } = await sb.from('dm_reactions').select('message_id,user_id,emoji').in('message_id', ids);
+  (data || []).forEach(r => {
+    let m = state.dmReacts.get(r.message_id); if (!m) { m = {}; state.dmReacts.set(r.message_id, m); }
+    (m[r.emoji] || (m[r.emoji] = new Set())).add(r.user_id);
+  });
+}
+function dmRefreshReactions(messageId) {
+  const row = document.querySelector(`.dm-row[data-mid="${messageId}"]`); if (!row) return;
+  const rx = row.querySelector('.dm-reacts'); if (!rx) return;
+  rx.innerHTML = reactionsInner(messageId);
+  const msg = state.dmMsgs.get(messageId); if (msg) wireReactChips(row, msg);
+}
+async function toggleReaction(messageId, emoji) {
+  const uid = state.user.id;
+  let map = state.dmReacts.get(messageId); if (!map) { map = {}; state.dmReacts.set(messageId, map); }
+  const set = map[emoji] || (map[emoji] = new Set());
+  const had = set.has(uid);
+  if (had) { set.delete(uid); if (!set.size) delete map[emoji]; }
+  else { set.add(uid); }
+  dmRefreshReactions(messageId); haptic(10);
+  if (state.dmConv) state.dmConv.send({ type: 'broadcast', event: 'react', payload: { message_id: messageId, emoji, user_id: uid, op: had ? 'remove' : 'add' } });
+  try {
+    if (had) await sb.from('dm_reactions').delete().eq('message_id', messageId).eq('user_id', uid).eq('emoji', emoji);
+    else await sb.from('dm_reactions').insert({ message_id: messageId, user_id: uid, emoji });
+  } catch (_) {}
+}
+function applyRemoteReaction({ message_id, emoji, user_id, op }) {
+  let map = state.dmReacts.get(message_id); if (!map) { map = {}; state.dmReacts.set(message_id, map); }
+  const set = map[emoji] || (map[emoji] = new Set());
+  if (op === 'remove') { set.delete(user_id); if (!set.size) delete map[emoji]; }
+  else set.add(user_id);
+  dmRefreshReactions(message_id);
+}
+
+/* ---- pista compartida (reproductor principal) ---- */
 async function playSharedTrack(meta, audioUrl) {
   if (meta && meta.id) {
     if (state.current?.id === meta.id) { togglePlay(); return; }
@@ -3462,84 +3723,28 @@ async function playSharedTrack(meta, audioUrl) {
   const t = { id: meta.id || audioUrl, title: meta.title || 'Pista', artist: meta.artist || '', cover_url: meta.cover_url || '', audio_url: audioUrl, duration: 0 };
   state.tracks = [t]; state.queue = [t.id]; playTrack(t);
 }
-function dmAppendBubble(msg) {
-  const thread = $('dmThread');
-  const empty = thread.querySelector('.dm-empty'); if (empty) empty.remove();
-  thread.appendChild(makeBubble(msg));
-  thread.scrollTop = thread.scrollHeight;
-}
-// Deslizar un mensaje propio (hacia la izquierda) para editar / eliminar
-function attachSwipe(node, msg) {
-  let startX = 0, startY = 0, dx = 0, dragging = false, swiped = false;
-  node.addEventListener('pointerdown', (e) => {
-    startX = e.clientX; startY = e.clientY; dragging = true; dx = 0; swiped = false; node.classList.add('swiping');
-  });
-  node.addEventListener('pointermove', (e) => {
-    if (!dragging) return;
-    const ddx = e.clientX - startX, ddy = e.clientY - startY;
-    if (Math.abs(ddy) > Math.abs(ddx)) return; // gesto vertical = scroll
-    dx = Math.max(-130, Math.min(0, ddx));
-    if (dx < -8) swiped = true;
-    node.style.transform = `translateX(${dx}px)`;
-  });
-  const end = () => {
-    if (!dragging) return;
-    dragging = false; node.classList.remove('swiping');
-    node.style.transform = '';
-    if (dx < -55) openMsgActions(msg, node);
-    dx = 0;
-  };
-  node.addEventListener('pointerup', end);
-  node.addEventListener('pointercancel', end);
-  node.addEventListener('pointerleave', end);
-  // si hubo deslizamiento, anula el click (no abrir imagen/archivo)
-  node.addEventListener('click', (e) => { if (swiped) { e.preventDefault(); e.stopPropagation(); swiped = false; } }, true);
-}
-function openMsgActions(msg, node) {
-  const sheet = el(`<div class="modal-backdrop sheet"><div class="action-sheet">
-    <button class="as-item" data-a="edit"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg> Editar mensaje</button>
-    <button class="as-item danger" data-a="del"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg> Eliminar mensaje</button>
-    <button class="as-item cancel" data-a="cancel">Cancelar</button>
-  </div></div>`);
-  const close = () => sheet.remove();
-  sheet.addEventListener('click', (e) => { if (e.target === sheet) close(); });
-  sheet.querySelector('[data-a="cancel"]').onclick = close;
-  sheet.querySelector('[data-a="edit"]').onclick = () => { close(); editMessage(msg, node); };
-  sheet.querySelector('[data-a="del"]').onclick = () => { close(); deleteMessage(msg, node); };
-  $('modalRoot').appendChild(sheet);
-}
-function editMessage(msg, node) {
-  const m = openModal(`
-    <div class="modal-head"><h3>Editar mensaje</h3><button class="close">&times;</button></div>
-    <div class="modal-body">
-      <div class="field"><textarea id="edBody" maxlength="1000">${esc(msg.body)}</textarea></div>
-      <button class="btn primary" id="edSave">Guardar cambios</button>
-    </div>`);
-  setTimeout(() => m.querySelector('#edBody')?.focus(), 60);
-  m.querySelector('#edSave').onclick = async () => {
-    const nb = m.querySelector('#edBody').value.trim();
-    if (!nb && !msg.attachment_url) { toast('El mensaje no puede quedar vacío'); return; }
-    const { error } = await sb.from('direct_messages').update({ body: nb }).eq('id', msg.id);
-    if (error) { toast('No se pudo editar'); return; }
-    msg.body = nb;
-    node.replaceWith(makeBubble(msg));
-    m.remove();
-    toast('Mensaje editado');
-  };
-}
-async function deleteMessage(msg, node) {
-  if (!confirm('¿Eliminar este mensaje?')) return;
-  const { error } = await sb.from('direct_messages').delete().eq('id', msg.id);
-  if (error) { toast('No se pudo eliminar'); return; }
-  node.remove();
+/* ---- nota de voz (mini-reproductor) ---- */
+function dmToggleVoice(box) {
+  if (!box) return;
+  const fill = box.querySelector('.dm-voice-fill'); const tlabel = box.querySelector('.dm-voice-time');
+  if (dmVoiceEl && dmVoiceEl._box === box) { if (dmVoiceEl.paused) dmVoiceEl.play(); else dmVoiceEl.pause(); return; }
+  if (dmVoiceEl) { dmVoiceEl.pause(); dmVoiceEl._box?.classList.remove('playing'); }
+  const a = new Audio(box.dataset.audio); dmVoiceEl = a; a._box = box;
+  a.ontimeupdate = () => { if (a.duration && isFinite(a.duration)) { fill.style.width = (a.currentTime / a.duration * 100) + '%'; tlabel.textContent = fmtDur(a.currentTime); } };
+  a.onended = () => { box.classList.remove('playing'); fill.style.width = '0%'; tlabel.textContent = fmtDur(a.duration); };
+  a.onplay = () => box.classList.add('playing');
+  a.onpause = () => box.classList.remove('playing');
+  a.play();
 }
 function openImageViewer(url) {
   const v = el(`<div class="img-viewer"><img src="${esc(url)}" alt="" /></div>`);
   v.onclick = () => v.remove();
   document.body.appendChild(v);
 }
+
+/* ---- adjuntos ---- */
 function setDmPending(file) {
-  if (file.size > 26214400) { toast('Máximo 25 MB'); $('dmFile').value=''; return; }
+  if (file.size > 26214400) { toast('Máximo 25 MB'); $('dmFile').value = ''; return; }
   state.dmPendingFile = file;
   const prev = $('dmAttachPreview');
   const isImg = file.type.startsWith('image');
@@ -3557,11 +3762,11 @@ async function sendDm(e) {
   e.preventDefault();
   if (!requireNotBanned()) return;
   const other = state.dmPeer; if (!other) return;
-  const input = $('dmInput');
-  const body = input.value.trim();
-  const file = state.dmPendingFile;
+  const input = $('dmInput'); const body = input.value.trim(); const file = state.dmPendingFile;
   if (!body && !file) return;
-  input.value = '';
+  input.value = ''; dmHideEmoji();
+  const reply_to = state.dmReplyTo?.id || null; cancelReply();
+  if (state.dmConv) state.dmConv.send({ type: 'broadcast', event: 'stop', payload: {} });
   let attachment_url = null, attachment_type = null, attachment_name = null;
   if (file) {
     const sendBtn = $('dmForm').querySelector('.dm-send'); sendBtn.disabled = true;
@@ -3571,22 +3776,133 @@ async function sendDm(e) {
       const up = await sb.storage.from('chat').upload(path, file, { contentType: file.type || 'application/octet-stream' });
       if (up.error) throw up.error;
       attachment_url = sb.storage.from('chat').getPublicUrl(path).data.publicUrl;
-      attachment_type = file.type.startsWith('image') ? 'image' : 'file';
+      attachment_type = file.type.startsWith('image') ? 'image' : file.type.startsWith('video') ? 'video' : file.type.startsWith('audio') ? 'audio' : 'file';
       attachment_name = file.name;
     } catch (err) { toast('No se pudo subir el archivo'); sendBtn.disabled = false; return; }
-    sendBtn.disabled = false;
-    clearDmPending();
+    sendBtn.disabled = false; clearDmPending();
   }
   const { data: sent, error } = await sb.from('direct_messages')
-    .insert({ sender_id: state.user.id, recipient_id: other, body, attachment_url, attachment_type, attachment_name })
+    .insert({ sender_id: state.user.id, recipient_id: other, body, attachment_url, attachment_type, attachment_name, reply_to })
     .select().single();
   if (error) { toast('No se pudo enviar'); return; }
-  dmAppendBubble(sent);
+  dmAppendMessage(sent, { scroll: true });
 }
+async function dmSendAudio(blob, secs) {
+  const other = state.dmPeer; if (!other || !requireNotBanned()) return;
+  try {
+    const path = `${state.user.id}/${Date.now()}.webm`;
+    const up = await sb.storage.from('chat').upload(path, blob, { contentType: blob.type || 'audio/webm' });
+    if (up.error) throw up.error;
+    const url = sb.storage.from('chat').getPublicUrl(path).data.publicUrl;
+    const reply_to = state.dmReplyTo?.id || null; cancelReply();
+    const { data: sent, error } = await sb.from('direct_messages')
+      .insert({ sender_id: state.user.id, recipient_id: other, body: '', attachment_url: url, attachment_type: 'audio', attachment_name: String(secs), reply_to })
+      .select().single();
+    if (error) { toast('No se pudo enviar'); return; }
+    dmAppendMessage(sent, { scroll: true });
+  } catch (err) { toast('No se pudo enviar la nota de voz'); }
+}
+
+/* ---- grabación de voz ---- */
+async function dmStartRec() {
+  if (dmMediaRec) return;
+  if (!navigator.mediaDevices || !window.MediaRecorder) { toast('Tu navegador no soporta notas de voz'); return; }
+  try { dmRecStream = await navigator.mediaDevices.getUserMedia({ audio: true }); }
+  catch (e) { toast('No se pudo acceder al micrófono'); return; }
+  dmRecChunks = [];
+  try { dmMediaRec = new MediaRecorder(dmRecStream); }
+  catch (e) { dmMediaRec = new MediaRecorder(dmRecStream, { mimeType: 'audio/webm' }); }
+  dmMediaRec.ondataavailable = (ev) => { if (ev.data && ev.data.size) dmRecChunks.push(ev.data); };
+  dmMediaRec.start(); dmRecStart = Date.now();
+  $('dmRec').classList.remove('hidden'); $('dmForm').classList.add('hidden'); dmHideEmoji();
+  dmRecTimer = setInterval(() => { $('dmRecTime').textContent = fmtDur((Date.now() - dmRecStart) / 1000); }, 200);
+  haptic(12);
+}
+function dmStopRec(send) {
+  if (!dmMediaRec) return;
+  clearInterval(dmRecTimer);
+  const secs = Math.max(1, Math.round((Date.now() - dmRecStart) / 1000));
+  const rec = dmMediaRec; dmMediaRec = null;
+  rec.addEventListener('stop', () => {
+    if (dmRecStream) { dmRecStream.getTracks().forEach(t => t.stop()); dmRecStream = null; }
+    $('dmRec').classList.add('hidden'); $('dmForm').classList.remove('hidden');
+    if (send && dmRecChunks.length) dmSendAudio(new Blob(dmRecChunks, { type: rec.mimeType || 'audio/webm' }), secs);
+    dmRecChunks = [];
+  }, { once: true });
+  try { rec.stop(); } catch (_) {}
+}
+
+/* ---- emoji ---- */
+function dmBuildEmojiPanel() {
+  const p = $('dmEmojiPanel'); if (!p || p.dataset.built) return; p.dataset.built = '1';
+  p.innerHTML = DM_EMOJIS.map(e => `<button type="button" class="em">${e}</button>`).join('');
+  p.querySelectorAll('.em').forEach(b => b.onclick = () => insertAtCursor($('dmInput'), b.textContent));
+}
+function dmToggleEmoji() { $('dmEmojiPanel').classList.toggle('hidden'); if (!$('dmEmojiPanel').classList.contains('hidden')) $('dmInput').focus(); }
+function dmHideEmoji() { $('dmEmojiPanel').classList.add('hidden'); }
+function insertAtCursor(inp, text) {
+  const s = inp.selectionStart ?? inp.value.length, e = inp.selectionEnd ?? inp.value.length;
+  inp.value = inp.value.slice(0, s) + text + inp.value.slice(e);
+  inp.selectionStart = inp.selectionEnd = s + text.length; inp.focus();
+}
+
+/* ---- indicador de "escribiendo" ---- */
+function dmTypingPing() {
+  if (!state.dmConv) return;
+  const now = Date.now();
+  if (now - dmTypingThrottle > 1500) { dmTypingThrottle = now; state.dmConv.send({ type: 'broadcast', event: 'typing', payload: {} }); }
+  clearTimeout(dmTypingStopTimer);
+  dmTypingStopTimer = setTimeout(() => state.dmConv && state.dmConv.send({ type: 'broadcast', event: 'stop', payload: {} }), 2500);
+}
+function dmShowTyping(on) {
+  const t = $('dmTyping'); if (!t) return;
+  t.classList.toggle('hidden', !on);
+  const st = $('dmStatus'); if (st) { st.innerHTML = on ? 'escribiendo…' : dmStatusText(); st.classList.toggle('typing', on); }
+  if (on) { clearTimeout(dmTypingHideTimer); dmTypingHideTimer = setTimeout(() => dmShowTyping(false), 4500); if (dmNearBottom()) dmScrollBottom(true); }
+}
+
+/* ---- búsqueda en la conversación ---- */
+function dmToggleSearch() { const b = $('dmSearchBar'); b.classList.toggle('hidden'); if (!b.classList.contains('hidden')) $('dmSearchInput').focus(); else dmClearSearchHl(); }
+function dmCloseSearch() { $('dmSearchBar').classList.add('hidden'); $('dmSearchInput').value = ''; $('dmSearchCount').textContent = ''; dmClearSearchHl(); }
+function dmClearSearchHl() { $('dmThread').querySelectorAll('.dm-row').forEach(r => r.classList.remove('dm-hit', 'dm-dim')); }
+function dmRunSearch(q) {
+  q = (q || '').trim().toLowerCase();
+  const rows = [...$('dmThread').querySelectorAll('.dm-row')];
+  if (!q) { dmClearSearchHl(); $('dmSearchCount').textContent = ''; return; }
+  let hits = 0, last = null;
+  rows.forEach(r => {
+    const m = state.dmMsgs.get(r.dataset.mid);
+    const has = m && (m.body || '').toLowerCase().includes(q);
+    r.classList.toggle('dm-hit', !!has); r.classList.toggle('dm-dim', !has);
+    if (has) { hits++; last = r; }
+  });
+  $('dmSearchCount').textContent = hits ? `${hits}` : '0';
+  if (last) last.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+
+/* ---- menú de cabecera ---- */
+function dmHeaderMenu() {
+  const other = state.dmPeer;
+  const sheet = el(`<div class="modal-backdrop sheet"><div class="action-sheet">
+    <button class="as-item" data-a="profile"><svg fill="none" stroke="currentColor"><use href="#i-people"/></svg> Ver perfil</button>
+    <button class="as-item" data-a="search"><svg fill="none" stroke="currentColor"><use href="#i-search"/></svg> Buscar en el chat</button>
+    <button class="as-item cancel" data-a="cancel">Cancelar</button>
+  </div></div>`);
+  const close = () => sheet.remove();
+  sheet.addEventListener('click', (e) => { if (e.target === sheet) close(); });
+  sheet.querySelector('[data-a="cancel"]').onclick = close;
+  sheet.querySelector('[data-a="profile"]').onclick = () => { close(); closeDmScreen(); openProfile(other); };
+  sheet.querySelector('[data-a="search"]').onclick = () => { close(); $('dmSearchBar').classList.remove('hidden'); $('dmSearchInput').focus(); };
+  $('modalRoot').appendChild(sheet);
+}
+
 function closeDmScreen() {
   $('dmScreen').classList.remove('open');
-  state.dmPeer = null;
-  clearDmPending();
+  if (state.dmConv) { try { sb.removeChannel(state.dmConv); } catch (_) {} state.dmConv = null; }
+  if (dmMediaRec) dmStopRec(false);
+  if (dmVoiceEl) { dmVoiceEl.pause(); dmVoiceEl = null; }
+  state.dmPeer = null; state.dmPeerProfile = null; state.dmMsgs.clear(); state.dmReacts.clear();
+  cancelReply(); clearDmPending(); dmCloseSearch(); dmHideEmoji(); dmShowTyping(false);
   if (state.view === 'messages') renderMessages();
 }
 async function refreshDmBadge() {
@@ -3594,15 +3910,21 @@ async function refreshDmBadge() {
     .eq('recipient_id', state.user.id).eq('read', false);
   const n = count || 0;
   const badge = $('dmBadge'), side = $('dmCount');
-  if (n > 0) { badge.textContent = n; badge.classList.remove('hidden'); side.textContent = n; }
-  else { badge.classList.add('hidden'); side.textContent = ''; }
+  if (n > 0) { badge.textContent = n; badge.classList.remove('hidden'); if (side) side.textContent = n; }
+  else { badge.classList.add('hidden'); if (side) side.textContent = ''; }
 }
 function markDmRead(other) {
   sb.from('direct_messages').update({ read: true })
     .eq('sender_id', other).eq('recipient_id', state.user.id).eq('read', false)
     .then(() => refreshDmBadge());
+  if (state.dmConv) state.dmConv.send({ type: 'broadcast', event: 'read', payload: {} });
 }
-
+function dmMarkAllMineRead() {
+  document.querySelectorAll('.dm-row.me').forEach(r => {
+    const m = state.dmMsgs.get(r.dataset.mid); if (m && !m.read) m.read = true;
+    const tick = r.querySelector('.dm-tick'); if (tick) { tick.classList.add('read'); tick.querySelector('use')?.setAttribute('href', '#i-check-double'); }
+  });
+}
 function openCommunityChat() {
   const r = rightEl();
   if (!r.classList.contains('open')) toggleRight();
@@ -3611,9 +3933,10 @@ function convoRow(c, p) {
   const mine = c.last.sender_id === state.user.id;
   const online = state.online.some(u => u.id === c.other);
   let snip = c.last.body;
-  if (c.last.attachment_url) {
+  if (c.last.deleted) snip = '🚫 Mensaje eliminado';
+  else if (c.last.attachment_url) {
     if (c.last.attachment_type === 'track') snip = c.last.body || '🎵 Pista';
-    else snip = (c.last.attachment_type === 'image' ? '📷 Foto' : '📎 Archivo') + (c.last.body ? ' · ' + c.last.body : '');
+    else { const lbl = c.last.attachment_type === 'image' ? '📷 Foto' : c.last.attachment_type === 'video' ? '🎬 Vídeo' : c.last.attachment_type === 'audio' ? '🎙️ Nota de voz' : '📎 Archivo'; snip = lbl + (c.last.body ? ' · ' + c.last.body : ''); }
   }
   const row = el(`
     <div class="convo" data-uid="${c.other}">
@@ -3679,10 +4002,11 @@ async function openDM(other) {
   if (!other || other === state.user.id) return;
   const { data: prof } = await sb.from('profiles').select('*').eq('id', other).single();
   if (!prof) { toast('Usuario no encontrado'); return; }
+  state.dmPeer = other; state.dmPeerProfile = prof;
+  cancelReply(); clearDmPending(); dmCloseSearch(); dmHideEmoji();
   const name = prof.display_name || prof.username;
-  state.dmPeer = other;
-  clearDmPending();
-  $('dmPeerHead').innerHTML = `${avatarHTML(prof)}<div><div class="dm-name">${esc(name)}</div><div class="dm-handle">@${esc(prof.username)}</div></div>`;
+  const online = state.online.some(u => u.id === other);
+  $('dmPeerHead').innerHTML = `${avatarHTML(prof)}<div class="dm-peer-meta"><div class="dm-name">${esc(name)}${verifiedBadge(prof)}</div><div class="dm-status" id="dmStatus">${online ? '<span class="dot-online"></span> en línea' : '@' + esc(prof.username)}</div></div>`;
   $('dmPeerHead').onclick = () => { closeDmScreen(); openProfile(other); };
   $('dmInput').placeholder = `Mensaje para ${name}...`;
   const thread = $('dmThread');
@@ -3690,12 +4014,22 @@ async function openDM(other) {
   $('dmScreen').classList.add('open');
   hideDrawers();
 
+  if (state.dmConv) { try { sb.removeChannel(state.dmConv); } catch (_) {} state.dmConv = null; }
+  const ch = sb.channel('dmconv:' + dmConvKey(state.user.id, other), { config: { broadcast: { self: false } } });
+  ch.on('broadcast', { event: 'typing' }, () => dmShowTyping(true))
+    .on('broadcast', { event: 'stop' }, () => dmShowTyping(false))
+    .on('broadcast', { event: 'read' }, () => dmMarkAllMineRead())
+    .on('broadcast', { event: 'react' }, ({ payload }) => applyRemoteReaction(payload))
+    .subscribe();
+  state.dmConv = ch;
+
   const { data } = await sb.from('direct_messages').select('*')
     .or(`and(sender_id.eq.${state.user.id},recipient_id.eq.${other}),and(sender_id.eq.${other},recipient_id.eq.${state.user.id})`)
-    .order('created_at', { ascending: true }).limit(300);
-  thread.innerHTML = '';
-  if (!data || !data.length) thread.innerHTML = `<div class="dm-empty">Aún no hay mensajes.<br>¡Escribe el primero! 👋</div>`;
-  else data.forEach(dmAppendBubble);
+    .order('created_at', { ascending: true }).limit(400);
+  const msgs = data || [];
+  state.dmReacts.clear();
+  await dmLoadReactions(msgs.map(m => m.id));
+  renderThread(msgs);
   markDmRead(other);
   setTimeout(() => $('dmInput')?.focus(), 120);
 }

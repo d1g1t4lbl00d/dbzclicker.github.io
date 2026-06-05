@@ -9,7 +9,7 @@
 <link rel="manifest" href="/manifest.json?v=20260605b" />
 <meta name="theme-color" content="#0a0d18" />
 <link rel="apple-touch-icon" href="/icon-192.png?v=20260605b" />
-<link rel="stylesheet" href="css/styles.css?v=20260605e" />
+<link rel="stylesheet" href="css/styles.css?v=20260605f" />
 <script>(function(){try{var t=localStorage.getItem('ub_theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}try{if(sessionStorage.getItem('ub_splash'))document.documentElement.classList.add('no-splash');}catch(e){}})();</script>
 <style>
 #splash{position:fixed;inset:0;z-index:99999;background:#00020b;display:flex;align-items:center;justify-content:center;overflow:hidden;transition:opacity .55s ease}
@@ -88,6 +88,14 @@ html.no-splash #splash{display:none}
     <symbol id="i-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></symbol>
     <symbol id="i-palette" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r="1.5"/><circle cx="17.5" cy="10.5" r="1.5"/><circle cx="8.5" cy="7.5" r="1.5"/><circle cx="6.5" cy="12.5" r="1.5"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125 0-.926.746-1.688 1.688-1.688H16c3.314 0 6-2.686 6-6 0-4.97-4.5-8.561-10-8.561z"/></symbol>
     <symbol id="i-camera" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></symbol>
+    <symbol id="i-reply" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></symbol>
+    <symbol id="i-copy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></symbol>
+    <symbol id="i-check-double" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 13 5.5 17.5 14 9"/><polyline points="9.5 13.5 12 16 22 6"/></symbol>
+    <symbol id="i-mic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></symbol>
+    <symbol id="i-smile" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
   </defs>
 </svg>
 
@@ -270,15 +278,40 @@ html.no-splash #splash{display:none}
   <header class="dm-screen-head">
     <button class="dm-back" id="dmBack" title="Volver"><svg><use href="#i-chevron-left"/></svg></button>
     <div class="dm-peer" id="dmPeerHead"></div>
+    <div class="dm-head-actions">
+      <button class="dm-head-btn" id="dmSearchBtn" title="Buscar en el chat"><svg><use href="#i-search"/></svg></button>
+      <button class="dm-head-btn" id="dmMenuBtn" title="Más"><svg><use href="#i-more"/></svg></button>
+    </div>
   </header>
-  <div class="dm-thread" id="dmThread"></div>
+  <div class="dm-searchbar hidden" id="dmSearchBar">
+    <svg class="dm-sb-ico"><use href="#i-search"/></svg>
+    <input type="text" id="dmSearchInput" placeholder="Buscar en la conversación..." autocomplete="off" />
+    <span class="dm-sb-count" id="dmSearchCount"></span>
+    <button class="dm-sb-x" id="dmSearchClose" title="Cerrar"><svg><use href="#i-x"/></svg></button>
+  </div>
+  <div class="dm-thread-wrap">
+    <div class="dm-thread" id="dmThread"></div>
+    <div class="dm-typing hidden" id="dmTyping"><span class="dt-dots"><i></i><i></i><i></i></span></div>
+    <button class="dm-scroll-fab hidden" id="dmScrollFab" title="Ir abajo"><svg><use href="#i-chevron-down"/></svg></button>
+  </div>
+  <div class="dm-reply-bar hidden" id="dmReplyBar"></div>
   <div class="dm-attach-preview hidden" id="dmAttachPreview"></div>
+  <div class="dm-rec hidden" id="dmRec">
+    <button type="button" class="dm-rec-cancel" id="dmRecCancel" title="Cancelar"><svg><use href="#i-trash"/></svg></button>
+    <span class="dm-rec-dot"></span>
+    <span class="dm-rec-time" id="dmRecTime">0:00</span>
+    <span class="dm-rec-label">Grabando nota de voz…</span>
+    <button type="button" class="dm-rec-send" id="dmRecSend" title="Enviar"><svg><use href="#i-send"/></svg></button>
+  </div>
   <form class="dm-form" id="dmForm">
-    <button type="button" class="dm-attach" id="dmAttach" title="Adjuntar"><svg><use href="#i-paperclip"/></svg></button>
+    <button type="button" class="dm-icbtn" id="dmEmoji" title="Emoji"><svg><use href="#i-smile"/></svg></button>
+    <button type="button" class="dm-icbtn dm-attach" id="dmAttach" title="Adjuntar"><svg><use href="#i-paperclip"/></svg></button>
     <input type="file" id="dmFile" accept="image/*,video/*,audio/*,.pdf,.zip,.doc,.docx,.txt" hidden />
-    <input type="text" id="dmInput" placeholder="Mensaje..." maxlength="1000" autocomplete="off" />
+    <input type="text" id="dmInput" placeholder="Mensaje..." maxlength="2000" autocomplete="off" />
+    <button type="button" class="dm-icbtn dm-mic" id="dmMic" title="Nota de voz"><svg><use href="#i-mic"/></svg></button>
     <button type="submit" class="dm-send" title="Enviar"><svg><use href="#i-send"/></svg></button>
   </form>
+  <div class="dm-emoji-panel hidden" id="dmEmojiPanel"></div>
 </div>
 
 <!-- ===================== DRAWER BACKDROP + MOBILE NAV ===================== -->
@@ -307,7 +340,7 @@ html.no-splash #splash{display:none}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
-<script src="js/config.js?v=20260605e"></script>
-<script src="js/app.js?v=20260605e"></script>
+<script src="js/config.js?v=20260605f"></script>
+<script src="js/app.js?v=20260605f"></script>
 </body>
 </html>
