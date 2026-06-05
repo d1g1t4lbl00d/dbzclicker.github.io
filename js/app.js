@@ -2136,21 +2136,18 @@ async function openProfile(userId) {
   main.innerHTML = `
     <div class="profile-view ${glowCls} ${cardsCls} ${animCls}" style="--accent:${accent};${fontVar}${bgStyle(theme)}">
       <button class="profile-back" id="profileBack"><svg fill="none" stroke="currentColor"><use href="#i-chevron-left"/></svg> Volver</button>
-      ${banner ? `<div class="profile-banner" style="background-image:url('${banner}')"></div>` : ''}
+      ${banner ? `<div class="profile-cover" style="background-image:url('${banner}')"></div>` : `<div class="profile-cover profile-cover-grad"></div>`}
       <div class="profile-head ${banner ? 'has-banner' : ''}">
-        ${avatarHTML(prof)}
-        <div style="flex:1;min-width:0">
-          <h2 class="accent-name">${esc(prof.display_name || prof.username)}${verifiedBadge(prof)}${displayBadgeHtml(prof)} ${prof.is_admin?'<span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c;vertical-align:middle">MOD</span>':''} ${prof.banned?'<span class="t-genre" style="background:#fae3e0;border-color:#f0c2bc;color:#c0533f;vertical-align:middle">baneado</span>':''}</h2>
-          <div style="color:var(--ink-soft)">@${esc(prof.username)}</div>
-          ${profBadgesHtml}
-          ${tagline ? `<div class="profile-tagline">${esc(tagline)}</div>` : ''}
-          ${prof.bio ? `<p style="margin-top:6px;max-width:520px">${esc(prof.bio)}</p>` : ''}
-          <div class="pstats">
-            <span class="pstat" data-pstat="tracks"><b>${myTracks.length}</b> pistas</span>
-            <span class="pstat" data-pstat="followers"><b>${followers||0}</b> seguidores</span>
-            <span class="pstat" data-pstat="following"><b>${following||0}</b> siguiendo</span>
-          </div>
-          ${links.length ? `<div class="profile-links">${links.map(l => `<a href="${esc(czHref(l.url))}" target="_blank" rel="noopener noreferrer"><svg fill="none" stroke="currentColor"><use href="#i-globe"/></svg>${esc(l.label || 'enlace')}</a>`).join('')}</div>` : ''}
+        <div class="ph-avatar">${avatarHTML(prof)}</div>
+        <h2 class="accent-name">${esc(prof.display_name || prof.username)}${verifiedBadge(prof)}${displayBadgeHtml(prof)} ${prof.is_admin?'<span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c;vertical-align:middle">MOD</span>':''} ${prof.banned?'<span class="t-genre" style="background:#fae3e0;border-color:#f0c2bc;color:#c0533f;vertical-align:middle">baneado</span>':''}</h2>
+        <div class="ph-handle">@${esc(prof.username)}</div>
+        ${profBadgesHtml}
+        ${tagline ? `<div class="profile-tagline">${esc(tagline)}</div>` : ''}
+        ${prof.bio ? `<p class="ph-bio">${esc(prof.bio)}</p>` : ''}
+        <div class="pstats">
+          <span class="pstat" data-pstat="tracks"><b>${myTracks.length}</b><i>pistas</i></span>
+          <span class="pstat" data-pstat="followers"><b>${followers||0}</b><i>seguidores</i></span>
+          <span class="pstat" data-pstat="following"><b>${following||0}</b><i>siguiendo</i></span>
         </div>
         <div class="pactions">
           ${isMe ? `<button class="btn primary" id="customizeBtn"><svg fill="none" stroke="#fff"><use href="#i-palette"/></svg> Personalizar</button><button class="btn" id="editProfBtn"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg> Editar perfil</button><button class="btn" id="logoutBtn"><svg fill="none" stroke="currentColor"><use href="#i-logout"/></svg> Cerrar sesión</button>`
@@ -2160,6 +2157,7 @@ async function openProfile(userId) {
           ${(!isMe && state.profile.is_admin) ? `<button class="btn" id="verifyBtn"><svg fill="none" stroke="currentColor"><use href="#i-verify"/></svg> ${prof.verified?'Quitar verificación':'Verificar'}</button>` : ''}
           ${(!isMe && state.profile.is_admin && !prof.is_admin) ? `<button class="btn danger-btn" id="delUserBtn"><svg fill="none" stroke="#fff"><use href="#i-trash"/></svg> Eliminar usuario</button>` : ''}
         </div>
+        ${links.length ? `<div class="profile-links">${links.map(l => `<a href="${esc(czHref(l.url))}" target="_blank" rel="noopener noreferrer"><svg fill="none" stroke="currentColor"><use href="#i-globe"/></svg>${esc(l.label || 'enlace')}</a>`).join('')}</div>` : ''}
       </div>
       <div class="profile-tabs" id="profileTabs">
         <button class="active" data-ptab="tracks"><svg fill="none" stroke="currentColor"><use href="#i-music"/></svg> Pistas <span class="ptab-n">${myTracks.length}</span></button>
