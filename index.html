@@ -9,7 +9,7 @@
 <link rel="manifest" href="/manifest.json?v=20260605b" />
 <meta name="theme-color" content="#0a0d18" />
 <link rel="apple-touch-icon" href="/icon-192.png?v=20260605b" />
-<link rel="stylesheet" href="css/styles.css?v=20260605d" />
+<link rel="stylesheet" href="css/styles.css?v=20260605e" />
 <script>(function(){try{var t=localStorage.getItem('ub_theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}try{if(sessionStorage.getItem('ub_splash'))document.documentElement.classList.add('no-splash');}catch(e){}})();</script>
 <style>
 #splash{position:fixed;inset:0;z-index:99999;background:#00020b;display:flex;align-items:center;justify-content:center;overflow:hidden;transition:opacity .55s ease}
@@ -133,14 +133,13 @@ html.no-splash #splash{display:none}
 <!-- ===================== APP ===================== -->
 <div class="app hidden" id="app">
   <div class="brand">
-    <span class="brand-mark"><img src="/assets/logo-eyes.png?v=20260605d" alt="" /></span>
     <div class="logo">Under<span class="u">Bro</span></div>
   </div>
 
   <!-- TOPBAR -->
   <div class="topbar">
     <button class="icon-btn menu-toggle" id="menuToggle"><svg><use href="#i-menu"/></svg></button>
-    <span class="topbar-brand"><span class="brand-mark sm"><img src="/assets/logo-eyes.png?v=20260605d" alt="" /></span><span class="logo topbar-logo">Under<span class="u">Bro</span></span></span>
+    <div class="logo topbar-logo">Under<span class="u">Bro</span></div>
     <div class="tabs" id="feedTabs">
       <button data-tab="following">Following</button>
       <button data-tab="trending" class="active">Trending</button>
@@ -308,7 +307,7 @@ html.no-splash #splash{display:none}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
-<script src="js/config.js?v=20260605d"></script>
-<script src="js/app.js?v=20260605d"></script>
+<script src="js/config.js?v=20260605e"></script>
+<script src="js/app.js?v=20260605e"></script>
 </body>
 </html>
