@@ -3397,6 +3397,7 @@ const DM_QUICK_EMOJI = ['❤️', '😂', '👍', '😮', '😢', '🙏'];
 const DM_EMOJIS = ['😀','😁','😂','🤣','😊','😍','😘','😎','🤩','🥳','😅','😆','😇','🙂','🙃','😉','😌','😋','😜','🤪','😝','🤗','🤔','🤨','😐','😶','😏','😒','🙄','😬','😴','😪','😮','😯','😲','😳','🥺','😢','😭','😤','😠','😡','🤬','🤯','😱','😨','😰','😥','🥶','🥵','🤤','🤥','🤐','🤢','🤮','🤧','😷','🤒','🤕','😈','👻','💀','👽','🤖','🎃','😺','🙈','🙉','🙊','💋','👍','👎','👌','✌️','🤞','🤟','🤘','👏','🙌','🙏','💪','🫶','👋','🤙','🖐️','✋','🤝','❤️','🧡','💛','💚','💙','💜','🖤','🤍','💔','💕','💞','💓','💗','💖','💘','💝','🔥','✨','⭐','🌟','💫','⚡','💯','🎉','🎊','🎵','🎶','🎁','🏆','👑','💎','🌈','☀️','🌙','⚽','🏀','🎮','🎧','🎤','🎸','🍻','🍕','☕','✅','❌','❓','❗'];
 
 let dmVoiceEl = null, dmMediaRec = null, dmRecChunks = [], dmRecStart = 0, dmRecTimer = null, dmRecStream = null;
+let dmRecAudioCtx = null, dmRecAnalyser = null, dmRecRAF = null, dmRecLevels = [];
 let dmTypingThrottle = 0, dmTypingStopTimer = null, dmTypingHideTimer = null;
 
 function initDM() {
@@ -3815,12 +3816,15 @@ async function dmStartRec() {
   dmMediaRec.ondataavailable = (ev) => { if (ev.data && ev.data.size) dmRecChunks.push(ev.data); };
   dmMediaRec.start(); dmRecStart = Date.now();
   $('dmRec').classList.remove('hidden'); $('dmForm').classList.add('hidden'); dmHideEmoji();
+  $('dmRecTime').textContent = '0:00';
   dmRecTimer = setInterval(() => { $('dmRecTime').textContent = fmtDur((Date.now() - dmRecStart) / 1000); }, 200);
+  dmWaveStart(dmRecStream);
   haptic(12);
 }
 function dmStopRec(send) {
   if (!dmMediaRec) return;
   clearInterval(dmRecTimer);
+  dmWaveStop();
   const secs = Math.max(1, Math.round((Date.now() - dmRecStart) / 1000));
   const rec = dmMediaRec; dmMediaRec = null;
   rec.addEventListener('stop', () => {
@@ -3830,6 +3834,51 @@ function dmStopRec(send) {
     dmRecChunks = [];
   }, { once: true });
   try { rec.stop(); } catch (_) {}
+}
+/* onda de audio en vivo durante la grabación */
+function dmWaveStart(stream) {
+  const cv = $('dmRecWave'); if (!cv) return;
+  try {
+    dmRecAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const src = dmRecAudioCtx.createMediaStreamSource(stream);
+    dmRecAnalyser = dmRecAudioCtx.createAnalyser();
+    dmRecAnalyser.fftSize = 512;
+    src.connect(dmRecAnalyser);
+  } catch (e) { return; }
+  dmRecLevels = [];
+  const ctx = cv.getContext('2d');
+  const data = new Uint8Array(dmRecAnalyser.frequencyBinCount);
+  const draw = () => {
+    dmRecRAF = requestAnimationFrame(draw);
+    const dpr = window.devicePixelRatio || 1;
+    const cw = cv.clientWidth || 200, ch = cv.clientHeight || 34;
+    if (cv.width !== Math.round(cw * dpr)) { cv.width = Math.round(cw * dpr); cv.height = Math.round(ch * dpr); }
+    dmRecAnalyser.getByteTimeDomainData(data);
+    let sum = 0; for (let i = 0; i < data.length; i++) { const v = (data[i] - 128) / 128; sum += v * v; }
+    const rms = Math.sqrt(sum / data.length);
+    dmRecLevels.push(rms);
+    const W = cv.width, H = cv.height;
+    const barW = 3 * dpr, gap = 2 * dpr, step = barW + gap;
+    const maxBars = Math.floor(W / step);
+    if (dmRecLevels.length > maxBars) dmRecLevels = dmRecLevels.slice(-maxBars);
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = '#3e57fc';
+    for (let i = 0; i < dmRecLevels.length; i++) {
+      const h = Math.max(2 * dpr, Math.min(H, dmRecLevels[i] * H * 2.6));
+      const x = W - (dmRecLevels.length - i) * step;
+      const r = barW / 2;
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(x, (H - h) / 2, barW, h, r); else ctx.rect(x, (H - h) / 2, barW, h);
+      ctx.fill();
+    }
+  };
+  draw();
+}
+function dmWaveStop() {
+  if (dmRecRAF) cancelAnimationFrame(dmRecRAF); dmRecRAF = null;
+  if (dmRecAudioCtx) { try { dmRecAudioCtx.close(); } catch (_) {} dmRecAudioCtx = null; }
+  dmRecAnalyser = null; dmRecLevels = [];
+  const cv = $('dmRecWave'); if (cv && cv.getContext) cv.getContext('2d').clearRect(0, 0, cv.width, cv.height);
 }
 
 /* ---- emoji ---- */
