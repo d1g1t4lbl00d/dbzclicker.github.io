@@ -3537,6 +3537,17 @@ function wireBubble(row, msg) {
   const bub = row.querySelector('.dm-bubble');
   const img = row.querySelector('.dm-img'); if (img) img.onclick = () => openImageViewer(img.dataset.full);
   const vplay = row.querySelector('[data-vplay]'); if (vplay) vplay.onclick = (e) => { e.stopPropagation(); dmToggleVoice(row.querySelector('.dm-voice')); };
+  const wave = row.querySelector('.dm-voice-wave');
+  if (wave) wave.addEventListener('pointerdown', (e) => {
+    e.stopPropagation(); e.preventDefault();
+    const box = row.querySelector('.dm-voice');
+    dmSeekVoice(box, e, false);
+    const mv = (ev) => dmSeekVoice(box, ev, true);
+    const up = () => { document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); document.removeEventListener('pointercancel', up); };
+    document.addEventListener('pointermove', mv);
+    document.addEventListener('pointerup', up);
+    document.addEventListener('pointercancel', up);
+  });
   const dmPlay = row.querySelector('[data-dmplay]'); if (dmPlay) dmPlay.onclick = (e) => { e.stopPropagation(); playSharedTrack(safeMeta(msg), msg.attachment_url); };
   const jump = row.querySelector('[data-jump]'); if (jump) jump.onclick = (e) => { e.stopPropagation(); dmJumpTo(jump.dataset.jump); };
   wireReactChips(row, msg);
@@ -3753,6 +3764,18 @@ function dmVoiceProgress(box, frac, cur) {
   if (wave) { const bars = wave.children, n = bars.length, upto = Math.round(frac * n); for (let i = 0; i < n; i++) bars[i].classList.toggle('on', i < upto); }
   else if (fill) { fill.style.width = (frac * 100) + '%'; }
   if (tlabel) tlabel.textContent = fmtDur(cur);
+}
+function dmSeekVoice(box, e, dragging) {
+  if (!box) return;
+  const wave = box.querySelector('.dm-voice-wave'); if (!wave) return;
+  const rect = wave.getBoundingClientRect();
+  const frac = Math.min(1, Math.max(0, (e.clientX - rect.left) / rect.width));
+  const dur0 = parseFloat(box.dataset.dur) || 0;
+  if (!dragging && !(dmVoiceEl && dmVoiceEl._box === box)) dmToggleVoice(box);
+  const a = dmVoiceEl;
+  if (!a || a._box !== box) { dmVoiceProgress(box, frac, frac * dur0); return; }
+  const apply = () => { const d = (a.duration && isFinite(a.duration)) ? a.duration : dur0; if (d) { a.currentTime = frac * d; dmVoiceProgress(box, frac, a.currentTime); } };
+  if (a.readyState >= 1) apply(); else a.addEventListener('loadedmetadata', apply, { once: true });
 }
 function dmToggleVoice(box) {
   if (!box) return;
