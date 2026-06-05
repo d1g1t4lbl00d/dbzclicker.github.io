@@ -258,11 +258,16 @@ img { display: block; }
   height: 100dvh; max-width: 1560px; margin: 0 auto;
 }
 .brand {
-  grid-area: brand; display: flex; align-items: center; padding: 0 20px;
+  grid-area: brand; display: flex; align-items: center; gap: 11px; padding: 0 20px;
   border-bottom: 1px solid var(--line-soft); border-right: 1px solid var(--line-soft);
   background: var(--glass); backdrop-filter: blur(10px);
 }
 .brand .logo { font-size: 27px; }
+/* mini app-icon de marca (monograma sobre fondo de marca para que la U blanca lea en cualquier tema) */
+.brand-mark { flex-shrink: 0; width: 38px; height: 38px; border-radius: 11px; background: linear-gradient(160deg, #0c1226, #05060f); display: grid; place-items: center; box-shadow: inset 0 0 0 1px rgba(255,255,255,.07), 0 4px 14px rgba(62,87,252,.28); }
+.brand-mark img { width: 72%; height: auto; }
+.brand-mark.sm { width: 30px; height: 30px; border-radius: 9px; }
+.topbar-brand { display: none; }
 
 .topbar {
   grid-area: topbar; display: flex; align-items: center; gap: 14px; padding: 0 20px;
@@ -1149,7 +1154,8 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
 
   /* TOPBAR en dos filas: [☰ · UnderBro · 🔍 🔔 avatar] / [tabs] */
   .topbar { flex-wrap: wrap; align-items: center; gap: 8px 8px; padding: 9px 12px; }
-  .topbar-logo { display: block; font-size: 22px; margin-right: auto; }
+  .topbar-brand { display: flex; align-items: center; gap: 9px; margin-right: auto; }
+  .topbar-logo { display: block; font-size: 22px; }
   .icon-btn { width: 42px; height: 42px; }
   .topbar-right { gap: 6px; }
   .avatar-chip { padding: 2px; }
