@@ -38,7 +38,7 @@ function setTheme(theme) {
   document.documentElement.setAttribute('data-theme', theme);
   try { localStorage.setItem('ub_theme', theme); } catch (_) {}
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute('content', theme === 'dark' ? '#0f1218' : '#5f7fb8');
+  if (meta) meta.setAttribute('content', theme === 'dark' ? '#0a0d18' : '#3e57fc');
 }
 
 /* ---- insignia de verificado / fundador ---- */
@@ -74,7 +74,7 @@ function badgeUnlockQueue(keys) {
 }
 function badgeUnlockAnim(key, onDone) {
   const b = BADGES[key]; if (!b) { if (onDone) onDone(); return; }
-  const colors = ['#6fb6e0', '#8b7fe0', '#56c5d0', '#ffd166', '#ff6f9c', '#6f8fc6'];
+  const colors = ['#27a9ff', '#6e2df5', '#3e57fc', '#ffd166', '#ff6f9c', '#4f8ff7'];
   const confetti = Array.from({ length: 26 }, (_, i) => `<i style="left:${(Math.random() * 100).toFixed(1)}%;background:${colors[i % colors.length]};animation-delay:${(Math.random() * 0.5).toFixed(2)}s;animation-duration:${(1.6 + Math.random() * 1.3).toFixed(2)}s"></i>`).join('');
   const ov = el(`<div class="badge-pop"><div class="bp-confetti">${confetti}</div><div class="bp-card"><div class="bdg ${b.cls} bp-badge">${b.glyph}</div><div class="bp-kicker">¡Insignia desbloqueada!</div><div class="bp-name">${esc(b.name)}</div><div class="bp-desc">${esc(b.desc)}</div><div class="bp-tap">toca para cerrar</div></div></div>`);
   document.body.appendChild(ov);
@@ -2030,7 +2030,7 @@ function openProfileCustomizer() {
         <input type="file" id="bannerFile" accept="image/*" hidden />
         <button type="button" class="btn sm" id="bannerFrame" style="margin-top:6px"><svg fill="none" stroke="currentColor"><use href="#i-image"/></svg> Ajustar encuadre</button>
       </div>
-      <div class="field"><label>Color de acento</label><div class="bg-row"><input type="color" id="thAccent" value="${czColor(t.accent) || '#5f7fb8'}"><span class="sub">Tiñe tu nombre, botones y enlaces</span></div></div>
+      <div class="field"><label>Color de acento</label><div class="bg-row"><input type="color" id="thAccent" value="${czColor(t.accent) || '#3e57fc'}"><span class="sub">Tiñe tu nombre, botones y enlaces</span></div></div>
       <div class="field"><label>Fuente</label><select class="cz-select" id="thFont">${Object.keys(FONTS).map(f => `<option>${f}</option>`).join('')}</select></div>
       <div class="field"><label>Frase destacada</label><input type="text" id="thTagline" maxlength="140" placeholder="Una frase que te represente" value="${esc(t.tagline || '')}" /></div>
       <div class="field"><label>Fondo del perfil</label>
@@ -2180,7 +2180,7 @@ async function openProfile(userId) {
   const isMe = userId === state.user.id;
   const followsHim = state.follows.has(userId);
   const theme = (prof.theme && typeof prof.theme === 'object') ? prof.theme : {};
-  const accent = czColor(theme.accent) || '#5f7fb8';
+  const accent = czColor(theme.accent) || '#3e57fc';
   const banner = czUrl(theme.banner);
   const bannerPos = czPos(theme.bannerPos) || '50% 50%';
   const bannerZoom = czZoom(theme.bannerZoom);
@@ -2876,7 +2876,7 @@ async function renderDashboard() {
       <div class="dash-sec-head"><h3>Tus redes y enlaces</h3><button class="btn sm" id="editLinksBtn"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg> Editar</button></div>
       <p class="dash-hint" style="margin:6px 0 12px">Los mismos que se ven en tu perfil. Si añades tu Spotify, se reproducirá abajo.</p>
       <div class="dash-socials">
-        ${links.length ? links.map(l => { const p = platformOf(l.url); return `<a class="social-card" href="${esc(czHref(l.url))}" target="_blank" rel="noopener noreferrer" style="--sc:${p ? p.color : '#5f7fb8'}"><div class="sc-dot"></div><div class="sc-info"><div class="sc-name">${esc(l.label || (p ? p.name : 'Enlace'))}</div><div class="sc-n">${esc(hostOf(l.url))}</div></div></a>`; }).join('') : '<div class="empty" style="padding:14px;grid-column:1/-1"><p>Aún no has añadido enlaces. Pulsa <b>Editar</b> para poner tus redes.</p></div>'}
+        ${links.length ? links.map(l => { const p = platformOf(l.url); return `<a class="social-card" href="${esc(czHref(l.url))}" target="_blank" rel="noopener noreferrer" style="--sc:${p ? p.color : '#3e57fc'}"><div class="sc-dot"></div><div class="sc-info"><div class="sc-name">${esc(l.label || (p ? p.name : 'Enlace'))}</div><div class="sc-n">${esc(hostOf(l.url))}</div></div></a>`; }).join('') : '<div class="empty" style="padding:14px;grid-column:1/-1"><p>Aún no has añadido enlaces. Pulsa <b>Editar</b> para poner tus redes.</p></div>'}
       </div>
     </div>
 

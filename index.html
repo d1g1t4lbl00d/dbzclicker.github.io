@@ -5,23 +5,26 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>UnderBro — upload. share. connect.</title>
 <meta name="description" content="UnderBro — sube, comparte y conecta a través de la música." />
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90' font-weight='bold' fill='%235f7fb8'>U</text></svg>" />
-<link rel="manifest" href="/manifest.json?v=20260604t" />
-<meta name="theme-color" content="#5f7fb8" />
-<link rel="apple-touch-icon" href="/icon-192.png" />
-<link rel="stylesheet" href="css/styles.css?v=20260604t" />
-<script>(function(){try{var t=localStorage.getItem('ub_theme');if(!t)t=(window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';document.documentElement.setAttribute('data-theme',t);}catch(e){}try{if(sessionStorage.getItem('ub_splash'))document.documentElement.classList.add('no-splash');}catch(e){}})();</script>
+<link rel="icon" type="image/png" href="/assets/favicon-64.png?v=20260605a" />
+<link rel="manifest" href="/manifest.json?v=20260605a" />
+<meta name="theme-color" content="#0a0d18" />
+<link rel="apple-touch-icon" href="/icon-192.png?v=20260605a" />
+<link rel="stylesheet" href="css/styles.css?v=20260605a" />
+<script>(function(){try{var t=localStorage.getItem('ub_theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}try{if(sessionStorage.getItem('ub_splash'))document.documentElement.classList.add('no-splash');}catch(e){}})();</script>
 <style>
-#splash{position:fixed;inset:0;z-index:99999;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden;transition:opacity .5s ease}
+#splash{position:fixed;inset:0;z-index:99999;background:#00020b;display:flex;align-items:center;justify-content:center;overflow:hidden;transition:opacity .55s ease}
+#splash::before{content:"";position:absolute;width:120vmax;height:120vmax;background:radial-gradient(circle,rgba(62,87,252,.18),transparent 60%);animation:spGlow 3.2s ease-in-out infinite}
 #splash.hide{opacity:0;pointer-events:none}
-#splash video{max-width:100%;max-height:100%;width:auto;height:auto;object-fit:contain}
+#splash img{position:relative;width:min(58vw,240px);height:auto;filter:drop-shadow(0 12px 40px rgba(62,87,252,.35));animation:spLogo .9s cubic-bezier(.22,.61,.36,1) both}
+@keyframes spLogo{0%{opacity:0;transform:scale(.86)}60%{opacity:1}100%{opacity:1;transform:scale(1)}}
+@keyframes spGlow{0%,100%{opacity:.55;transform:scale(.92)}50%{opacity:1;transform:scale(1.05)}}
 html.no-splash #splash{display:none}
 </style>
 </head>
 <body>
 
 <!-- ===================== SPLASH ===================== -->
-<div id="splash"><video id="splashVid" src="/assets/intro.mp4?v=20260604t" muted autoplay playsinline preload="auto"></video></div>
+<div id="splash"><img src="/assets/logo-splash.png?v=20260605a" alt="UnderBro" /></div>
 <script>(function(){
   var html=document.documentElement, el=document.getElementById('splash');
   if(!el){return;}
@@ -32,16 +35,10 @@ html.no-splash #splash{display:none}
     if(done){return;} done=true;
     clearTimeout(t);
     el.classList.add('hide');
-    setTimeout(function(){ if(el&&el.parentNode){el.parentNode.removeChild(el);} },550);
-  }
-  var v=document.getElementById('splashVid');
-  if(v){
-    v.addEventListener('ended', finish);
-    v.addEventListener('error', finish);
-    var p=v.play&&v.play(); if(p&&p.catch){p.catch(function(){finish();});}
+    setTimeout(function(){ if(el&&el.parentNode){el.parentNode.removeChild(el);} },600);
   }
   el.addEventListener('click', finish);
-  t=setTimeout(finish, 12000);
+  t=setTimeout(finish, 1900);
 })();</script>
 
 <!-- ===================== ICON SPRITE ===================== -->
@@ -98,7 +95,7 @@ html.no-splash #splash{display:none}
 <div class="auth-screen" id="authScreen">
   <div class="auth-card">
     <div class="auth-head">
-      <div class="logo">Under<span class="u">Bro</span></div>
+      <img class="auth-logo" src="/assets/logo-wordmark.png?v=20260605a" alt="UnderBro" />
       <p>upload. share. connect.</p>
     </div>
     <div class="auth-body">
@@ -310,7 +307,7 @@ html.no-splash #splash{display:none}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
-<script src="js/config.js?v=20260604t"></script>
-<script src="js/app.js?v=20260604t"></script>
+<script src="js/config.js?v=20260605a"></script>
+<script src="js/app.js?v=20260605a"></script>
 </body>
 </html>
