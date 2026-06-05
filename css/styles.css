@@ -901,18 +901,14 @@ img { display: block; }
 .vbadge { width: 15px; height: 15px; color: var(--blue-2); vertical-align: -2px; display: inline-block; }
 .person-name .vbadge, .fr-name .vbadge { width: 14px; height: 14px; }
 
-/* ---- Insignias (badges) ---- */
-.bdg { display: inline-flex; align-items: center; justify-content: center; min-width: 17px; height: 17px; padding: 0 5px; border-radius: 8px; font-size: 11px; font-weight: 800; line-height: 1; vertical-align: 1px; }
-.bdg-alpha { background: none; color: rgba(0,0,0,.45); min-width: 0; padding: 0; height: auto; font-size: 9px; font-weight: 800; letter-spacing: .2px; vertical-align: super; margin-left: -2px; }
-:root[data-theme="dark"] .bdg-alpha { background: none; color: rgba(255,255,255,.5); }
-.bdg-tester { background: linear-gradient(135deg, #ffd76a, #f0a52e); color: #5a3a00; box-shadow: 0 1px 5px rgba(240,165,46,.5); }
-/* en tamaño grande (Estudio / animación) la Alpha sí se ve definida */
-.bdg-alpha.big { vertical-align: baseline; margin-left: 0; background: rgba(127,127,127,.18); border: 1px solid rgba(127,127,127,.3); color: var(--ink); }
-:root[data-theme="dark"] .bdg-alpha.big { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.25); color: #fff; }
-.profile-badges .bdg-alpha { vertical-align: middle; font-size: 12px; margin-left: 0; }
-.profile-badges { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px; }
-.profile-badges .bdg { height: 23px; padding: 0 10px; font-size: 13px; gap: 5px; }
-.profile-badges .bdg-txt { font-size: 11.5px; font-weight: 700; }
+/* ---- Insignias (badges): solo el símbolo, sin fondo (base inspirada en Alpha) ---- */
+.bdg { display: inline-block; font-weight: 800; line-height: 1; font-size: 9px; letter-spacing: .2px; vertical-align: super; margin-left: -2px; }
+.bdg-alpha  { color: rgba(0,0,0,.45); }
+:root[data-theme="dark"] .bdg-alpha { color: rgba(255,255,255,.5); }
+.bdg-tester { color: #f0a52e; }
+.profile-badges { display: flex; flex-wrap: wrap; gap: 14px; margin: 8px 0 2px; align-items: center; }
+.profile-badges .bdg { vertical-align: middle; font-size: 16px; margin-left: 0; }
+.profile-badges .bdg-txt { font-size: 11.5px; font-weight: 700; color: var(--ink-soft); margin-left: 3px; vertical-align: middle; }
 .badge-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
 .badge-item { display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 15px 10px; border: 1px solid var(--line-soft); border-radius: 14px; background: var(--panel-2); cursor: pointer; transition: transform .14s, box-shadow .14s, border-color .14s; color: inherit; }
 .badge-item:not(.locked):hover { transform: translateY(-2px); box-shadow: var(--sh-2); }
@@ -921,14 +917,16 @@ img { display: block; }
 .badge-item.locked .bdg { filter: grayscale(1); }
 .bi-name { font-weight: 750; font-size: 13px; color: var(--ink); }
 .bi-state { font-size: 11px; color: var(--ink-soft); text-align: center; }
-.bdg.big { width: 56px; height: 56px; min-width: 56px; border-radius: 16px; font-size: 30px; padding: 0; }
+.bdg.big { font-size: 46px; vertical-align: baseline; margin-left: 0; }
 
 /* animación de desbloqueo */
 .badge-pop { position: fixed; inset: 0; z-index: 300; display: grid; place-items: center; background: rgba(8,10,14,.66); backdrop-filter: blur(4px); opacity: 0; transition: opacity .3s; overflow: hidden; }
 .badge-pop.show { opacity: 1; }
 .bp-card { position: relative; z-index: 2; text-align: center; padding: 30px 28px; transform: scale(.6); opacity: 0; transition: transform .45s cubic-bezier(.2,1.3,.4,1), opacity .3s; }
 .badge-pop.show .bp-card { transform: scale(1); opacity: 1; }
-.bp-badge { width: 88px; height: 88px; min-width: 88px; border-radius: 24px; font-size: 48px; margin: 0 auto 16px; box-shadow: 0 14px 44px rgba(0,0,0,.5); animation: bpFloat 2.4s ease-in-out infinite; }
+.bp-badge { display: inline-block; font-size: 70px; line-height: 1; margin: 0 auto 16px; vertical-align: baseline; animation: bpFloat 2.4s ease-in-out infinite; }
+.bp-badge.bdg-alpha { color: rgba(255,255,255,.85); }
+.bp-badge.bdg-tester { filter: drop-shadow(0 8px 22px rgba(240,165,46,.55)); }
 .bp-kicker { color: #cdd5e4; font-size: 12px; letter-spacing: 1.5px; text-transform: uppercase; font-weight: 800; }
 .bp-name { color: #fff; font-size: 30px; font-weight: 850; margin: 2px 0 8px; }
 .bp-desc { color: #aeb7c8; font-size: 13px; max-width: 290px; margin: 0 auto; line-height: 1.45; }
