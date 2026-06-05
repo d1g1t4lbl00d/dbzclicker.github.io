@@ -91,7 +91,6 @@
 :root[data-theme="dark"] textarea:focus,
 :root[data-theme="dark"] .field input:focus,
 :root[data-theme="dark"] .modal-body .field textarea:focus { background: var(--panel-2); }
-:root[data-theme="dark"] .auth-head { background: linear-gradient(180deg, #1b212b, #171b22); }
 :root[data-theme="dark"] .auth-tabs button.active,
 :root[data-theme="dark"] .tabs button.active { background: var(--panel); color: var(--blue); }
 :root[data-theme="dark"] .dm-bubble.them { background: var(--panel-2); border-color: var(--line); color: var(--ink); }
@@ -218,12 +217,16 @@ img { display: block; }
   box-shadow: var(--sh-3); overflow: hidden; animation: fadeUp .5s var(--ease) both;
 }
 .auth-head {
-  text-align: center; padding: 38px 28px 24px;
-  background: linear-gradient(180deg, #ffffff, #f1f5fc);
-  border-bottom: 1px solid var(--line-soft);
+  position: relative; overflow: hidden;
+  text-align: center; padding: 40px 28px 26px;
+  background:
+    radial-gradient(420px 220px at 50% -20%, rgba(62,87,252,.32), transparent 70%),
+    linear-gradient(165deg, #0c1226 0%, #070a16 60%, #05060f 100%);
+  border-bottom: 1px solid rgba(255,255,255,.06);
 }
 .auth-head .logo { font-size: 46px; }
-.auth-logo { width: 132px; height: 132px; margin: 0 auto; border-radius: 26px; box-shadow: 0 10px 30px rgba(62,87,252,.3), 0 2px 8px rgba(0,0,0,.25); }
+.auth-logo { width: min(230px, 64%); height: auto; margin: 0 auto; filter: drop-shadow(0 10px 28px rgba(62,87,252,.4)); }
+.auth-head p { color: #aeb8d6; }
 .auth-head p { color: var(--ink-soft); font-size: 12px; margin-top: 6px; letter-spacing: 1.5px; text-transform: lowercase; }
 .auth-body { padding: 26px 28px 30px; }
 .auth-tabs { display: flex; gap: 6px; margin-bottom: 20px; background: var(--panel-2); border: 1px solid var(--line-soft); border-radius: 13px; padding: 4px; }
@@ -1207,6 +1210,8 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
     background: var(--glass); backdrop-filter: blur(16px) saturate(1.4); border-top: 1px solid var(--line);
     justify-content: space-around; align-items: center;
   }
+  /* sin sesión (app oculta) no debe verse la barra inferior */
+  #app.hidden ~ .bottom-nav { display: none; }
   .bottom-nav button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; border: none; background: none; color: var(--ink-soft); font-size: 10px; font-weight: 650; padding: 7px 0; position: relative; min-width: 0; }
   .bottom-nav button svg { width: 23px; height: 23px; stroke: var(--ink-soft); transition: stroke .15s, transform .15s var(--ease); }
   .bottom-nav button.active { color: var(--blue-deep); }
