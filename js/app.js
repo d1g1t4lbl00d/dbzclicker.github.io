@@ -57,6 +57,8 @@ function displayBadgeHtml(p) {
 async function loadBadges() {
   const { data } = await sb.from('user_badges').select('badge').eq('user_id', state.user.id);
   state.badges = new Set((data || []).map(r => r.badge));
+  // el desarrollador (admin) posee todo el catálogo, presente y futuro
+  if (state.profile && state.profile.is_admin) Object.keys(BADGES).forEach(k => state.badges.add(k));
   let seen = []; try { seen = JSON.parse(localStorage.getItem('ub_badges_seen') || '[]'); } catch (_) {}
   const seenSet = new Set(seen);
   const fresh = [...state.badges].filter(b => BADGES[b] && !seenSet.has(b));
@@ -2109,7 +2111,7 @@ async function openProfile(userId) {
     sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)').contains('collaborators', JSON.stringify([{ id: userId }])).order('created_at', { ascending: false }),
     sb.from('user_badges').select('badge').eq('user_id', userId),
   ]);
-  const profBadges = (badgesRes.data || []).map(r => r.badge).filter(b => BADGES[b]);
+  const profBadges = (prof.is_admin ? Object.keys(BADGES) : (badgesRes.data || []).map(r => r.badge)).filter(b => BADGES[b]);
   const profBadgesHtml = profBadges.length ? `<div class="profile-badges">${profBadges.map(k => `<span class="bdg ${BADGES[k].cls}" title="${esc(BADGES[k].name)}">${BADGES[k].glyph} <span class="bdg-txt">${esc(BADGES[k].name)}</span></span>`).join('')}</div>` : '';
   // pistas propias y "feats" (cualquier colaboración que te involucra: tuyas con invitados
   // y pistas de otros donde te añadieron como colaborador)
