@@ -711,7 +711,13 @@ img { display: block; }
 .dm-row.them .dm-voice-bar { background: var(--line); }
 .dm-voice-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 4px; background: #fff; }
 .dm-row.them .dm-voice-fill { background: var(--accent); }
-.dm-voice-time { font-size: 11px; opacity: .8; min-width: 30px; text-align: right; }
+/* onda de audio congelada (se colorea al reproducir) */
+.dm-voice-wave { flex: 1; min-width: 0; display: flex; align-items: center; gap: 2px; height: 30px; }
+.dm-voice-wave span { flex: 1; min-width: 2px; height: var(--h, 40%); min-height: 3px; border-radius: 3px; background: rgba(255,255,255,.38); transition: background .08s linear; }
+.dm-voice-wave span.on { background: #fff; }
+.dm-row.them .dm-voice-wave span { background: color-mix(in srgb, var(--ink-soft) 55%, transparent); }
+.dm-row.them .dm-voice-wave span.on { background: var(--accent); }
+.dm-voice-time { font-size: 11px; opacity: .8; min-width: 32px; text-align: right; flex-shrink: 0; }
 
 /* pista compartida */
 .dm-track { display: flex; align-items: center; gap: 10px; padding: 7px; border-radius: 13px; min-width: 220px; background: rgba(255,255,255,.16); }

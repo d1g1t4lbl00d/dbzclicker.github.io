@@ -3488,8 +3488,12 @@ function mediaHTML(msg) {
   if (t === 'image') return `<img class="dm-img" src="${esc(msg.attachment_url)}" alt="" data-full="${esc(msg.attachment_url)}" />`;
   if (t === 'video') return `<video class="dm-video" src="${esc(msg.attachment_url)}" controls playsinline preload="metadata"></video>`;
   if (t === 'audio') {
-    const secs = parseInt(msg.attachment_name, 10); const dur = isNaN(secs) ? '0:00' : fmtDur(secs);
-    return `<div class="dm-voice" data-audio="${esc(msg.attachment_url)}"><button class="dm-voice-play" data-vplay aria-label="Reproducir"><svg class="ci-play"><use href="#i-play"/></svg><svg class="ci-pause"><use href="#i-pause"/></svg></button><div class="dm-voice-bar"><div class="dm-voice-fill"></div></div><span class="dm-voice-time">${dur}</span></div>`;
+    let info = {}; try { info = JSON.parse(msg.attachment_name || '{}'); } catch (_) {}
+    let secs = info.d, peaks = info.w;
+    if (secs == null) { const n = parseInt(msg.attachment_name, 10); secs = isNaN(n) ? 0 : n; }
+    if (!Array.isArray(peaks) || !peaks.length) peaks = dmPlaceholderPeaks(msg.id, 32);
+    const bars = peaks.map(p => `<span style="--h:${Math.max(8, Math.min(100, p | 0))}%"></span>`).join('');
+    return `<div class="dm-voice" data-audio="${esc(msg.attachment_url)}" data-dur="${secs || 0}"><button class="dm-voice-play" data-vplay aria-label="Reproducir"><svg class="ci-play"><use href="#i-play"/></svg><svg class="ci-pause"><use href="#i-pause"/></svg></button><div class="dm-voice-wave">${bars}</div><span class="dm-voice-time">${fmtDur(secs || 0)}</span></div>`;
   }
   if (t === 'track') {
     const meta = safeMeta(msg);
@@ -3724,15 +3728,40 @@ async function playSharedTrack(meta, audioUrl) {
   const t = { id: meta.id || audioUrl, title: meta.title || 'Pista', artist: meta.artist || '', cover_url: meta.cover_url || '', audio_url: audioUrl, duration: 0 };
   state.tracks = [t]; state.queue = [t.id]; playTrack(t);
 }
-/* ---- nota de voz (mini-reproductor) ---- */
+/* ---- nota de voz (mini-reproductor con onda) ---- */
+function dmPlaceholderPeaks(seed, n) {
+  let s = 0; const str = String(seed || '');
+  for (let i = 0; i < str.length; i++) s = (s * 31 + str.charCodeAt(i)) >>> 0;
+  const out = [];
+  for (let i = 0; i < n; i++) { s = (s * 1103515245 + 12345) >>> 0; out.push(22 + (s % 60)); }
+  return out;
+}
+function dmComputePeaks(levels, n) {
+  if (!levels || !levels.length) return [];
+  let maxv = 0.02; for (let i = 0; i < levels.length; i++) if (levels[i] > maxv) maxv = levels[i];
+  const out = [];
+  for (let i = 0; i < n; i++) {
+    const a = Math.floor(i * levels.length / n), b = Math.max(a + 1, Math.floor((i + 1) * levels.length / n));
+    let m = 0; for (let j = a; j < b && j < levels.length; j++) if (levels[j] > m) m = levels[j];
+    out.push(Math.min(100, Math.max(10, Math.round(m / maxv * 100))));
+  }
+  return out;
+}
+function dmVoiceProgress(box, frac, cur) {
+  const wave = box.querySelector('.dm-voice-wave'); const fill = box.querySelector('.dm-voice-fill');
+  const tlabel = box.querySelector('.dm-voice-time');
+  if (wave) { const bars = wave.children, n = bars.length, upto = Math.round(frac * n); for (let i = 0; i < n; i++) bars[i].classList.toggle('on', i < upto); }
+  else if (fill) { fill.style.width = (frac * 100) + '%'; }
+  if (tlabel) tlabel.textContent = fmtDur(cur);
+}
 function dmToggleVoice(box) {
   if (!box) return;
-  const fill = box.querySelector('.dm-voice-fill'); const tlabel = box.querySelector('.dm-voice-time');
+  const dur0 = parseFloat(box.dataset.dur) || 0;
   if (dmVoiceEl && dmVoiceEl._box === box) { if (dmVoiceEl.paused) dmVoiceEl.play(); else dmVoiceEl.pause(); return; }
   if (dmVoiceEl) { dmVoiceEl.pause(); dmVoiceEl._box?.classList.remove('playing'); }
   const a = new Audio(box.dataset.audio); dmVoiceEl = a; a._box = box;
-  a.ontimeupdate = () => { if (a.duration && isFinite(a.duration)) { fill.style.width = (a.currentTime / a.duration * 100) + '%'; tlabel.textContent = fmtDur(a.currentTime); } };
-  a.onended = () => { box.classList.remove('playing'); fill.style.width = '0%'; tlabel.textContent = fmtDur(a.duration); };
+  a.ontimeupdate = () => { const d = (a.duration && isFinite(a.duration)) ? a.duration : dur0; if (d) dmVoiceProgress(box, a.currentTime / d, a.currentTime); };
+  a.onended = () => { box.classList.remove('playing'); dmVoiceProgress(box, 0, dur0); };
   a.onplay = () => box.classList.add('playing');
   a.onpause = () => box.classList.remove('playing');
   a.play();
@@ -3788,7 +3817,7 @@ async function sendDm(e) {
   if (error) { toast('No se pudo enviar'); return; }
   dmAppendMessage(sent, { scroll: true });
 }
-async function dmSendAudio(blob, secs) {
+async function dmSendAudio(blob, secs, peaks) {
   const other = state.dmPeer; if (!other || !requireNotBanned()) return;
   try {
     const path = `${state.user.id}/${Date.now()}.webm`;
@@ -3796,8 +3825,9 @@ async function dmSendAudio(blob, secs) {
     if (up.error) throw up.error;
     const url = sb.storage.from('chat').getPublicUrl(path).data.publicUrl;
     const reply_to = state.dmReplyTo?.id || null; cancelReply();
+    const name = JSON.stringify({ d: secs, w: (peaks && peaks.length) ? peaks : undefined });
     const { data: sent, error } = await sb.from('direct_messages')
-      .insert({ sender_id: state.user.id, recipient_id: other, body: '', attachment_url: url, attachment_type: 'audio', attachment_name: String(secs), reply_to })
+      .insert({ sender_id: state.user.id, recipient_id: other, body: '', attachment_url: url, attachment_type: 'audio', attachment_name: name, reply_to })
       .select().single();
     if (error) { toast('No se pudo enviar'); return; }
     dmAppendMessage(sent, { scroll: true });
@@ -3824,13 +3854,14 @@ async function dmStartRec() {
 function dmStopRec(send) {
   if (!dmMediaRec) return;
   clearInterval(dmRecTimer);
+  const peaks = dmComputePeaks(dmRecLevels, 32);
   dmWaveStop();
   const secs = Math.max(1, Math.round((Date.now() - dmRecStart) / 1000));
   const rec = dmMediaRec; dmMediaRec = null;
   rec.addEventListener('stop', () => {
     if (dmRecStream) { dmRecStream.getTracks().forEach(t => t.stop()); dmRecStream = null; }
     $('dmRec').classList.add('hidden'); $('dmForm').classList.remove('hidden');
-    if (send && dmRecChunks.length) dmSendAudio(new Blob(dmRecChunks, { type: rec.mimeType || 'audio/webm' }), secs);
+    if (send && dmRecChunks.length) dmSendAudio(new Blob(dmRecChunks, { type: rec.mimeType || 'audio/webm' }), secs, peaks);
     dmRecChunks = [];
   }, { once: true });
   try { rec.stop(); } catch (_) {}
