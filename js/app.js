@@ -4361,12 +4361,12 @@ function showPrivacyPolicy() {
       <h4>Cookies y almacenamiento local</h4>
       <p>Usamos almacenamiento local del navegador para mantener tu sesión iniciada, recordar el volumen y tus preferencias. No usamos cookies de publicidad ni de rastreo de terceros.</p>
       <h4>Dónde se procesan</h4>
-      <p>Los datos se almacenan en <b>Supabase</b> (base de datos y archivos) y la web se sirve mediante <b>GitHub Pages</b>, actuando como encargados del tratamiento.</p>
+      <p>Los datos se almacenan en <b>Supabase</b> (base de datos y archivos) y la web se sirve mediante <b>Vercel</b>, actuando como encargados del tratamiento.</p>
       <h4>Seguridad y moderación</h4>
       <p>Puedes <b>bloquear</b> a cualquier usuario (deja de poder escribirte y ocultas su contenido) y <b>reportar</b> perfiles, pistas, fotos y mensajes. El contenido que infrinja derechos o las normas puede ser retirado por moderación.</p>
       <h4>Tus derechos</h4>
       <p>Puedes editar tu perfil en cualquier momento y <b>eliminar tu cuenta y todos tus datos y archivos</b> desde <b>Ajustes → Eliminar cuenta</b>. Esa acción es permanente.</p>
-      <p style="color:var(--ink-soft);font-size:12px;margin-top:14px">Versión completa en <a href="/privacy.html" target="_blank" rel="noopener">underbro.app/privacy.html</a> · Última actualización: ${new Date().toLocaleDateString('es-ES')}.</p>
+      <p style="color:var(--ink-soft);font-size:12px;margin-top:14px">Versión completa en <a href="/privacy" target="_blank" rel="noopener">underbro.app/privacy</a> · Última actualización: ${new Date().toLocaleDateString('es-ES')}.</p>
     </div>`);
 }
 

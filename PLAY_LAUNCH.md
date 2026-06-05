@@ -18,17 +18,14 @@ Falta (acciones tuyas, fuera del código): dominio activo, cuenta Play, generar 
 
 ---
 
-## 1) Dominio (prerrequisito)
+## 1) Dominio y hosting ✅ (ya hecho)
 
-1. Compra **underbro.app** en un registrador donde controles el DNS.
-2. Configura DNS apuntando a GitHub Pages:
-   - **A** (`@`): `185.199.108.153`, `185.199.109.153`, `185.199.110.153`, `185.199.111.153`
-   - **AAAA** (`@`): `2606:50c0:8000::153`, `2606:50c0:8001::153`, `2606:50c0:8002::153`, `2606:50c0:8003::153`
-   - **CNAME** `www` → `d1g1t4lbl00d.github.io`
-3. Crea el archivo `CNAME` (contenido: `underbro.app`) en la raíz del repo y/o ponlo en Settings → Pages → Custom domain.
-4. Activa **Enforce HTTPS** cuando GitHub haya emitido el certificado.
+- La app se sirve en **Vercel** (proyecto `dbzclicker-github-io`), conectado al repo de GitHub.
+- **https://underbro.app** ya está activo con HTTPS y sirve la última versión.
+- **Auto-deploy:** cada push a `main` despliega a producción automáticamente.
+- Vercel sirve la app en la **raíz** del dominio → rutas absolutas (`/manifest.json`, `/sw.js`, `/.well-known/`) correctas y PWA instalable.
 
-> `.app` es HSTS-preload: HTTPS obligatorio (GitHub Pages lo provee).
+> No se usa GitHub Pages para el dominio; no hace falta `CNAME` ni registros DNS manuales.
 
 ---
 
@@ -60,7 +57,7 @@ Falta (acciones tuyas, fuera del código): dominio activo, cuenta Play, generar 
 - **Gráfico destacado 1024×500.**
 - **Capturas:** mín. 2 (teléfono). Puedes usar las pantallas de stream, perfil y chat.
 - **Categoría:** Música y audio (o Social).
-- **Política de privacidad (URL):** `https://underbro.app/privacy.html`
+- **Política de privacidad (URL):** `https://underbro.app/privacy`
 - **Correo de contacto:** crea/define uno (p. ej. `hola@underbro.app`) y úsalo también en privacy.html.
 
 ---
