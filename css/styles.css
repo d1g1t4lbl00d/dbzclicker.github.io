@@ -929,11 +929,16 @@ img { display: block; }
 .bdg.big { font-size: 46px; vertical-align: baseline; margin-left: 0; }
 .badge-toggle { display: flex; align-items: center; gap: 9px; margin-top: 14px; font-size: 13px; color: var(--ink-2); cursor: pointer; }
 .badge-toggle input { width: auto; flex-shrink: 0; }
-/* selector de encuadre de imagen */
-.frame-pick { background-size: cover; background-repeat: no-repeat; cursor: grab; user-select: none; touch-action: none; border: 1px solid var(--line); box-shadow: var(--sh-1); }
+/* selector de encuadre de imagen (mover + zoom) */
+.frame-pick { position: relative; overflow: hidden; cursor: grab; user-select: none; touch-action: none; border: 1px solid var(--line); box-shadow: var(--sh-1); }
 .frame-pick:active { cursor: grabbing; }
+.frame-pick img { width: 100%; height: 100%; object-fit: cover; display: block; pointer-events: none; }
 .frame-pick.is-banner { width: 100%; aspect-ratio: 16 / 6.4; border-radius: 12px; }
 .frame-pick.is-avatar { width: 200px; height: 200px; border-radius: 50%; margin: 0 auto; }
+.frame-zoom { display: flex; align-items: center; gap: 10px; margin-top: 12px; }
+.frame-zoom svg { width: 16px; height: 16px; color: var(--ink-soft); flex-shrink: 0; }
+.frame-zoom input[type=range] { flex: 1; }
+.profile-cover .cover-img { width: 100%; height: 100%; object-fit: cover; display: block; }
 
 /* animación de desbloqueo */
 .badge-pop { position: fixed; inset: 0; z-index: 300; display: grid; place-items: center; background: rgba(8,10,14,.66); backdrop-filter: blur(4px); opacity: 0; transition: opacity .3s; overflow: hidden; }

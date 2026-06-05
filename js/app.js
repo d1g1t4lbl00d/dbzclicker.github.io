@@ -133,7 +133,9 @@ function avatarHTML(profile, cls='') {
   const url = profile?.avatar_url;
   const name = profile?.display_name || profile?.username || '?';
   const pos = czPos(profile?.theme?.avatarPos);
-  if (url) return `<div class="avatar ${cls}"><img src="${esc(url)}" alt="" ${pos ? `style="object-position:${pos}"` : ''} /></div>`;
+  const zoom = czZoom(profile?.theme?.avatarZoom);
+  const st = (pos || zoom > 1) ? ` style="${pos ? `object-position:${pos};` : ''}${zoom > 1 ? `transform:scale(${zoom});` : ''}"` : '';
+  if (url) return `<div class="avatar ${cls}"><img src="${esc(url)}" alt=""${st} /></div>`;
   return `<div class="avatar ${cls}">${esc(initials(name))}</div>`;
 }
 
@@ -285,7 +287,7 @@ function renderMe() {
   const orb = $('orbAv');
   if (orb) {
     const av = state.profile.avatar_url;
-    if (av) { orb.style.backgroundImage = `url('${czUrl(av)}')`; orb.style.backgroundPosition = czPos(state.profile.theme?.avatarPos) || 'center'; orb.textContent = ''; }
+    if (av) { const z = czZoom(state.profile.theme?.avatarZoom); orb.style.backgroundImage = `url('${czUrl(av)}')`; orb.style.backgroundPosition = czPos(state.profile.theme?.avatarPos) || 'center'; orb.style.backgroundSize = z > 1 ? (z * 100) + '%' : 'cover'; orb.textContent = ''; }
     else { orb.style.backgroundImage = 'none'; orb.textContent = initials(state.profile.display_name || state.profile.username || '?'); }
   }
 }
@@ -1921,18 +1923,23 @@ function czColor(c) { return (typeof c === 'string' && /^#[0-9a-fA-F]{3,8}$/.tes
 function czUrl(u) { return (typeof u === 'string') ? u.replace(/["')\\<>]/g, '') : ''; }
 function czNum(v) { const n = Number(v); return Number.isFinite(n) ? Math.max(0, Math.min(100, n)) : 0; }
 function czPos(s) { return /^\d{1,3}% \d{1,3}%$/.test(s || '') ? s : ''; }
+function czZoom(v) { const n = Number(v); return (Number.isFinite(n) && n >= 1 && n <= 3) ? n : 1; }
 function parsePos(s) { const m = /^(\d{1,3})% (\d{1,3})%$/.exec(s || ''); return m ? { x: Math.min(100, +m[1]), y: Math.min(100, +m[2]) } : { x: 50, y: 50 }; }
-// selector de encuadre: arrastra la imagen para elegir la parte visible
-function openFramePicker(imgUrl, mode, initialPos, onSave) {
-  const pos = parsePos(initialPos);
+// selector de encuadre: arrastra para mover + control para acercar (zoom), con vista previa real
+function openFramePicker(imgUrl, mode, initial, onSave) {
+  const pos = parsePos(initial && initial.pos);
+  let zoom = czZoom(initial && initial.zoom);
   const m = openModal(`
     <div class="modal-head"><h3>Ajustar encuadre</h3><button class="close">&times;</button></div>
     <div class="modal-body">
-      <p class="dash-note" style="margin-bottom:12px">Arrastra la imagen para elegir la parte que se verá.</p>
-      <div class="frame-pick ${mode === 'avatar' ? 'is-avatar' : 'is-banner'}" id="framePick" style="background-image:url('${imgUrl}');background-position:${pos.x}% ${pos.y}%"></div>
-      <button class="btn primary" id="frameSave" style="width:100%;margin-top:14px">Usar este encuadre</button>
+      <p class="dash-note" style="margin-bottom:12px">Arrastra para mover · usa el control para acercar.</p>
+      <div class="frame-pick ${mode === 'avatar' ? 'is-avatar' : 'is-banner'}" id="framePick"><img id="frameImg" src="${imgUrl}" alt="" /></div>
+      <div class="frame-zoom"><svg fill="none" stroke="currentColor"><use href="#i-search"/></svg><input type="range" id="frameZoom" min="1" max="3" step="0.01" value="${zoom}" /></div>
+      <button class="btn primary" id="frameSave" style="width:100%;margin-top:12px">Usar este encuadre</button>
     </div>`);
-  const box = m.querySelector('#framePick');
+  const box = m.querySelector('#framePick'), img = m.querySelector('#frameImg');
+  const apply = () => { img.style.objectPosition = `${pos.x}% ${pos.y}%`; img.style.transform = `scale(${zoom})`; };
+  apply();
   let dragging = false, sx = 0, sy = 0, spx = 0, spy = 0;
   const clamp = (v) => Math.max(0, Math.min(100, v));
   box.addEventListener('pointerdown', (e) => { dragging = true; sx = e.clientX; sy = e.clientY; spx = pos.x; spy = pos.y; try { box.setPointerCapture(e.pointerId); } catch (_) {} });
@@ -1941,12 +1948,13 @@ function openFramePicker(imgUrl, mode, initialPos, onSave) {
     const r = box.getBoundingClientRect();
     pos.x = clamp(spx - (e.clientX - sx) / r.width * 100);
     pos.y = clamp(spy - (e.clientY - sy) / r.height * 100);
-    box.style.backgroundPosition = `${pos.x}% ${pos.y}%`;
+    apply();
   });
   const stop = () => { dragging = false; };
   box.addEventListener('pointerup', stop);
   box.addEventListener('pointercancel', stop);
-  m.querySelector('#frameSave').onclick = () => { onSave(`${Math.round(pos.x)}% ${Math.round(pos.y)}%`); m.remove(); };
+  m.querySelector('#frameZoom').oninput = (e) => { zoom = czZoom(parseFloat(e.target.value)); apply(); };
+  m.querySelector('#frameSave').onclick = () => { onSave({ pos: `${Math.round(pos.x)}% ${Math.round(pos.y)}%`, zoom: Math.round(zoom * 100) / 100 }); m.remove(); };
 }
 function czHref(u) { if (typeof u !== 'string' || !u) return '#'; return /^https?:\/\//i.test(u) ? u : 'https://' + u.replace(/^\/+/, ''); }
 function bgStyle(theme) {
@@ -2045,14 +2053,14 @@ function openProfileCustomizer() {
       <div class="auth-msg" id="thMsg"></div>
     </div>`);
 
-  let bannerFile = null, bgFile = null, bannerPos = czPos(t.bannerPos) || '';
+  let bannerFile = null, bgFile = null, bannerPos = czPos(t.bannerPos) || '', bannerZoom = czZoom(t.bannerZoom);
   const bannerInput = m.querySelector('#bannerFile'), bgInput = m.querySelector('#bgFile');
   m.querySelector('#bannerPick').onclick = () => bannerInput.click();
-  bannerInput.onchange = () => { const f = bannerInput.files[0]; if (!f || !f.type.startsWith('image')) return; bannerFile = f; bannerPos = ''; m.querySelector('#bannerPrev').innerHTML = `<img src="${URL.createObjectURL(f)}" alt="" />`; m.querySelector('#bannerName').textContent = f.name; };
+  bannerInput.onchange = () => { const f = bannerInput.files[0]; if (!f || !f.type.startsWith('image')) return; bannerFile = f; bannerPos = ''; bannerZoom = 1; m.querySelector('#bannerPrev').innerHTML = `<img src="${URL.createObjectURL(f)}" alt="" />`; m.querySelector('#bannerName').textContent = f.name; };
   m.querySelector('#bannerFrame').onclick = () => {
     const imgUrl = bannerFile ? URL.createObjectURL(bannerFile) : (t.banner ? czUrl(t.banner) : '');
     if (!imgUrl) { toast('Sube primero un banner'); return; }
-    openFramePicker(imgUrl, 'banner', bannerPos || '50% 50%', (p) => { bannerPos = p; const img = m.querySelector('#bannerPrev img'); if (img) img.style.objectPosition = p; });
+    openFramePicker(imgUrl, 'banner', { pos: bannerPos || '50% 50%', zoom: bannerZoom }, ({ pos, zoom }) => { bannerPos = pos; bannerZoom = zoom; const img = m.querySelector('#bannerPrev img'); if (img) { img.style.objectPosition = pos; img.style.transform = `scale(${zoom})`; } });
   };
   m.querySelector('#bgPick').onclick = () => bgInput.click();
   bgInput.onchange = () => { const f = bgInput.files[0]; if (!f || !f.type.startsWith('image')) return; bgFile = f; m.querySelector('#bgPrev').innerHTML = `<img src="${URL.createObjectURL(f)}" alt="" />`; m.querySelector('#bgName').textContent = f.name; };
@@ -2102,7 +2110,9 @@ function openProfileCustomizer() {
         accent: m.querySelector('#thAccent').value,
         banner: t.banner || null,
         bannerPos: bannerPos || null,
+        bannerZoom: bannerZoom > 1 ? bannerZoom : null,
         avatarPos: czPos(t.avatarPos) || null,
+        avatarZoom: czZoom(t.avatarZoom) > 1 ? czZoom(t.avatarZoom) : null,
         bg: { type: bgType.value, c1: m.querySelector('#bgC1').value, c2: m.querySelector('#bgC2').value, image: t.bg.image || null, animated: m.querySelector('#bgAnim').checked },
         links: links.slice(0, 8),
         font: m.querySelector('#thFont').value,
@@ -2162,7 +2172,8 @@ async function openProfile(userId) {
   const theme = (prof.theme && typeof prof.theme === 'object') ? prof.theme : {};
   const accent = czColor(theme.accent) || '#5f7fb8';
   const banner = czUrl(theme.banner);
-  const bannerPos = czPos(theme.bannerPos) || 'center';
+  const bannerPos = czPos(theme.bannerPos) || '50% 50%';
+  const bannerZoom = czZoom(theme.bannerZoom);
   const links = Array.isArray(theme.links) ? theme.links : [];
   const font = (theme.font && FONTS[theme.font]) ? theme.font : '';
   const fontVar = font ? `--pf-font:'${font.replace(/'/g,'')}', sans-serif;` : '';
@@ -2174,7 +2185,7 @@ async function openProfile(userId) {
   main.innerHTML = `
     <div class="profile-view ${glowCls} ${cardsCls} ${animCls}" style="--accent:${accent};${fontVar}${bgStyle(theme)}">
       <button class="profile-back" id="profileBack"><svg fill="none" stroke="currentColor"><use href="#i-chevron-left"/></svg> Volver</button>
-      ${banner ? `<div class="profile-cover" style="background-image:url('${banner}');background-position:${bannerPos}"></div>` : `<div class="profile-cover profile-cover-grad"></div>`}
+      ${banner ? `<div class="profile-cover"><img class="cover-img" src="${banner}" alt="" style="object-position:${bannerPos};transform:scale(${bannerZoom})" /></div>` : `<div class="profile-cover profile-cover-grad"></div>`}
       <div class="profile-head ${banner ? 'has-banner' : ''}">
         <div class="ph-avatar">${avatarHTML(prof)}</div>
         <h2 class="accent-name">${esc(prof.display_name || prof.username)}${verifiedBadge(prof)}${displayBadgeHtml(prof)} ${prof.is_admin?'<span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c;vertical-align:middle">MOD</span>':''} ${prof.banned?'<span class="t-genre" style="background:#fae3e0;border-color:#f0c2bc;color:#c0533f;vertical-align:middle">baneado</span>':''}</h2>
@@ -3207,16 +3218,17 @@ function renderSettings() {
 
   const avatarFile = $('avatarFile');
   $('changeAvatar').onclick = () => avatarFile.click();
-  let newAvatarFile = null, avatarPos = czPos(p.theme?.avatarPos) || '';
-  const applyAvatarPos = () => { const img = $('setAvatar').querySelector('img'); if (img && avatarPos) img.style.objectPosition = avatarPos; };
+  let newAvatarFile = null, avatarPos = czPos(p.theme?.avatarPos) || '', avatarZoom = czZoom(p.theme?.avatarZoom);
+  const applyAvatarPos = () => { const img = $('setAvatar').querySelector('img'); if (img) { if (avatarPos) img.style.objectPosition = avatarPos; if (avatarZoom > 1) img.style.transform = `scale(${avatarZoom})`; } };
+  applyAvatarPos();
   avatarFile.onchange = () => {
     newAvatarFile = avatarFile.files[0];
-    if (newAvatarFile) { avatarPos = ''; const url = URL.createObjectURL(newAvatarFile); $('setAvatar').innerHTML = `<div class="avatar" style="width:72px;height:72px"><img src="${url}"/></div>`; }
+    if (newAvatarFile) { avatarPos = ''; avatarZoom = 1; const url = URL.createObjectURL(newAvatarFile); $('setAvatar').innerHTML = `<div class="avatar" style="width:72px;height:72px"><img src="${url}"/></div>`; }
   };
   $('avatarFrame').onclick = () => {
     const imgUrl = newAvatarFile ? URL.createObjectURL(newAvatarFile) : (state.profile.avatar_url ? czUrl(state.profile.avatar_url) : '');
     if (!imgUrl) { toast('Primero pon una foto de perfil'); return; }
-    openFramePicker(imgUrl, 'avatar', avatarPos || '50% 50%', (pp) => { avatarPos = pp; applyAvatarPos(); });
+    openFramePicker(imgUrl, 'avatar', { pos: avatarPos || '50% 50%', zoom: avatarZoom }, ({ pos, zoom }) => { avatarPos = pos; avatarZoom = zoom; applyAvatarPos(); });
   };
 
   $('saveProfile').onclick = async () => {
@@ -3235,7 +3247,7 @@ function renderSettings() {
         if (up.error) throw up.error;
         avatar_url = sb.storage.from('avatars').getPublicUrl(path).data.publicUrl;
       }
-      const theme = { ...(state.profile.theme && typeof state.profile.theme === 'object' ? state.profile.theme : {}), avatarPos: avatarPos || null };
+      const theme = { ...(state.profile.theme && typeof state.profile.theme === 'object' ? state.profile.theme : {}), avatarPos: avatarPos || null, avatarZoom: avatarZoom > 1 ? avatarZoom : null };
       const { data, error } = await sb.from('profiles').update({ display_name, username, bio, avatar_url, theme }).eq('id', state.user.id).select().single();
       if (error) throw error;
       state.profile = data;
