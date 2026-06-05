@@ -1496,3 +1496,18 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
 /* botón primario: realce sutil al pulsar */
 .btn.primary:active { filter: brightness(.97); }
 .play-lg:active { transform: scale(.9); }
+
+/* ===================== REPORTAR / MODERACIÓN ===================== */
+.rep-reasons { display: flex; flex-wrap: wrap; gap: 8px; }
+.rep-reason { border: 1.5px solid var(--line); background: var(--panel-2); color: var(--ink-2); border-radius: 20px; padding: 8px 14px; font-size: 13px; font-weight: 650; cursor: pointer; transition: all .15s var(--ease); }
+.rep-reason:hover { border-color: var(--blue); }
+.rep-reason.on { background: var(--accent-grad); color: #fff; border-color: transparent; }
+.rep-card { border: 1px solid var(--line); border-radius: var(--r); padding: 13px 14px; margin-bottom: 12px; background: var(--panel-2); }
+.rep-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+.rep-type { font-size: 11px; font-weight: 750; text-transform: uppercase; letter-spacing: .4px; color: #fff; background: var(--accent-grad); padding: 2px 9px; border-radius: 20px; }
+.rep-when { font-size: 11.5px; color: var(--ink-soft); }
+.rep-reason-l { font-weight: 700; font-size: 14px; color: var(--ink); }
+.rep-details { font-size: 13px; color: var(--ink-2); margin-top: 4px; background: var(--panel); border-radius: 9px; padding: 8px 10px; }
+.rep-meta { font-size: 12px; color: var(--ink-soft); margin-top: 8px; }
+.rep-meta b { color: var(--blue-deep); cursor: pointer; }
+.rep-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; }

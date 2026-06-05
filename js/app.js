@@ -22,6 +22,8 @@ const state = {
   eventSaves: new Set(),// event_ids que he guardado
   badges: new Set(),   // insignias que poseo
   follows: new Set(),  // user_ids que sigo
+  blocked: new Set(),  // user_ids que he bloqueado
+  hidden: new Set(),   // user_ids a ocultar (bloqueo en cualquier sentido)
   downloads: new Set(JSON.parse(localStorage.getItem('ub_downloads') || '[]')),
   view: 'feed',
   tab: 'trending',
@@ -252,7 +254,7 @@ async function onAuthenticated() {
   $('authScreen').classList.add('hidden');
   $('app').classList.remove('hidden');
   renderMe();
-  await Promise.all([loadLikes(), loadReposts(), loadEventSaves(), loadFollows(), loadBadges()]);
+  await Promise.all([loadLikes(), loadReposts(), loadEventSaves(), loadFollows(), loadBlocks(), loadBadges()]);
   bindUI();
   initSwipeNav();
   initPlayer();
@@ -314,6 +316,124 @@ async function loadEventSaves() {
 async function loadFollows() {
   const { data } = await sb.from('follows').select('following_id').eq('follower_id', state.user.id);
   state.follows = new Set((data||[]).map(r => r.following_id));
+}
+async function loadBlocks() {
+  const { data } = await sb.from('blocks').select('blocker_id,blocked_id')
+    .or(`blocker_id.eq.${state.user.id},blocked_id.eq.${state.user.id}`);
+  const mine = new Set(), hidden = new Set();
+  (data || []).forEach(b => {
+    if (b.blocker_id === state.user.id) { mine.add(b.blocked_id); hidden.add(b.blocked_id); }
+    if (b.blocked_id === state.user.id) hidden.add(b.blocker_id);
+  });
+  state.blocked = mine; state.hidden = hidden;
+}
+function isHidden(userId) { return userId && userId !== state.user.id && state.hidden && state.hidden.has(userId); }
+
+/* =======================================================================
+   SEGURIDAD: BLOQUEAR Y REPORTAR (moderación / cumplimiento Play)
+   ======================================================================= */
+async function blockUser(userId, name, onDone) {
+  if (!userId || userId === state.user.id) return;
+  if (!confirm(`¿Bloquear a ${name || 'este usuario'}?\n\nNo podrá enviarte mensajes y dejarás de ver su contenido.`)) return;
+  const { error } = await sb.from('blocks').insert({ blocker_id: state.user.id, blocked_id: userId });
+  if (error) { toast('No se pudo bloquear'); return; }
+  state.blocked.add(userId); state.hidden.add(userId);
+  toast('Usuario bloqueado');
+  if (onDone) onDone();
+}
+async function unblockUser(userId, onDone) {
+  const { error } = await sb.from('blocks').delete().eq('blocker_id', state.user.id).eq('blocked_id', userId);
+  if (error) { toast('No se pudo desbloquear'); return; }
+  state.blocked.delete(userId);
+  await loadBlocks();
+  toast('Usuario desbloqueado');
+  if (onDone) onDone();
+}
+const REPORT_REASONS = ['Spam o engaño', 'Acoso o bullying', 'Contenido sexual', 'Violencia o amenazas', 'Discurso de odio', 'Suplantación de identidad', 'Propiedad intelectual', 'Otro'];
+const REPORT_LABEL = { user: 'usuario', track: 'pista', post: 'publicación', comment: 'comentario', message: 'mensaje', chat: 'mensaje del chat' };
+function openReportModal(targetType, targetId, targetOwner, label) {
+  if (!requireNotBanned()) return;
+  const chips = REPORT_REASONS.map(r => `<button type="button" class="rep-reason" data-r="${esc(r)}">${esc(r)}</button>`).join('');
+  const m = openModal(`
+    <div class="modal-head"><h3>Reportar ${esc(REPORT_LABEL[targetType] || 'contenido')}</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <p class="sub" style="margin-bottom:12px">Cuéntanos qué pasa con ${esc(label || 'este contenido')}. Los moderadores lo revisarán.</p>
+      <div class="rep-reasons">${chips}</div>
+      <div class="field" style="margin-top:14px"><label>Detalles (opcional)</label><textarea id="repDetails" maxlength="600" placeholder="Añade contexto si quieres..."></textarea></div>
+      <button class="btn primary" id="repSend" disabled style="width:100%">Enviar reporte</button>
+    </div>`);
+  let reason = '';
+  m.querySelectorAll('.rep-reason').forEach(b => b.onclick = () => {
+    m.querySelectorAll('.rep-reason').forEach(x => x.classList.remove('on'));
+    b.classList.add('on'); reason = b.dataset.r; m.querySelector('#repSend').disabled = false;
+  });
+  m.querySelector('#repSend').onclick = async () => {
+    if (!reason) return;
+    const details = m.querySelector('#repDetails').value.trim();
+    m.querySelector('#repSend').disabled = true;
+    const { error } = await sb.from('reports').insert({
+      reporter_id: state.user.id, target_type: targetType, target_id: String(targetId),
+      target_owner: targetOwner || null, reason, details: details || null,
+    });
+    if (error) { toast('No se pudo enviar el reporte'); m.querySelector('#repSend').disabled = false; return; }
+    m.remove();
+    toast('Gracias. Reporte enviado a moderación.');
+  };
+}
+// gestor de cuentas bloqueadas (cualquier usuario)
+async function openBlockedList() {
+  const m = openModal(`<div class="modal-head"><h3>Cuentas bloqueadas</h3><button class="close">&times;</button></div><div class="modal-body" id="blkBody"><div class="loading"><div class="spinner"></div></div></div>`);
+  const body = m.querySelector('#blkBody');
+  const ids = [...state.blocked];
+  if (!ids.length) { body.innerHTML = `<div class="empty" style="padding:20px"><p>No has bloqueado a nadie.</p></div>`; return; }
+  const { data } = await sb.from('profiles').select('id,username,display_name,avatar_url,theme').in('id', ids);
+  body.innerHTML = '';
+  (data || []).forEach(p => {
+    const row = el(`<div class="follow-row"><div class="fr-left">${avatarHTML(p)}<div><div class="fr-name">${esc(p.display_name || p.username)}</div><div class="fr-handle">@${esc(p.username)}</div></div></div><div class="fr-actions"><button class="btn sm">Desbloquear</button></div></div>`);
+    row.querySelector('button').onclick = () => unblockUser(p.id, () => { row.remove(); if (!state.blocked.size) body.innerHTML = `<div class="empty" style="padding:20px"><p>No has bloqueado a nadie.</p></div>`; });
+    body.appendChild(row);
+  });
+}
+// panel de moderación: revisar reportes (solo admin)
+async function openReportsAdmin() {
+  if (!state.profile.is_admin) return;
+  const m = openModal(`<div class="modal-head"><h3>Reportes</h3><button class="close">&times;</button></div><div class="modal-body" id="repBody"><div class="loading"><div class="spinner"></div></div></div>`);
+  const body = m.querySelector('#repBody');
+  const { data, error } = await sb.from('reports').select('*').eq('status', 'open').order('created_at', { ascending: false }).limit(100);
+  if (error) { body.innerHTML = `<div class="empty" style="padding:20px"><p>No se pudieron cargar los reportes.</p></div>`; return; }
+  if (!data || !data.length) { body.innerHTML = `<div class="empty" style="padding:20px"><svg fill="none"><use href="#i-verify"/></svg><p>Sin reportes abiertos. ¡Todo en orden!</p></div>`; return; }
+  // perfiles implicados
+  const uids = [...new Set(data.flatMap(r => [r.reporter_id, r.target_owner]).filter(Boolean))];
+  const { data: profs } = await sb.from('profiles').select('id,username,display_name').in('id', uids);
+  const byId = Object.fromEntries((profs || []).map(p => [p.id, p]));
+  const nameOf = (id) => id && byId[id] ? ('@' + byId[id].username) : '—';
+  body.innerHTML = '';
+  data.forEach(r => {
+    const card = el(`<div class="rep-card">
+      <div class="rep-top"><span class="rep-type">${esc(REPORT_LABEL[r.target_type] || r.target_type)}</span><span class="rep-when">${timeAgo(r.created_at)}</span></div>
+      <div class="rep-reason-l">${esc(r.reason)}</div>
+      ${r.details ? `<div class="rep-details">${esc(r.details)}</div>` : ''}
+      <div class="rep-meta">Autor: <b data-go="${esc(r.target_owner || '')}">${esc(nameOf(r.target_owner))}</b> · Reporta: ${esc(nameOf(r.reporter_id))}</div>
+      <div class="rep-actions">
+        ${r.target_owner ? `<button class="btn sm" data-a="profile">Ver autor</button><button class="btn sm" data-a="ban" style="border-color:#e3b7b0;color:#c0533f">Banear autor</button>` : ''}
+        <button class="btn sm" data-a="dismiss">Descartar</button>
+        <button class="btn sm primary" data-a="done">Resuelto</button>
+      </div></div>`);
+    const resolve = async (status) => {
+      const { error: e2 } = await sb.from('reports').update({ status, resolved_by: state.user.id, resolved_at: new Date().toISOString() }).eq('id', r.id);
+      if (e2) { toast('No se pudo actualizar'); return; }
+      card.remove(); if (!body.querySelector('.rep-card')) body.innerHTML = `<div class="empty" style="padding:20px"><p>Sin reportes abiertos.</p></div>`;
+    };
+    const prof = card.querySelector('[data-a="profile"]'); if (prof) prof.onclick = () => { m.remove(); openProfile(r.target_owner); };
+    const ban = card.querySelector('[data-a="ban"]'); if (ban) ban.onclick = async () => {
+      if (!confirm('¿Banear al autor de este contenido?')) return;
+      await sb.from('profiles').update({ banned: true }).eq('id', r.target_owner);
+      toast('Usuario baneado'); resolve('actioned');
+    };
+    card.querySelector('[data-a="dismiss"]').onclick = () => resolve('dismissed');
+    card.querySelector('[data-a="done"]').onclick = () => resolve('reviewed');
+    body.appendChild(card);
+  });
 }
 
 /* =======================================================================
@@ -580,6 +700,8 @@ async function renderSearch() {
   let people = [], tracks = [];
   try { [people, tracks] = await Promise.all([fetchPeopleSearch(term), fetchSearch(term)]); }
   catch (err) { console.error(err); toast('Error en la búsqueda'); }
+  people = (people || []).filter(p => !isHidden(p.id));
+  tracks = (tracks || []).filter(t => !isHidden(t.user_id));
 
   main.innerHTML = `
     <div class="main-head"><div><h2>Búsqueda: "${esc(term)}"</h2><div class="sub">${people.length} persona(s) · ${tracks.length} pista(s)</div></div></div>
@@ -627,6 +749,7 @@ function personSearchRow(p) {
 }
 
 function renderFeed(head, tracks, view) {
+  tracks = (tracks || []).filter(t => !isHidden(t.user_id) && !isHidden(t._repostedById));
   const main = $('main');
   const showStories = view === 'feed';
   main.innerHTML = `<div class="main-head"><div><h2>${esc(head.title)}</h2><div class="sub">${esc(head.sub)}</div></div></div>${showStories ? '<div id="storiesBar" class="stories-bar"></div>' : ''}<div id="feedList" class="feed-list compact"></div>`;
@@ -680,6 +803,7 @@ function trackCard(t) {
         <button class="act" data-act="addPlaylist"><svg fill="none" stroke="currentColor"><use href="#i-listadd"/></svg>Playlist</button>
         <button class="act" data-act="download"><svg><use href="#i-download"/></svg>Descargar</button>
         ${mine ? `<button class="act" data-act="edit"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg>Editar</button>` : ''}
+        ${mine ? '' : `<button class="act" data-act="report"><svg fill="none" stroke="currentColor"><use href="#i-bell"/></svg>Reportar</button>`}
         ${(mine || state.profile.is_admin) ? `<button class="act danger" data-act="delete"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg>${mine ? 'Borrar' : 'Borrar (mod)'}</button>` : ''}
       </div>
       <div class="comments hidden" data-comments></div>
@@ -767,6 +891,7 @@ async function handleTrackClick(e, t, card) {
   else if (act === 'repost') toggleRepost(t, card);
   else if (act === 'repostby') { if (t._repostedById) openProfile(t._repostedById); }
   else if (act === 'delete') deleteTrack(t, card);
+  else if (act === 'report') openReportModal('track', t.id, t.user_id, '“' + (t.title || 'pista') + '”');
   else if (act === 'edit') openEditTrack(t, card);
   else if (act === 'toggleComments') toggleComments(t, card);
   else if (act === 'seekwave') {
@@ -1709,6 +1834,7 @@ async function renderPosts() {
   let posts = [];
   try { posts = await fetchPosts(); }
   catch (err) { console.error(err); toast('Error al cargar las fotos'); }
+  posts = (posts || []).filter(p => !isHidden(p.user_id));
 
   const list = $('postList'); list.innerHTML = '';
   if (!posts.length) {
@@ -1736,10 +1862,11 @@ function postCard(p, liked) {
           <b data-act="profile">${esc(prof.display_name || prof.username || 'anónimo')}</b>
           <span class="post-time">${timeAgo(p.created_at)}</span>
         </div>
-        ${(mine || state.profile.is_admin) ? `<div class="post-tools">
+        <div class="post-tools">
           ${mine ? `<button class="post-tool" data-act="edit" title="Editar pie de foto"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg></button>` : ''}
-          <button class="post-tool danger" data-act="delete" title="Borrar publicación"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg></button>
-        </div>` : ''}
+          ${!mine ? `<button class="post-tool" data-act="report" title="Reportar publicación"><svg fill="none" stroke="currentColor"><use href="#i-bell"/></svg></button>` : ''}
+          ${(mine || state.profile.is_admin) ? `<button class="post-tool danger" data-act="delete" title="Borrar publicación"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg></button>` : ''}
+        </div>
       </div>
       <div class="post-img"><img src="${esc(p.image_url)}" alt="" loading="lazy" data-act="zoom" /></div>
       ${p.caption ? `<div class="post-caption"><b data-act="profile">@${esc(prof.username || '')}</b> ${linkifyMentions(p.caption)}</div>` : ''}
@@ -1762,6 +1889,7 @@ function handlePostClick(e, p, card) {
   else if (act === 'like') togglePostLike(p, card);
   else if (act === 'edit') openEditPost(p, card);
   else if (act === 'delete') deletePost(p, card);
+  else if (act === 'report') openReportModal('post', p.id, p.user_id, 'esta publicación');
   else if (act === 'toggleComments') togglePostComments(p, card);
   else if (act === 'share') sharePost(p);
   else if (act === 'zoom') openImageViewer(p.image_url);
@@ -2223,6 +2351,8 @@ async function openProfile(userId) {
           ${(!isMe && state.profile.is_admin && !prof.is_admin) ? `<button class="btn" id="banBtn" style="border-color:#e3b7b0;color:#c0533f">${prof.banned?'Desbanear':'Banear usuario'}</button>` : ''}
           ${(!isMe && state.profile.is_admin) ? `<button class="btn" id="verifyBtn"><svg fill="none" stroke="currentColor"><use href="#i-verify"/></svg> ${prof.verified?'Quitar verificación':'Verificar'}</button>` : ''}
           ${(!isMe && state.profile.is_admin && !prof.is_admin) ? `<button class="btn danger-btn" id="delUserBtn"><svg fill="none" stroke="#fff"><use href="#i-trash"/></svg> Eliminar usuario</button>` : ''}
+          ${!isMe ? `<button class="btn" id="blockBtn">${state.blocked.has(prof.id) ? 'Desbloquear' : 'Bloquear'}</button>` : ''}
+          ${!isMe ? `<button class="btn" id="reportBtn"><svg fill="none" stroke="currentColor"><use href="#i-bell"/></svg> Reportar</button>` : ''}
         </div>
         ${links.length ? `<div class="profile-links">${links.map(l => `<a href="${esc(czHref(l.url))}" target="_blank" rel="noopener noreferrer"><svg fill="none" stroke="currentColor"><use href="#i-globe"/></svg>${esc(l.label || 'enlace')}</a>`).join('')}</div>` : ''}
       </div>
@@ -2286,6 +2416,13 @@ async function openProfile(userId) {
   if (isMe) $('editProfBtn').onclick = () => switchView('settings');
   const msgBtn = $('msgBtn');
   if (msgBtn) msgBtn.onclick = () => openDM(userId);
+  const blockBtn = $('blockBtn');
+  if (blockBtn) blockBtn.onclick = () => {
+    if (state.blocked.has(userId)) unblockUser(userId, () => openProfile(userId));
+    else blockUser(userId, prof.display_name || prof.username, () => openProfile(userId));
+  };
+  const reportBtn = $('reportBtn');
+  if (reportBtn) reportBtn.onclick = () => openReportModal('user', userId, userId, '@' + prof.username);
   const delUserBtn = $('delUserBtn');
   if (delUserBtn) delUserBtn.onclick = () => adminDeleteUser(userId, prof.username, () => switchView('people'));
   const banBtn = $('banBtn');
@@ -2329,7 +2466,7 @@ async function renderPeople() {
   main.innerHTML = `<div class="main-head"><div><h2>Bro's</h2><div class="sub">Descubre a otros creadores</div></div></div><div id="peopleList" class="loading"><div class="spinner"></div></div>`;
   const { data } = await sb.from('profiles').select('*').order('created_at', { ascending: false }).limit(60);
   const list = $('peopleList'); list.className = 'feed-list';
-  const people = (data||[]).filter(p => p.id !== state.user.id);
+  const people = (data||[]).filter(p => p.id !== state.user.id && !isHidden(p.id));
   if (!people.length) { list.innerHTML = '<div class="empty"><p>Aún no hay nadie más por aquí.</p></div>'; return; }
   list.innerHTML = '';
   people.forEach(p => {
@@ -3210,6 +3347,12 @@ function renderSettings() {
         <div class="auth-msg" id="delMsg"></div>
       </div>
       <hr style="border:none;border-top:1px solid var(--line-soft);margin:20px 0" />
+      <div class="field"><label>Privacidad y seguridad</label>
+        <button class="btn" id="manageBlocks" style="width:100%"><svg fill="none" stroke="currentColor"><use href="#i-people"/></svg> Cuentas bloqueadas</button>
+        ${p.is_admin ? `<button class="btn" id="modReports" style="width:100%;margin-top:8px"><svg fill="none" stroke="currentColor"><use href="#i-bell"/></svg> Moderación · Reportes</button>` : ''}
+        <div class="sub" style="margin-top:6px">Gestiona a quién has bloqueado${p.is_admin ? ' y revisa los reportes de la comunidad.' : '.'}</div>
+      </div>
+      <hr style="border:none;border-top:1px solid var(--line-soft);margin:20px 0" />
       <div class="field"><label>Apariencia</label>
         <button class="btn" id="setThemeBtn" style="width:100%"></button>
         <div class="sub" style="margin-top:6px">Cambia entre tema claro y oscuro.</div>
@@ -3223,6 +3366,8 @@ function renderSettings() {
       <div style="text-align:center;margin-top:10px;font-size:12px;color:var(--ink-soft)">UnderBro · versión ${APP_VERSION} · <a id="checkUpdate" style="cursor:pointer;text-decoration:underline">Buscar actualizaciones</a></div>
     </div>`;
   $('policyLink').onclick = showPrivacyPolicy;
+  $('manageBlocks').onclick = openBlockedList;
+  if ($('modReports')) $('modReports').onclick = openReportsAdmin;
   const themeBtn = $('setThemeBtn');
   const paintThemeBtn = () => { themeBtn.innerHTML = currentTheme() === 'dark' ? '☀️ Cambiar a tema claro' : '🌙 Cambiar a tema oscuro'; };
   paintThemeBtn();
@@ -3371,12 +3516,17 @@ async function initChat() {
   });
 }
 function appendChatMsg(m) {
+  if (isHidden(m.user_id)) return; // ocultar mensajes de usuarios bloqueados
   const box = $('chatMsgs');
   const canDel = m.user_id === state.user.id || state.profile.is_admin;
-  const row = el(`<div class="chat-msg" data-mid="${m.id}"><span class="who" data-uid="${m.user_id}">${esc(m.profiles?.display_name||m.profiles?.username||'anónimo')}</span><span class="when">${timeAgo(m.created_at)}</span>${canDel?`<button class="act sm" data-del-msg style="float:right;padding:0 5px" title="Borrar mensaje">✕</button>`:''}<p>${linkifyMentions(m.body)}</p></div>`);
+  const mine = m.user_id === state.user.id;
+  const rep = (!mine && !state.profile.is_admin) ? `<button class="act sm" data-rep-msg style="float:right;padding:0 5px" title="Reportar">⚐</button>` : '';
+  const row = el(`<div class="chat-msg" data-mid="${m.id}"><span class="who" data-uid="${m.user_id}">${esc(m.profiles?.display_name||m.profiles?.username||'anónimo')}</span><span class="when">${timeAgo(m.created_at)}</span>${canDel?`<button class="act sm" data-del-msg style="float:right;padding:0 5px" title="Borrar mensaje">✕</button>`:''}${rep}<p>${linkifyMentions(m.body)}</p></div>`);
   const who = row.querySelector('.who');
   who.onclick = () => openProfile(m.user_id);
   who.style.cursor = 'pointer';
+  const repBtn = row.querySelector('[data-rep-msg]');
+  if (repBtn) repBtn.onclick = () => openReportModal('chat', m.id, m.user_id, 'este mensaje del chat');
   const del = row.querySelector('[data-del-msg]');
   if (del) del.onclick = async () => {
     const { error } = await sb.from('messages').delete().eq('id', m.id);
@@ -3626,6 +3776,7 @@ function openMsgMenu(msg, node) {
   if (msg.body) items.push(`<button class="as-item" data-a="copy"><svg fill="none" stroke="currentColor"><use href="#i-copy"/></svg> Copiar</button>`);
   if (mine && msg.body) items.push(`<button class="as-item" data-a="edit"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg> Editar</button>`);
   if (mine) items.push(`<button class="as-item danger" data-a="del"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg> Eliminar para todos</button>`);
+  if (!mine && !msg.deleted) items.push(`<button class="as-item danger" data-a="report"><svg fill="none" stroke="currentColor"><use href="#i-bell"/></svg> Reportar mensaje</button>`);
   const sheet = el(`<div class="modal-backdrop sheet"><div class="action-sheet"><div class="as-reactbar">${quick}</div>${items.join('')}<button class="as-item cancel" data-a="cancel">Cancelar</button></div></div>`);
   const close = () => sheet.remove();
   sheet.addEventListener('click', (e) => { if (e.target === sheet) close(); });
@@ -3636,6 +3787,7 @@ function openMsgMenu(msg, node) {
   const cp = sheet.querySelector('[data-a="copy"]'); if (cp) cp.onclick = () => { close(); copyMessage(msg); };
   const ed = sheet.querySelector('[data-a="edit"]'); if (ed) ed.onclick = () => { close(); editMessage(msg); };
   const dl = sheet.querySelector('[data-a="del"]'); if (dl) dl.onclick = () => { close(); softDeleteMessage(msg); };
+  const rp = sheet.querySelector('[data-a="report"]'); if (rp) rp.onclick = () => { close(); openReportModal('message', msg.id, msg.sender_id, 'este mensaje'); };
   $('modalRoot').appendChild(sheet);
 }
 function openReactPicker(msg) {
@@ -3815,6 +3967,8 @@ async function sendDm(e) {
   e.preventDefault();
   if (!requireNotBanned()) return;
   const other = state.dmPeer; if (!other) return;
+  if (state.blocked.has(other)) { toast('Has bloqueado a este usuario. Desbloquéalo para escribirle.'); return; }
+  if (state.hidden.has(other)) { toast('No puedes enviar mensajes a este usuario.'); return; }
   const input = $('dmInput'); const body = input.value.trim(); const file = state.dmPendingFile;
   if (!body && !file) return;
   input.value = ''; dmHideEmoji();
@@ -3986,9 +4140,13 @@ function dmRunSearch(q) {
 /* ---- menú de cabecera ---- */
 function dmHeaderMenu() {
   const other = state.dmPeer;
+  const blocked = state.blocked.has(other);
+  const peerName = state.dmPeerProfile ? (state.dmPeerProfile.display_name || state.dmPeerProfile.username) : '';
   const sheet = el(`<div class="modal-backdrop sheet"><div class="action-sheet">
     <button class="as-item" data-a="profile"><svg fill="none" stroke="currentColor"><use href="#i-people"/></svg> Ver perfil</button>
     <button class="as-item" data-a="search"><svg fill="none" stroke="currentColor"><use href="#i-search"/></svg> Buscar en el chat</button>
+    <button class="as-item" data-a="block"><svg fill="none" stroke="currentColor"><use href="#i-x"/></svg> ${blocked ? 'Desbloquear' : 'Bloquear'}</button>
+    <button class="as-item danger" data-a="report"><svg fill="none" stroke="currentColor"><use href="#i-bell"/></svg> Reportar usuario</button>
     <button class="as-item cancel" data-a="cancel">Cancelar</button>
   </div></div>`);
   const close = () => sheet.remove();
@@ -3996,6 +4154,8 @@ function dmHeaderMenu() {
   sheet.querySelector('[data-a="cancel"]').onclick = close;
   sheet.querySelector('[data-a="profile"]').onclick = () => { close(); closeDmScreen(); openProfile(other); };
   sheet.querySelector('[data-a="search"]').onclick = () => { close(); $('dmSearchBar').classList.remove('hidden'); $('dmSearchInput').focus(); };
+  sheet.querySelector('[data-a="block"]').onclick = () => { close(); if (blocked) unblockUser(other); else blockUser(other, peerName); };
+  sheet.querySelector('[data-a="report"]').onclick = () => { close(); openReportModal('user', other, other, '@' + (state.dmPeerProfile?.username || '')); };
   $('modalRoot').appendChild(sheet);
 }
 
@@ -4063,6 +4223,7 @@ async function renderMessages() {
   const convos = new Map();
   (data || []).forEach(mm => {
     const other = mm.sender_id === state.user.id ? mm.recipient_id : mm.sender_id;
+    if (isHidden(other)) return; // ocultar conversaciones con usuarios bloqueados
     if (!convos.has(other)) convos.set(other, { other, last: mm, unread: 0 });
     if (mm.recipient_id === state.user.id && !mm.read) convos.get(other).unread++;
   });
@@ -4163,6 +4324,7 @@ function initPresence() {
   });
 }
 function renderOnline(users) {
+  users = (users || []).filter(u => !isHidden(u.id));
   $('onlineCount').textContent = users.length;
   const list = $('onlineList');
   list.innerHTML = users.map(u => `
