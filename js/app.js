@@ -2973,33 +2973,36 @@ async function buildStorySegmentPicker(box, track, onChange) {
 }
 
 function openStoryViewer(groups, gIdx = 0, startIdx = 0) {
-  // compatibilidad: si llega un solo grupo, envolverlo
   if (groups && !Array.isArray(groups)) { groups = [groups]; gIdx = 0; }
   if (!groups || !groups.length) return;
   try { if (audio && !audio.paused) audio.pause(); } catch (_) {}
   const STORY_MS = 7000;
   let gi = gIdx, idx = startIdx, timer = null;
+  let segStart = 0, segRemaining = STORY_MS, curBar = null, isPaused = false, muted = false;
   const overlay = el(`
     <div class="story-viewer">
       <div class="sv-bars"></div>
       <div class="sv-head">
         <span class="sv-av"></span>
         <div class="sv-who"><b class="sv-name"></b><span class="sv-time"></span></div>
+        <button class="sv-mute hidden" type="button" aria-label="Silenciar"><svg fill="none" stroke="#fff"><use href="#i-vol"/></svg></button>
         <button class="sv-x" type="button" aria-label="Cerrar">&times;</button>
       </div>
       <div class="sv-stage"><img class="sv-img" alt="" /></div>
       <div class="sv-music"></div>
       <div class="sv-links"></div>
-      <button class="sv-tap left" type="button" aria-label="Anterior"></button>
-      <button class="sv-tap right" type="button" aria-label="Siguiente"></button>
+      <div class="sv-foot"></div>
+      <div class="sv-pause-ind"><svg fill="none" stroke="#fff"><use href="#i-pause"/></svg></div>
     </div>`);
   document.body.appendChild(overlay);
   document.body.style.overflow = 'hidden';
   const barsEl = overlay.querySelector('.sv-bars');
+  const stage = overlay.querySelector('.sv-stage');
   let bars = [];
 
   const stopAudio = () => { if (storyAudio) { try { storyAudio.pause(); } catch (_) {} storyAudio = null; } };
   const close = () => { clearTimeout(timer); stopAudio(); overlay.remove(); document.body.style.overflow = ''; loadStoriesBar(); };
+  const curStory = () => groups[gi].items[idx];
   const nextItem = () => {
     const g = groups[gi];
     if (idx < g.items.length - 1) show(gi, idx + 1);
@@ -3011,23 +3014,64 @@ function openStoryViewer(groups, gIdx = 0, startIdx = 0) {
     else if (gi > 0) show(gi - 1, groups[gi - 1].items.length - 1);
     else show(gi, 0);
   };
+  const pause = () => {
+    if (isPaused) return; isPaused = true;
+    clearTimeout(timer);
+    segRemaining = Math.max(0, STORY_MS - (Date.now() - segStart));
+    if (curBar) { const w = getComputedStyle(curBar).width; curBar.style.transition = 'none'; curBar.style.width = w; }
+    if (storyAudio) { try { storyAudio.pause(); } catch (_) {} }
+    overlay.classList.add('paused');
+  };
+  const resume = () => {
+    if (!isPaused) return; isPaused = false;
+    overlay.classList.remove('paused');
+    if (curBar) { requestAnimationFrame(() => { curBar.style.transition = `width ${segRemaining}ms linear`; curBar.style.width = '100%'; }); }
+    segStart = Date.now() - (STORY_MS - segRemaining);
+    timer = setTimeout(nextItem, segRemaining);
+    if (storyAudio && !muted) { try { storyAudio.play().catch(() => {}); } catch (_) {} }
+  };
+
+  function buildFoot(g) {
+    const foot = overlay.querySelector('.sv-foot');
+    if (g.userId === state.user.id) {
+      foot.innerHTML = `<button class="sv-viewers" type="button"><svg fill="none" stroke="#fff"><use href="#i-people"/></svg> <b class="sv-vc">0</b> <span>vistas</span></button>`;
+      foot.querySelector('.sv-viewers').onclick = () => { pause(); openStoryViewers(curStory().id, resume); };
+    } else {
+      foot.innerHTML = `<form class="sv-reply"><input type="text" placeholder="Responder a ${esc(g.user.display_name || g.user.username || '')}…" maxlength="500" /><button type="submit" aria-label="Enviar"><svg fill="none" stroke="#fff"><use href="#i-send"/></svg></button></form>`;
+      const form = foot.querySelector('.sv-reply'); const inp = form.querySelector('input');
+      inp.onfocus = pause; inp.onblur = () => resume();
+      form.onsubmit = async (e) => {
+        e.preventDefault();
+        if (!requireNotBanned()) return;
+        const body = inp.value.trim(); if (!body) return; inp.value = ''; inp.blur();
+        const { error } = await sb.from('direct_messages').insert({ sender_id: state.user.id, recipient_id: g.userId, body: '↩️ Respuesta a tu historia: ' + body });
+        toast(error ? 'No se pudo enviar' : 'Respuesta enviada 💬');
+      };
+    }
+  }
 
   function rebuildHeader(g) {
     overlay.querySelector('.sv-av').innerHTML = avatarHTML(g.user, '');
     overlay.querySelector('.sv-name').textContent = g.user.display_name || g.user.username || 'usuario';
     barsEl.innerHTML = g.items.map(() => `<div class="sv-bar"><i></i></div>`).join('');
     bars = [...barsEl.querySelectorAll('.sv-bar i')];
-    // botón borrar solo en tus historias
     const oldDel = overlay.querySelector('.sv-del'); if (oldDel) oldDel.remove();
     if (g.userId === state.user.id) {
       const del = el(`<button class="sv-del" type="button" aria-label="Eliminar"><svg fill="none" stroke="#fff"><use href="#i-trash"/></svg></button>`);
-      del.onclick = async () => { const s = groups[gi].items[idx]; if (!confirm('¿Eliminar esta historia?')) return; await sb.from('stories').delete().eq('id', s.id); toast('Historia eliminada'); close(); };
-      overlay.querySelector('.sv-head').insertBefore(del, overlay.querySelector('.sv-x'));
+      del.onclick = async () => { const s = curStory(); if (!confirm('¿Eliminar esta historia?')) return; await sb.from('stories').delete().eq('id', s.id); toast('Historia eliminada'); close(); };
+      overlay.querySelector('.sv-head').insertBefore(del, overlay.querySelector('.sv-mute'));
     }
+    buildFoot(g);
+  }
+
+  async function refreshViews(storyId) {
+    const vc = overlay.querySelector('.sv-vc'); if (!vc) return;
+    const { count } = await sb.from('story_views').select('viewer_id', { count: 'exact', head: true }).eq('story_id', storyId);
+    if (curStory().id === storyId && vc.isConnected) vc.textContent = Math.max(0, (count || 1) - 1);
   }
 
   function show(g, i) {
-    clearTimeout(timer); stopAudio();
+    clearTimeout(timer); stopAudio(); isPaused = false; overlay.classList.remove('paused');
     if (g !== gi) { gi = g; rebuildHeader(groups[gi]); }
     idx = i;
     const grp = groups[gi]; const s = grp.items[idx];
@@ -3036,28 +3080,74 @@ function openStoryViewer(groups, gIdx = 0, startIdx = 0) {
     overlay.querySelector('.sv-time').textContent = ageH <= 0 ? 'hace un momento' : `hace ${ageH} h`;
     bars.forEach((fill, k) => { fill.style.transition = 'none'; fill.style.width = k < idx ? '100%' : '0%'; });
     const mus = overlay.querySelector('.sv-music');
+    const muteBtn = overlay.querySelector('.sv-mute');
     if (s.tracks) {
       mus.innerHTML = `<svg fill="none" stroke="#fff"><use href="#i-music"/></svg> <span>${esc(s.tracks.title)} · ${esc(s.tracks.profiles?.display_name || s.tracks.profiles?.username || s.tracks.artist || '')}</span>`;
+      muteBtn.classList.remove('hidden');
       try {
-        storyAudio = new Audio(s.tracks.audio_url);
+        storyAudio = new Audio(s.tracks.audio_url); storyAudio.muted = muted;
         const st = +s.song_start || 0;
-        const seekAndPlay = () => { try { if (st > 0) storyAudio.currentTime = st; } catch (_) {} storyAudio.play().catch(() => {}); };
         if (st > 0) storyAudio.addEventListener('loadedmetadata', () => { try { storyAudio.currentTime = st; } catch (_) {} }, { once: true });
-        seekAndPlay();
+        try { if (st > 0) storyAudio.currentTime = st; } catch (_) {}
+        storyAudio.play().catch(() => {});
       } catch (_) {}
-    } else mus.innerHTML = '';
+    } else { mus.innerHTML = ''; muteBtn.classList.add('hidden'); }
     const links = Array.isArray(s.links) ? s.links : [];
     overlay.querySelector('.sv-links').innerHTML = links.map(l => `<a class="sv-link" href="${esc(czHref(l.url))}" target="_blank" rel="noopener noreferrer">${esc(l.label || 'Ver enlace')}</a>`).join('');
     markStoryViewed(s.id);
-    const cur = bars[idx];
-    requestAnimationFrame(() => { cur.style.transition = `width ${STORY_MS}ms linear`; cur.style.width = '100%'; });
+    if (groups[gi].userId === state.user.id) refreshViews(s.id);
+    curBar = bars[idx];
+    requestAnimationFrame(() => { curBar.style.transition = `width ${STORY_MS}ms linear`; curBar.style.width = '100%'; });
+    segStart = Date.now(); segRemaining = STORY_MS;
     timer = setTimeout(nextItem, STORY_MS);
   }
+
   overlay.querySelector('.sv-x').onclick = close;
-  overlay.querySelector('.sv-tap.right').onclick = nextItem;
-  overlay.querySelector('.sv-tap.left').onclick = prevItem;
+  overlay.querySelector('.sv-mute').onclick = () => { muted = !muted; if (storyAudio) storyAudio.muted = muted; overlay.querySelector('.sv-mute').classList.toggle('muted', muted); };
+
+  // gestos: tocar (nav), mantener (pausa), deslizar abajo (cerrar), deslizar lateral (nav)
+  let sx = 0, sy = 0, moved = false, downT = 0, holdT = null;
+  stage.addEventListener('pointerdown', (e) => {
+    sx = e.clientX; sy = e.clientY; moved = false; downT = Date.now();
+    holdT = setTimeout(pause, 240);
+  });
+  stage.addEventListener('pointermove', (e) => {
+    const dx = e.clientX - sx, dy = e.clientY - sy;
+    if (!moved && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) { moved = true; clearTimeout(holdT); }
+    if (dy > 0 && Math.abs(dy) > Math.abs(dx)) { overlay.style.transform = `translateY(${Math.min(dy, 500)}px)`; overlay.style.opacity = String(Math.max(.3, 1 - dy / 700)); }
+  });
+  const onUp = (e) => {
+    clearTimeout(holdT);
+    const dx = (e.clientX || sx) - sx, dy = (e.clientY || sy) - sy, dt = Date.now() - downT;
+    if (overlay.style.transform) { overlay.style.transition = 'transform .2s, opacity .2s'; setTimeout(() => { overlay.style.transition = ''; }, 220); }
+    overlay.style.transform = ''; overlay.style.opacity = '';
+    if (dy > 110 && Math.abs(dy) > Math.abs(dx)) { close(); return; }
+    if (isPaused) { resume(); return; }
+    if (moved && Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) { dx < 0 ? nextItem() : prevItem(); return; }
+    if (!moved && dt < 400) { const r = stage.getBoundingClientRect(); (e.clientX - r.left < r.width * 0.30) ? prevItem() : nextItem(); }
+  };
+  stage.addEventListener('pointerup', onUp);
+  stage.addEventListener('pointercancel', () => { clearTimeout(holdT); overlay.style.transform = ''; overlay.style.opacity = ''; if (isPaused) resume(); });
+
   rebuildHeader(groups[gi]);
   show(gi, startIdx);
+}
+async function openStoryViewers(storyId, onClose) {
+  const m = openModal(`<div class="modal-head"><h3>Visto por</h3><button class="close">&times;</button></div><div class="modal-body" id="svvBody"><div class="loading" style="padding:20px"><div class="spinner"></div></div></div>`);
+  if (onClose) { m.addEventListener('click', (e) => { if (e.target === m || e.target.closest('.close')) onClose(); }); }
+  const body = m.querySelector('#svvBody');
+  const { data } = await sb.from('story_views').select('viewer_id, created_at').eq('story_id', storyId).order('created_at', { ascending: false }).limit(120);
+  const ids = [...new Set((data || []).map(v => v.viewer_id))].filter(x => x !== state.user.id);
+  if (!ids.length) { body.innerHTML = `<div class="empty" style="padding:18px"><svg fill="none"><use href="#i-people"/></svg><p>Aún nadie ha visto esta historia.</p></div>`; return; }
+  const { data: profs } = await sb.from('profiles').select('id,username,display_name,avatar_url,theme').in('id', ids);
+  const byId = Object.fromEntries((profs || []).map(p => [p.id, p]));
+  body.innerHTML = '';
+  ids.forEach(id => {
+    const p = byId[id]; if (!p) return;
+    const row = el(`<div class="follow-row"><div class="fr-left">${avatarHTML(p)}<div><div class="fr-name">${esc(p.display_name || p.username)}</div><div class="fr-handle">@${esc(p.username)}</div></div></div></div>`);
+    row.onclick = () => { m.remove(); if (onClose) onClose(); openProfile(p.id); };
+    body.appendChild(row);
+  });
 }
 async function markStoryViewed(id) {
   if (state._storySeen && state._storySeen.has(id)) return;

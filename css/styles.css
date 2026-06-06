@@ -1815,3 +1815,28 @@ textarea.pk-in { resize: vertical; line-height: 1.5; }
 .seg-wave > span { flex: 1; min-width: 2px; background: var(--ink-faint); border-radius: 2px; opacity: .55; }
 .seg-window { position: absolute; top: 0; bottom: 0; background: rgba(62,87,252,.22); border: 2px solid var(--accent); border-radius: 9px; pointer-events: none; box-shadow: 0 0 0 100vmax rgba(0,0,0,.04); }
 .seg-time { font-size: 11.5px; color: var(--ink-soft); margin-top: 6px; font-variant-numeric: tabular-nums; }
+
+/* ===================== HISTORIAS: funciones completas ===================== */
+.sv-stage { touch-action: none; -webkit-user-select: none; user-select: none; }
+.sv-mute { position: relative; width: 38px; height: 38px; border-radius: 50%; border: none; background: rgba(0,0,0,.4); display: grid; place-items: center; cursor: pointer; flex-shrink: 0; }
+.sv-mute svg { width: 18px; height: 18px; stroke: #fff; }
+.sv-mute.muted { opacity: .6; }
+.sv-mute.muted::after { content: ""; position: absolute; left: 7px; right: 7px; height: 2px; background: #fff; transform: rotate(-45deg); border-radius: 2px; }
+/* música y enlaces suben para dejar hueco a la barra inferior */
+.sv-music { bottom: 132px; }
+.sv-links { bottom: 84px; }
+/* barra inferior: respuesta (otros) o vistas (tú) */
+.sv-foot { position: absolute; left: 0; right: 0; bottom: 0; z-index: 6; display: flex; justify-content: center; padding: 10px 14px calc(env(safe-area-inset-bottom,0px) + 12px); }
+.sv-reply { display: flex; align-items: center; gap: 9px; width: 100%; max-width: 520px; }
+.sv-reply input { flex: 1; min-width: 0; padding: 12px 16px; border-radius: 26px; border: 1.5px solid rgba(255,255,255,.35); background: rgba(255,255,255,.14); color: #fff; backdrop-filter: blur(8px); font-size: 14px; }
+.sv-reply input::placeholder { color: rgba(255,255,255,.75); }
+.sv-reply input:focus { outline: none; border-color: #fff; }
+.sv-reply button { width: 44px; height: 44px; border-radius: 50%; border: none; background: var(--accent-grad); display: grid; place-items: center; flex-shrink: 0; box-shadow: var(--sh-blue); }
+.sv-reply button svg { width: 18px; height: 18px; stroke: #fff; }
+.sv-viewers { display: inline-flex; align-items: center; gap: 7px; background: rgba(0,0,0,.5); color: #fff; border: none; border-radius: 22px; padding: 10px 18px; font-size: 13px; font-weight: 650; cursor: pointer; backdrop-filter: blur(6px); }
+.sv-viewers svg { width: 16px; height: 16px; } .sv-viewers b { font-weight: 850; }
+/* indicador de pausa */
+.sv-pause-ind { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%) scale(.7); opacity: 0; transition: opacity .15s, transform .15s; pointer-events: none; z-index: 5; }
+.story-viewer.paused .sv-pause-ind { opacity: .92; transform: translate(-50%,-50%) scale(1); }
+.sv-pause-ind svg { width: 56px; height: 56px; fill: rgba(255,255,255,.92); stroke: rgba(255,255,255,.92); filter: drop-shadow(0 2px 12px rgba(0,0,0,.6)); }
+.story-viewer { transition: transform .05s linear; }
