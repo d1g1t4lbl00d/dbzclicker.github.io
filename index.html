@@ -9,7 +9,7 @@
 <link rel="manifest" href="/manifest.json?v=20260605l" />
 <meta name="theme-color" content="#0a0d18" />
 <link rel="apple-touch-icon" href="/icon-192.png?v=20260605l" />
-<link rel="stylesheet" href="css/styles.css?v=20260606f" />
+<link rel="stylesheet" href="css/styles.css?v=20260606g" />
 <script>(function(){try{var t=localStorage.getItem('ub_theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}try{if(sessionStorage.getItem('ub_splash'))document.documentElement.classList.add('no-splash');}catch(e){}})();</script>
 <style>
 #splash{position:fixed;inset:0;z-index:99999;background:#00020b;display:flex;align-items:center;justify-content:center;overflow:hidden;transition:opacity .55s ease}
@@ -96,6 +96,8 @@ html.no-splash #splash{display:none}
     <symbol id="i-smile" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></symbol>
     <symbol id="i-more" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="12" cy="19" r="1.6"/></symbol>
     <symbol id="i-x" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+    <symbol id="i-tools" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.7 6.3a4 4 0 0 0-5.4 5.4l-6 6a1.5 1.5 0 0 0 2.1 2.1l6-6a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.1-2.1z"/><path d="M14 7l3-3 3 3-3 3"/></symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="8" y1="13" x2="16" y2="13"/><line x1="8" y1="17" x2="13" y2="17"/></symbol>
   </defs>
 </svg>
 
@@ -193,6 +195,7 @@ html.no-splash #splash{display:none}
       <button class="nav-item" data-view="playlists"><svg><use href="#i-list"/></svg> Playlists</button>
       <button class="nav-item" data-view="mytracks"><svg><use href="#i-files"/></svg> My Uploads <span class="count" id="cntMine"></span></button>
       <button class="nav-item" data-view="dashboard"><svg><use href="#i-chart"/></svg> Estudio</button>
+      <button class="nav-item" data-view="tools"><svg><use href="#i-tools"/></svg> Herramientas</button>
       <button class="nav-item" data-view="downloads"><svg><use href="#i-download"/></svg> Downloads <span class="count" id="cntDl"></span></button>
     </div>
     <div class="side-group">
@@ -345,7 +348,7 @@ html.no-splash #splash{display:none}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
-<script src="js/config.js?v=20260606f"></script>
-<script src="js/app.js?v=20260606f"></script>
+<script src="js/config.js?v=20260606g"></script>
+<script src="js/app.js?v=20260606g"></script>
 </body>
 </html>

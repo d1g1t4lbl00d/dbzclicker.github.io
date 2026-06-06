@@ -259,6 +259,9 @@ $('btnLogout').onclick = logout;
    ======================================================================= */
 let bootDone = false;
 async function init() {
+  // ruta pública del press kit: underbro.app/?kit=usuario (sin necesidad de sesión)
+  const kitSlug = new URLSearchParams(location.search).get('kit');
+  if (kitSlug) { renderPublicPressKit(kitSlug); return; }
   const { data: { session } } = await sb.auth.getSession();
   if (session) { state.user = session.user; await onAuthenticated(); }
   sb.auth.onAuthStateChange(async (event, sess) => {
@@ -561,6 +564,8 @@ async function switchView(view) {
   if (view === 'playlists') return renderPlaylists();
   if (view === 'dashboard') return renderDashboard();
   if (view === 'events') return renderEvents();
+  if (view === 'tools') return renderTools();
+  if (view === 'presskit') return renderPressKit();
   if (view === 'radio') return startRadio();
 
   main.innerHTML = skeletonFeed();
@@ -3307,6 +3312,286 @@ function proposeCollab(userId) {
   if (state.blocked.has(userId) || state.hidden.has(userId)) { toast('No puedes escribir a este usuario'); return; }
   openDM(userId);
   setTimeout(() => { const i = $('dmInput'); if (i && !i.value) { i.value = '¡Hey! Me mola tu rollo 🔥 ¿te animas a hacer un feat juntos?'; i.focus(); } }, 420);
+}
+
+/* =======================================================================
+   HERRAMIENTAS — Press Kit / EPK
+   ======================================================================= */
+function renderTools() {
+  setActiveNav('tools');
+  const main = $('main');
+  main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
+  main.innerHTML = `
+    <div class="main-head"><div><h2>Herramientas</h2><div class="sub">Utilidades para artistas</div></div></div>
+    <div class="tools-grid">
+      <button class="tool-card" id="toolPresskit">
+        <div class="tool-ico"><svg fill="none" stroke="currentColor"><use href="#i-doc"/></svg></div>
+        <div class="tool-name">Press Kit / EPK</div>
+        <div class="tool-desc">Crea tu dossier de artista profesional y compártelo con salas, sellos y promotores con un solo enlace o en PDF.</div>
+        <span class="tool-go">Crear ahora →</span>
+      </button>
+      <div class="tool-card soon">
+        <div class="tool-ico"><svg fill="none" stroke="currentColor"><use href="#i-image"/></svg></div>
+        <div class="tool-name">Portada de pista</div>
+        <div class="tool-desc">Genera portadas con tu marca.</div>
+        <span class="tool-soon">Próximamente</span>
+      </div>
+      <div class="tool-card soon">
+        <div class="tool-ico"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg></div>
+        <div class="tool-name">Smart link</div>
+        <div class="tool-desc">Una página de enlaces para cada lanzamiento.</div>
+        <span class="tool-soon">Próximamente</span>
+      </div>
+    </div>`;
+  $('toolPresskit').onclick = () => switchView('presskit');
+}
+
+let pkState = null;
+let pkAudio = null;
+
+async function pkLoadOrDefault() {
+  const uid = state.user.id;
+  const { data: saved } = await sb.from('press_kits').select('data').eq('user_id', uid).maybeSingle();
+  const p = state.profile;
+  const theme = (p.theme && typeof p.theme === 'object') ? p.theme : {};
+  const profLinks = (Array.isArray(theme.links) ? theme.links : []).map(l => ({ label: l.label || '', url: l.url || '' }));
+  const [{ data: tracks }, foll] = await Promise.all([
+    sb.from('tracks').select('id,title,cover_url,audio_url,genre,plays').eq('user_id', uid).order('plays', { ascending: false }).limit(30),
+    sb.from('follows').select('id', { count: 'exact', head: true }).eq('following_id', uid),
+  ]);
+  const tr = (tracks || []);
+  const allTracks = tr.map(t => ({ id: t.id, title: t.title, cover_url: t.cover_url || '', audio_url: t.audio_url || '' }));
+  const totalPlays = tr.reduce((a, t) => a + (t.plays || 0), 0);
+  // valores guardados (si los hay)
+  if (saved && saved.data && Object.keys(saved.data).length) {
+    const d = saved.data;
+    d.allTracks = allTracks;                 // refrescar catálogo para el selector
+    d.links = profLinks;                     // enlaces siempre desde el perfil
+    d.stats = { followers: foll.count || 0, plays: totalPlays, tracks: tr.length };
+    if (!d.sections) d.sections = { stats: true, bio: true, highlights: true, tracks: true, contact: true, links: true };
+    return d;
+  }
+  const genres = [...new Set(tr.map(t => (t.genre || '').trim()).filter(Boolean))].slice(0, 4).join(', ');
+  return {
+    name: p.display_name || p.username, tagline: theme.tagline || '', location: '', genres,
+    bioShort: (p.bio || '').slice(0, 200), bioLong: p.bio || '',
+    avatar: p.avatar_url || '', banner: czUrl(theme.banner) || '',
+    contactEmail: '', booking: '', management: '',
+    highlights: [],
+    links: profLinks,
+    showStats: true, stats: { followers: foll.count || 0, plays: totalPlays, tracks: tr.length },
+    tracks: allTracks.slice(0, 4),
+    allTracks,
+    accent: czColor(theme.accent) || '#3e57fc', template: 'dark',
+    sections: { stats: true, bio: true, highlights: true, tracks: true, contact: true, links: true },
+  };
+}
+
+async function renderPressKit() {
+  setActiveNav('tools');
+  const main = $('main');
+  main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
+  main.innerHTML = `<div class="main-head"><div><h2>Press Kit</h2><div class="sub">Tu dossier de artista</div></div></div><div class="loading" style="padding:40px"><div class="spinner"></div></div>`;
+  pkState = await pkLoadOrDefault();
+  const k = pkState;
+  const tpls = [['dark', 'Oscuro'], ['light', 'Claro'], ['gradient', 'Degradado']];
+  main.innerHTML = `
+    <div class="main-head">
+      <div><h2>Press Kit / EPK</h2><div class="sub">Edita a la izquierda, mira el resultado a la derecha</div></div>
+      <button class="btn sm" id="pkBack"><svg fill="none" stroke="currentColor"><use href="#i-chevron-left"/></svg> Herramientas</button>
+    </div>
+    <div class="pk-builder">
+      <div class="pk-form">
+        <div class="pk-fsec"><h4>Identidad</h4>
+          <label class="pk-l">Nombre artístico</label><input class="pk-in" data-k="name" value="${esc(k.name || '')}" maxlength="60" />
+          <label class="pk-l">Eslogan / frase</label><input class="pk-in" data-k="tagline" value="${esc(k.tagline || '')}" maxlength="100" placeholder="Ej: Trap melódico desde Madrid" />
+          <div class="pk-row2">
+            <div><label class="pk-l">Ubicación</label><input class="pk-in" data-k="location" value="${esc(k.location || '')}" maxlength="60" placeholder="Ciudad, país" /></div>
+            <div><label class="pk-l">Géneros</label><input class="pk-in" data-k="genres" value="${esc(k.genres || '')}" maxlength="80" placeholder="Trap, R&B" /></div>
+          </div>
+        </div>
+        <div class="pk-fsec"><h4>Biografía</h4>
+          <label class="pk-l">Bio corta (1–2 frases)</label><textarea class="pk-in" data-k="bioShort" maxlength="280" rows="2">${esc(k.bioShort || '')}</textarea>
+          <label class="pk-l">Bio larga</label><textarea class="pk-in" data-k="bioLong" maxlength="1500" rows="5">${esc(k.bioLong || '')}</textarea>
+        </div>
+        <div class="pk-fsec"><h4>Hitos / logros <span class="pk-hint2">una línea por hito</span></h4>
+          <textarea class="pk-in" data-k="highlights" rows="4" placeholder="+50.000 reproducciones&#10;Telonero en Sala X&#10;Reseñado por...">${esc((k.highlights || []).join('\n'))}</textarea>
+        </div>
+        <div class="pk-fsec"><h4>Pistas destacadas <span class="pk-hint2">elige cuáles mostrar</span></h4>
+          <div class="pk-tracks-pick">
+            ${(k.allTracks || []).length ? k.allTracks.map(t => `<label class="pk-tk"><input type="checkbox" data-tk="${esc(t.id)}" ${k.tracks.some(x => x.id === t.id) ? 'checked' : ''}/> <span>${esc(t.title)}</span></label>`).join('') : '<p class="pk-hint2">Sube pistas para destacarlas aquí.</p>'}
+          </div>
+        </div>
+        <div class="pk-fsec"><h4>Contacto / booking</h4>
+          <label class="pk-l">Email de contacto</label><input class="pk-in" data-k="contactEmail" value="${esc(k.contactEmail || '')}" maxlength="120" placeholder="booking@tucorreo.com" />
+          <label class="pk-l">Management / sello</label><input class="pk-in" data-k="management" value="${esc(k.management || '')}" maxlength="120" placeholder="Nombre del management (opcional)" />
+          <label class="pk-l">Teléfono / booking</label><input class="pk-in" data-k="booking" value="${esc(k.booking || '')}" maxlength="120" placeholder="Tel. o web de contratación (opcional)" />
+        </div>
+        <div class="pk-fsec"><h4>Diseño</h4>
+          <label class="pk-l">Color de acento</label>
+          <div class="pk-color"><input type="color" data-k="accent" value="${czColor(k.accent) || '#3e57fc'}" /><span>${esc(k.accent || '#3e57fc')}</span></div>
+          <label class="pk-l">Plantilla</label>
+          <div class="pk-tpls">${tpls.map(([v, n]) => `<button type="button" class="pk-tpl ${k.template === v ? 'on' : ''}" data-tpl="${v}">${n}</button>`).join('')}</div>
+          <label class="pk-l">Secciones visibles</label>
+          <div class="pk-toggles">
+            ${[['stats', 'Estadísticas'], ['bio', 'Biografía'], ['highlights', 'Hitos'], ['tracks', 'Pistas'], ['links', 'Enlaces'], ['contact', 'Contacto']].map(([s, n]) => `<label class="pk-tg"><input type="checkbox" data-sec="${s}" ${k.sections[s] !== false ? 'checked' : ''}/> ${n}</label>`).join('')}
+          </div>
+        </div>
+        <div class="pk-actions">
+          <button class="btn primary" id="pkSave"><svg fill="none" stroke="#fff"><use href="#i-verify"/></svg> Guardar y publicar</button>
+          <button class="btn" id="pkShare"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg> Copiar enlace</button>
+          <button class="btn" id="pkView"><svg fill="none" stroke="currentColor"><use href="#i-globe"/></svg> Ver público</button>
+          <button class="btn" id="pkPdf"><svg fill="none" stroke="currentColor"><use href="#i-download"/></svg> Descargar PDF</button>
+        </div>
+      </div>
+      <div class="pk-preview-wrap">
+        <div class="pk-preview-label">Vista previa</div>
+        <div id="pkPreview" class="pk-preview"></div>
+      </div>
+    </div>`;
+
+  $('pkBack').onclick = () => switchView('tools');
+  // bind inputs de texto
+  main.querySelectorAll('.pk-in[data-k]').forEach(inp => inp.addEventListener('input', () => {
+    const key = inp.dataset.k;
+    if (key === 'highlights') pkState.highlights = inp.value.split('\n').map(s => s.trim()).filter(Boolean);
+    else pkState[key] = inp.value;
+    if (key === 'accent') { const sp = inp.parentElement.querySelector('span'); if (sp) sp.textContent = inp.value; }
+    pkRenderPreview();
+  }));
+  // pistas
+  main.querySelectorAll('input[data-tk]').forEach(cb => cb.onchange = () => {
+    const id = cb.dataset.tk; const t = (pkState.allTracks || []).find(x => x.id === id);
+    if (cb.checked) { if (t && !pkState.tracks.some(x => x.id === id)) pkState.tracks.push(t); }
+    else pkState.tracks = pkState.tracks.filter(x => x.id !== id);
+    pkRenderPreview();
+  });
+  // plantilla
+  main.querySelectorAll('.pk-tpl').forEach(b => b.onclick = () => {
+    pkState.template = b.dataset.tpl;
+    main.querySelectorAll('.pk-tpl').forEach(x => x.classList.toggle('on', x === b));
+    pkRenderPreview();
+  });
+  // secciones
+  main.querySelectorAll('input[data-sec]').forEach(cb => cb.onchange = () => {
+    pkState.sections[cb.dataset.sec] = cb.checked; pkRenderPreview();
+  });
+  $('pkSave').onclick = pkSave;
+  $('pkShare').onclick = () => { const u = pkPublicUrl(); navigator.clipboard?.writeText(u).then(() => toast('Enlace copiado: ' + u)).catch(() => toast(u)); };
+  $('pkView').onclick = () => window.open(pkPublicUrl(), '_blank');
+  $('pkPdf').onclick = () => { document.body.classList.add('pk-printing'); setTimeout(() => { window.print(); document.body.classList.remove('pk-printing'); }, 60); };
+  pkRenderPreview();
+}
+
+function pkPublicUrl() { return location.origin + '/?kit=' + encodeURIComponent(state.profile.username || ''); }
+
+function pkRenderPreview() {
+  const box = $('pkPreview'); if (!box) return;
+  box.innerHTML = pressKitHTML(pkState);
+  pkWireAudio(box);
+}
+
+async function pkSave() {
+  const btn = $('pkSave'); btn.disabled = true;
+  const out = JSON.parse(JSON.stringify(pkState)); delete out.allTracks; // no hace falta persistir el catálogo
+  out.updatedAt = new Date().toISOString();
+  const { error } = await sb.from('press_kits').upsert({
+    user_id: state.user.id, slug: state.profile.username, data: out, published: true, updated_at: out.updatedAt,
+  }, { onConflict: 'user_id' });
+  btn.disabled = false;
+  if (error) { toast('No se pudo guardar'); return; }
+  btn.innerHTML = '✓ Publicado';
+  toast('📄 Press kit guardado y publicado');
+  setTimeout(() => { btn.innerHTML = '<svg fill="none" stroke="#fff"><use href="#i-verify"/></svg> Guardar y publicar'; }, 2500);
+}
+
+/* ---- render del press kit (preview + público) ---- */
+function pressKitHTML(k) {
+  if (!k) return '';
+  const accent = czColor(k.accent) || '#3e57fc';
+  const sec = k.sections || {};
+  const banner = czUrl(k.banner);
+  const meta = [k.location, k.genres].filter(Boolean).map(esc).join(' · ');
+  const initials = (k.name || '?').trim().slice(0, 2).toUpperCase();
+  const av = czUrl(k.avatar)
+    ? `<div class="pk-av" style="background-image:url('${czUrl(k.avatar)}')"></div>`
+    : `<div class="pk-av pk-av-ph">${esc(initials)}</div>`;
+  const stats = (sec.stats !== false && k.stats) ? `
+    <div class="pk-stats">
+      <div><b>${nfmt(k.stats.followers)}</b><span>seguidores</span></div>
+      <div><b>${nfmt(k.stats.plays)}</b><span>reproducciones</span></div>
+      <div><b>${nfmt(k.stats.tracks)}</b><span>pistas</span></div>
+    </div>` : '';
+  const bioText = (k.bioLong || k.bioShort || '').trim();
+  const bio = (sec.bio !== false && bioText) ? `<section class="pk-sec"><h3>Biografía</h3><p class="pk-bio">${esc(bioText).replace(/\n/g, '<br>')}</p></section>` : '';
+  const hl = (sec.highlights !== false && (k.highlights || []).length) ? `<section class="pk-sec"><h3>Hitos</h3><ul class="pk-hl">${k.highlights.map(h => `<li>${esc(h)}</li>`).join('')}</ul></section>` : '';
+  const tracks = (sec.tracks !== false && (k.tracks || []).length) ? `<section class="pk-sec"><h3>Pistas destacadas</h3><div class="pk-tracks">${k.tracks.map(t => `
+      <div class="pk-track">
+        <div class="pk-tk-cover" style="${czUrl(t.cover_url) ? `background-image:url('${czUrl(t.cover_url)}')` : ''}">${czUrl(t.cover_url) ? '' : '<svg fill="none" stroke="#fff"><use href="#i-music"/></svg>'}</div>
+        <div class="pk-tk-title">${esc(t.title || 'Pista')}</div>
+        ${czHref(t.audio_url) ? `<button class="pk-tk-play" data-pkplay="${esc(czHref(t.audio_url))}" aria-label="Reproducir"><svg class="ci-play"><use href="#i-play"/></svg><svg class="ci-pause"><use href="#i-pause"/></svg></button>` : ''}
+      </div>`).join('')}</div></section>` : '';
+  const links = (sec.links !== false && (k.links || []).length) ? `<section class="pk-sec"><h3>Enlaces</h3><div class="pk-links">${k.links.filter(l => l.url).map(l => `<a href="${esc(czHref(l.url))}" target="_blank" rel="noopener noreferrer">${esc(l.label || hostOf(l.url))}</a>`).join('')}</div></section>` : '';
+  const contactBits = [];
+  if (k.contactEmail) contactBits.push(`<div><span>Email</span><a href="mailto:${esc(k.contactEmail)}">${esc(k.contactEmail)}</a></div>`);
+  if (k.management) contactBits.push(`<div><span>Management</span><b>${esc(k.management)}</b></div>`);
+  if (k.booking) contactBits.push(`<div><span>Booking</span><b>${esc(k.booking)}</b></div>`);
+  const contact = (sec.contact !== false && contactBits.length) ? `<section class="pk-sec"><h3>Contacto</h3><div class="pk-contact">${contactBits.join('')}</div></section>` : '';
+  return `
+    <article class="pk tpl-${esc(k.template || 'dark')}" style="--pk-accent:${accent}">
+      <header class="pk-hero ${banner ? 'has-banner' : ''}">
+        ${banner ? `<div class="pk-banner" style="background-image:url('${banner}')"></div>` : ''}
+        <div class="pk-hero-in">
+          ${av}
+          <div class="pk-id">
+            <h1 class="pk-name">${esc(k.name || 'Tu nombre')}</h1>
+            ${k.tagline ? `<div class="pk-tag">${esc(k.tagline)}</div>` : ''}
+            ${meta ? `<div class="pk-meta">${meta}</div>` : ''}
+          </div>
+        </div>
+      </header>
+      <div class="pk-body">
+        ${stats}${bio}${hl}${tracks}${links}${contact}
+      </div>
+      <footer class="pk-foot">Press kit creado con <b>UnderBro</b> · underbro.app</footer>
+    </article>`;
+}
+
+function pkWireAudio(scope) {
+  scope.querySelectorAll('[data-pkplay]').forEach(btn => btn.onclick = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const url = btn.dataset.pkplay;
+    if (pkAudio && pkAudio._btn === btn) { if (pkAudio.paused) pkAudio.play(); else pkAudio.pause(); return; }
+    if (pkAudio) { pkAudio.pause(); pkAudio._btn?.classList.remove('playing'); }
+    const a = new Audio(url); pkAudio = a; a._btn = btn;
+    a.onplay = () => btn.classList.add('playing');
+    a.onpause = () => btn.classList.remove('playing');
+    a.onended = () => btn.classList.remove('playing');
+    a.play().catch(() => toast('No se pudo reproducir'));
+  });
+}
+
+/* ---- página pública (sin sesión): underbro.app/?kit=usuario ---- */
+async function renderPublicPressKit(slug) {
+  document.documentElement.classList.add('no-splash');
+  const sp = document.getElementById('splash'); if (sp) sp.remove();
+  document.getElementById('authScreen')?.classList.add('hidden');
+  document.getElementById('app')?.classList.add('hidden');
+  let host = document.getElementById('publicKit');
+  if (!host) { host = el('<div id="publicKit"></div>'); document.body.appendChild(host); }
+  host.innerHTML = `<div class="loading" style="padding:70px"><div class="spinner"></div></div>`;
+  let kit = null;
+  try {
+    const { data } = await sb.from('press_kits').select('data').eq('slug', slug).eq('published', true).maybeSingle();
+    kit = data && data.data;
+  } catch (_) {}
+  if (!kit || !kit.name) {
+    host.innerHTML = `<div class="pk-notfound"><h2>Press kit no encontrado</h2><p>El enlace puede ser incorrecto o el artista lo ha despublicado.</p><a class="btn primary" href="/">Ir a UnderBro</a></div>`;
+    return;
+  }
+  document.title = (kit.name || 'Press kit') + ' · UnderBro';
+  host.innerHTML = `<div class="pk-public-inner">${pressKitHTML(kit)}<div class="pk-cta"><span>¿Eres artista? Crea el tuyo gratis</span><a class="btn primary" href="/">Crear mi press kit en UnderBro</a></div></div>`;
+  pkWireAudio(host);
 }
 
 function editLinksModal(onSaved) {
