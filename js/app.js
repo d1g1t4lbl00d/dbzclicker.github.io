@@ -2954,20 +2954,56 @@ async function renderDashboard() {
   const uid = state.user.id;
   const [tracksRes, followersRes, postsRes, refRes] = await Promise.all([
     sb.from('tracks').select('id,title,cover_url,plays,likes_count,reposts_count,created_at').eq('user_id', uid).order('plays', { ascending: false }),
-    sb.from('follows').select('created_at').eq('following_id', uid),
+    sb.from('follows').select('follower_id,created_at').eq('following_id', uid),
     sb.from('posts').select('id', { count: 'exact', head: true }).eq('user_id', uid),
     sb.from('profiles').select('id', { count: 'exact', head: true }).eq('referred_by', uid),
   ]);
   const invitedCount = refRes.count || 0;
+  const postsCount = postsRes.count || 0;
   const inviteUrl = `${location.origin}/?ref=${encodeURIComponent(state.profile.username || '')}`;
   const tracks = tracksRes.data || [];
-  const followerDates = (followersRes.data || []).map(r => r.created_at);
+  const followerRows = followersRes.data || [];
+  const followerDates = followerRows.map(r => r.created_at);
   const totalPlays = tracks.reduce((a, t) => a + (t.plays || 0), 0);
   const totalLikes = tracks.reduce((a, t) => a + (t.likes_count || 0), 0);
   const totalReposts = tracks.reduce((a, t) => a + (t.reposts_count || 0), 0);
   const followers = followerDates.length;
   const theme = (state.profile.theme && typeof state.profile.theme === 'object') ? state.profile.theme : {};
   const links = Array.isArray(theme.links) ? theme.links : [];
+
+  // últimos seguidores (caras)
+  const recentIds = [...followerRows].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 12).map(r => r.follower_id).filter(Boolean);
+  let recentProfiles = [];
+  if (recentIds.length) { const { data } = await sb.from('profiles').select('id,username,display_name,avatar_url,theme').in('id', recentIds); const byId = Object.fromEntries((data || []).map(p => [p.id, p])); recentProfiles = recentIds.map(id => byId[id]).filter(Boolean); }
+
+  // destacados
+  const star = tracks[0] || null;
+  const avgPlays = tracks.length ? Math.round(totalPlays / tracks.length) : 0;
+  const likeRatio = totalPlays ? Math.round((totalLikes / totalPlays) * 100) : 0;
+
+  // próximos hitos
+  const nextMilestone = (n, steps) => steps.find(s => s > n) || (n + steps[steps.length - 1]);
+  const playGoal = nextMilestone(totalPlays, [100, 500, 1000, 5000, 10000, 50000, 100000, 500000, 1000000]);
+  const followGoal = nextMilestone(followers, [10, 25, 50, 100, 250, 500, 1000, 5000, 10000]);
+  const likeGoal = nextMilestone(totalLikes, [25, 50, 100, 250, 500, 1000, 5000, 10000]);
+
+  // nivel de artista (perfil completo)
+  const checks = [
+    { ok: !!state.profile.avatar_url, label: 'Foto de perfil', act: 'avatar' },
+    { ok: !!czUrl(theme.banner), label: 'Banner', act: 'banner' },
+    { ok: !!(state.profile.bio && state.profile.bio.trim()), label: 'Biografía', act: 'bio' },
+    { ok: links.length > 0, label: 'Redes y enlaces', act: 'links' },
+    { ok: links.some(l => /spotify\.com/i.test(l.url || '')), label: 'Spotify conectado', act: 'links' },
+    { ok: tracks.length > 0, label: 'Tu primera pista', act: 'upload' },
+    { ok: postsCount > 0, label: 'Tu primera foto', act: 'posts' },
+  ];
+  const doneCount = checks.filter(c => c.ok).length;
+  const completePct = Math.round((doneCount / checks.length) * 100);
+  const mbar = (label, cur, goal, icon) => {
+    const pct = Math.min(100, Math.round((cur / goal) * 100));
+    return `<div class="ms-row"><div class="ms-top"><span class="ms-l"><svg fill="none" stroke="currentColor"><use href="${icon}"/></svg> ${label}</span><span class="ms-n">${nfmt(cur)} / ${nfmt(goal)}</span></div><div class="ms-bar"><div class="ms-fill" style="width:${pct}%"></div></div></div>`;
+  };
+
 
   // crecimiento de seguidores (últimos 14 días)
   const days = 14, buckets = new Array(days).fill(0), labels = [];
@@ -2992,11 +3028,48 @@ async function renderDashboard() {
     </div>
 
     <div class="dash-section">
+      <div class="dash-sec-head"><h3>Destacados</h3><button class="btn sm" id="shareStatsBtn"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg> Compartir números</button></div>
+      <div class="dash-highlights">
+        <div class="hl-card hl-star">
+          <div class="hl-cover" style="${star && star.cover_url ? `background-image:url('${czUrl(star.cover_url)}')` : ''}">${star && star.cover_url ? '' : '<svg fill="none" stroke="#fff"><use href="#i-music"/></svg>'}</div>
+          <div class="hl-meta"><div class="hl-k">Pista estrella</div><div class="hl-v">${star ? esc(star.title) : '—'}</div><div class="hl-sub">${star ? nfmt(star.plays || 0) + ' repros' : 'Sube tu primera pista'}</div></div>
+        </div>
+        <div class="hl-card"><div class="hl-k">Media por pista</div><div class="hl-big">${nfmt(avgPlays)}</div><div class="hl-sub">reproducciones</div></div>
+        <div class="hl-card"><div class="hl-k">Ratio de me gusta</div><div class="hl-big">${likeRatio}%</div><div class="hl-sub">de tus oyentes</div></div>
+      </div>
+    </div>
+
+    <div class="dash-section">
       <h3>Seguidores nuevos (últimos 14 días) · +${newLast14}</h3>
       <div class="dash-chart">
         ${buckets.map((b, i) => `<div class="dc-col" title="${labels[i].toLocaleDateString('es-ES',{day:'numeric',month:'short'})}: ${b}"><div class="dc-bar" style="height:${Math.round((b / maxB) * 100)}%"></div><span class="dc-x">${labels[i].getDate()}</span></div>`).join('')}
       </div>
     </div>
+
+    <div class="dash-section">
+      <h3>Próximos hitos</h3>
+      ${mbar('Reproducciones', totalPlays, playGoal, '#i-headphones')}
+      ${mbar('Seguidores', followers, followGoal, '#i-people')}
+      ${mbar('Me gusta', totalLikes, likeGoal, '#i-heart')}
+    </div>
+
+    <div class="dash-section">
+      <div class="dash-sec-head"><h3>Nivel de artista</h3><span class="dash-pct">${completePct}%</span></div>
+      <p class="dash-hint" style="margin:4px 0 12px">Completa tu perfil para destacar más en UnderBro.</p>
+      <div class="level-wrap">
+        <div class="level-ring" style="--p:${completePct}"><span>${doneCount}/${checks.length}</span></div>
+        <div class="level-list">
+          ${checks.map(c => `<button class="lv-item ${c.ok ? 'done' : ''}" data-act="${c.act}"><span class="lv-ico">${c.ok ? '✓' : '+'}</span> ${esc(c.label)}</button>`).join('')}
+        </div>
+      </div>
+    </div>
+
+    ${recentProfiles.length ? `<div class="dash-section">
+      <h3>Últimos seguidores</h3>
+      <div class="dash-faces">
+        ${recentProfiles.map(p => `<button class="face" data-uid="${p.id}" title="${esc(p.display_name || p.username || '')}">${avatarHTML(p)}</button>`).join('')}
+      </div>
+    </div>` : ''}
 
     <div class="dash-section">
       <h3>Insignias</h3>
@@ -3051,6 +3124,16 @@ async function renderDashboard() {
   copyInvite.onclick = async () => { try { await navigator.clipboard.writeText(inviteUrl); } catch { const i = body.querySelector('#inviteUrl'); i.select(); try { document.execCommand('copy'); } catch {} } copyInvite.textContent = 'Copiado ✓'; toast('Enlace de invitación copiado'); };
   body.querySelector('#shareInvite').onclick = () => { if (navigator.share) navigator.share({ title: 'Únete a UnderBro', text: 'Sígueme en UnderBro 🎧', url: inviteUrl }).catch(() => {}); else { navigator.clipboard?.writeText(inviteUrl); toast('Enlace copiado'); } };
   body.querySelector('#editLinksBtn').onclick = () => editLinksModal(() => renderDashboard());
+  body.querySelector('#shareStatsBtn').onclick = () => shareStatsCard({ plays: totalPlays, followers, likes: totalLikes, reposts: totalReposts, tracks: tracks.length });
+  body.querySelectorAll('.lv-item:not(.done)').forEach(it => it.onclick = () => {
+    const a = it.dataset.act;
+    if (a === 'links') editLinksModal(() => renderDashboard());
+    else if (a === 'banner') openProfileCustomizer();
+    else if (a === 'upload') openUploadModal();
+    else if (a === 'posts') switchView('posts');
+    else switchView('settings');
+  });
+  body.querySelectorAll('.dash-faces .face').forEach(f => f.onclick = () => openProfile(f.dataset.uid));
   body.querySelectorAll('.dt-row').forEach(r => r.onclick = () => { const t = tracks.find(x => x.id === r.dataset.tid); if (t) openProfile(uid); });
   body.querySelectorAll('.badge-item:not(.locked)').forEach(bi => bi.onclick = async () => {
     const key = bi.dataset.badge;
@@ -3070,6 +3153,65 @@ async function renderDashboard() {
     state.profile.show_badges = val;
     toast(val ? 'Insignias visibles en tu perfil' : 'Insignias ocultas en tu perfil');
   };
+}
+
+// genera una tarjeta cuadrada (1080x1080) con tus números para compartir
+function shareStatsCard(s) {
+  toast('Generando imagen…');
+  const S = 1080;
+  const cv = document.createElement('canvas'); cv.width = S; cv.height = S;
+  const ctx = cv.getContext('2d');
+  const FB = '800 0px -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
+  const font = (w, px) => `${w} ${px}px -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif`;
+  ctx.fillStyle = '#00020b'; ctx.fillRect(0, 0, S, S);
+  let rg = ctx.createRadialGradient(S * 0.5, S * 0.26, 0, S * 0.5, S * 0.26, S * 0.62);
+  rg.addColorStop(0, 'rgba(62,87,252,0.38)'); rg.addColorStop(1, 'rgba(62,87,252,0)');
+  ctx.fillStyle = rg; ctx.fillRect(0, 0, S, S);
+  rg = ctx.createRadialGradient(S * 0.85, S * 0.9, 0, S * 0.85, S * 0.9, S * 0.5);
+  rg.addColorStop(0, 'rgba(110,45,245,0.30)'); rg.addColorStop(1, 'rgba(110,45,245,0)');
+  ctx.fillStyle = rg; ctx.fillRect(0, 0, S, S);
+
+  const render = (logo) => {
+    if (logo) { const lw = 150, lh = logo.height * lw / logo.width; ctx.drawImage(logo, (S - lw) / 2, 96, lw, lh); }
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#ffffff'; ctx.font = font('800', 60);
+    ctx.fillText('@' + (state.profile.username || ''), S / 2, 320);
+    ctx.fillStyle = '#aeb8d6'; ctx.font = font('500', 30);
+    ctx.fillText('mis números en UnderBro', S / 2, 366);
+
+    const stats = [['Reproducciones', s.plays], ['Seguidores', s.followers], ['Me gusta', s.likes], ['Pistas', s.tracks]];
+    const cx = [S * 0.30, S * 0.70], cy = [560, 800];
+    stats.forEach((st, i) => {
+      const x = cx[i % 2], y = cy[Math.floor(i / 2)];
+      ctx.fillStyle = '#ffffff'; ctx.font = font('800', 96);
+      ctx.fillText(nfmt(st[1]), x, y);
+      ctx.fillStyle = '#8fb4ff'; ctx.font = font('600', 30);
+      ctx.fillText(st[0], x, y + 46);
+    });
+
+    ctx.fillStyle = '#5f9bff'; ctx.font = font('700', 34);
+    ctx.fillText('underbro.app', S / 2, S - 76);
+
+    cv.toBlob(async (blob) => {
+      if (!blob) { toast('No se pudo generar la imagen'); return; }
+      const file = new File([blob], 'underbro-stats.png', { type: 'image/png' });
+      try {
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: 'Mis números en UnderBro', text: '🎧 @' + (state.profile.username || '') + ' en UnderBro' });
+          return;
+        }
+      } catch (_) { /* cancelado o no soportado → descarga */ }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = 'underbro-stats.png'; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+      toast('Imagen guardada');
+    }, 'image/png');
+  };
+
+  const img = new Image();
+  img.onload = () => render(img);
+  img.onerror = () => render(null);
+  img.src = '/assets/logo-mark.png';
 }
 
 function editLinksModal(onSaved) {
