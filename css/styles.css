@@ -1581,3 +1581,24 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
 .rep-meta { font-size: 12px; color: var(--ink-soft); margin-top: 8px; }
 .rep-meta b { color: var(--blue-deep); cursor: pointer; }
 .rep-actions { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 11px; }
+
+/* ===================== AUDITORÍA: pulido de modo oscuro ===================== */
+:root[data-theme="dark"] *::-webkit-scrollbar-thumb { background: #2a3350; }
+:root[data-theme="dark"] *::-webkit-scrollbar-thumb:hover { background: #36406a; }
+/* reproductor + now playing */
+:root[data-theme="dark"] .player { background: var(--glass); }
+:root[data-theme="dark"] .player .controls button:not(.play-big),
+:root[data-theme="dark"] .np-controls button:not(.np-play) { background: linear-gradient(180deg, #242b37, #1b212b); }
+:root[data-theme="dark"] .seek, :root[data-theme="dark"] .vol-slider { background: var(--line); }
+:root[data-theme="dark"] .wave .bar::before, :root[data-theme="dark"] .np-wave .bar::before { background: #2c3550; }
+:root[data-theme="dark"] .now-playing { background: linear-gradient(180deg, #0b0f1c 0%, var(--bg) 55%, var(--bg-2) 100%); }
+:root[data-theme="dark"] .np-bg::after { background: linear-gradient(180deg, rgba(8,11,22,.4), rgba(5,6,15,.88)); }
+:root[data-theme="dark"] .np-close { background: rgba(255,255,255,.12); }
+:root[data-theme="dark"] .np-close svg { stroke: #fff; }
+/* superficies que se quedaban claras */
+:root[data-theme="dark"] .danger-zone { background: rgba(214,90,71,.10); border-color: rgba(214,90,71,.4); }
+:root[data-theme="dark"] .convo-community { background: linear-gradient(180deg, #141a2a, #10131f); border-color: var(--line); }
+:root[data-theme="dark"] .collab-chips .chip { background: rgba(62,87,252,.16); border-color: rgba(62,87,252,.4); color: #9fb4ff; }
+:root[data-theme="dark"] .sk { background: linear-gradient(90deg, #161b27 25%, #1f2533 37%, #161b27 63%); background-size: 480px 100%; }
+:root[data-theme="dark"] .cover-pick:hover, :root[data-theme="dark"] .dropzone.drag, :root[data-theme="dark"] .create-choice:hover { background: rgba(62,87,252,.12); }
+:root[data-theme="dark"] .track:hover, :root[data-theme="dark"] .search-person:hover, :root[data-theme="dark"] .person:hover { border-color: #2c3550; }

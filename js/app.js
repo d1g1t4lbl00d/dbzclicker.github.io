@@ -1148,7 +1148,7 @@ function attachMentionAutocomplete(input) {
   if (!input || input.dataset.mentionAc) return;
   input.dataset.mentionAc = '1';
   let dd = null, reqId = 0;
-  const close = () => { if (dd) { dd.remove(); dd = null; } };
+  const close = () => { if (dd) { dd.remove(); dd = null; window.removeEventListener('resize', place); } };
   const place = () => {
     if (!dd) return;
     const r = input.getBoundingClientRect();
@@ -1181,9 +1181,9 @@ function attachMentionAutocomplete(input) {
       dd.appendChild(item);
     });
     document.body.appendChild(dd); place();
+    window.addEventListener('resize', place);
   });
   input.addEventListener('blur', () => setTimeout(close, 160));
-  window.addEventListener('resize', place);
 }
 
 function renderComments(box, t, comments) {
@@ -1411,7 +1411,7 @@ async function playTrack(t) {
   audio.src = t.audio_url;
   try { await audio.play(); } catch {}
   // contar reproducción
-  sb.rpc('increment_plays', { track: t.id }).then(() => { t.plays = (t.plays||0)+1; });
+  sb.rpc('increment_plays', { track: t.id }).then(() => { t.plays = (t.plays||0)+1; }).catch(() => {});
   // si no está en la cola actual, crear cola con la vista
   if (!state.queue.includes(t.id)) state.queue = [t.id];
 }
@@ -2978,7 +2978,7 @@ async function renderDashboard() {
   main.innerHTML = `<div class="main-head"><div><h2>Estudio</h2><div class="sub">Tu panel de artista</div></div></div><div id="dashBody"><div class="loading" style="padding:30px"><div class="spinner"></div></div></div>`;
   const uid = state.user.id;
   const [tracksRes, followersRes, postsRes, refRes] = await Promise.all([
-    sb.from('tracks').select('id,title,cover_url,plays,likes_count,reposts_count,created_at').eq('user_id', uid).order('plays', { ascending: false }),
+    sb.from('tracks').select('id,title,cover_url,plays,likes_count,reposts_count,created_at,genre').eq('user_id', uid).order('plays', { ascending: false }),
     sb.from('follows').select('follower_id,created_at').eq('following_id', uid),
     sb.from('posts').select('id', { count: 'exact', head: true }).eq('user_id', uid),
     sb.from('profiles').select('id', { count: 'exact', head: true }).eq('referred_by', uid),
@@ -3813,6 +3813,7 @@ function initDM() {
   sb.channel('dm-inbox-' + state.user.id)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'direct_messages', filter: `recipient_id=eq.${state.user.id}` }, async (payload) => {
       const msg = payload.new;
+      if (isHidden(msg.sender_id)) return; // ignora DMs de usuarios bloqueados
       if (state.dmPeer === msg.sender_id) {
         dmAppendMessage(msg, { scroll: true }); markDmRead(msg.sender_id); dmShowTyping(false);
       } else {
@@ -3892,7 +3893,7 @@ function mediaHTML(msg) {
       : `<div class="dm-track-cover"><svg fill="none" stroke="#fff"><use href="#i-music"/></svg></div>`;
     return `<div class="dm-track" data-track-id="${esc(meta.id || '')}">${cover}<div class="dm-track-info"><div class="dm-track-title">${esc(meta.title || 'Pista')}</div><div class="dm-track-artist">${esc(meta.artist || '')}</div></div><button class="dm-track-play" data-dmplay aria-label="Reproducir"><svg class="ci-play"><use href="#i-play"/></svg><svg class="ci-pause"><use href="#i-pause"/></svg></button></div>`;
   }
-  return `<a class="dm-filechip" href="${esc(msg.attachment_url)}" target="_blank" rel="noopener"><svg fill="none"><use href="#i-file"/></svg><span class="fn">${esc(msg.attachment_name || 'archivo')}</span></a>`;
+  return `<a class="dm-filechip" href="${esc(czHref(msg.attachment_url))}" target="_blank" rel="noopener"><svg fill="none"><use href="#i-file"/></svg><span class="fn">${esc(msg.attachment_name || 'archivo')}</span></a>`;
 }
 function bubbleHTML(msg) {
   const mine = msg.sender_id === state.user.id;
@@ -4394,7 +4395,7 @@ function dmHeaderMenu() {
   sheet.querySelector('[data-a="cancel"]').onclick = close;
   sheet.querySelector('[data-a="profile"]').onclick = () => { close(); closeDmScreen(); openProfile(other); };
   sheet.querySelector('[data-a="search"]').onclick = () => { close(); $('dmSearchBar').classList.remove('hidden'); $('dmSearchInput').focus(); };
-  sheet.querySelector('[data-a="block"]').onclick = () => { close(); if (blocked) unblockUser(other); else blockUser(other, peerName); };
+  sheet.querySelector('[data-a="block"]').onclick = () => { close(); if (blocked) unblockUser(other); else blockUser(other, peerName, closeDmScreen); };
   sheet.querySelector('[data-a="report"]').onclick = () => { close(); openReportModal('user', other, other, '@' + (state.dmPeerProfile?.username || '')); };
   $('modalRoot').appendChild(sheet);
 }
