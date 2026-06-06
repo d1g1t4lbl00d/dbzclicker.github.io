@@ -3071,6 +3071,12 @@ async function renderDashboard() {
       </div>
     </div>` : ''}
 
+    <div class="dash-section" id="collabSection">
+      <h3>Colaboraciones sugeridas</h3>
+      <p class="dash-hint" style="margin:4px 0 10px">Artistas de tu mismo estilo para hacer un <b>feat</b>. Propón la colaboración por mensaje.</p>
+      <div id="collabBody"><div class="loading" style="padding:14px"><div class="spinner"></div></div></div>
+    </div>
+
     <div class="dash-section">
       <h3>Insignias</h3>
       <p class="dash-hint" style="margin:6px 0 12px">La que elijas se mostrará junto a tu nombre. Activa abajo si quieres exhibir tu colección en el perfil.</p>
@@ -3134,6 +3140,7 @@ async function renderDashboard() {
     else switchView('settings');
   });
   body.querySelectorAll('.dash-faces .face').forEach(f => f.onclick = () => openProfile(f.dataset.uid));
+  loadCollabSuggestions(tracks);
   body.querySelectorAll('.dt-row').forEach(r => r.onclick = () => { const t = tracks.find(x => x.id === r.dataset.tid); if (t) openProfile(uid); });
   body.querySelectorAll('.badge-item:not(.locked)').forEach(bi => bi.onclick = async () => {
     const key = bi.dataset.badge;
@@ -3212,6 +3219,47 @@ function shareStatsCard(s) {
   img.onload = () => render(img);
   img.onerror = () => render(null);
   img.src = '/assets/logo-mark.png';
+}
+
+// sugiere artistas de tu mismo estilo para colaborar
+async function loadCollabSuggestions(myTracks) {
+  const sec = $('collabBody'); if (!sec) return;
+  const genres = new Set((myTracks || []).map(t => (t.genre || '').trim().toLowerCase()).filter(Boolean));
+  if (!genres.size) {
+    sec.innerHTML = `<div class="empty" style="padding:10px"><p>Añade un <b>género</b> a tus pistas (Editar pista) y te sugeriremos colaboradores de tu estilo.</p></div>`;
+    return;
+  }
+  const { data } = await sb.from('tracks')
+    .select('user_id, genre, profiles!tracks_user_id_fkey(id,username,display_name,avatar_url,theme,verified,is_admin)')
+    .neq('user_id', state.user.id).not('genre', 'is', null)
+    .order('created_at', { ascending: false }).limit(500);
+  const byUser = new Map();
+  (data || []).forEach(t => {
+    const g = (t.genre || '').trim().toLowerCase();
+    if (!genres.has(g) || !t.profiles || isHidden(t.user_id)) return;
+    let e = byUser.get(t.user_id);
+    if (!e) { e = { prof: t.profiles, genres: new Set(), count: 0 }; byUser.set(t.user_id, e); }
+    e.genres.add(t.genre.trim()); e.count++;
+  });
+  const list = [...byUser.values()].sort((a, b) => b.count - a.count).slice(0, 8);
+  if (!list.length) {
+    sec.innerHTML = `<div class="empty" style="padding:10px"><p>Aún no encontramos artistas de tu estilo. ¡Vuelve cuando haya más gente con tus géneros!</p></div>`;
+    return;
+  }
+  sec.innerHTML = list.map(e => {
+    const p = e.prof; const gtags = [...e.genres].slice(0, 3).map(g => `<span class="cl-tag">${esc(g)}</span>`).join('');
+    return `<div class="collab-card">
+      <button class="cl-who" data-uid="${p.id}">${avatarHTML(p)}<div class="cl-info"><div class="cl-name">${esc(p.display_name || p.username)}${verifiedBadge(p)}</div><div class="cl-genres">${gtags}</div></div></button>
+      <button class="btn sm primary cl-go" data-uid="${p.id}" data-name="${esc(p.display_name || p.username || '')}"><svg fill="none" stroke="#fff"><use href="#i-mail"/></svg> Proponer feat</button>
+    </div>`;
+  }).join('');
+  sec.querySelectorAll('.cl-who').forEach(b => b.onclick = () => openProfile(b.dataset.uid));
+  sec.querySelectorAll('.cl-go').forEach(b => b.onclick = () => proposeCollab(b.dataset.uid));
+}
+function proposeCollab(userId) {
+  if (state.blocked.has(userId) || state.hidden.has(userId)) { toast('No puedes escribir a este usuario'); return; }
+  openDM(userId);
+  setTimeout(() => { const i = $('dmInput'); if (i && !i.value) { i.value = '¡Hey! Me mola tu rollo 🔥 ¿te animas a hacer un feat juntos?'; i.focus(); } }, 420);
 }
 
 function editLinksModal(onSaved) {

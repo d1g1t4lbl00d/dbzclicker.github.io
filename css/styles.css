@@ -1188,6 +1188,17 @@ img { display: block; }
 .lv-ico { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 800; flex-shrink: 0; background: var(--panel-2); color: var(--ink-soft); }
 .lv-item.done .lv-ico { background: var(--ok); color: #fff; }
 
+/* ---- Estudio: colaboraciones ---- */
+.collab-card { display: flex; align-items: center; gap: 10px; padding: 8px 4px; }
+.collab-card + .collab-card { border-top: 1px solid var(--line-soft); }
+.cl-who { flex: 1; min-width: 0; display: flex; align-items: center; gap: 11px; border: none; background: none; cursor: pointer; text-align: left; padding: 0; }
+.cl-who .avatar { width: 44px; height: 44px; flex-shrink: 0; }
+.cl-info { min-width: 0; }
+.cl-name { font-weight: 750; font-size: 14px; color: var(--ink); display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cl-genres { display: flex; gap: 5px; margin-top: 3px; flex-wrap: wrap; }
+.cl-tag { font-size: 10.5px; font-weight: 650; color: var(--blue-deep); background: rgba(62,87,252,.12); border: 1px solid rgba(62,87,252,.25); padding: 1px 7px; border-radius: 20px; }
+.cl-go { flex-shrink: 0; }
+
 /* ---- Estudio: últimos seguidores ---- */
 .dash-faces { display: flex; flex-wrap: wrap; gap: 8px; }
 .dash-faces .face { border: none; background: none; padding: 0; cursor: pointer; transition: transform .12s var(--ease-spring); }
