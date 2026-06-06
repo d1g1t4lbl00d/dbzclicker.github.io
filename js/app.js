@@ -3479,8 +3479,41 @@ async function renderPressKit() {
   $('pkSave').onclick = pkSave;
   $('pkShare').onclick = () => { const u = pkPublicUrl(); navigator.clipboard?.writeText(u).then(() => toast('Enlace copiado: ' + u)).catch(() => toast(u)); };
   $('pkView').onclick = () => window.open(pkPublicUrl(), '_blank');
-  $('pkPdf').onclick = () => { document.body.classList.add('pk-printing'); setTimeout(() => { window.print(); document.body.classList.remove('pk-printing'); }, 60); };
+  $('pkPdf').onclick = pkDownloadPdf;
   pkRenderPreview();
+}
+
+// imprime/descarga SOLO el press kit (iframe aislado, sin el resto de la app)
+function pkDownloadPdf() {
+  const cssHref = (document.querySelector('link[rel="stylesheet"]') || {}).href || '/css/styles.css';
+  const html = pressKitHTML(pkState);
+  const name = (pkState && pkState.name) ? pkState.name : 'press-kit';
+  const ifr = document.createElement('iframe');
+  ifr.setAttribute('aria-hidden', 'true');
+  ifr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;';
+  document.body.appendChild(ifr);
+  const d = ifr.contentWindow.document;
+  d.open();
+  d.write(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+    <title>${esc(name)} — Press Kit</title>
+    <link rel="stylesheet" href="${esc(cssHref)}">
+    <style>
+      html,body{margin:0;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+      .pk{max-width:100%;border-radius:0;}
+      .pk-tk-play{display:none !important;}
+      @page{margin:12mm;}
+    </style></head><body>${html}</body></html>`);
+  d.close();
+  let done = false;
+  const go = () => {
+    if (done) return; done = true;
+    try { ifr.contentWindow.focus(); ifr.contentWindow.print(); } catch (_) {}
+    setTimeout(() => ifr.remove(), 1500);
+  };
+  // espera a que cargue la hoja de estilos enlazada antes de imprimir
+  ifr.onload = () => setTimeout(go, 350);
+  setTimeout(go, 1200); // respaldo por si onload no dispara (document.write)
+  toast('Preparando PDF… elige "Guardar como PDF"');
 }
 
 function pkPublicUrl() { return location.origin + '/?kit=' + encodeURIComponent(state.profile.username || ''); }
