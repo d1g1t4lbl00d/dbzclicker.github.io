@@ -3040,6 +3040,13 @@ async function renderDashboard() {
     </div>
 
     <div class="dash-section">
+      <h3>Difundir a tus seguidores</h3>
+      <p class="dash-hint" style="margin:4px 0 10px">Avisa a tus <b>${nfmt(followers)}</b> seguidores de un lanzamiento o novedad. Reciben <b>notificación</b> y aparece en sus avisos. (Máx. 1 cada 3 h.)</p>
+      <textarea id="annBody" maxlength="280" placeholder="Ej: ¡Nuevo tema fuera ya! 🔥 Escúchalo y dime qué te parece."></textarea>
+      <button class="btn primary" id="annSend" style="width:100%;margin-top:8px"${followers ? '' : ' disabled'}><svg fill="none" stroke="#fff"><use href="#i-bell"/></svg> ${followers ? 'Enviar difusión' : 'Aún no tienes seguidores'}</button>
+    </div>
+
+    <div class="dash-section">
       <h3>Seguidores nuevos (últimos 14 días) · +${newLast14}</h3>
       <div class="dash-chart">
         ${buckets.map((b, i) => `<div class="dc-col" title="${labels[i].toLocaleDateString('es-ES',{day:'numeric',month:'short'})}: ${b}"><div class="dc-bar" style="height:${Math.round((b / maxB) * 100)}%"></div><span class="dc-x">${labels[i].getDate()}</span></div>`).join('')}
@@ -3141,6 +3148,21 @@ async function renderDashboard() {
   });
   body.querySelectorAll('.dash-faces .face').forEach(f => f.onclick = () => openProfile(f.dataset.uid));
   loadCollabSuggestions(tracks);
+  const annSend = body.querySelector('#annSend');
+  if (annSend && followers) annSend.onclick = async () => {
+    const ta = body.querySelector('#annBody'); const txt = ta.value.trim();
+    if (!txt) { toast('Escribe un mensaje'); return; }
+    annSend.disabled = true;
+    const { error } = await sb.from('announcements').insert({ artist_id: uid, body: txt });
+    if (error) {
+      if (((error.message || '') + (error.details || '')).includes('rate_limited')) toast('Solo puedes difundir una vez cada 3 horas');
+      else toast('No se pudo enviar la difusión');
+      annSend.disabled = false; return;
+    }
+    ta.value = '';
+    annSend.innerHTML = 'Difusión enviada ✓';
+    toast('📣 Difusión enviada a tus seguidores');
+  };
   body.querySelectorAll('.dt-row').forEach(r => r.onclick = () => { const t = tracks.find(x => x.id === r.dataset.tid); if (t) openProfile(uid); });
   body.querySelectorAll('.badge-item:not(.locked)').forEach(bi => bi.onclick = async () => {
     const key = bi.dataset.badge;
@@ -3644,6 +3666,9 @@ async function fetchNotifications() {
   // nuevos seguidores
   const { data: fol } = await sb.from('follows').select('created_at, profiles!follows_follower_id_fkey(*)').eq('following_id', state.user.id).order('created_at',{ascending:false}).limit(20);
   (fol||[]).forEach(f => out.push({ ts: f.created_at, type:'follow', who: f.profiles, text: 'empezó a seguirte' }));
+  // difusiones de artistas que sigues
+  const { data: anns } = await sb.from('announcements').select('created_at, body, artist_id, profiles!announcements_artist_id_fkey(*)').neq('artist_id', state.user.id).order('created_at',{ascending:false}).limit(20);
+  (anns||[]).forEach(a => { if (!isHidden(a.artist_id)) out.push({ ts: a.created_at, type:'announcement', who: a.profiles, text: '📣 ' + (a.body || '') }); });
   if (ids.length) {
     const { data: lk } = await sb.from('likes').select('created_at, track_id, profiles(*)').in('track_id', ids).neq('user_id', state.user.id).order('created_at',{ascending:false}).limit(20);
     (lk||[]).forEach(l => out.push({ ts: l.created_at, type:'like', who: l.profiles, text: `marcó ♥ tu pista "${titleById[l.track_id]||''}"` }));
