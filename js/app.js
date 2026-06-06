@@ -3440,14 +3440,15 @@ async function renderPressKit() {
           </div>
         </div>
         <div class="pk-actions">
-          <button class="btn primary" id="pkPdf"><svg fill="none" stroke="#fff"><use href="#i-download"/></svg> Descargar PDF</button>
-          <button class="btn" id="pkSave"><svg fill="none" stroke="currentColor"><use href="#i-verify"/></svg> Guardar</button>
+          <button class="btn primary" id="pkSave"><svg fill="none" stroke="#fff"><use href="#i-globe"/></svg> Guardar y publicar</button>
+          <button class="btn" id="pkPdf"><svg fill="none" stroke="currentColor"><use href="#i-download"/></svg> Descargar PDF</button>
         </div>
         <div class="pk-publish">
-          <label class="pk-tg"><input type="checkbox" id="pkPubChk" ${pkState.published ? 'checked' : ''}/> <span>Crear enlace público para compartir <span class="pk-hint2">(opcional · salas y sellos)</span></span></label>
+          <p class="pk-hint2" id="pkPubNote">${pkState.published ? '🌐 Tu press kit está público. Comparte el enlace con salas y sellos.' : 'Pulsa “Guardar y publicar” para obtener una web compartible, o usa “Descargar PDF” sin publicar nada.'}</p>
           <div class="pk-pub-row ${pkState.published ? '' : 'hidden'}" id="pkPubRow">
             <button class="btn sm" id="pkShare"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg> Copiar enlace</button>
             <button class="btn sm" id="pkView"><svg fill="none" stroke="currentColor"><use href="#i-globe"/></svg> Ver público</button>
+            <button class="btn sm" id="pkPriv">Hacer privado</button>
           </div>
         </div>
       </div>
@@ -3483,12 +3484,14 @@ async function renderPressKit() {
   main.querySelectorAll('input[data-sec]').forEach(cb => cb.onchange = () => {
     pkState.sections[cb.dataset.sec] = cb.checked; pkRenderPreview();
   });
-  $('pkSave').onclick = () => pkSave();
-  $('pkPubChk').onchange = async () => {
-    pkState.published = $('pkPubChk').checked;
+  const pkSyncPub = () => {
     $('pkPubRow').classList.toggle('hidden', !pkState.published);
-    await pkSave(true);
+    $('pkPubNote').innerHTML = pkState.published
+      ? '🌐 Tu press kit está público. Comparte el enlace con salas y sellos.'
+      : 'Pulsa “Guardar y publicar” para obtener una web compartible, o usa “Descargar PDF” sin publicar nada.';
   };
+  $('pkSave').onclick = async () => { pkState.published = true; await pkSave(); pkSyncPub(); };
+  $('pkPriv').onclick = async () => { pkState.published = false; await pkSave(true); pkSyncPub(); };
   $('pkShare').onclick = () => { const u = pkPublicUrl(); navigator.clipboard?.writeText(u).then(() => toast('Enlace copiado: ' + u)).catch(() => toast(u)); };
   $('pkView').onclick = () => window.open(pkPublicUrl(), '_blank');
   $('pkPdf').onclick = pkDownloadPdf;
@@ -3546,9 +3549,9 @@ async function pkSave(fromToggle) {
   }, { onConflict: 'user_id' });
   btn.disabled = false;
   if (error) { toast('No se pudo guardar'); return; }
-  toast(fromToggle ? (pub ? '🔗 Enlace público activado' : 'Enlace público desactivado · ahora es privado')
-                   : '📄 Press kit guardado (privado)');
-  if (!fromToggle) { btn.innerHTML = '✓ Guardado'; setTimeout(() => { btn.innerHTML = '<svg fill="none" stroke="currentColor"><use href="#i-verify"/></svg> Guardar'; }, 2200); }
+  toast(fromToggle ? 'Ahora es privado · solo tú lo ves'
+                   : '🌐 Press kit guardado y publicado');
+  if (!fromToggle) { btn.innerHTML = '✓ Publicado'; setTimeout(() => { btn.innerHTML = '<svg fill="none" stroke="#fff"><use href="#i-globe"/></svg> Guardar y publicar'; }, 2200); }
 }
 
 /* ---- render del press kit (preview + público) ---- */
