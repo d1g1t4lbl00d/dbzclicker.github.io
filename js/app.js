@@ -2795,11 +2795,11 @@ async function loadStoriesBar() {
   if (myGroup) {
     addBtn.classList.add('has-story');
     addBtn.querySelector('.add-ring').classList.toggle('seen', myGroup.allSeen);
-    addBtn.onclick = (e) => { if (e.target.closest('.story-add-badge')) { openAddStory(); return; } openStoryViewer(myGroup); };
+    addBtn.onclick = (e) => { if (e.target.closest('.story-add-badge')) { openAddStory(); return; } openStoryViewer(arr, arr.indexOf(myGroup)); };
   }
   arr.filter(g => g.userId !== state.user.id).forEach(g => {
     const c = el(`<div class="story-circle"><span class="story-ring ${g.allSeen ? 'seen' : ''}"><span class="story-av">${avatarHTML(g.user, '')}</span></span><span class="story-name">${esc(g.user.display_name || g.user.username)}</span></div>`);
-    c.onclick = () => openStoryViewer(g);
+    c.onclick = () => openStoryViewer(arr, arr.indexOf(g));
     bar.appendChild(c);
   });
 }
@@ -2808,7 +2808,7 @@ function pickTrackModal(cb) {
   const m = openModal(`<div class="modal-head"><h3>Elegir canción</h3><button class="close">&times;</button></div><div class="modal-body"><input type="text" id="stSearch" placeholder="Buscar pista…" style="width:100%;padding:10px 12px;border:1px solid var(--line-soft);border-radius:10px;margin-bottom:10px;background:var(--glass);color:var(--ink)" /><div id="stResults"><div class="loading" style="padding:16px"><div class="spinner"></div></div></div></div>`);
   const results = m.querySelector('#stResults');
   const run = async (q) => {
-    let query = sb.from('tracks').select('id,title,cover_url,artist,profiles!tracks_user_id_fkey(display_name,username)');
+    let query = sb.from('tracks').select('id,title,cover_url,artist,audio_url,profiles!tracks_user_id_fkey(display_name,username)');
     query = q ? query.ilike('title', `%${q}%`).limit(30) : query.order('plays', { ascending: false }).limit(30);
     const { data } = await query;
     const list = data || [];
@@ -2826,7 +2826,7 @@ function pickTrackModal(cb) {
 }
 
 function openAddStory() {
-  let imgFile = null, pickedTrack = null;
+  let imgFile = null, pickedTrack = null, pickedStart = 0;
   const m = openModal(`
     <div class="modal-head"><h3>Nueva historia</h3><button class="close">&times;</button></div>
     <div class="modal-body">
@@ -2857,9 +2857,10 @@ function openAddStory() {
     publish.disabled = false;
   };
   m.querySelector('#stTrackBtn').onclick = () => pickTrackModal((t) => {
-    pickedTrack = t;
-    chip.innerHTML = `<div class="st-track-chip"><div class="st-tc-cover" style="${t.cover_url ? `background-image:url('${czUrl(t.cover_url)}')` : ''}"></div><div class="st-tc-info"><b>${esc(t.title)}</b><span>${esc(t.profiles?.display_name || t.profiles?.username || t.artist || '')}</span></div><button class="st-tc-x" type="button" aria-label="Quitar">&times;</button></div>`;
-    chip.querySelector('.st-tc-x').onclick = () => { pickedTrack = null; chip.innerHTML = ''; };
+    pickedTrack = t; pickedStart = 0;
+    chip.innerHTML = `<div class="st-track-chip"><div class="st-tc-cover" style="${t.cover_url ? `background-image:url('${czUrl(t.cover_url)}')` : ''}"></div><div class="st-tc-info"><b>${esc(t.title)}</b><span>${esc(t.profiles?.display_name || t.profiles?.username || t.artist || '')}</span></div><button class="st-tc-x" type="button" aria-label="Quitar">&times;</button></div><div class="st-seg" id="stSeg"></div>`;
+    chip.querySelector('.st-tc-x').onclick = () => { pickedTrack = null; pickedStart = 0; chip.innerHTML = ''; };
+    buildStorySegmentPicker(chip.querySelector('#stSeg'), t, (s) => { pickedStart = s; });
   });
   function addLinkRow() {
     if (linksWrap.children.length >= 4) { toast('Máximo 4 enlaces'); return; }
@@ -2880,7 +2881,7 @@ function openAddStory() {
       const links = [...linksWrap.querySelectorAll('.st-link-row')]
         .map(r => ({ url: czHref(r.querySelector('.st-link-url').value.trim()), label: r.querySelector('.st-link-label').value.trim() || 'Ver enlace' }))
         .filter(l => l.url);
-      const { error } = await sb.from('stories').insert({ user_id: state.user.id, image_url, track_id: pickedTrack?.id || null, links });
+      const { error } = await sb.from('stories').insert({ user_id: state.user.id, image_url, track_id: pickedTrack?.id || null, song_start: pickedTrack ? Math.round(pickedStart) : 0, links });
       if (error) throw error;
       m.remove(); toast('📸 Historia publicada'); loadStoriesBar();
     } catch (e) {
@@ -2890,17 +2891,100 @@ function openAddStory() {
   };
 }
 
-function openStoryViewer(group, startIdx = 0) {
-  if (!group || !group.items.length) return;
+// selector de fragmento con forma de onda para la canción de la historia
+const STORY_WIN = 7; // segundos que dura la historia
+async function buildStorySegmentPicker(box, track, onChange) {
+  if (!box) return;
+  if (!track.audio_url) { box.innerHTML = ''; return; }
+  box.innerHTML = `<div class="seg-load"><div class="spinner"></div> Cargando onda…</div>`;
+  let dur = 0, peaks = [];
+  try {
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new Ctx();
+    const resp = await fetch(track.audio_url);
+    const arr = await resp.arrayBuffer();
+    const audioBuf = await ctx.decodeAudioData(arr);
+    dur = audioBuf.duration;
+    const ch = audioBuf.getChannelData(0);
+    const N = 90, block = Math.max(1, Math.floor(ch.length / N));
+    let mx = 0.0001;
+    for (let i = 0; i < N; i++) {
+      let m = 0; const s = i * block;
+      for (let j = 0; j < block; j += 8) { const v = Math.abs(ch[s + j] || 0); if (v > m) m = v; }
+      peaks.push(m); if (m > mx) mx = m;
+    }
+    peaks = peaks.map(p => Math.max(0.08, p / mx));
+    try { ctx.close(); } catch (_) {}
+  } catch (e) {
+    // sin onda: deslizador simple
+    box.innerHTML = `<label class="pk-l" style="margin-top:2px">Inicio de la canción</label><input type="range" id="segRange" min="0" max="100" value="0" style="width:100%"><div class="seg-time"><span id="segT">0:00</span></div>`;
+    const r = box.querySelector('#segRange'); const tl = box.querySelector('#segT');
+    // duración desconocida: estima con un audio element
+    const a = new Audio(track.audio_url); a.onloadedmetadata = () => { dur = a.duration || 0; };
+    r.oninput = () => { const st = (dur || 0) * (r.value / 100); tl.textContent = fmtDur(st); onChange(st); };
+    return;
+  }
+  const win = Math.min(STORY_WIN, dur);
+  const winPct = dur ? Math.min(100, (win / dur) * 100) : 100;
+  let start = 0;
+  box.innerHTML = `
+    <div class="seg-head"><span>Elige el trozo que suena (${STORY_WIN}s)</span><button type="button" class="seg-play" id="segPlay"><svg class="ci-play"><use href="#i-play"/></svg><svg class="ci-pause"><use href="#i-pause"/></svg> Probar</button></div>
+    <div class="seg-wave" id="segWave">
+      ${peaks.map(p => `<span style="height:${Math.round(p * 100)}%"></span>`).join('')}
+      <div class="seg-window" id="segWin" style="width:${winPct}%;left:0"></div>
+    </div>
+    <div class="seg-time"><span id="segT">0:00</span> – <span id="segE">${fmtDur(win)}</span></div>`;
+  const wave = box.querySelector('#segWave');
+  const winEl = box.querySelector('#segWin');
+  const tStart = box.querySelector('#segT'), tEnd = box.querySelector('#segE');
+  const apply = () => {
+    const leftPct = dur ? (start / dur) * 100 : 0;
+    winEl.style.left = leftPct + '%';
+    tStart.textContent = fmtDur(start); tEnd.textContent = fmtDur(Math.min(dur, start + win));
+    onChange(start);
+  };
+  const setFromClientX = (clientX) => {
+    const r = wave.getBoundingClientRect();
+    let frac = (clientX - r.left) / r.width;       // centro de la ventana donde tocas
+    let st = frac * dur - win / 2;
+    start = Math.max(0, Math.min(dur - win, st));
+    apply();
+  };
+  let dragging = false;
+  wave.addEventListener('pointerdown', (e) => { dragging = true; setFromClientX(e.clientX); });
+  wave.addEventListener('pointermove', (e) => { if (dragging) setFromClientX(e.clientX); });
+  const endDrag = () => dragging = false;
+  wave.addEventListener('pointerup', endDrag);
+  wave.addEventListener('pointercancel', endDrag);
+  wave.addEventListener('pointerleave', endDrag);
+  // probar el fragmento
+  let prev = null, prevTimer = null;
+  const playBtn = box.querySelector('#segPlay');
+  playBtn.onclick = () => {
+    if (prev) { prev.pause(); prev = null; clearTimeout(prevTimer); playBtn.classList.remove('playing'); return; }
+    prev = new Audio(track.audio_url);
+    prev.currentTime = start;
+    prev.play().then(() => {
+      playBtn.classList.add('playing');
+      prevTimer = setTimeout(() => { if (prev) { prev.pause(); prev = null; } playBtn.classList.remove('playing'); }, win * 1000);
+    }).catch(() => {});
+  };
+  apply();
+}
+
+function openStoryViewer(groups, gIdx = 0, startIdx = 0) {
+  // compatibilidad: si llega un solo grupo, envolverlo
+  if (groups && !Array.isArray(groups)) { groups = [groups]; gIdx = 0; }
+  if (!groups || !groups.length) return;
   try { if (audio && !audio.paused) audio.pause(); } catch (_) {}
   const STORY_MS = 7000;
-  let idx = startIdx, timer = null;
+  let gi = gIdx, idx = startIdx, timer = null;
   const overlay = el(`
     <div class="story-viewer">
       <div class="sv-bars"></div>
       <div class="sv-head">
-        <span class="sv-av">${avatarHTML(group.user, '')}</span>
-        <div class="sv-who"><b>${esc(group.user.display_name || group.user.username)}</b><span class="sv-time"></span></div>
+        <span class="sv-av"></span>
+        <div class="sv-who"><b class="sv-name"></b><span class="sv-time"></span></div>
         <button class="sv-x" type="button" aria-label="Cerrar">&times;</button>
       </div>
       <div class="sv-stage"><img class="sv-img" alt="" /></div>
@@ -2912,18 +2996,41 @@ function openStoryViewer(group, startIdx = 0) {
   document.body.appendChild(overlay);
   document.body.style.overflow = 'hidden';
   const barsEl = overlay.querySelector('.sv-bars');
-  barsEl.innerHTML = group.items.map(() => `<div class="sv-bar"><i></i></div>`).join('');
-  const bars = [...barsEl.querySelectorAll('.sv-bar i')];
-  const isOwner = group.userId === state.user.id;
+  let bars = [];
 
   const stopAudio = () => { if (storyAudio) { try { storyAudio.pause(); } catch (_) {} storyAudio = null; } };
   const close = () => { clearTimeout(timer); stopAudio(); overlay.remove(); document.body.style.overflow = ''; loadStoriesBar(); };
-  const nextItem = () => { if (idx < group.items.length - 1) show(idx + 1); else close(); };
-  const prevItem = () => { show(idx > 0 ? idx - 1 : 0); };
+  const nextItem = () => {
+    const g = groups[gi];
+    if (idx < g.items.length - 1) show(gi, idx + 1);
+    else if (gi < groups.length - 1) show(gi + 1, 0);
+    else close();
+  };
+  const prevItem = () => {
+    if (idx > 0) show(gi, idx - 1);
+    else if (gi > 0) show(gi - 1, groups[gi - 1].items.length - 1);
+    else show(gi, 0);
+  };
 
-  function show(i) {
-    clearTimeout(timer); stopAudio(); idx = i;
-    const s = group.items[idx];
+  function rebuildHeader(g) {
+    overlay.querySelector('.sv-av').innerHTML = avatarHTML(g.user, '');
+    overlay.querySelector('.sv-name').textContent = g.user.display_name || g.user.username || 'usuario';
+    barsEl.innerHTML = g.items.map(() => `<div class="sv-bar"><i></i></div>`).join('');
+    bars = [...barsEl.querySelectorAll('.sv-bar i')];
+    // botón borrar solo en tus historias
+    const oldDel = overlay.querySelector('.sv-del'); if (oldDel) oldDel.remove();
+    if (g.userId === state.user.id) {
+      const del = el(`<button class="sv-del" type="button" aria-label="Eliminar"><svg fill="none" stroke="#fff"><use href="#i-trash"/></svg></button>`);
+      del.onclick = async () => { const s = groups[gi].items[idx]; if (!confirm('¿Eliminar esta historia?')) return; await sb.from('stories').delete().eq('id', s.id); toast('Historia eliminada'); close(); };
+      overlay.querySelector('.sv-head').insertBefore(del, overlay.querySelector('.sv-x'));
+    }
+  }
+
+  function show(g, i) {
+    clearTimeout(timer); stopAudio();
+    if (g !== gi) { gi = g; rebuildHeader(groups[gi]); }
+    idx = i;
+    const grp = groups[gi]; const s = grp.items[idx];
     overlay.querySelector('.sv-img').src = s.image_url;
     const ageH = Math.floor((Date.now() - new Date(s.created_at)) / 3600000);
     overlay.querySelector('.sv-time').textContent = ageH <= 0 ? 'hace un momento' : `hace ${ageH} h`;
@@ -2931,7 +3038,13 @@ function openStoryViewer(group, startIdx = 0) {
     const mus = overlay.querySelector('.sv-music');
     if (s.tracks) {
       mus.innerHTML = `<svg fill="none" stroke="#fff"><use href="#i-music"/></svg> <span>${esc(s.tracks.title)} · ${esc(s.tracks.profiles?.display_name || s.tracks.profiles?.username || s.tracks.artist || '')}</span>`;
-      try { storyAudio = new Audio(s.tracks.audio_url); storyAudio.play().catch(() => {}); } catch (_) {}
+      try {
+        storyAudio = new Audio(s.tracks.audio_url);
+        const st = +s.song_start || 0;
+        const seekAndPlay = () => { try { if (st > 0) storyAudio.currentTime = st; } catch (_) {} storyAudio.play().catch(() => {}); };
+        if (st > 0) storyAudio.addEventListener('loadedmetadata', () => { try { storyAudio.currentTime = st; } catch (_) {} }, { once: true });
+        seekAndPlay();
+      } catch (_) {}
     } else mus.innerHTML = '';
     const links = Array.isArray(s.links) ? s.links : [];
     overlay.querySelector('.sv-links').innerHTML = links.map(l => `<a class="sv-link" href="${esc(czHref(l.url))}" target="_blank" rel="noopener noreferrer">${esc(l.label || 'Ver enlace')}</a>`).join('');
@@ -2943,12 +3056,8 @@ function openStoryViewer(group, startIdx = 0) {
   overlay.querySelector('.sv-x').onclick = close;
   overlay.querySelector('.sv-tap.right').onclick = nextItem;
   overlay.querySelector('.sv-tap.left').onclick = prevItem;
-  if (isOwner) {
-    const del = el(`<button class="sv-del" type="button" aria-label="Eliminar"><svg fill="none" stroke="#fff"><use href="#i-trash"/></svg></button>`);
-    del.onclick = async () => { const s = group.items[idx]; if (!confirm('¿Eliminar esta historia?')) return; await sb.from('stories').delete().eq('id', s.id); toast('Historia eliminada'); close(); };
-    overlay.querySelector('.sv-head').insertBefore(del, overlay.querySelector('.sv-x'));
-  }
-  show(startIdx);
+  rebuildHeader(groups[gi]);
+  show(gi, startIdx);
 }
 async function markStoryViewed(id) {
   if (state._storySeen && state._storySeen.has(id)) return;
