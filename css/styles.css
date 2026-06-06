@@ -1002,7 +1002,7 @@ img { display: block; }
 .story-viewer .sv-bars { display: flex; gap: 4px; width: 100%; max-width: 520px; padding: 10px 12px 0; }
 .sv-bar { flex: 1; height: 3px; border-radius: 3px; background: rgba(255,255,255,.3); overflow: hidden; }
 .sv-bar i { display: block; height: 100%; width: 0; background: #fff; }
-.sv-head { display: flex; align-items: center; gap: 10px; width: 100%; max-width: 520px; padding: 12px; color: #fff; z-index: 3; }
+.sv-head { display: flex; align-items: center; gap: 10px; width: 100%; max-width: 520px; padding: 12px; color: #fff; z-index: 6; }
 .sv-head .avatar { width: 34px !important; height: 34px !important; font-size: 14px !important; }
 .sv-av { flex: 0 0 auto; }
 .sv-who { flex: 1; min-width: 0; line-height: 1.2; }
@@ -1013,13 +1013,13 @@ img { display: block; }
 .sv-del svg { width: 20px; height: 20px; }
 .sv-stage { flex: 1; width: 100%; max-width: 520px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .sv-img { max-width: 100%; max-height: 100%; object-fit: contain; border-radius: 10px; }
-.sv-music { position: absolute; bottom: 86px; left: 50%; transform: translateX(-50%); max-width: 84%; display: flex; align-items: center; gap: 7px; background: rgba(0,0,0,.5); color: #fff; padding: 7px 14px; border-radius: 20px; font-size: 12.5px; backdrop-filter: blur(6px); z-index: 3; }
+.sv-music { position: absolute; bottom: 86px; left: 50%; transform: translateX(-50%); max-width: 84%; display: flex; align-items: center; gap: 7px; background: rgba(0,0,0,.5); color: #fff; padding: 7px 14px; border-radius: 20px; font-size: 12.5px; backdrop-filter: blur(6px); z-index: 5; pointer-events: none; }
 .sv-music:empty { display: none; }
 .sv-music svg { width: 15px; height: 15px; flex-shrink: 0; }
 .sv-music span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sv-links { position: absolute; bottom: 26px; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 0 16px; z-index: 3; }
-.sv-link { background: #fff; color: #16181c; font-weight: 700; padding: 11px 20px; border-radius: 24px; text-decoration: none; max-width: 420px; width: 100%; text-align: center; box-shadow: 0 4px 18px rgba(0,0,0,.35); }
-.sv-tap { position: absolute; top: 64px; bottom: 0; background: none; border: none; cursor: pointer; z-index: 2; }
+.sv-links { position: absolute; bottom: 26px; left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 0 16px; z-index: 5; pointer-events: none; }
+.sv-link { background: #fff; color: #16181c; font-weight: 700; padding: 11px 20px; border-radius: 24px; text-decoration: none; max-width: 420px; width: 100%; text-align: center; box-shadow: 0 4px 18px rgba(0,0,0,.35); pointer-events: auto; }
+.sv-tap { position: absolute; top: 64px; bottom: 0; background: none; border: none; cursor: pointer; z-index: 4; }
 .sv-tap.left { left: 0; width: 32%; }
 .sv-tap.right { right: 0; width: 68%; }
 
