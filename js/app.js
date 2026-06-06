@@ -3351,7 +3351,7 @@ let pkAudio = null;
 
 async function pkLoadOrDefault() {
   const uid = state.user.id;
-  const { data: saved } = await sb.from('press_kits').select('data').eq('user_id', uid).maybeSingle();
+  const { data: saved } = await sb.from('press_kits').select('data,published').eq('user_id', uid).maybeSingle();
   const p = state.profile;
   const theme = (p.theme && typeof p.theme === 'object') ? p.theme : {};
   const profLinks = (Array.isArray(theme.links) ? theme.links : []).map(l => ({ label: l.label || '', url: l.url || '' }));
@@ -3369,6 +3369,7 @@ async function pkLoadOrDefault() {
     d.links = profLinks;                     // enlaces siempre desde el perfil
     d.stats = { followers: foll.count || 0, plays: totalPlays, tracks: tr.length };
     if (!d.sections) d.sections = { stats: true, bio: true, highlights: true, tracks: true, contact: true, links: true };
+    d.published = !!saved.published;
     return d;
   }
   const genres = [...new Set(tr.map(t => (t.genre || '').trim()).filter(Boolean))].slice(0, 4).join(', ');
@@ -3384,6 +3385,7 @@ async function pkLoadOrDefault() {
     allTracks,
     accent: czColor(theme.accent) || '#3e57fc', template: 'dark',
     sections: { stats: true, bio: true, highlights: true, tracks: true, contact: true, links: true },
+    published: false,
   };
 }
 
@@ -3438,10 +3440,15 @@ async function renderPressKit() {
           </div>
         </div>
         <div class="pk-actions">
-          <button class="btn primary" id="pkSave"><svg fill="none" stroke="#fff"><use href="#i-verify"/></svg> Guardar y publicar</button>
-          <button class="btn" id="pkShare"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg> Copiar enlace</button>
-          <button class="btn" id="pkView"><svg fill="none" stroke="currentColor"><use href="#i-globe"/></svg> Ver público</button>
-          <button class="btn" id="pkPdf"><svg fill="none" stroke="currentColor"><use href="#i-download"/></svg> Descargar PDF</button>
+          <button class="btn primary" id="pkPdf"><svg fill="none" stroke="#fff"><use href="#i-download"/></svg> Descargar PDF</button>
+          <button class="btn" id="pkSave"><svg fill="none" stroke="currentColor"><use href="#i-verify"/></svg> Guardar</button>
+        </div>
+        <div class="pk-publish">
+          <label class="pk-tg"><input type="checkbox" id="pkPubChk" ${pkState.published ? 'checked' : ''}/> <span>Crear enlace público para compartir <span class="pk-hint2">(opcional · salas y sellos)</span></span></label>
+          <div class="pk-pub-row ${pkState.published ? '' : 'hidden'}" id="pkPubRow">
+            <button class="btn sm" id="pkShare"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg> Copiar enlace</button>
+            <button class="btn sm" id="pkView"><svg fill="none" stroke="currentColor"><use href="#i-globe"/></svg> Ver público</button>
+          </div>
         </div>
       </div>
       <div class="pk-preview-wrap">
@@ -3476,7 +3483,12 @@ async function renderPressKit() {
   main.querySelectorAll('input[data-sec]').forEach(cb => cb.onchange = () => {
     pkState.sections[cb.dataset.sec] = cb.checked; pkRenderPreview();
   });
-  $('pkSave').onclick = pkSave;
+  $('pkSave').onclick = () => pkSave();
+  $('pkPubChk').onchange = async () => {
+    pkState.published = $('pkPubChk').checked;
+    $('pkPubRow').classList.toggle('hidden', !pkState.published);
+    await pkSave(true);
+  };
   $('pkShare').onclick = () => { const u = pkPublicUrl(); navigator.clipboard?.writeText(u).then(() => toast('Enlace copiado: ' + u)).catch(() => toast(u)); };
   $('pkView').onclick = () => window.open(pkPublicUrl(), '_blank');
   $('pkPdf').onclick = pkDownloadPdf;
@@ -3524,18 +3536,19 @@ function pkRenderPreview() {
   pkWireAudio(box);
 }
 
-async function pkSave() {
+async function pkSave(fromToggle) {
   const btn = $('pkSave'); btn.disabled = true;
+  const pub = !!pkState.published;
   const out = JSON.parse(JSON.stringify(pkState)); delete out.allTracks; // no hace falta persistir el catálogo
   out.updatedAt = new Date().toISOString();
   const { error } = await sb.from('press_kits').upsert({
-    user_id: state.user.id, slug: state.profile.username, data: out, published: true, updated_at: out.updatedAt,
+    user_id: state.user.id, slug: state.profile.username, data: out, published: pub, updated_at: out.updatedAt,
   }, { onConflict: 'user_id' });
   btn.disabled = false;
   if (error) { toast('No se pudo guardar'); return; }
-  btn.innerHTML = '✓ Publicado';
-  toast('📄 Press kit guardado y publicado');
-  setTimeout(() => { btn.innerHTML = '<svg fill="none" stroke="#fff"><use href="#i-verify"/></svg> Guardar y publicar'; }, 2500);
+  toast(fromToggle ? (pub ? '🔗 Enlace público activado' : 'Enlace público desactivado · ahora es privado')
+                   : '📄 Press kit guardado (privado)');
+  if (!fromToggle) { btn.innerHTML = '✓ Guardado'; setTimeout(() => { btn.innerHTML = '<svg fill="none" stroke="currentColor"><use href="#i-verify"/></svg> Guardar'; }, 2200); }
 }
 
 /* ---- render del press kit (preview + público) ---- */
