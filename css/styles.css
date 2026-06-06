@@ -229,7 +229,13 @@ img { display: block; }
 .auth-head p { color: #aeb8d6; }
 .auth-head p { color: var(--ink-soft); font-size: 12px; margin-top: 6px; letter-spacing: 1.5px; text-transform: lowercase; }
 .auth-body { padding: 26px 28px 30px; }
-.auth-tabs { display: flex; gap: 6px; margin-bottom: 20px; background: var(--panel-2); border: 1px solid var(--line-soft); border-radius: 13px; padding: 4px; }
+.auth-tabs { display: flex; gap: 6px; margin-bottom: 16px; background: var(--panel-2); border: 1px solid var(--line-soft); border-radius: 13px; padding: 4px; }
+.google-btn { display: flex; align-items: center; justify-content: center; gap: 10px; background: #fff; color: #1f2330; border: 1px solid #dadce0; font-weight: 700; }
+.google-btn:hover { background: #f7f8fa; }
+.google-btn .g-ico { width: 18px; height: 18px; flex-shrink: 0; }
+:root[data-theme="dark"] .google-btn { background: #fff; color: #1f2330; border-color: #fff; }
+.auth-or { display: flex; align-items: center; gap: 12px; margin: 16px 0; color: var(--ink-soft); font-size: 12px; font-weight: 600; }
+.auth-or::before, .auth-or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 .auth-tabs button {
   flex: 1; padding: 10px; border-radius: 10px; border: none; background: transparent;
   color: var(--ink-soft); font-weight: 650; font-size: 13px; transition: all .2s var(--ease);

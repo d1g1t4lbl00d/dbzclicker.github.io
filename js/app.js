@@ -174,6 +174,26 @@ $('tabLogin').onclick = () => setAuthMode('login');
 $('tabRegister').onclick = () => setAuthMode('register');
 $('authPolicyLink').onclick = (e) => { e.preventDefault(); showPrivacyPolicy(); };
 $('authPolicyFooter').onclick = (e) => { e.preventDefault(); showPrivacyPolicy(); };
+$('googleBtn').onclick = signInWithGoogle;
+
+async function signInWithGoogle() {
+  const btn = $('googleBtn'); const msg = $('authMsg');
+  msg.className = 'auth-msg'; msg.textContent = '';
+  btn.disabled = true;
+  try {
+    // conserva el ?ref= de invitación al volver del login de Google
+    const { error } = await sb.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: window.location.origin + window.location.search },
+    });
+    if (error) throw error;
+    // el navegador redirige a Google; al volver, onAuthStateChange arranca la sesión
+  } catch (err) {
+    msg.className = 'auth-msg error';
+    msg.textContent = 'No se pudo iniciar con Google. ' + traducirError(err.message || '');
+    btn.disabled = false;
+  }
+}
 
 $('authForm').addEventListener('submit', async (e) => {
   e.preventDefault();
@@ -237,15 +257,20 @@ $('btnLogout').onclick = logout;
 /* =======================================================================
    ARRANQUE / SESIÓN
    ======================================================================= */
+let bootDone = false;
 async function init() {
   const { data: { session } } = await sb.auth.getSession();
   if (session) { state.user = session.user; await onAuthenticated(); }
-  sb.auth.onAuthStateChange((_e, sess) => {
-    if (!sess && state.user) location.reload();
+  sb.auth.onAuthStateChange(async (event, sess) => {
+    if (event === 'SIGNED_OUT') { if (state.user) location.reload(); return; }
+    // vuelta de un login OAuth (Google): arranca la app si aún no lo hizo
+    if (sess && !bootDone) { state.user = sess.user; await onAuthenticated(); }
   });
 }
 
 async function onAuthenticated() {
+  if (bootDone) return;
+  bootDone = true;
   const { data: { session } } = await sb.auth.getSession();
   state.user = session.user;
   // cargar / asegurar perfil
