@@ -259,9 +259,12 @@ $('btnLogout').onclick = logout;
    ======================================================================= */
 let bootDone = false;
 async function init() {
-  // ruta pública del press kit: underbro.app/?kit=usuario (sin necesidad de sesión)
-  const kitSlug = new URLSearchParams(location.search).get('kit');
+  // rutas públicas (sin sesión): ?kit=usuario (press kit) · ?l=slug (smart link)
+  const _q = new URLSearchParams(location.search);
+  const kitSlug = _q.get('kit');
   if (kitSlug) { renderPublicPressKit(kitSlug); return; }
+  const linkSlug = _q.get('l');
+  if (linkSlug) { renderPublicSmartLink(linkSlug); return; }
   const { data: { session } } = await sb.auth.getSession();
   if (session) { state.user = session.user; await onAuthenticated(); }
   sb.auth.onAuthStateChange(async (event, sess) => {
@@ -566,6 +569,10 @@ async function switchView(view) {
   if (view === 'events') return renderEvents();
   if (view === 'tools') return renderTools();
   if (view === 'presskit') return renderPressKit();
+  if (view === 'smartlinks') return renderSmartLinks();
+  if (view === 'smartlink') return renderSmartLinkBuilder();
+  if (view === 'splits') return renderSplitSheets();
+  if (view === 'split') return renderSplitBuilder();
   if (view === 'radio') return startRadio();
 
   main.innerHTML = skeletonFeed();
@@ -3330,20 +3337,28 @@ function renderTools() {
         <div class="tool-desc">Crea tu dossier de artista profesional y compártelo con salas, sellos y promotores con un solo enlace o en PDF.</div>
         <span class="tool-go">Crear ahora →</span>
       </button>
-      <div class="tool-card soon">
-        <div class="tool-ico"><svg fill="none" stroke="currentColor"><use href="#i-image"/></svg></div>
-        <div class="tool-name">Portada de pista</div>
-        <div class="tool-desc">Genera portadas con tu marca.</div>
-        <span class="tool-soon">Próximamente</span>
-      </div>
-      <div class="tool-card soon">
+      <button class="tool-card" id="toolSmartlink">
         <div class="tool-ico"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg></div>
         <div class="tool-name">Smart link</div>
-        <div class="tool-desc">Una página de enlaces para cada lanzamiento.</div>
+        <div class="tool-desc">Una página por lanzamiento con tu portada y botones a Spotify, YouTube, Apple… Un solo enlace para tu bio.</div>
+        <span class="tool-go">Crear ahora →</span>
+      </button>
+      <button class="tool-card" id="toolSplit">
+        <div class="tool-ico"><svg fill="none" stroke="currentColor"><use href="#i-doc"/></svg></div>
+        <div class="tool-name">Split sheet</div>
+        <div class="tool-desc">Documento de reparto de una colaboración: quién hizo qué y el % de cada uno. Exporta a PDF.</div>
+        <span class="tool-go">Crear ahora →</span>
+      </button>
+      <div class="tool-card soon">
+        <div class="tool-ico"><svg fill="none" stroke="currentColor"><use href="#i-image"/></svg></div>
+        <div class="tool-name">Portada / flyer</div>
+        <div class="tool-desc">Genera carátulas y carteles con tu marca.</div>
         <span class="tool-soon">Próximamente</span>
       </div>
     </div>`;
   $('toolPresskit').onclick = () => switchView('presskit');
+  $('toolSmartlink').onclick = () => switchView('smartlinks');
+  $('toolSplit').onclick = () => switchView('splits');
 }
 
 let pkState = null;
@@ -3641,6 +3656,354 @@ async function renderPublicPressKit(slug) {
   document.title = (kit.name || 'Press kit') + ' · UnderBro';
   host.innerHTML = `<div class="pk-public-inner">${pressKitHTML(kit)}<div class="pk-cta"><span>¿Eres artista? Crea el tuyo gratis</span><a class="btn primary" href="/">Crear mi press kit en UnderBro</a></div></div>`;
   pkWireAudio(host);
+}
+
+/* =======================================================================
+   HERRAMIENTA: SMART LINK (link-in-bio por lanzamiento)
+   ======================================================================= */
+let smEditId = null, smState = null;
+function slugify(s) { return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40); }
+
+async function renderSmartLinks() {
+  setActiveNav('tools');
+  const main = $('main');
+  main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
+  main.innerHTML = `
+    <div class="main-head"><div><h2>Smart links</h2><div class="sub">Un enlace para tu bio que lleva a todas las plataformas</div></div>
+      <button class="btn sm" id="smBack"><svg fill="none" stroke="currentColor"><use href="#i-chevron-left"/></svg> Herramientas</button></div>
+    <button class="btn primary" id="smNew" style="margin-bottom:14px"><svg fill="none" stroke="#fff"><use href="#i-plus"/></svg> Nuevo smart link</button>
+    <div id="smList" class="loading" style="padding:30px"><div class="spinner"></div></div>`;
+  $('smBack').onclick = () => switchView('tools');
+  $('smNew').onclick = () => { smEditId = null; switchView('smartlink'); };
+  const { data } = await sb.from('smart_links').select('id,slug,data,published,created_at').eq('user_id', state.user.id).order('created_at', { ascending: false });
+  const list = $('smList'); list.className = '';
+  if (!data || !data.length) { list.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-share"/></svg><p>Aún no has creado ningún smart link.<br>Pulsa <b>Nuevo smart link</b> para tu próximo lanzamiento.</p></div>`; return; }
+  list.innerHTML = '';
+  data.forEach(r => {
+    const d = r.data || {}; const url = location.origin + '/?l=' + r.slug;
+    const row = el(`<div class="sm-row">
+      <div class="sm-cover" style="${czUrl(d.cover) ? `background-image:url('${czUrl(d.cover)}')` : ''}">${czUrl(d.cover) ? '' : '<svg fill="none" stroke="#fff"><use href="#i-music"/></svg>'}</div>
+      <div class="sm-info"><div class="sm-title">${esc(d.title || 'Sin título')}</div><div class="sm-slug">/?l=${esc(r.slug)} ${r.published ? '' : '· <b>privado</b>'}</div></div>
+      <div class="sm-acts">
+        <button class="btn sm" data-a="edit">Editar</button>
+        <button class="btn sm" data-a="copy" title="Copiar enlace"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg></button>
+        <button class="btn sm danger-btn" data-a="del" title="Borrar"><svg fill="none" stroke="#fff"><use href="#i-trash"/></svg></button>
+      </div></div>`);
+    row.querySelector('[data-a="edit"]').onclick = () => { smEditId = r.id; switchView('smartlink'); };
+    row.querySelector('[data-a="copy"]').onclick = () => { navigator.clipboard?.writeText(url).then(() => toast('Enlace copiado: ' + url)).catch(() => toast(url)); };
+    row.querySelector('[data-a="del"]').onclick = async () => { if (!confirm('¿Borrar este smart link?')) return; await sb.from('smart_links').delete().eq('id', r.id); row.remove(); toast('Smart link borrado'); };
+    list.appendChild(row);
+  });
+}
+
+async function renderSmartLinkBuilder() {
+  setActiveNav('tools');
+  const main = $('main');
+  main.innerHTML = `<div class="main-head"><div><h2>Smart link</h2></div></div><div class="loading" style="padding:40px"><div class="spinner"></div></div>`;
+  const uid = state.user.id;
+  const { data: tracks } = await sb.from('tracks').select('id,title,cover_url,audio_url').eq('user_id', uid).order('created_at', { ascending: false }).limit(30);
+  const myTracks = tracks || [];
+  let d;
+  if (smEditId) { const { data } = await sb.from('smart_links').select('*').eq('id', smEditId).maybeSingle(); d = data ? { ...data.data, _slug: data.slug, _pub: data.published } : null; }
+  if (!d) d = { title: '', subtitle: state.profile.display_name || state.profile.username, cover: '', audio: '', links: [], accent: '#3e57fc', template: 'dark', _slug: '', _pub: true };
+  smState = d;
+  const tpls = [['dark', 'Oscuro'], ['light', 'Claro'], ['gradient', 'Degradado']];
+  main.innerHTML = `
+    <div class="main-head"><div><h2>Smart link</h2><div class="sub">Edita y publica tu página de lanzamiento</div></div>
+      <button class="btn sm" id="slBack"><svg fill="none" stroke="currentColor"><use href="#i-chevron-left"/></svg> Mis smart links</button></div>
+    <div class="pk-builder">
+      <div class="pk-form">
+        <div class="pk-fsec"><h4>Lanzamiento</h4>
+          <label class="pk-l">Título</label><input class="pk-in" data-sk="title" value="${esc(d.title || '')}" maxlength="80" placeholder="Nombre del tema o álbum" />
+          <label class="pk-l">Subtítulo / artista</label><input class="pk-in" data-sk="subtitle" value="${esc(d.subtitle || '')}" maxlength="80" />
+          <label class="pk-l">Portada</label>
+          <div class="sm-cover-pick">
+            <div class="sm-cover-prev" id="slCoverPrev" style="${czUrl(d.cover) ? `background-image:url('${czUrl(d.cover)}')` : ''}">${czUrl(d.cover) ? '' : '<svg fill="none" stroke="#fff"><use href="#i-image"/></svg>'}</div>
+            <div><button class="btn sm" id="slCoverBtn">Subir imagen</button><input type="file" id="slCoverFile" accept="image/*" hidden /><div class="pk-hint2" style="margin-top:6px">o elige una de tus pistas abajo</div></div>
+          </div>
+          ${myTracks.length ? `<label class="pk-l">Basar en una pista (opcional)</label><div class="sm-track-row">${myTracks.map(t => `<button type="button" class="sm-tk-thumb" data-tk="${esc(t.id)}" title="${esc(t.title)}" style="${czUrl(t.cover_url) ? `background-image:url('${czUrl(t.cover_url)}')` : ''}">${czUrl(t.cover_url) ? '' : esc((t.title || '?').slice(0, 2))}</button>`).join('')}</div>` : ''}
+        </div>
+        <div class="pk-fsec"><h4>Enlaces a plataformas <button class="btn sm" id="slAddLink" style="float:right">+ Añadir</button></h4>
+          <div id="slLinks"></div>
+          <div class="pk-hint2">Pega tus URLs de Spotify, YouTube, Apple Music, SoundCloud, Instagram, TikTok… Se detectan solas.</div>
+        </div>
+        <div class="pk-fsec"><h4>Diseño</h4>
+          <label class="pk-l">Color de acento</label>
+          <div class="pk-color"><input type="color" data-sk="accent" value="${czColor(d.accent) || '#3e57fc'}" /><span>${esc(d.accent || '#3e57fc')}</span></div>
+          <label class="pk-l">Plantilla</label>
+          <div class="pk-tpls">${tpls.map(([v, n]) => `<button type="button" class="pk-tpl ${d.template === v ? 'on' : ''}" data-sltpl="${v}">${n}</button>`).join('')}</div>
+          <label class="pk-l">Enlace (slug)</label>
+          <div class="sm-slug-edit"><span>/?l=</span><input class="pk-in" data-sk="_slug" value="${esc(d._slug || '')}" maxlength="40" placeholder="se genera solo" /></div>
+        </div>
+        <div class="pk-actions">
+          <button class="btn primary" id="slSave"><svg fill="none" stroke="#fff"><use href="#i-globe"/></svg> Guardar y publicar</button>
+          <button class="btn" id="slCopy"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg> Copiar enlace</button>
+          <button class="btn" id="slView"><svg fill="none" stroke="currentColor"><use href="#i-globe"/></svg> Ver</button>
+        </div>
+      </div>
+      <div class="pk-preview-wrap"><div class="pk-preview-label">Vista previa</div><div id="slPreview" class="pk-preview"></div></div>
+    </div>`;
+  $('slBack').onclick = () => switchView('smartlinks');
+  main.querySelectorAll('.pk-in[data-sk]').forEach(inp => inp.addEventListener('input', () => {
+    const k = inp.dataset.sk; smState[k] = inp.value;
+    if (k === 'accent') { const sp = inp.parentElement.querySelector('span'); if (sp) sp.textContent = inp.value; }
+    if (k !== '_slug') slRenderPreview();
+  }));
+  main.querySelectorAll('.pk-tpl[data-sltpl]').forEach(b => b.onclick = () => { smState.template = b.dataset.sltpl; main.querySelectorAll('.pk-tpl[data-sltpl]').forEach(x => x.classList.toggle('on', x === b)); slRenderPreview(); });
+  main.querySelectorAll('.sm-tk-thumb').forEach(b => b.onclick = () => {
+    const t = myTracks.find(x => x.id === b.dataset.tk); if (!t) return;
+    smState.cover = t.cover_url || ''; smState.audio = t.audio_url || '';
+    if (!smState.title) { smState.title = t.title; const ti = main.querySelector('[data-sk="title"]'); if (ti) ti.value = t.title; }
+    const cp = $('slCoverPrev'); cp.style.backgroundImage = czUrl(t.cover_url) ? `url('${czUrl(t.cover_url)}')` : ''; cp.innerHTML = czUrl(t.cover_url) ? '' : '<svg fill="none" stroke="#fff"><use href="#i-image"/></svg>';
+    slRenderPreview();
+  });
+  $('slCoverBtn').onclick = () => $('slCoverFile').click();
+  $('slCoverFile').onchange = async () => {
+    const f = $('slCoverFile').files[0]; if (!f) return;
+    if (f.size > 6e6) { toast('Máximo 6 MB'); return; }
+    $('slCoverBtn').disabled = true; $('slCoverBtn').textContent = 'Subiendo…';
+    try {
+      const ext = (f.name.split('.').pop() || 'jpg').toLowerCase();
+      const path = `${uid}/sl_${Date.now()}.${ext}`;
+      const up = await sb.storage.from('covers').upload(path, f, { contentType: f.type || 'image/jpeg' });
+      if (up.error) throw up.error;
+      smState.cover = sb.storage.from('covers').getPublicUrl(path).data.publicUrl;
+      const cp = $('slCoverPrev'); cp.style.backgroundImage = `url('${czUrl(smState.cover)}')`; cp.innerHTML = '';
+      slRenderPreview();
+    } catch (e) { toast('No se pudo subir la imagen'); }
+    $('slCoverBtn').disabled = false; $('slCoverBtn').textContent = 'Subir imagen';
+  };
+  $('slAddLink').onclick = () => { smState.links.push({ url: '', label: '' }); slRenderLinks(); slRenderPreview(); };
+  $('slSave').onclick = slSave;
+  $('slCopy').onclick = () => { if (!smState._slug) { toast('Guarda primero para generar el enlace'); return; } const u = location.origin + '/?l=' + smState._slug; navigator.clipboard?.writeText(u).then(() => toast('Enlace copiado: ' + u)).catch(() => toast(u)); };
+  $('slView').onclick = () => { if (!smState._slug) { toast('Guarda primero'); return; } window.open(location.origin + '/?l=' + smState._slug, '_blank'); };
+  slRenderLinks();
+  slRenderPreview();
+}
+function slRenderLinks() {
+  const box = $('slLinks'); if (!box) return;
+  box.innerHTML = (smState.links || []).map((l, i) => `
+    <div class="sm-link-row">
+      <input class="pk-in" data-li="${i}" data-f="url" value="${esc(l.url || '')}" placeholder="https://..." />
+      <input class="pk-in sm-link-label" data-li="${i}" data-f="label" value="${esc(l.label || '')}" placeholder="Etiqueta (opcional)" />
+      <button class="sm-link-x" data-rm="${i}" title="Quitar">&times;</button>
+    </div>`).join('');
+  box.querySelectorAll('input[data-li]').forEach(inp => inp.addEventListener('input', () => {
+    const i = +inp.dataset.li; smState.links[i][inp.dataset.f] = inp.value; slRenderPreview();
+  }));
+  box.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { smState.links.splice(+b.dataset.rm, 1); slRenderLinks(); slRenderPreview(); });
+}
+function slRenderPreview() { const box = $('slPreview'); if (!box) return; box.innerHTML = smartLinkHTML(smState); pkWireAudio(box); }
+
+async function slSave() {
+  const btn = $('slSave'); btn.disabled = true;
+  if (!smState.title.trim()) { toast('Ponle un título'); btn.disabled = false; return; }
+  let slug = slugify(smState._slug) || (slugify(smState.title) + '-' + Math.random().toString(36).slice(2, 6));
+  smState._slug = slug;
+  const payload = {
+    title: smState.title, subtitle: smState.subtitle, cover: smState.cover, audio: smState.audio,
+    links: (smState.links || []).filter(l => (l.url || '').trim()), accent: smState.accent, template: smState.template,
+  };
+  try {
+    if (smEditId) {
+      const { error } = await sb.from('smart_links').update({ slug, data: payload, published: true, updated_at: new Date().toISOString() }).eq('id', smEditId);
+      if (error) throw error;
+    } else {
+      const { data, error } = await sb.from('smart_links').insert({ user_id: state.user.id, slug, data: payload, published: true }).select('id').single();
+      if (error) throw error; smEditId = data.id;
+    }
+    btn.innerHTML = '✓ Publicado'; toast('🌐 Smart link publicado');
+    setTimeout(() => { btn.innerHTML = '<svg fill="none" stroke="#fff"><use href="#i-globe"/></svg> Guardar y publicar'; }, 2200);
+  } catch (e) {
+    toast(/duplicate|unique/i.test(e.message || '') ? 'Ese enlace ya existe, prueba otro slug' : 'No se pudo guardar');
+    btn.disabled = false; return;
+  }
+  btn.disabled = false;
+}
+
+function smartLinkHTML(d) {
+  if (!d) return '';
+  const accent = czColor(d.accent) || '#3e57fc';
+  const cover = czUrl(d.cover);
+  const links = (d.links || []).filter(l => (l.url || '').trim());
+  const btns = links.map(l => {
+    const p = (typeof platformOf === 'function') ? platformOf(l.url) : null;
+    const label = l.label || (p ? p.name : hostOf(l.url));
+    const col = p ? p.color : accent;
+    return `<a class="sl-btn" href="${esc(czHref(l.url))}" target="_blank" rel="noopener noreferrer" style="--slc:${col}"><span class="sl-dot"></span><span class="sl-btn-l">${esc(label)}</span><span class="sl-arrow">↗</span></a>`;
+  }).join('');
+  return `
+    <div class="sl tpl-${esc(d.template || 'dark')}" style="--pk-accent:${accent}">
+      <div class="sl-cover" style="${cover ? `background-image:url('${cover}')` : ''}">${cover ? '' : '<svg fill="none" stroke="#fff"><use href="#i-music"/></svg>'}</div>
+      <div class="sl-head"><div class="sl-title">${esc(d.title || 'Tu lanzamiento')}</div>${d.subtitle ? `<div class="sl-sub">${esc(d.subtitle)}</div>` : ''}</div>
+      ${czHref(d.audio) ? `<button class="sl-listen" data-pkplay="${esc(czHref(d.audio))}"><svg class="ci-play"><use href="#i-play"/></svg><svg class="ci-pause"><use href="#i-pause"/></svg> Escuchar adelanto</button>` : ''}
+      <div class="sl-btns">${btns || '<div class="pk-hint2" style="text-align:center;padding:10px">Añade enlaces a plataformas</div>'}</div>
+      <div class="sl-foot">Smart link · <b>UnderBro</b></div>
+    </div>`;
+}
+
+async function renderPublicSmartLink(slug) {
+  document.documentElement.classList.add('no-splash');
+  const sp = document.getElementById('splash'); if (sp) sp.remove();
+  document.getElementById('authScreen')?.classList.add('hidden');
+  document.getElementById('app')?.classList.add('hidden');
+  let host = document.getElementById('publicKit');
+  if (!host) { host = el('<div id="publicKit"></div>'); document.body.appendChild(host); }
+  host.innerHTML = `<div class="loading" style="padding:70px"><div class="spinner"></div></div>`;
+  let d = null;
+  try { const { data } = await sb.from('smart_links').select('data').eq('slug', slug).eq('published', true).maybeSingle(); d = data && data.data; } catch (_) {}
+  if (!d || !d.title) { host.innerHTML = `<div class="pk-notfound"><h2>Enlace no encontrado</h2><p>El enlace puede ser incorrecto o ya no está disponible.</p><a class="btn primary" href="/">Ir a UnderBro</a></div>`; return; }
+  document.title = d.title + ' · UnderBro';
+  host.innerHTML = `<div class="sl-public-inner">${smartLinkHTML(d)}<div class="pk-cta"><a class="btn primary" href="/">Crea tu smart link en UnderBro</a></div></div>`;
+  pkWireAudio(host);
+}
+
+/* =======================================================================
+   HERRAMIENTA: SPLIT SHEET (reparto de colaboración → PDF)
+   ======================================================================= */
+let ssEditId = null, ssState = null;
+
+async function renderSplitSheets() {
+  setActiveNav('tools');
+  const main = $('main');
+  main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
+  main.innerHTML = `
+    <div class="main-head"><div><h2>Split sheets</h2><div class="sub">Reparto de autoría de tus colaboraciones</div></div>
+      <button class="btn sm" id="ssBack"><svg fill="none" stroke="currentColor"><use href="#i-chevron-left"/></svg> Herramientas</button></div>
+    <button class="btn primary" id="ssNew" style="margin-bottom:14px"><svg fill="none" stroke="#fff"><use href="#i-plus"/></svg> Nuevo split sheet</button>
+    <div id="ssList" class="loading" style="padding:30px"><div class="spinner"></div></div>`;
+  $('ssBack').onclick = () => switchView('tools');
+  $('ssNew').onclick = () => { ssEditId = null; switchView('split'); };
+  const { data } = await sb.from('split_sheets').select('id,data,updated_at').eq('user_id', state.user.id).order('updated_at', { ascending: false });
+  const list = $('ssList'); list.className = '';
+  if (!data || !data.length) { list.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-doc"/></svg><p>Aún no tienes ningún split sheet.<br>Crea uno para tu próxima colaboración.</p></div>`; return; }
+  list.innerHTML = '';
+  data.forEach(r => {
+    const d = r.data || {};
+    const row = el(`<div class="sm-row">
+      <div class="sm-cover" style="display:grid;place-items:center"><svg fill="none" stroke="#fff" style="width:22px;height:22px"><use href="#i-doc"/></svg></div>
+      <div class="sm-info"><div class="sm-title">${esc(d.title || 'Sin título')}</div><div class="sm-slug">${(d.people || []).length} colaborador(es) · ${esc(d.date || '')}</div></div>
+      <div class="sm-acts"><button class="btn sm" data-a="edit">Abrir</button><button class="btn sm danger-btn" data-a="del" title="Borrar"><svg fill="none" stroke="#fff"><use href="#i-trash"/></svg></button></div></div>`);
+    row.querySelector('[data-a="edit"]').onclick = () => { ssEditId = r.id; switchView('split'); };
+    row.querySelector('[data-a="del"]').onclick = async () => { if (!confirm('¿Borrar este split sheet?')) return; await sb.from('split_sheets').delete().eq('id', r.id); row.remove(); toast('Borrado'); };
+    list.appendChild(row);
+  });
+}
+
+async function renderSplitBuilder() {
+  setActiveNav('tools');
+  const main = $('main');
+  main.innerHTML = `<div class="main-head"><div><h2>Split sheet</h2></div></div><div class="loading" style="padding:40px"><div class="spinner"></div></div>`;
+  let d = null;
+  if (ssEditId) { const { data } = await sb.from('split_sheets').select('data').eq('id', ssEditId).maybeSingle(); d = data && data.data; }
+  if (!d) d = { title: '', date: new Date().toISOString().slice(0, 10), people: [{ name: state.profile.display_name || state.profile.username, role: 'Autor / intérprete', share: 100, contact: '' }], notes: '' };
+  ssState = d;
+  main.innerHTML = `
+    <div class="main-head"><div><h2>Split sheet</h2><div class="sub">Reparto de autoría · exporta a PDF</div></div>
+      <button class="btn sm" id="spBack"><svg fill="none" stroke="currentColor"><use href="#i-chevron-left"/></svg> Mis split sheets</button></div>
+    <div class="pk-builder">
+      <div class="pk-form">
+        <div class="pk-fsec"><h4>Obra</h4>
+          <div class="pk-row2"><div><label class="pk-l">Título de la canción</label><input class="pk-in" data-ss="title" value="${esc(d.title || '')}" maxlength="120" /></div>
+          <div><label class="pk-l">Fecha</label><input class="pk-in" type="date" data-ss="date" value="${esc(d.date || '')}" /></div></div>
+        </div>
+        <div class="pk-fsec"><h4>Colaboradores <button class="btn sm" id="ssAdd" style="float:right">+ Añadir</button></h4>
+          <div id="ssPeople"></div>
+          <div class="ss-total" id="ssTotal"></div>
+        </div>
+        <div class="pk-fsec"><h4>Notas (opcional)</h4>
+          <textarea class="pk-in" data-ss="notes" rows="3" placeholder="Acuerdos adicionales, masters, publishing...">${esc(d.notes || '')}</textarea>
+        </div>
+        <div class="pk-actions">
+          <button class="btn primary" id="ssPdf"><svg fill="none" stroke="#fff"><use href="#i-download"/></svg> Descargar PDF</button>
+          <button class="btn" id="ssSave"><svg fill="none" stroke="currentColor"><use href="#i-verify"/></svg> Guardar</button>
+        </div>
+      </div>
+      <div class="pk-preview-wrap"><div class="pk-preview-label">Vista previa</div><div id="ssPreview" class="pk-preview"></div></div>
+    </div>`;
+  $('spBack').onclick = () => switchView('splits');
+  main.querySelectorAll('.pk-in[data-ss]').forEach(inp => inp.addEventListener('input', () => { ssState[inp.dataset.ss] = inp.value; ssRenderPreview(); }));
+  $('ssAdd').onclick = () => { ssState.people.push({ name: '', role: '', share: 0, contact: '' }); ssRenderPeople(); ssRenderPreview(); };
+  $('ssSave').onclick = ssSave;
+  $('ssPdf').onclick = () => toolPrintPdf(splitSheetHTML(ssState, true), (ssState.title || 'split-sheet'));
+  ssRenderPeople();
+  ssRenderPreview();
+}
+function ssRenderPeople() {
+  const box = $('ssPeople'); if (!box) return;
+  box.innerHTML = (ssState.people || []).map((p, i) => `
+    <div class="ss-person">
+      <input class="pk-in" data-pi="${i}" data-f="name" value="${esc(p.name || '')}" placeholder="Nombre legal" />
+      <div class="pk-row2">
+        <input class="pk-in" data-pi="${i}" data-f="role" value="${esc(p.role || '')}" placeholder="Rol (letra, prod...)" />
+        <div class="ss-share"><input class="pk-in" type="number" min="0" max="100" data-pi="${i}" data-f="share" value="${p.share || 0}" /><span>%</span></div>
+      </div>
+      <input class="pk-in" data-pi="${i}" data-f="contact" value="${esc(p.contact || '')}" placeholder="Email / contacto (opcional)" />
+      ${ssState.people.length > 1 ? `<button class="sm-link-x" data-rmp="${i}" title="Quitar">&times;</button>` : ''}
+    </div>`).join('');
+  box.querySelectorAll('input[data-pi]').forEach(inp => inp.addEventListener('input', () => {
+    const i = +inp.dataset.pi, f = inp.dataset.f;
+    ssState.people[i][f] = f === 'share' ? (parseFloat(inp.value) || 0) : inp.value;
+    ssUpdateTotal(); ssRenderPreview();
+  }));
+  box.querySelectorAll('[data-rmp]').forEach(b => b.onclick = () => { ssState.people.splice(+b.dataset.rmp, 1); ssRenderPeople(); ssRenderPreview(); });
+  ssUpdateTotal();
+}
+function ssUpdateTotal() {
+  const t = (ssState.people || []).reduce((a, p) => a + (parseFloat(p.share) || 0), 0);
+  const el2 = $('ssTotal'); if (!el2) return;
+  el2.textContent = `Total: ${t}%` + (t === 100 ? ' ✓' : ' (debe sumar 100%)');
+  el2.className = 'ss-total ' + (t === 100 ? 'ok' : 'warn');
+}
+function ssRenderPreview() { const box = $('ssPreview'); if (!box) return; box.innerHTML = splitSheetHTML(ssState); }
+
+async function ssSave() {
+  const btn = $('ssSave'); btn.disabled = true;
+  const out = JSON.parse(JSON.stringify(ssState)); out.updatedAt = new Date().toISOString();
+  try {
+    if (ssEditId) { const { error } = await sb.from('split_sheets').update({ data: out, updated_at: out.updatedAt }).eq('id', ssEditId); if (error) throw error; }
+    else { const { data, error } = await sb.from('split_sheets').insert({ user_id: state.user.id, data: out }).select('id').single(); if (error) throw error; ssEditId = data.id; }
+    btn.innerHTML = '✓ Guardado'; toast('Split sheet guardado');
+    setTimeout(() => { btn.innerHTML = '<svg fill="none" stroke="currentColor"><use href="#i-verify"/></svg> Guardar'; }, 2000);
+  } catch (e) { toast('No se pudo guardar'); }
+  btn.disabled = false;
+}
+
+function splitSheetHTML(d, forPdf) {
+  if (!d) return '';
+  const total = (d.people || []).reduce((a, p) => a + (parseFloat(p.share) || 0), 0);
+  const rows = (d.people || []).map(p => `<tr><td>${esc(p.name || '—')}</td><td>${esc(p.role || '')}</td><td class="ss-pct">${(parseFloat(p.share) || 0)}%</td><td>${esc(p.contact || '')}</td></tr>`).join('');
+  return `
+    <div class="ss-doc ${forPdf ? 'for-pdf' : ''}">
+      <div class="ss-doc-head"><h2>Split Sheet</h2><div class="ss-doc-sub">Acuerdo de reparto de autoría</div></div>
+      <div class="ss-doc-meta"><div><span>Obra</span><b>${esc(d.title || '—')}</b></div><div><span>Fecha</span><b>${esc(d.date || '—')}</b></div></div>
+      <table class="ss-table"><thead><tr><th>Nombre</th><th>Rol</th><th>%</th><th>Contacto</th></tr></thead><tbody>${rows}</tbody>
+        <tfoot><tr><td colspan="2">Total</td><td class="ss-pct ${total === 100 ? 'ok' : 'warn'}">${total}%</td><td></td></tr></tfoot></table>
+      ${d.notes ? `<div class="ss-notes"><h4>Notas</h4><p>${esc(d.notes).replace(/\n/g, '<br>')}</p></div>` : ''}
+      <div class="ss-sign"><h4>Firmas</h4>${(d.people || []).map(p => `<div class="ss-sign-row"><span class="ss-sign-line"></span><span class="ss-sign-name">${esc(p.name || '')}</span></div>`).join('')}</div>
+      <div class="ss-doc-foot">Generado con UnderBro · underbro.app</div>
+    </div>`;
+}
+
+/* genérico: imprime/descarga un HTML aislado como PDF (sin el resto de la app) */
+function toolPrintPdf(html, title) {
+  const cssHref = (document.querySelector('link[rel="stylesheet"]') || {}).href || '/css/styles.css';
+  const ifr = document.createElement('iframe');
+  ifr.setAttribute('aria-hidden', 'true');
+  ifr.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;opacity:0;';
+  document.body.appendChild(ifr);
+  const dd = ifr.contentWindow.document;
+  dd.open();
+  dd.write(`<!DOCTYPE html><html lang="es"><head><meta charset="utf-8"><title>${esc(title || 'documento')}</title>
+    <link rel="stylesheet" href="${esc(cssHref)}">
+    <style>html,body{margin:0;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact;} .ss-doc,.pk,.sl{max-width:100%;} @page{margin:14mm;}</style>
+    </head><body>${html}</body></html>`);
+  dd.close();
+  let done = false;
+  const go = () => { if (done) return; done = true; try { ifr.contentWindow.focus(); ifr.contentWindow.print(); } catch (_) {} setTimeout(() => ifr.remove(), 1500); };
+  ifr.onload = () => setTimeout(go, 350);
+  setTimeout(go, 1200);
+  toast('Preparando PDF… elige "Guardar como PDF"');
 }
 
 function editLinksModal(onSaved) {
