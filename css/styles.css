@@ -1916,3 +1916,40 @@ textarea.pk-in { resize: vertical; line-height: 1.5; }
 .an-play { width: 56px; flex-shrink: 0; border: none; border-radius: 14px; background: var(--accent-grad); display: grid; place-items: center; cursor: pointer; box-shadow: var(--sh-blue); transition: transform .12s; }
 .an-play:active { transform: scale(.93); }
 .an-play svg { width: 22px; height: 22px; }
+
+/* ===================== PULIDO DEL REPRODUCTOR ===================== */
+/* --- mini-player: botón cerrar más sutil --- */
+.p-close svg { width: 17px; height: 17px; stroke: var(--ink-faint); transition: stroke .15s; }
+.p-close:hover svg { stroke: var(--ink); }
+/* --- ecualizador de portada más suave (deja ver el arte) --- */
+.eq { background: linear-gradient(180deg, rgba(16,21,38,.20), rgba(16,21,38,.34)); }
+.eq span { width: 2.5px; box-shadow: 0 0 6px rgba(255,255,255,.4); }
+/* --- microinteracción del play del mini-player --- */
+.player .controls .play-big { transition: transform .14s var(--ease), box-shadow .2s; }
+.player .controls .play-big:active { transform: scale(.9); }
+
+/* --- Now Playing: controles secundarios (aleatorio / repetir) --- */
+.np-controls { gap: 18px; }
+.np-controls .np-sec { width: 46px; height: 46px; border: none; background: transparent; box-shadow: none; }
+.np-controls .np-sec svg { width: 20px; height: 20px; fill: none; stroke: var(--ink-soft); }
+.np-controls .np-sec:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.np-controls .np-sec.on { background: color-mix(in srgb, var(--blue) 15%, transparent); }
+.np-controls .np-sec.on svg { stroke: var(--blue-deep); }
+.np-controls .np-sec.one { position: relative; }
+.np-controls .np-sec.one::after { content: "1"; position: absolute; top: 7px; right: 9px; font-size: 9px; font-weight: 900; color: var(--blue-deep); line-height: 1; }
+.np-play { transition: transform .14s var(--ease), box-shadow .2s; }
+.np-play:active { transform: scale(.93); }
+/* --- chip de velocidad --- */
+.np-rate { align-self: center; padding: 6px 16px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel); color: var(--ink-soft); font-weight: 750; font-size: 13px; font-variant-numeric: tabular-nums; transition: background .15s, color .15s, border-color .15s, transform .12s; }
+.np-rate.on { background: color-mix(in srgb, var(--blue) 14%, transparent); color: var(--blue-deep); border-color: color-mix(in srgb, var(--blue) 40%, transparent); }
+.np-rate:active { transform: scale(.95); }
+.np-times #npDur { cursor: pointer; }
+
+/* --- móvil: anterior/siguiente también en el mini-player --- */
+@media (max-width: 720px) {
+  .player { gap: 9px; }
+  .player .controls { gap: 5px; }
+  .player .controls #pPrev, .player .controls #pNext { display: grid !important; width: 33px; height: 33px; border: none; background: transparent; box-shadow: none; }
+  .player .controls #pPrev svg, .player .controls #pNext svg { width: 15px; height: 15px; }
+  .player .controls .play-big { width: 44px; height: 44px; }
+}

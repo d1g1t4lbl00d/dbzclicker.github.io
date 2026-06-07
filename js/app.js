@@ -1381,7 +1381,7 @@ function initPlayer() {
     updateMediaPositionState();
   });
   audio.addEventListener('loadedmetadata', () => { $('pDur').textContent = fmtTime(audio.duration); if (npIsOpen()) $('npDur').textContent = fmtTime(audio.duration); updateMediaPositionState(); });
-  audio.addEventListener('ended', () => step(1));
+  audio.addEventListener('ended', () => { if (npRepeat === 'one') { audio.currentTime = 0; audio.play().catch(() => {}); } else step(1); });
   audio.addEventListener('play', () => { setPlayIcon(true); showEq(true); markPlayingCard(); setNpPlayIcon(true); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'playing'; });
   audio.addEventListener('pause', () => { setPlayIcon(false); showEq(false); setNpPlayIcon(false); document.querySelectorAll('.track.playing, .dm-track.playing').forEach(c => c.classList.remove('playing')); if ('mediaSession' in navigator) navigator.mediaSession.playbackState = 'paused'; });
 
@@ -1463,12 +1463,32 @@ function markPlayingCard() {
 }
 
 /* ---- Vista "Reproduciendo ahora" a pantalla completa ---- */
+let npRepeat = 'off', npShuffle = false, npRate = 1, npShowRemaining = false;
+const NP_RATES = [1, 1.25, 1.5, 2, 0.75];
 function initNowPlaying() {
   $('npPlay').onclick = togglePlay;
   $('npPrev').onclick = () => step(-1);
   $('npNext').onclick = () => step(1);
   $('npClose').onclick = closeNowPlaying;
   $('player').querySelector('.now').addEventListener('click', openNowPlaying);
+
+  // aleatorio
+  $('npShuffle').onclick = () => { npShuffle = !npShuffle; $('npShuffle').classList.toggle('on', npShuffle); haptic(10); toast(npShuffle ? '🔀 Aleatorio activado' : 'Aleatorio desactivado'); };
+  // repetir: off → all → one → off
+  $('npRepeat').onclick = () => {
+    npRepeat = npRepeat === 'off' ? 'all' : npRepeat === 'all' ? 'one' : 'off';
+    const b = $('npRepeat'); b.classList.toggle('on', npRepeat !== 'off'); b.classList.toggle('one', npRepeat === 'one');
+    haptic(10); toast(npRepeat === 'all' ? '🔁 Repetir toda la cola' : npRepeat === 'one' ? '🔂 Repetir esta pista' : 'Repetir desactivado');
+  };
+  // velocidad
+  $('npRate').onclick = () => {
+    const i = (NP_RATES.indexOf(npRate) + 1) % NP_RATES.length; npRate = NP_RATES[i];
+    try { audio.playbackRate = npRate; } catch {}
+    $('npRate').textContent = npRate + 'x';
+    $('npRate').classList.toggle('on', npRate !== 1); updateMediaPositionState(); haptic(8);
+  };
+  // tocar el tiempo total alterna restante / total
+  $('npDur').onclick = () => { npShowRemaining = !npShowRemaining; updateNpProgress(audio.duration ? audio.currentTime / audio.duration : 0); };
 
   // seek arrastrando sobre el waveform grande
   const w = $('npWave');
@@ -1480,7 +1500,7 @@ function initNowPlaying() {
   w.addEventListener('pointercancel', () => { wd = false; });
 }
 function npIsOpen() { return $('nowPlaying').classList.contains('open'); }
-function openNowPlaying() { if (!state.current) return; syncNowPlaying(); $('nowPlaying').classList.add('open'); }
+function openNowPlaying() { if (!state.current) return; $('nowPlaying').classList.add('open'); syncNowPlaying(); }
 function closeNowPlaying() { $('nowPlaying').classList.remove('open'); }
 function closePlayer() {
   try { audio.pause(); audio.removeAttribute('src'); audio.load(); } catch (_) {}
@@ -1498,10 +1518,8 @@ function syncNowPlaying() {
   $('npBg').style.backgroundImage = t.cover_url ? `url("${esc(t.cover_url)}")` : 'none';
   const npPeaks = Array.isArray(t.waveform) && t.waveform.length ? t.waveform : waveBars(t.id, 80);
   $('npWave').innerHTML = npPeaks.map(h => `<div class="bar" style="--h:${czNum(h)}%"></div>`).join('');
-  $('npCur').textContent = fmtTime(audio.currentTime);
-  $('npDur').textContent = fmtTime(audio.duration || t.duration);
   setNpPlayIcon(!audio.paused);
-  if (audio.duration) updateNpProgress(audio.currentTime / audio.duration);
+  updateNpProgress(audio.duration ? audio.currentTime / audio.duration : 0);
 }
 function updateNpProgress(pct) {
   if (!npIsOpen()) return;
@@ -1509,6 +1527,8 @@ function updateNpProgress(pct) {
   const upto = Math.floor(pct * bars.length);
   bars.forEach((b, i) => b.classList.toggle('played', i <= upto));
   $('npCur').textContent = fmtTime(audio.currentTime);
+  const dur = audio.duration || state.current?.duration || 0;
+  $('npDur').textContent = (npShowRemaining && dur) ? '-' + fmtTime(Math.max(0, dur - audio.currentTime)) : fmtTime(dur);
 }
 function setPlayIcon(playing) {
   $('pPlay').querySelector('use').setAttribute('href', playing ? '#i-pause' : '#i-play');
@@ -1549,6 +1569,7 @@ async function playTrack(t) {
   updateMediaSession();
   if (npIsOpen()) syncNowPlaying();
   audio.src = t.audio_url;
+  try { audio.playbackRate = npRate; } catch {}
   try { await audio.play(); } catch {}
   // contar reproducción
   sb.rpc('increment_plays', { track: t.id }).then(() => { t.plays = (t.plays||0)+1; }).catch(() => {});
@@ -1558,7 +1579,18 @@ async function playTrack(t) {
 async function step(dir) {
   if (!state.current) return;
   let idx = state.queue.indexOf(state.current.id);
-  let nextId = state.queue[idx + dir];
+  let nextId;
+  if (npShuffle && dir > 0 && state.queue.length > 1) {
+    let r; do { r = Math.floor(Math.random() * state.queue.length); } while (state.queue[r] === state.current.id);
+    nextId = state.queue[r];
+  } else {
+    nextId = state.queue[idx + dir];
+  }
+  // repetir toda la cola: al llegar al final, vuelve al principio
+  if (!nextId && dir > 0 && npRepeat === 'all' && state.queue.length) {
+    const t0 = state.tracks.find(x => x.id === state.queue[0]);
+    if (t0) { playTrack(t0); return; }
+  }
   // radio / autoplay infinito: al llegar al final, cargar más y seguir
   if (!nextId && dir > 0) {
     const added = await loadRadioBatch();
