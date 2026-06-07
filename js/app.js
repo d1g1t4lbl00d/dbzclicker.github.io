@@ -4198,6 +4198,24 @@ ${toolBar('presskit', 'Press Kit / EPK', 'Edita a la izquierda, mira el resultad
   $('pkView').onclick = () => window.open(pkPublicUrl(), '_blank');
   $('pkPdf').onclick = pkDownloadPdf;
   pkRenderPreview();
+  mountBuilderTabs();
+}
+
+// Conmutador móvil "Editar / Vista previa" para los builders de herramientas.
+// En escritorio no se muestra (se ve form + preview a la vez).
+function mountBuilderTabs() {
+  const b = document.querySelector('.pk-builder');
+  if (!b || b.previousElementSibling?.classList?.contains('pk-tabs')) return;
+  const tabs = el(`<div class="pk-tabs">
+    <button class="on" data-pt="edit">Editar</button>
+    <button data-pt="prev">Vista previa</button>
+  </div>`);
+  b.parentNode.insertBefore(tabs, b);
+  tabs.querySelectorAll('button').forEach(btn => btn.onclick = () => {
+    tabs.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === btn));
+    b.classList.toggle('show-preview', btn.dataset.pt === 'prev');
+    try { b.scrollIntoView({ block: 'start', behavior: 'smooth' }); } catch {}
+  });
 }
 
 // imprime/descarga SOLO el press kit (iframe aislado, sin el resto de la app)
@@ -4464,6 +4482,7 @@ ${toolBar('smartlink', 'Smart link', 'Edita y publica tu página de lanzamiento'
   $('slView').onclick = () => { if (!smState._slug) { toast('Guarda primero'); return; } window.open(location.origin + '/?l=' + smState._slug, '_blank'); };
   slRenderLinks();
   slRenderPreview();
+  mountBuilderTabs();
 }
 function slRenderLinks() {
   const box = $('slLinks'); if (!box) return;
@@ -4611,6 +4630,7 @@ ${toolBar('split', 'Split sheet', 'Reparto de autoría · exporta a PDF', { id: 
   $('ssPdf').onclick = () => toolPrintPdf(splitSheetHTML(ssState, true), (ssState.title || 'split-sheet'));
   ssRenderPeople();
   ssRenderPreview();
+  mountBuilderTabs();
 }
 function ssRenderPeople() {
   const box = $('ssPeople'); if (!box) return;

@@ -1704,9 +1704,21 @@ textarea.pk-in { resize: vertical; line-height: 1.5; }
 .pk-notfound h2 { font-size: 22px; margin-bottom: 8px; }
 .pk-notfound p { color: #8a94aa; margin-bottom: 18px; }
 
+/* conmutador Editar / Vista previa (solo móvil) */
+.pk-tabs { display: none; }
+
 @media (max-width: 860px) {
   .pk-builder { grid-template-columns: 1fr; }
   .pk-preview-wrap { position: static; }
+  /* pestañas: alternar formulario / vista previa sin scroll largo */
+  .pk-tabs { display: flex; gap: 5px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 13px; padding: 4px; margin-bottom: 14px; position: sticky; top: 6px; z-index: 6; }
+  .pk-tabs button { flex: 1; padding: 10px; border: none; background: none; border-radius: 10px; font-weight: 720; font-size: 13.5px; color: var(--ink-soft); transition: background .15s, color .15s; }
+  .pk-tabs button.on { background: var(--panel); color: var(--ink); box-shadow: var(--sh-1); }
+  .pk-builder .pk-preview-wrap { display: none; }
+  .pk-builder.show-preview .pk-form { display: none; }
+  .pk-builder.show-preview .pk-preview-wrap { display: block; }
+  /* la barra de acciones no se pega (evita solaparse con nav/reproductor) */
+  .pk-actions { position: static; padding-bottom: 6px; }
 }
 
 /* ---- impresión / PDF ---- */
