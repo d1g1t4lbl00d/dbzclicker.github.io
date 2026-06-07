@@ -1620,20 +1620,61 @@ function renderQueuePanel() {
     if (!t) return;
     const isCur = id === state.current?.id;
     const isPast = curIdx >= 0 && i < curIdx;
+    const canDrag = !isCur && !isPast;
     const who = t.profiles?.display_name || t.profiles?.username || t.artist || '';
     const row = el(`<div class="npq-row${isCur ? ' cur' : ''}${isPast ? ' past' : ''}" data-id="${esc(String(id))}">
+      ${canDrag ? '<button class="npq-grip" data-grip title="Arrastra para reordenar"><svg fill="none" stroke="currentColor"><use href="#i-menu"/></svg></button>' : '<span class="npq-grip-sp"></span>'}
       <div class="npq-cover"${t.cover_url ? ` style="background-image:url('${esc(t.cover_url)}')"` : ''}>${isCur ? '<span class="npq-eq"><i></i><i></i><i></i></span>' : ''}</div>
       <div class="npq-info"><div class="npq-title">${esc(t.title)}</div><div class="npq-artist">${esc(who)}</div></div>
       ${isCur ? '<span class="npq-now">sonando</span>' : `<button class="npq-x" data-rm title="Quitar de la cola"><svg><use href="#i-x"/></svg></button>`}
     </div>`);
     row.onclick = (e) => {
-      if (e.target.closest('[data-rm]')) { removeFromQueue(id); return; }
+      if (e.target.closest('[data-rm]') || e.target.closest('[data-grip]')) return;
       if (!isCur) { const tt = state.tracks.find(x => x.id === id); if (tt) playTrack(tt); }
     };
+    const grip = row.querySelector('[data-grip]');
+    if (grip) grip.addEventListener('pointerdown', (e) => startQueueDrag(e, row));
     list.appendChild(row);
   });
   const upcoming = curIdx >= 0 ? state.queue.length - curIdx - 1 : state.queue.length;
   $('npqCount').textContent = upcoming > 0 ? `${upcoming} a continuación` : 'Fin de la cola';
+}
+// arrastrar para reordenar la cola (toque + ratón). Las pistas "a continuación"
+// no pueden subir por encima de la que suena.
+function startQueueDrag(e, row) {
+  e.preventDefault(); e.stopPropagation();
+  const list = $('npqList'); if (!list) return;
+  row.classList.add('dragging');
+  haptic(12);
+  try { row.setPointerCapture(e.pointerId); } catch {}
+  const move = (ev) => {
+    const cur = list.querySelector('.npq-row.cur');
+    const others = [...list.querySelectorAll('.npq-row:not(.dragging)')];
+    const y = ev.clientY;
+    let target = null;
+    for (const r of others) { const b = r.getBoundingClientRect(); if (y < b.top + b.height / 2) { target = r; break; } }
+    // no permitir colocarla por encima de la pista actual
+    if (cur && target && others.indexOf(target) <= others.indexOf(cur)) {
+      if (cur.nextSibling !== row) list.insertBefore(row, cur.nextSibling);
+      return;
+    }
+    if (target) list.insertBefore(row, target); else list.appendChild(row);
+  };
+  const up = () => {
+    row.removeEventListener('pointermove', move);
+    row.removeEventListener('pointerup', up);
+    row.removeEventListener('pointercancel', up);
+    row.classList.remove('dragging');
+    // reconstruir la cola a partir del orden del DOM (conservando el tipo de id)
+    const orig = new Map(state.queue.map(q => [String(q), q]));
+    const ids = [...list.querySelectorAll('.npq-row')].map(r => r.dataset.id);
+    const rebuilt = ids.map(s => orig.get(s)).filter(v => v != null);
+    if (rebuilt.length === state.queue.length) state.queue = rebuilt;
+    renderQueuePanel();
+  };
+  row.addEventListener('pointermove', move);
+  row.addEventListener('pointerup', up);
+  row.addEventListener('pointercancel', up);
 }
 async function step(dir) {
   if (!state.current) return;

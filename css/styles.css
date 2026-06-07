@@ -2001,3 +2001,11 @@ textarea.pk-in { resize: vertical; line-height: 1.5; }
 .npq-eq i:nth-child(2) { animation-delay: -.5s; }
 .npq-eq i:nth-child(3) { animation-delay: -.1s; }
 @keyframes npqEq { 0%,100% { height: 4px; } 50% { height: 13px; } }
+
+/* arrastrar para reordenar la cola */
+.npq-grip { flex-shrink: 0; width: 28px; height: 36px; padding: 0; border: none; background: transparent; color: var(--ink-soft, #9aa3b2); display: grid; place-items: center; cursor: grab; touch-action: none; opacity: .6; }
+.npq-grip:active { cursor: grabbing; opacity: 1; }
+.npq-grip svg { width: 17px; height: 17px; pointer-events: none; }
+.npq-grip-sp { flex-shrink: 0; width: 28px; }
+.npq-row { touch-action: pan-y; transition: background .12s; }
+.npq-row.dragging { background: var(--panel-2, rgba(255,255,255,.08)); box-shadow: 0 10px 28px rgba(0,0,0,.4); opacity: .96; position: relative; z-index: 2; }
