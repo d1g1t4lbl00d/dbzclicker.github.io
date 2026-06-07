@@ -1261,6 +1261,31 @@ function initPlayer() {
   $('pNext').onclick = () => step(1);
   $('pClose').onclick = (e) => { e.stopPropagation(); closePlayer(); };
 
+  // deslizar el reproductor hacia abajo para cerrarlo
+  (function () {
+    const pl = $('player'); let sy = 0, sx = 0, dragging = false, moved = false;
+    pl.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('.seek, .vol-slider, button')) return;
+      sy = e.clientY; sx = e.clientX; dragging = true; moved = false;
+    });
+    pl.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      const dy = e.clientY - sy, dx = e.clientX - sx;
+      if (Math.abs(dy) > 6 || Math.abs(dx) > 6) moved = true;
+      if (dy > 0 && Math.abs(dy) > Math.abs(dx)) { pl.style.transform = `translateY(${Math.min(dy, 220)}px)`; pl.style.opacity = String(Math.max(.2, 1 - dy / 240)); }
+    });
+    const end = (e) => {
+      if (!dragging) return; dragging = false;
+      const dy = (e.clientY || sy) - sy;
+      pl.style.transition = 'transform .2s var(--ease), opacity .2s';
+      if (dy > 70) { pl.style.transform = 'translateY(130%)'; pl.style.opacity = '0'; setTimeout(() => { pl.style.transition = ''; pl.style.transform = ''; pl.style.opacity = ''; closePlayer(); }, 190); }
+      else { pl.style.transform = ''; pl.style.opacity = ''; setTimeout(() => { pl.style.transition = ''; }, 200); }
+      if (moved) { const sup = (ev) => { if (ev.target.closest('.now')) { ev.stopPropagation(); ev.preventDefault(); } pl.removeEventListener('click', sup, true); }; pl.addEventListener('click', sup, true); }
+    };
+    pl.addEventListener('pointerup', end);
+    pl.addEventListener('pointercancel', () => { if (dragging) { dragging = false; pl.style.transform = ''; pl.style.opacity = ''; } });
+  })();
+
   audio.addEventListener('timeupdate', () => {
     if (seeking || !audio.duration) return;
     const pct = audio.currentTime / audio.duration;

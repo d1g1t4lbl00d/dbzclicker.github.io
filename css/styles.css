@@ -1862,3 +1862,7 @@ textarea.pk-in { resize: vertical; line-height: 1.5; }
 .p-close svg { width: 18px; height: 18px; stroke: var(--ink-soft); }
 :root[data-theme="dark"] .p-close:hover { background: rgba(255,255,255,.1); }
 @media (max-width: 720px) { .player .p-close { width: 40px; height: 40px; } .player .p-close svg { width: 20px; height: 20px; } }
+
+/* deslizar el reproductor hacia abajo para cerrarlo */
+.player { touch-action: none; }
+.player { transition: transform .2s var(--ease), opacity .2s; }
