@@ -901,14 +901,18 @@ function trackCard(t) {
   const collabs = Array.isArray(t.collaborators) ? t.collaborators : [];
   const ft = collabs.length ? ` ft. ${collabs.map(c => `<a data-collab="${esc(c.id)}">${esc(c.display_name || c.username)}</a>`).join(', ')}` : '';
   const mine = t.user_id === state.user.id;
+  const isExt = !!t.source;            // beat importado con licencia abierta (CC)
   const cov = t.cover_url ? czUrl(t.cover_url) : '';
+  const artistHtml = isExt
+    ? `<span>${esc(t.artist || prof.display_name || 'productor')}</span>${t.external_url ? ` · <a class="t-cc" href="${esc(czHref(t.external_url))}" target="_blank" rel="noopener">${esc(t.source)} · CC</a>` : ''}`
+    : `<a data-act="profile">${esc(prof.display_name || prof.username || t.artist || 'anónimo')}</a>${verifiedBadge(prof)}${displayBadgeHtml(prof)}${ft}`;
   const card = el(`
     <div class="track ${cov ? 'has-bg' : ''}" data-id="${t.id}" ${cov ? `style="background-image:url('${cov}')"` : ''}>
       ${t._repostedBy ? `<div class="repost-badge"><svg fill="none" stroke="currentColor"><use href="#i-repeat"/></svg> Reposteado por <a data-act="repostby">${esc(t._repostedBy)}</a></div>` : ''}
       <div class="t-head">
         <div class="t-titles">
           <div class="t-title">${esc(t.title)}</div>
-          <div class="t-artist">por <a data-act="profile">${esc(prof.display_name || prof.username || t.artist || 'anónimo')}</a>${verifiedBadge(prof)}${displayBadgeHtml(prof)}${ft}</div>
+          <div class="t-artist">por ${artistHtml}</div>
         </div>
         ${t.genre ? `<span class="t-genre">${esc(t.genre)}</span>` : ''}
         ${t.is_beat ? `<span class="t-genre beat-tag">BEAT${t.bpm ? ' · ' + t.bpm + ' BPM' : ''}${t.song_key ? ' · ' + esc(t.song_key) : ''}</span>` : ''}
@@ -3752,9 +3756,10 @@ async function renderBeats() {
   const main = $('main');
   main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
   main.innerHTML = `
-    <div class="main-head"><div><h2>Beats</h2><div class="sub">Beats que suben los productores · descárgalos gratis</div></div></div>
+    <div class="main-head"><div><h2>Beats</h2><div class="sub">Beats que suben los productores · descárgalos gratis</div></div>${state.profile.is_admin ? `<button class="btn sm" id="beatsImport"><svg fill="none" stroke="currentColor"><use href="#i-plus"/></svg> Importar (CC)</button>` : ''}</div>
     <div class="beats-search"><svg fill="none" stroke="currentColor"><use href="#i-search"/></svg><input type="text" id="beatsSearch" placeholder="Buscar por título, género, BPM o tono…" /></div>
     <div id="beatsList" class="feed-list compact"><div class="loading" style="padding:30px"><div class="spinner"></div></div></div>`;
+  const importBtn = $('beatsImport'); if (importBtn) importBtn.onclick = () => openBeatsImporter(() => switchView('beats'));
   const { data } = await sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)').eq('is_beat', true).order('created_at', { ascending: false }).limit(80);
   const all = (data || []).filter(t => !isHidden(t.user_id));
   const list = $('beatsList');
@@ -3770,6 +3775,109 @@ async function renderBeats() {
     const q = e.target.value.trim().toLowerCase();
     renderList(!q ? all : all.filter(t => (t.title || '').toLowerCase().includes(q) || (t.genre || '').toLowerCase().includes(q) || String(t.bpm || '').includes(q) || (t.song_key || '').toLowerCase().includes(q)));
   };
+}
+
+/* =======================================================================
+   IMPORTADOR DE BEATS (Creative Commons vía Jamendo) — solo admin.
+   Streaming desde el CDN de Jamendo (no se re-aloja) + crédito al productor.
+   ======================================================================= */
+const JAMENDO_CID_KEY = 'ub_jamendo_cid';
+async function importJamendoTrack(t) {
+  try {
+    const genres = (t.musicinfo && t.musicinfo.tags && t.musicinfo.tags.genres) || [];
+    const { error } = await sb.from('tracks').insert({
+      user_id: state.user.id,
+      title: (t.name || 'Beat').slice(0, 120),
+      artist: t.artist_name || 'Productor',
+      genre: genres[0] || null,
+      audio_url: t.audio,
+      cover_url: t.image || null,
+      duration: t.duration ? Math.round(+t.duration) : null,
+      is_beat: true,
+      source: 'Jamendo',
+      external_url: t.shareurl || t.audio,
+      license: t.license_ccurl || null,
+      waveform: waveBars(String(t.id), 80),
+      collaborators: [],
+    });
+    if (error) throw error;
+    return true;
+  } catch (e) { console.error(e); return false; }
+}
+function openBeatsImporter(onDone) {
+  if (!state.profile.is_admin) return;
+  let cid = localStorage.getItem(JAMENDO_CID_KEY) || '';
+  const m = openModal(`
+    <div class="modal-head"><h3>Importar beats · Creative Commons</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <p class="bi-note">Instrumentales con licencia <b>Creative Commons</b> desde <b>Jamendo</b>. Se reproducen en streaming (no se re-alojan) y se acredita a cada productor con enlace a su licencia.</p>
+      <div class="field">
+        <label>Jamendo client_id · <a href="https://devportal.jamendo.com/" target="_blank" rel="noopener" style="font-weight:700">conseguir gratis →</a></label>
+        <div class="bi-cid"><input class="pk-in" id="biCid" value="${esc(cid)}" placeholder="pega tu client_id" /></div>
+      </div>
+      <div class="bi-controls">
+        <input class="pk-in" id="biTag" placeholder="estilo: hiphop, trap, lofi, boombap…" value="hiphop" />
+        <button class="btn primary" id="biSearch"><svg fill="none" stroke="#fff"><use href="#i-search"/></svg> Buscar</button>
+      </div>
+      <div id="biResults" class="bi-results"></div>
+      <div class="auth-msg" id="biMsg"></div>
+    </div>`);
+  const msg = m.querySelector('#biMsg'), results = m.querySelector('#biResults');
+  let lastTracks = [], prev = { aud: null, btn: null };
+  const setIcon = (btn, name) => { const u = btn.querySelector('use'); if (u) u.setAttribute('href', '#i-' + name); };
+  const preview = (t, btn) => {
+    if (prev.aud && prev.btn === btn) { if (prev.aud.paused) { prev.aud.play(); setIcon(btn, 'pause'); } else { prev.aud.pause(); setIcon(btn, 'play'); } return; }
+    if (prev.aud) { try { prev.aud.pause(); } catch {} setIcon(prev.btn, 'play'); }
+    try { audio && audio.pause(); } catch {}
+    const a = new Audio(t.audio); a.play().catch(() => {}); setIcon(btn, 'pause');
+    a.onended = () => setIcon(btn, 'play');
+    prev = { aud: a, btn };
+  };
+  async function search() {
+    cid = m.querySelector('#biCid').value.trim(); localStorage.setItem(JAMENDO_CID_KEY, cid);
+    if (!cid) { msg.className = 'auth-msg error'; msg.textContent = 'Pega tu client_id de Jamendo primero.'; return; }
+    const tag = m.querySelector('#biTag').value.trim() || 'instrumental';
+    msg.className = 'auth-msg'; msg.textContent = '';
+    results.innerHTML = `<div class="loading" style="padding:24px"><div class="spinner"></div></div>`;
+    try {
+      const url = `https://api.jamendo.com/v3.0/tracks/?client_id=${encodeURIComponent(cid)}&format=json&limit=40&order=popularity_total&audioformat=mp32&include=musicinfo+licenses&vocalinstrumental=instrumental&fuzzytags=${encodeURIComponent(tag)}`;
+      const r = await fetch(url);
+      const j = await r.json();
+      if (j.headers && j.headers.status && j.headers.status !== 'success') throw new Error(j.headers.error_message || 'error');
+      lastTracks = (j.results || []).filter(t => t.audio);
+      const ext = lastTracks.map(t => t.shareurl).filter(Boolean);
+      let already = new Set();
+      if (ext.length) { const { data } = await sb.from('tracks').select('external_url').in('external_url', ext); already = new Set((data || []).map(x => x.external_url)); }
+      renderResults(already);
+    } catch (e) {
+      results.innerHTML = `<div class="bi-empty">No se pudo conectar con Jamendo. Revisa el client_id e inténtalo de nuevo.</div>`;
+    }
+  }
+  function renderResults(already) {
+    if (!lastTracks.length) { results.innerHTML = `<div class="bi-empty">Sin resultados. Prueba con otro estilo.</div>`; return; }
+    results.innerHTML = '';
+    lastTracks.forEach(t => {
+      const done = already.has(t.shareurl);
+      const row = el(`<div class="bi-row">
+        <button class="bi-play" data-play><svg fill="none" stroke="currentColor"><use href="#i-play"/></svg></button>
+        <div class="bi-cover" style="${t.image ? `background-image:url('${esc(t.image)}')` : ''}"></div>
+        <div class="bi-info"><div class="bi-title">${esc(t.name)}</div><div class="bi-artist">${esc(t.artist_name)}${t.duration ? ' · ' + fmtTime(+t.duration) : ''}</div></div>
+        <button class="btn sm ${done ? '' : 'primary'} bi-add" data-add ${done ? 'disabled' : ''}>${done ? '✓' : 'Añadir'}</button>
+      </div>`);
+      row.querySelector('[data-play]').onclick = () => preview(t, row.querySelector('[data-play]'));
+      const addBtn = row.querySelector('[data-add]');
+      if (!done) addBtn.onclick = async () => {
+        addBtn.disabled = true; addBtn.textContent = '…';
+        const ok = await importJamendoTrack(t);
+        addBtn.textContent = ok ? '✓' : 'Error';
+        if (ok) addBtn.classList.remove('primary'); else { addBtn.disabled = false; addBtn.textContent = 'Añadir'; toast('No se pudo añadir'); }
+      };
+      results.appendChild(row);
+    });
+  }
+  m.querySelector('#biSearch').onclick = search;
+  m.querySelector('#biTag').addEventListener('keydown', e => { if (e.key === 'Enter') search(); });
+  m.addEventListener('click', (e) => { if (e.target.classList && e.target.classList.contains('close')) { try { prev.aud && prev.aud.pause(); } catch {} if (onDone) onDone(); } });
 }
 
 /* =======================================================================
