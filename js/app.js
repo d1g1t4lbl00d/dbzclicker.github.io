@@ -924,6 +924,7 @@ function trackCard(t) {
         <button class="act" data-act="toggleComments"><svg><use href="#i-comment"/></svg><span class="cn">Comentar</span></button>
         <button class="act" data-act="share"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg>Compartir</button>
         <button class="act" data-act="addPlaylist"><svg fill="none" stroke="currentColor"><use href="#i-listadd"/></svg>Playlist</button>
+        <button class="act" data-act="queue" title="Añadir a la cola"><svg fill="none" stroke="currentColor"><use href="#i-list"/></svg>Cola</button>
         <button class="act" data-act="download"><svg><use href="#i-download"/></svg>Descargar</button>
         ${mine ? `<button class="act" data-act="edit"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg>Editar</button>` : ''}
         ${mine ? '' : `<button class="act" data-act="report"><svg fill="none" stroke="currentColor"><use href="#i-bell"/></svg>Reportar</button>`}
@@ -1020,6 +1021,7 @@ async function handleTrackClick(e, t, card) {
   else if (act === 'download') downloadTrack(t);
   else if (act === 'share') shareTrack(t);
   else if (act === 'addPlaylist') openPlaylistPicker(t);
+  else if (act === 'queue') enqueue(t);
   else if (act === 'repost') toggleRepost(t, card);
   else if (act === 'repostby') { if (t._repostedById) openProfile(t._repostedById); }
   else if (act === 'delete') deleteTrack(t, card);
@@ -1490,6 +1492,15 @@ function initNowPlaying() {
   // tocar el tiempo total alterna restante / total
   $('npDur').onclick = () => { npShowRemaining = !npShowRemaining; updateNpProgress(audio.duration ? audio.currentTime / audio.duration : 0); };
 
+  // panel de cola ("a continuación")
+  $('npQueueBtn').onclick = () => {
+    const open = $('npQueuePanel').classList.toggle('open');
+    $('npQueueBtn').classList.toggle('on', open);
+    if (open) renderQueuePanel();
+    haptic(8);
+  };
+  $('npQueueClose').onclick = () => { $('npQueuePanel').classList.remove('open'); $('npQueueBtn').classList.remove('on'); };
+
   // seek arrastrando sobre el waveform grande
   const w = $('npWave');
   const seekW = (x) => { if (!audio.duration) return; const r = w.getBoundingClientRect(); audio.currentTime = Math.min(1, Math.max(0, (x - r.left) / r.width)) * audio.duration; };
@@ -1501,7 +1512,7 @@ function initNowPlaying() {
 }
 function npIsOpen() { return $('nowPlaying').classList.contains('open'); }
 function openNowPlaying() { if (!state.current) return; $('nowPlaying').classList.add('open'); syncNowPlaying(); }
-function closeNowPlaying() { $('nowPlaying').classList.remove('open'); }
+function closeNowPlaying() { $('nowPlaying').classList.remove('open'); $('npQueuePanel')?.classList.remove('open'); $('npQueueBtn')?.classList.remove('on'); }
 function closePlayer() {
   try { audio.pause(); audio.removeAttribute('src'); audio.load(); } catch (_) {}
   state.current = null; state.queue = [];
@@ -1575,6 +1586,54 @@ async function playTrack(t) {
   sb.rpc('increment_plays', { track: t.id }).then(() => { t.plays = (t.plays||0)+1; }).catch(() => {});
   // si no está en la cola actual, crear cola con la vista
   if (!state.queue.includes(t.id)) state.queue = [t.id];
+  if ($('npQueuePanel')?.classList.contains('open')) renderQueuePanel();
+}
+
+/* ---- Cola visible: "a continuación", saltar y quitar pistas ---- */
+function enqueue(t, playNext = false) {
+  if (!state.tracks.find(x => x.id === t.id)) state.tracks.push(t);
+  if (!state.current) { state.queue = [t.id]; playTrack(t); openNowPlaying(); return; }
+  if (state.queue.includes(t.id)) { toast('Ya está en la cola'); return; }
+  if (playNext) {
+    const idx = state.queue.indexOf(state.current.id);
+    state.queue.splice(idx + 1, 0, t.id);
+    toast('⏭️ Se reproduce a continuación');
+  } else {
+    state.queue.push(t.id);
+    toast('➕ Añadido a la cola');
+  }
+  haptic(10);
+  if ($('npQueuePanel')?.classList.contains('open')) renderQueuePanel();
+}
+function removeFromQueue(id) {
+  if (id === state.current?.id) return;        // la pista actual no se quita
+  const i = state.queue.indexOf(id);
+  if (i >= 0) state.queue.splice(i, 1);
+  renderQueuePanel();
+}
+function renderQueuePanel() {
+  const list = $('npqList'); if (!list) return;
+  const curIdx = state.queue.indexOf(state.current?.id);
+  list.innerHTML = '';
+  state.queue.forEach((id, i) => {
+    const t = state.tracks.find(x => x.id === id);
+    if (!t) return;
+    const isCur = id === state.current?.id;
+    const isPast = curIdx >= 0 && i < curIdx;
+    const who = t.profiles?.display_name || t.profiles?.username || t.artist || '';
+    const row = el(`<div class="npq-row${isCur ? ' cur' : ''}${isPast ? ' past' : ''}" data-id="${esc(String(id))}">
+      <div class="npq-cover"${t.cover_url ? ` style="background-image:url('${esc(t.cover_url)}')"` : ''}>${isCur ? '<span class="npq-eq"><i></i><i></i><i></i></span>' : ''}</div>
+      <div class="npq-info"><div class="npq-title">${esc(t.title)}</div><div class="npq-artist">${esc(who)}</div></div>
+      ${isCur ? '<span class="npq-now">sonando</span>' : `<button class="npq-x" data-rm title="Quitar de la cola"><svg><use href="#i-x"/></svg></button>`}
+    </div>`);
+    row.onclick = (e) => {
+      if (e.target.closest('[data-rm]')) { removeFromQueue(id); return; }
+      if (!isCur) { const tt = state.tracks.find(x => x.id === id); if (tt) playTrack(tt); }
+    };
+    list.appendChild(row);
+  });
+  const upcoming = curIdx >= 0 ? state.queue.length - curIdx - 1 : state.queue.length;
+  $('npqCount').textContent = upcoming > 0 ? `${upcoming} a continuación` : 'Fin de la cola';
 }
 async function step(dir) {
   if (!state.current) return;
