@@ -1665,66 +1665,82 @@ function attachQueueRow(row, id, isCur, isPast) {
   row.addEventListener('pointerup', finish);
   row.addEventListener('pointercancel', finish);
 }
-// FLIP: anima el desplazamiento de las demás filas al reordenar
-function flipQueue(list, exclude, mutate) {
-  const rows = [...list.querySelectorAll('.npq-row')].filter(r => r !== exclude);
-  const first = rows.map(r => [r, r.getBoundingClientRect().top]);
-  mutate();
-  for (const [r, top0] of first) {
-    const dy = top0 - r.getBoundingClientRect().top;
-    if (!dy) continue;
-    r.style.transition = 'none';
-    r.style.transform = `translateY(${dy}px)`;
-    requestAnimationFrame(() => { r.style.transition = 'transform .2s var(--ease)'; r.style.transform = ''; });
-  }
-}
+// Reordenado determinista basado en transforms: las vecinas se apartan a una
+// posición FIJA (no hay animaciones que se pisen). Solo se reordena el DOM al
+// soltar. La región reordenable son las pistas "a continuación".
 function beginQueueDrag(e, row) {
   const list = $('npqList'); if (!list) return;
-  const rect = row.getBoundingClientRect();
-  qDrag = { row, list, grab: e.clientY - rect.top, prevent: (ev) => ev.preventDefault() };
+  const allRows = [...list.querySelectorAll('.npq-row')];
+  const curRow = list.querySelector('.npq-row.cur');
+  const curIdx = curRow ? allRows.indexOf(curRow) : -1;
+  const upcoming = allRows.filter((r, i) => i > curIdx && !r.classList.contains('past') && !r.classList.contains('cur'));
+  const fromIdx = upcoming.indexOf(row);
+  if (fromIdx < 0 || upcoming.length < 2) { qDrag = null; return; }   // nada que reordenar
+  const homes = upcoming.map(r => { const b = r.getBoundingClientRect(); return { top: b.top, h: b.height }; });
+  const slotH = Math.abs(homes[1].top - homes[0].top) || homes[0].h;
+  qDrag = { list, row, upcoming, homes, slotH, fromIdx, toIdx: fromIdx, lastDy: 0, startY: e.clientY, prevent: (ev) => ev.preventDefault() };
   row.classList.add('dragging');
   document.body.classList.add('q-dragging');
   haptic(18);
   try { row.setPointerCapture(e.pointerId); } catch {}
   document.addEventListener('touchmove', qDrag.prevent, { passive: false });
+  upcoming.forEach(r => { if (r !== row) r.style.transition = 'transform .18s var(--ease)'; });
   qDragMove(e);
 }
 function qDragMove(e) {
   if (!qDrag) return;
-  const { row, list, grab } = qDrag;
-  const cur = list.querySelector('.npq-row.cur');
-  let desiredTop = e.clientY - grab;
-  if (cur) desiredTop = Math.max(desiredTop, cur.getBoundingClientRect().top);   // no por encima de la actual
-  const center = desiredTop + row.offsetHeight / 2;
-  const others = [...list.querySelectorAll('.npq-row:not(.dragging)')];
-  const start = cur ? others.indexOf(cur) + 1 : 0;
-  let target = null;
-  for (let i = start; i < others.length; i++) { const b = others[i].getBoundingClientRect(); if (center < b.top + b.height / 2) { target = others[i]; break; } }
-  const changes = target ? (row.nextElementSibling !== target) : (row.nextElementSibling !== null);
-  if (target !== row && changes) flipQueue(list, row, () => { if (target) list.insertBefore(row, target); else list.appendChild(row); });
-  // la fila arrastrada sigue al dedo (recalcular su posición de layout sin transform)
-  row.style.transform = 'none';
-  const layoutTop = row.getBoundingClientRect().top;
-  row.style.transform = `translateY(${(desiredTop - layoutTop).toFixed(1)}px) scale(1.03)`;
+  const { row, upcoming, homes, slotH, fromIdx } = qDrag;
+  // limitar el arrastre a la banda "a continuación"
+  const minTop = homes[0].top, maxTop = homes[upcoming.length - 1].top;
+  let top = homes[fromIdx].top + (e.clientY - qDrag.startY);
+  top = Math.max(minTop, Math.min(maxTop, top));
+  const dy = top - homes[fromIdx].top;
+  qDrag.lastDy = dy;
+  const center = top + homes[fromIdx].h / 2;
+  // índice destino comparando con los centros "home" (referencia fija → estable)
+  let toIdx = fromIdx;
+  while (toIdx < upcoming.length - 1 && center > homes[toIdx + 1].top + homes[toIdx + 1].h / 2) toIdx++;
+  while (toIdx > 0 && center < homes[toIdx - 1].top + homes[toIdx - 1].h / 2) toIdx--;
+  qDrag.toIdx = toIdx;
+  // apartar las vecinas hacia un desplazamiento fijo (±slotH) para abrir hueco
+  upcoming.forEach((r, i) => {
+    if (r === row) return;
+    let shift = 0;
+    if (fromIdx < toIdx && i > fromIdx && i <= toIdx) shift = -slotH;
+    else if (fromIdx > toIdx && i < fromIdx && i >= toIdx) shift = slotH;
+    r.style.transform = shift ? `translateY(${shift}px)` : 'translateY(0)';
+  });
+  // la fila arrastrada sigue al dedo (sin transición → 1:1)
+  row.style.transform = `translateY(${dy.toFixed(1)}px) scale(1.03)`;
 }
 function qDragEnd() {
   if (!qDrag) return;
-  const { row, list, prevent } = qDrag;
+  const { list, row, upcoming, homes, fromIdx, toIdx, lastDy, prevent } = qDrag;
   document.removeEventListener('touchmove', prevent, { passive: false });
   document.body.classList.remove('q-dragging');
-  // reconstruir la cola con el nuevo orden (conservando el tipo de id)
+  // nuevo orden de la región y reinserción en el DOM (una sola vez)
+  const newOrder = upcoming.slice();
+  newOrder.splice(toIdx, 0, newOrder.splice(fromIdx, 1)[0]);
+  const anchor = upcoming[upcoming.length - 1].nextSibling;
+  upcoming.forEach(r => { if (r !== row) { r.style.transition = ''; r.style.transform = ''; } });
+  newOrder.forEach(r => list.insertBefore(r, anchor));
+  // reconstruir state.queue desde el orden del DOM (conservando el tipo de id)
   const orig = new Map(state.queue.map(q => [String(q), q]));
   const ids = [...list.querySelectorAll('.npq-row')].map(r => r.dataset.id);
   const rebuilt = ids.map(s => orig.get(s)).filter(v => v != null);
   if (rebuilt.length === state.queue.length) state.queue = rebuilt;
-  // aterrizaje suave
-  row.style.transition = 'transform .2s var(--ease)';
+  // aterrizaje animado de la fila arrastrada hasta su nuevo hueco
+  row.style.transition = 'none';
   row.style.transform = 'none';
-  setTimeout(() => { row.classList.remove('dragging'); row.style.transition = ''; row.style.transform = ''; }, 200);
+  const newTop = row.getBoundingClientRect().top;
+  const delta = (homes[fromIdx].top + lastDy) - newTop;
+  row.style.transform = `translateY(${delta.toFixed(1)}px) scale(1.02)`;
+  requestAnimationFrame(() => { row.style.transition = 'transform .18s var(--ease)'; row.style.transform = 'none'; });
+  setTimeout(() => { row.classList.remove('dragging'); row.style.transition = ''; row.style.transform = ''; }, 210);
   qDrag = null;
-  const curIdx = state.queue.indexOf(state.current?.id);
-  const upcoming = curIdx >= 0 ? state.queue.length - curIdx - 1 : state.queue.length;
-  const c = $('npqCount'); if (c) c.textContent = upcoming > 0 ? `${upcoming} a continuación` : 'Fin de la cola';
+  const ci = state.queue.indexOf(state.current?.id);
+  const up = ci >= 0 ? state.queue.length - ci - 1 : state.queue.length;
+  const c = $('npqCount'); if (c) c.textContent = up > 0 ? `${up} a continuación` : 'Fin de la cola';
 }
 async function step(dir) {
   if (!state.current) return;
