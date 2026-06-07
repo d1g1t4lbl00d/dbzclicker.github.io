@@ -3087,7 +3087,7 @@ async function renderPlaylists() {
   main.innerHTML = `<div class="main-head"><div><h2>Playlists</h2><div class="sub">Tus listas de reproducción</div></div><button class="btn primary" id="newPlaylistBtn"><svg fill="none" stroke="#fff"><use href="#i-plus"/></svg> Crear</button></div><div id="plGrid" class="pl-grid"><div class="loading" style="grid-column:1/-1;padding:30px"><div class="spinner"></div></div></div>`;
   $('newPlaylistBtn').onclick = createPlaylistModal;
   const { data } = await sb.from('playlists')
-    .select('*, playlist_tracks(track_id, tracks(cover_url))')
+    .select('*, playlist_tracks(track_id, added_at, tracks(cover_url))')
     .eq('user_id', state.user.id).order('created_at', { ascending: false });
   const grid = $('plGrid');
   const lists = data || [];
@@ -3097,9 +3097,11 @@ async function renderPlaylists() {
 }
 function playlistCovers(pl) {
   if (pl.cover_url) return `<div class="pl-cover" style="background-image:url('${czUrl(pl.cover_url)}')"></div>`;
-  const covers = (pl.playlist_tracks || []).map(x => x.tracks?.cover_url).filter(Boolean).slice(0, 4);
-  if (!covers.length) return `<div class="pl-cover pl-cover-empty"><svg fill="none" stroke="#fff"><use href="#i-list"/></svg></div>`;
-  return `<div class="pl-cover pl-cover-grid">${covers.map(c => `<div style="background-image:url('${czUrl(c)}')"></div>`).join('')}</div>`;
+  // por defecto: la portada de la primera pista añadida (ordenando por added_at)
+  const rows = (pl.playlist_tracks || []).slice().sort((a, b) => (a.added_at ? +new Date(a.added_at) : 0) - (b.added_at ? +new Date(b.added_at) : 0));
+  const cover = rows.map(x => x.tracks?.cover_url).find(Boolean);
+  if (!cover) return `<div class="pl-cover pl-cover-empty"><svg fill="none" stroke="#fff"><use href="#i-list"/></svg></div>`;
+  return `<div class="pl-cover" style="background-image:url('${czUrl(cover)}')"></div>`;
 }
 function playlistCard(pl) {
   const n = (pl.playlist_tracks || []).length;
