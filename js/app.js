@@ -574,6 +574,7 @@ async function switchView(view) {
   if (view === 'smartlink') return renderSmartLinkBuilder();
   if (view === 'splits') return renderSplitSheets();
   if (view === 'split') return renderSplitBuilder();
+  if (view === 'analyzer') return renderAudioAnalyzer();
   if (view === 'radio') return startRadio();
 
   main.innerHTML = skeletonFeed();
@@ -3648,6 +3649,12 @@ function renderTools() {
         <div class="tool-desc">Documento de reparto de una colaboración: quién hizo qué y el % de cada uno. Exporta a PDF.</div>
         <span class="tool-go">Crear ahora →</span>
       </button>
+      <button class="tool-card" id="toolAnalyzer">
+        <div class="tool-ico"><svg fill="none" stroke="currentColor"><use href="#i-mixer"/></svg></div>
+        <div class="tool-name">Analizador de audio</div>
+        <div class="tool-desc">Sube una canción y obtén el <b>tono</b> (para el autotune), el <b>BPM</b> y un análisis de volumen, picos y clipping. Todo en tu navegador.</div>
+        <span class="tool-go">Analizar ahora →</span>
+      </button>
       <div class="tool-card soon">
         <div class="tool-ico"><svg fill="none" stroke="currentColor"><use href="#i-image"/></svg></div>
         <div class="tool-name">Portada / flyer</div>
@@ -3658,6 +3665,233 @@ function renderTools() {
   $('toolPresskit').onclick = () => switchView('presskit');
   $('toolSmartlink').onclick = () => switchView('smartlinks');
   $('toolSplit').onclick = () => switchView('splits');
+  $('toolAnalyzer').onclick = () => switchView('analyzer');
+}
+
+/* =======================================================================
+   ANALIZADOR DE AUDIO — tono (key), BPM y análisis (todo client-side)
+   ======================================================================= */
+const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+const NOTE_ES = { 'C': 'Do', 'C#': 'Do#', 'D': 'Re', 'D#': 'Re#', 'E': 'Mi', 'F': 'Fa', 'F#': 'Fa#', 'G': 'Sol', 'G#': 'Sol#', 'A': 'La', 'A#': 'La#', 'B': 'Si' };
+// Códigos Camelot (mezcla armónica) por [tonica][modo]
+const CAMELOT = {
+  'C major': '8B', 'C# major': '3B', 'D major': '10B', 'D# major': '5B', 'E major': '12B', 'F major': '7B', 'F# major': '2B', 'G major': '9B', 'G# major': '4B', 'A major': '11B', 'A# major': '6B', 'B major': '1B',
+  'C minor': '5A', 'C# minor': '12A', 'D minor': '7A', 'D# minor': '2A', 'E minor': '9A', 'F minor': '4A', 'F# minor': '11A', 'G minor': '6A', 'G# minor': '1A', 'A minor': '8A', 'A# minor': '3A', 'B minor': '10A',
+};
+
+// FFT iterativa radix-2 (in-place sobre re[], im[])
+function _fft(re, im) {
+  const n = re.length;
+  for (let i = 1, j = 0; i < n; i++) {
+    let bit = n >> 1;
+    for (; j & bit; bit >>= 1) j ^= bit;
+    j ^= bit;
+    if (i < j) { const tr = re[i]; re[i] = re[j]; re[j] = tr; const ti = im[i]; im[i] = im[j]; im[j] = ti; }
+  }
+  for (let len = 2; len <= n; len <<= 1) {
+    const ang = -2 * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang);
+    const half = len >> 1;
+    for (let i = 0; i < n; i += len) {
+      let cr = 1, ci = 0;
+      for (let k = 0; k < half; k++) {
+        const ar = re[i + k + half], ai = im[i + k + half];
+        const vr = ar * cr - ai * ci, vi = ar * ci + ai * cr;
+        const ur = re[i + k], ui = im[i + k];
+        re[i + k] = ur + vr; im[i + k] = ui + vi;
+        re[i + k + half] = ur - vr; im[i + k + half] = ui - vi;
+        const ncr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = ncr;
+      }
+    }
+  }
+}
+
+// correlación de Pearson
+function _pearson(a, b) {
+  const n = a.length; let ma = 0, mb = 0;
+  for (let i = 0; i < n; i++) { ma += a[i]; mb += b[i]; }
+  ma /= n; mb /= n;
+  let num = 0, da = 0, db = 0;
+  for (let i = 0; i < n; i++) { const x = a[i] - ma, y = b[i] - mb; num += x * y; da += x * x; db += y * y; }
+  const den = Math.sqrt(da * db);
+  return den ? num / den : 0;
+}
+
+// Detecta tonalidad con perfiles Krumhansl-Schmuckler sobre el cromagrama
+function detectKey(mono, sr) {
+  const N = 4096, hop = 2048;
+  const win = new Float32Array(N);
+  for (let i = 0; i < N; i++) win[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (N - 1)); // Hann
+  const chroma = new Float64Array(12);
+  const re = new Float32Array(N), im = new Float32Array(N);
+  const minF = 55, maxF = 2000; // A1..~B6
+  for (let off = 0; off + N <= mono.length; off += hop) {
+    for (let i = 0; i < N; i++) { re[i] = mono[off + i] * win[i]; im[i] = 0; }
+    _fft(re, im);
+    for (let k = 1; k < N / 2; k++) {
+      const f = k * sr / N;
+      if (f < minF || f > maxF) continue;
+      const mag = Math.sqrt(re[k] * re[k] + im[k] * im[k]);
+      if (mag <= 0) continue;
+      const midi = 69 + 12 * Math.log2(f / 440);
+      const pc = ((Math.round(midi) % 12) + 12) % 12;
+      chroma[pc] += mag;
+    }
+  }
+  // normaliza
+  let mx = 0; for (let i = 0; i < 12; i++) mx = Math.max(mx, chroma[i]);
+  if (mx > 0) for (let i = 0; i < 12; i++) chroma[i] /= mx;
+  const major = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88];
+  const minor = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
+  let best = { score: -2, tonic: 0, mode: 'major' };
+  for (let t = 0; t < 12; t++) {
+    const rot = new Array(12);
+    for (let j = 0; j < 12; j++) rot[j] = chroma[(t + j) % 12];
+    const sMaj = _pearson(rot, major), sMin = _pearson(rot, minor);
+    if (sMaj > best.score) best = { score: sMaj, tonic: t, mode: 'major' };
+    if (sMin > best.score) best = { score: sMin, tonic: t, mode: 'minor' };
+  }
+  return best;
+}
+
+// Detecta BPM por autocorrelación de la envolvente de onsets
+function detectBPM(mono, sr) {
+  const H = 512, fps = sr / H;
+  const nF = Math.floor(mono.length / H);
+  if (nF < 8) return null;
+  const env = new Float32Array(nF);
+  for (let i = 0; i < nF; i++) { let s = 0; const o = i * H; for (let j = 0; j < H; j++) { const v = mono[o + j] || 0; s += v * v; } env[i] = s; }
+  const onset = new Float32Array(nF);
+  for (let i = 1; i < nF; i++) { const d = env[i] - env[i - 1]; onset[i] = d > 0 ? d : 0; }
+  let mean = 0; for (let i = 0; i < nF; i++) mean += onset[i]; mean /= nF;
+  for (let i = 0; i < nF; i++) onset[i] -= mean;
+  let best = -Infinity, bestBpm = 120;
+  for (let bpm = 60; bpm <= 200; bpm += 0.5) {
+    const lag = fps * 60 / bpm, l0 = Math.floor(lag), frac = lag - l0;
+    if (l0 + 1 >= nF) continue;
+    let sum = 0;
+    for (let i = 0; i + l0 + 1 < nF; i++) sum += onset[i] * (onset[i + l0] * (1 - frac) + onset[i + l0 + 1] * frac);
+    if (sum > best) { best = sum; bestBpm = bpm; }
+  }
+  while (bestBpm < 70) bestBpm *= 2;
+  while (bestBpm > 150) bestBpm /= 2;
+  return Math.round(bestBpm * 10) / 10;
+}
+
+// Mezcla a mono y calcula pico, RMS, clipping
+function analyzeLevels(buf) {
+  const chs = buf.numberOfChannels;
+  const len = buf.length;
+  const data = [];
+  for (let c = 0; c < chs; c++) data.push(buf.getChannelData(c));
+  const mono = new Float32Array(len);
+  let peak = 0, sumSq = 0, clipped = 0;
+  for (let i = 0; i < len; i++) {
+    let s = 0; for (let c = 0; c < chs; c++) s += data[c][i];
+    s /= chs; mono[i] = s;
+    const a = Math.abs(s);
+    if (a > peak) peak = a;
+    sumSq += s * s;
+    if (a >= 0.992) clipped++;
+  }
+  const rms = Math.sqrt(sumSq / (len || 1));
+  const toDb = (x) => x > 0 ? 20 * Math.log10(x) : -Infinity;
+  return { mono, peakDb: toDb(peak), rmsDb: toDb(rms), peak, clipPct: (clipped / (len || 1)) * 100, crest: toDb(peak) - toDb(rms) };
+}
+
+function scaleNotes(tonic, mode) {
+  const steps = mode === 'major' ? [0, 2, 4, 5, 7, 9, 11] : [0, 2, 3, 5, 7, 8, 10];
+  return steps.map(s => NOTE_NAMES[(tonic + s) % 12]).join(' ');
+}
+
+async function renderAudioAnalyzer() {
+  setActiveNav('tools');
+  const main = $('main');
+  main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
+  main.innerHTML = `
+    <div class="main-head">
+      <div><h2>Analizador de audio</h2><div class="sub">Tono · BPM · volumen — sin salir del navegador</div></div>
+      <button class="btn sm" id="anBack"><svg fill="none" stroke="currentColor"><use href="#i-chevron-left"/></svg> Herramientas</button>
+    </div>
+    <div class="an-wrap">
+      <div class="dropzone an-dz" id="anDz">
+        <svg fill="none" stroke="currentColor"><use href="#i-upload"/></svg>
+        <div>Arrastra una canción (MP3/WAV) o haz clic</div>
+        <div class="fname" id="anName"></div>
+      </div>
+      <input type="file" id="anFile" accept="audio/*" hidden />
+      <div id="anResult"></div>
+    </div>`;
+  $('anBack').onclick = () => switchView('tools');
+  const dz = $('anDz'), fi = $('anFile'), res = $('anResult');
+  dz.onclick = () => fi.click();
+  fi.onchange = () => { if (fi.files[0]) runAnalysis(fi.files[0]); };
+  ['dragover', 'dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, (e) => {
+    e.preventDefault();
+    if (ev === 'dragover') dz.classList.add('drag'); else dz.classList.remove('drag');
+    if (ev === 'drop' && e.dataTransfer.files[0]) runAnalysis(e.dataTransfer.files[0]);
+  }));
+
+  async function runAnalysis(file) {
+    if (!file.type.startsWith('audio') && !/\.(mp3|wav|m4a|aac|ogg|flac)$/i.test(file.name)) { toast('Selecciona un archivo de audio'); return; }
+    $('anName').textContent = file.name;
+    res.innerHTML = `<div class="loading" style="padding:34px"><div class="spinner"></div><div style="margin-top:10px;color:var(--ink-soft);font-size:13px">Analizando audio…</div></div>`;
+    try {
+      const arr = await file.arrayBuffer();
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new Ctx();
+      const buf = await ctx.decodeAudioData(arr);
+      const sr = buf.sampleRate, dur = buf.duration;
+      const { mono, peakDb, rmsDb, clipPct, crest } = analyzeLevels(buf);
+      try { ctx.close(); } catch {}
+      // limita el análisis pesado a los primeros 120 s (consistencia + velocidad)
+      const slice = mono.length > sr * 120 ? mono.subarray(0, sr * 120) : mono;
+      await new Promise(r => setTimeout(r, 20)); // deja pintar el spinner
+      const key = detectKey(slice, sr);
+      const bpm = detectBPM(slice, sr);
+      const note = NOTE_NAMES[key.tonic];
+      const modeEs = key.mode === 'major' ? 'mayor' : 'menor';
+      const camelot = CAMELOT[`${note} ${key.mode}`] || '—';
+      const conf = Math.max(0, Math.min(100, Math.round((key.score + 0.2) / 1.0 * 100)));
+      const peaks = [];
+      const n = 120, block = Math.floor(mono.length / n) || 1;
+      for (let i = 0; i < n; i++) { let m = 0; const st = i * block; for (let j = 0; j < block; j += 16) { const v = Math.abs(mono[st + j] || 0); if (v > m) m = v; } peaks.push(m); }
+      const wmax = Math.max(...peaks) || 1;
+      const bars = peaks.map(p => `<span style="height:${Math.max(3, (p / wmax) * 100)}%"></span>`).join('');
+      const clipWarn = clipPct > 0.02;
+      const target = -14; // referencia streaming (LUFS aprox.)
+      const loudHint = rmsDb < -20 ? 'Suena bajo: sube nivel al masterizar.' : rmsDb > -9 ? 'Muy alto: puede saturar en plataformas.' : 'Buen nivel para streaming.';
+      res.innerHTML = `
+        <div class="an-hero">
+          <div class="an-big">
+            <div class="an-big-label">TONO (key)</div>
+            <div class="an-big-val">${note}${key.mode === 'minor' ? 'm' : ''}</div>
+            <div class="an-big-sub">${NOTE_ES[note]} ${modeEs} · Camelot ${camelot}</div>
+          </div>
+          <div class="an-big">
+            <div class="an-big-label">TEMPO</div>
+            <div class="an-big-val">${bpm ?? '—'}<small>BPM</small></div>
+            <div class="an-big-sub">${dur ? fmtTime(dur) : ''} de duración</div>
+          </div>
+        </div>
+        <div class="an-wave">${bars}</div>
+        <div class="an-key-detail">
+          <b>Para el autotune:</b> ajusta a <b>${note} ${modeEs}</b>. Notas de la escala: <span class="an-scale">${scaleNotes(key.tonic, key.mode)}</span>
+          <span class="an-conf">fiabilidad del tono ~${conf}%</span>
+        </div>
+        <div class="an-stats">
+          <div class="an-stat"><div class="an-stat-l">Pico</div><div class="an-stat-v ${peakDb > -0.1 ? 'bad' : ''}">${peakDb.toFixed(1)} dBFS</div></div>
+          <div class="an-stat"><div class="an-stat-l">Volumen (RMS)</div><div class="an-stat-v">${rmsDb.toFixed(1)} dBFS</div></div>
+          <div class="an-stat"><div class="an-stat-l">Rango dinámico</div><div class="an-stat-v">${crest.toFixed(1)} dB</div></div>
+          <div class="an-stat"><div class="an-stat-l">Clipping</div><div class="an-stat-v ${clipWarn ? 'bad' : 'good'}">${clipWarn ? clipPct.toFixed(2) + '%' : 'OK'}</div></div>
+        </div>
+        <div class="an-note">${clipWarn ? '⚠️ Hay clipping (saturación digital): baja el nivel antes de exportar. ' : ''}${loudHint} <span style="opacity:.6">Referencia de plataformas: ~${target} LUFS.</span></div>
+        <button class="btn sm ghost" id="anAgain" style="margin-top:14px"><svg fill="none" stroke="currentColor"><use href="#i-upload"/></svg> Analizar otra canción</button>`;
+      $('anAgain').onclick = () => { fi.value = ''; $('anName').textContent = ''; res.innerHTML = ''; };
+    } catch (err) {
+      console.error(err);
+      res.innerHTML = `<div class="an-note bad">No se pudo analizar el archivo. Prueba con un MP3 o WAV estándar.</div>`;
+    }
+  }
 }
 
 let pkState = null;

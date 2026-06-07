@@ -1866,3 +1866,27 @@ textarea.pk-in { resize: vertical; line-height: 1.5; }
 /* deslizar el reproductor hacia abajo para cerrarlo */
 .player { touch-action: none; }
 .player { transition: transform .2s var(--ease), opacity .2s; }
+
+/* ===================== ANALIZADOR DE AUDIO ===================== */
+.an-wrap { max-width: 720px; }
+.an-dz { margin-bottom: 16px; }
+.an-hero { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 14px; }
+.an-big { background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 20px; text-align: center; box-shadow: var(--sh-1); }
+.an-big-label { font-size: 11px; letter-spacing: 1.5px; color: var(--ink-soft); font-weight: 700; }
+.an-big-val { font-size: 46px; font-weight: 900; line-height: 1.1; margin: 6px 0 2px; background: var(--accent-grad); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.an-big-val small { font-size: 16px; font-weight: 700; -webkit-text-fill-color: var(--ink-soft); margin-left: 4px; }
+.an-big-sub { font-size: 12.5px; color: var(--ink-soft); }
+.an-wave { display: flex; align-items: center; gap: 2px; height: 64px; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 8px 12px; margin-bottom: 12px; overflow: hidden; }
+.an-wave span { flex: 1; min-width: 0; background: var(--accent-grad); border-radius: 2px; opacity: .85; }
+.an-key-detail { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 13px 15px; font-size: 13.5px; line-height: 1.6; margin-bottom: 12px; }
+.an-scale { font-weight: 700; letter-spacing: .5px; }
+.an-conf { display: block; font-size: 11.5px; color: var(--ink-soft); margin-top: 2px; }
+.an-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 12px; }
+.an-stat { background: var(--panel); border: 1px solid var(--line); border-radius: 13px; padding: 12px 10px; text-align: center; }
+.an-stat-l { font-size: 11px; color: var(--ink-soft); margin-bottom: 4px; }
+.an-stat-v { font-size: 16px; font-weight: 800; }
+.an-stat-v.bad { color: #e5484d; }
+.an-stat-v.good { color: #2a9d4a; }
+.an-note { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; font-size: 13px; color: var(--ink-soft); line-height: 1.55; }
+.an-note.bad { color: #e5484d; border-color: rgba(229,72,77,.4); }
+@media (max-width: 540px) { .an-stats { grid-template-columns: repeat(2, 1fr); } .an-big-val { font-size: 38px; } }
