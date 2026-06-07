@@ -295,6 +295,7 @@ async function onAuthenticated() {
   initDM();
   setupPush();
   loadNotifBadge();
+  ubBack.init();
   switchView('feed');
   handleDeepLink();
 }
@@ -551,6 +552,7 @@ async function updateCounts() {
    VISTAS
    ======================================================================= */
 async function switchView(view) {
+  ubRecord({ kind: 'view', view });
   state.view = view;
   const main = $('main');
   $('feedTabs')?.classList.toggle('hidden', view !== 'feed');
@@ -664,6 +666,83 @@ function initSwipeNav() {
     gotoScreenIdx(cur + (dx < 0 ? 1 : -1));
   }, { passive: true });
 }
+
+/* =======================================================================
+   BOTÓN ATRÁS DE ANDROID (PWA) — navega dentro de la app en vez de salir.
+   Técnica: mantenemos siempre una entrada "trampa" en el historial; al pulsar
+   atrás decidimos en vivo qué hacer (cerrar overlay → retroceder vista → salir
+   con doble pulsación). Así nunca se sale por accidente y no hay desincronías.
+   ======================================================================= */
+let ubViewStack = [];
+let ubNavigating = false;
+function ubRecord(entry) {
+  if (ubNavigating) return;
+  const t = ubViewStack[ubViewStack.length - 1];
+  if (t && t.kind === entry.kind && t.view === entry.view && t.id === entry.id) return;
+  ubViewStack.push(entry);
+  if (ubViewStack.length > 60) ubViewStack.shift();
+}
+function ubGoBackTo(entry) {
+  ubNavigating = true;
+  try {
+    if (entry.kind === 'profile') openProfile(entry.id);
+    else switchView(entry.view);
+  } finally { setTimeout(() => { ubNavigating = false; }, 0); }
+}
+// Cierra el overlay superior (si lo hay). Devuelve true si cerró algo.
+function ubCloseTopOverlay() {
+  const sv = document.querySelector('.story-viewer');
+  if (sv) { sv.querySelector('.sv-x')?.click(); return true; }
+  const iv = document.querySelector('.img-viewer');
+  if (iv) { iv.remove(); return true; }
+  const mods = document.querySelectorAll('#modalRoot .modal-backdrop');
+  if (mods.length) { mods[mods.length - 1].remove(); return true; }
+  if ($('dmScreen') && $('dmScreen').classList.contains('open')) { try { closeDmScreen(); } catch (_) {} return true; }
+  const right = document.querySelector('.right.open'); if (right) { right.classList.remove('open'); return true; }
+  const sb2 = $('sidebar'); if (sb2 && sb2.classList.contains('open')) { sb2.classList.remove('open'); return true; }
+  if (typeof npIsOpen === 'function' && npIsOpen()) { closeNowPlaying(); return true; }
+  return false;
+}
+const ubBack = {
+  lastHome: 0,
+  init() {
+    // Solo en PWA instalada o en táctil (donde el "atrás" puede cerrar la app).
+    // En navegador de escritorio dejamos el botón atrás como siempre.
+    const standalone = matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches || navigator.standalone === true;
+    const touch = matchMedia('(pointer: coarse)').matches;
+    if (!standalone && !touch) return;
+    try {
+      history.replaceState({ ub: 'base' }, '');
+      history.pushState({ ub: 'guard' }, '');
+      window.addEventListener('popstate', () => this.onPop());
+    } catch (_) {}
+  },
+  refill() { try { history.pushState({ ub: 'guard' }, ''); } catch (_) {} },
+  onPop() {
+    // 1) cerrar overlay superior
+    if (ubCloseTopOverlay()) { this.refill(); return; }
+    // 2) retroceder una vista en la pila
+    if (ubViewStack.length > 1) {
+      ubViewStack.pop();
+      const prev = ubViewStack[ubViewStack.length - 1];
+      this.refill();
+      ubGoBackTo(prev);
+      return;
+    }
+    // 2b) seguridad: si no estamos en casa, vuelve a casa
+    if (state.view && state.view !== 'feed') {
+      this.refill();
+      ubGoBackTo({ kind: 'view', view: 'feed' });
+      ubViewStack = [{ kind: 'view', view: 'feed' }];
+      return;
+    }
+    // 3) en casa: doble pulsación para salir
+    if (Date.now() - this.lastHome < 2000) { try { history.back(); } catch (_) {} return; }
+    this.lastHome = Date.now();
+    toast('Pulsa atrás otra vez para salir');
+    this.refill();
+  },
+};
 
 async function fetchTracks({ order='created_at', userId=null, limit=50 } = {}) {
   let q = sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)');
@@ -2389,6 +2468,7 @@ function openProfileCustomizer() {
 }
 
 async function openProfile(userId) {
+  ubRecord({ kind: 'profile', id: userId });
   const main = $('main');
   setActiveNav('');
   $('feedTabs')?.classList.add('hidden');
