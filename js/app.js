@@ -1259,6 +1259,7 @@ function initPlayer() {
   $('pPlay').onclick = togglePlay;
   $('pPrev').onclick = () => step(-1);
   $('pNext').onclick = () => step(1);
+  $('pClose').onclick = (e) => { e.stopPropagation(); closePlayer(); };
 
   audio.addEventListener('timeupdate', () => {
     if (seeking || !audio.duration) return;
@@ -1372,6 +1373,13 @@ function initNowPlaying() {
 function npIsOpen() { return $('nowPlaying').classList.contains('open'); }
 function openNowPlaying() { if (!state.current) return; syncNowPlaying(); $('nowPlaying').classList.add('open'); }
 function closeNowPlaying() { $('nowPlaying').classList.remove('open'); }
+function closePlayer() {
+  try { audio.pause(); audio.removeAttribute('src'); audio.load(); } catch (_) {}
+  state.current = null; state.queue = [];
+  closeNowPlaying();
+  $('player').classList.add('hidden');
+  document.querySelectorAll('.track.playing, .dm-track.playing').forEach(c => c.classList.remove('playing'));
+}
 function setNpPlayIcon(playing) { const u = $('npPlay').querySelector('use'); if (u) u.setAttribute('href', playing ? '#i-pause' : '#i-play'); }
 function syncNowPlaying() {
   const t = state.current; if (!t) return;

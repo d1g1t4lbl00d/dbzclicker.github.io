@@ -1854,3 +1854,11 @@ textarea.pk-in { resize: vertical; line-height: 1.5; }
 .sv-react-b:active { transform: scale(1.35); }
 .sv-react-fx { position: absolute; left: 50%; bottom: 110px; transform: translateX(-50%); font-size: 46px; pointer-events: none; z-index: 7; animation: svReactFx 1.1s ease-out forwards; }
 @keyframes svReactFx { 0% { opacity: 0; transform: translate(-50%, 20px) scale(.5); } 25% { opacity: 1; transform: translate(-50%, 0) scale(1.2); } 100% { opacity: 0; transform: translate(-50%, -160px) scale(1); } }
+
+/* ---- botón cerrar del reproductor ---- */
+.p-close { order: 99; width: 36px; height: 36px; border-radius: 50%; border: none; background: transparent; display: grid; place-items: center; flex-shrink: 0; cursor: pointer; transition: background .15s, transform .12s; }
+.p-close:hover { background: rgba(0,0,0,.07); }
+.p-close:active { transform: scale(.9); }
+.p-close svg { width: 18px; height: 18px; stroke: var(--ink-soft); }
+:root[data-theme="dark"] .p-close:hover { background: rgba(255,255,255,.1); }
+@media (max-width: 720px) { .player .p-close { width: 40px; height: 40px; } .player .p-close svg { width: 20px; height: 20px; } }
