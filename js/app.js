@@ -3872,28 +3872,40 @@ function _pearson(a, b) {
   return den ? num / den : 0;
 }
 
-// Detecta tonalidad con perfiles Krumhansl-Schmuckler sobre el cromagrama
+// Detecta tonalidad con perfiles Krumhansl-Schmuckler sobre el cromagrama.
+// Claves para que sea fiable con audio real (no solo tonos puros):
+//  · normalización por densidad de bins → elimina el sesgo geométrico de la FFT
+//    (los bins lineales se reparten desigual entre las 12 notas y, sin esto,
+//     el ruido/percusión empuja SIEMPRE hacia La/La#).
+//  · selección de picos espectrales → ignora batería, hats y ruido de banda ancha.
+//  · compresión logarítmica → evita que los frames muy fuertes dominen.
 function detectKey(mono, sr) {
-  const N = 4096, hop = 2048;
+  const N = 8192, hop = 4096;
   const win = new Float32Array(N);
   for (let i = 0; i < N; i++) win[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (N - 1)); // Hann
+  const minF = 65, maxF = 1500; // ~C2..~F#6 (fundamentales)
+  const kMin = Math.max(2, Math.floor(minF * N / sr));
+  const kMax = Math.min(N / 2 - 2, Math.ceil(maxF * N / sr));
+  // nota (pitch class) de cada bin + cuántos bins caen en cada nota
+  const pcOf = new Int16Array(N / 2), binCount = new Float64Array(12);
+  for (let k = kMin; k <= kMax; k++) {
+    const f = k * sr / N;
+    const pc = ((Math.round(69 + 12 * Math.log2(f / 440)) % 12) + 12) % 12;
+    pcOf[k] = pc; binCount[pc]++;
+  }
   const chroma = new Float64Array(12);
-  const re = new Float32Array(N), im = new Float32Array(N);
-  const minF = 55, maxF = 2000; // A1..~B6
+  const re = new Float32Array(N), im = new Float32Array(N), mag = new Float64Array(N / 2);
   for (let off = 0; off + N <= mono.length; off += hop) {
     for (let i = 0; i < N; i++) { re[i] = mono[off + i] * win[i]; im[i] = 0; }
     _fft(re, im);
-    for (let k = 1; k < N / 2; k++) {
-      const f = k * sr / N;
-      if (f < minF || f > maxF) continue;
-      const mag = Math.sqrt(re[k] * re[k] + im[k] * im[k]);
-      if (mag <= 0) continue;
-      const midi = 69 + 12 * Math.log2(f / 440);
-      const pc = ((Math.round(midi) % 12) + 12) % 12;
-      chroma[pc] += mag;
+    for (let k = kMin - 1; k <= kMax + 1; k++) mag[k] = Math.sqrt(re[k] * re[k] + im[k] * im[k]);
+    for (let k = kMin; k <= kMax; k++) {
+      const mk = mag[k];
+      if (mk > 0 && mk > mag[k - 1] && mk >= mag[k + 1]) chroma[pcOf[k]] += Math.log(1 + mk); // solo picos
     }
   }
-  // normaliza
+  // corrige el sesgo geométrico y normaliza
+  for (let i = 0; i < 12; i++) if (binCount[i] > 0) chroma[i] /= binCount[i];
   let mx = 0; for (let i = 0; i < 12; i++) mx = Math.max(mx, chroma[i]);
   if (mx > 0) for (let i = 0; i < 12; i++) chroma[i] /= mx;
   const major = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88];
