@@ -1800,11 +1800,11 @@ function openUploadModal(prefill) {
       </div>
       <div class="field"><label>Título</label><input type="text" id="uTitle" placeholder="Nombre de la pista" /></div>
       <div class="field"><label>Género</label><input type="text" id="uGenre" placeholder="Hip-Hop, House, Lo-Fi…" /></div>
-      <div class="field"><label class="pk-tg" style="font-weight:600"><input type="checkbox" id="uIsBeat" style="width:auto" /> <span>Es un <b>beat</b> · permitir descarga gratis</span></label></div>
-      <div class="pk-row2 hidden" id="uBeatRow">
-        <div><label class="pk-l">BPM</label><input type="number" id="uBpm" min="40" max="300" placeholder="140" /></div>
+      <div class="pk-row2" id="uBeatRow">
+        <div><label class="pk-l">BPM <span class="auto-tag" id="uAutoTag"></span></label><input type="number" id="uBpm" min="40" max="300" placeholder="140" /></div>
         <div><label class="pk-l">Tonalidad</label><input type="text" id="uKey" maxlength="16" placeholder="C min, F#…" /></div>
       </div>
+      <div class="field"><label class="pk-tg" style="font-weight:600"><input type="checkbox" id="uIsBeat" style="width:auto" /> <span>Es un <b>beat</b> · permitir descarga gratis</span></label></div>
       <div class="field">
         <label>Colaboradores (ft.)</label>
         <div class="collab-chips" id="collabChips"></div>
@@ -1846,12 +1846,38 @@ function openUploadModal(prefill) {
     if (!m.querySelector('#uTitle').value) m.querySelector('#uTitle').value = f.name.replace(/\.[^.]+$/,'');
     const tmp = new Audio(URL.createObjectURL(f));
     tmp.addEventListener('loadedmetadata', () => { duration = tmp.duration || 0; });
+    analyzeUploadAudio(f);
   }
-
-  m.querySelector('#uIsBeat').onchange = (e) => m.querySelector('#uBeatRow').classList.toggle('hidden', !e.target.checked);
+  // Pasa la pista por el analizador y autocompleta BPM/tono (sin pisar lo que el
+  // usuario ya haya escrito). Para que subir sea más fácil y con más info.
+  async function analyzeUploadAudio(f) {
+    const tag = m.querySelector('#uAutoTag');
+    const bpmEl = m.querySelector('#uBpm'), keyEl = m.querySelector('#uKey');
+    if (tag) { tag.textContent = '· analizando…'; tag.className = 'auto-tag busy'; }
+    try {
+      const arr = await f.arrayBuffer();
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      const ctx = new Ctx();
+      const buf = await ctx.decodeAudioData(arr);
+      const sr = buf.sampleRate;
+      const { mono } = analyzeLevels(buf);
+      try { ctx.close(); } catch {}
+      const slice = mono.length > sr * 120 ? mono.subarray(0, sr * 120) : mono;
+      await new Promise(r => setTimeout(r, 10));
+      const key = detectKey(slice, sr);
+      const bpm = detectBPM(slice, sr);
+      const note = NOTE_NAMES[key.tonic];
+      const keyTag = `${note}${key.mode === 'minor' ? 'm' : ''}`;
+      if (bpm && !bpmEl.value) bpmEl.value = bpm;
+      if (keyTag && !keyEl.value) keyEl.value = keyTag;
+      if (tag) { tag.textContent = '· detectado'; tag.className = 'auto-tag ok'; }
+    } catch (e) {
+      if (tag) { tag.textContent = ''; tag.className = 'auto-tag'; }
+    }
+  }
   // prerelleno desde el Analizador de audio (tono/BPM detectados)
   if (prefill) {
-    if (prefill.isBeat) { m.querySelector('#uIsBeat').checked = true; m.querySelector('#uBeatRow').classList.remove('hidden'); }
+    if (prefill.isBeat) m.querySelector('#uIsBeat').checked = true;
     if (prefill.bpm) m.querySelector('#uBpm').value = prefill.bpm;
     if (prefill.key) m.querySelector('#uKey').value = prefill.key;
     if (prefill.title && !m.querySelector('#uTitle').value) m.querySelector('#uTitle').value = prefill.title;
