@@ -636,6 +636,10 @@ document.addEventListener('pointerdown', (e) => {
   if (e.target.closest && e.target.closest(HAPTIC_SEL)) haptic(9);
 }, { passive: true });
 
+// Sin zoom en móvil: iOS ignora user-scalable=no, así que bloqueamos el pellizco.
+['gesturestart', 'gesturechange', 'gestureend'].forEach(ev =>
+  document.addEventListener(ev, (e) => e.preventDefault(), { passive: false }));
+
 function initSwipeNav() {
   if (initSwipeNav._done) return; initSwipeNav._done = true;
   const EXCLUDE = '.seek, .vol-slider, .wave, #npWave, .stories-bar, .dm-bubble, .dm-thread, .pl-cover-grid, input, textarea, select, .mention-dd, .post-grid';
