@@ -2583,6 +2583,8 @@ async function renderPeople() {
       </div>`);
     const followBtn = row.querySelector('[data-act="follow"]');
     row.querySelector('[data-act="view"]').onclick = () => openProfile(p.id);
+    row.style.cursor = 'pointer';
+    row.addEventListener('click', (e) => { if (e.target.closest('[data-act]')) return; openProfile(p.id); });
     row.querySelector('[data-act="msg"]').onclick = () => openDM(p.id);
     const delBtn = row.querySelector('[data-act="del"]');
     if (delBtn) delBtn.onclick = () => adminDeleteUser(p.id, p.username, () => row.remove());
