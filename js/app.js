@@ -1620,61 +1620,111 @@ function renderQueuePanel() {
     if (!t) return;
     const isCur = id === state.current?.id;
     const isPast = curIdx >= 0 && i < curIdx;
-    const canDrag = !isCur && !isPast;
     const who = t.profiles?.display_name || t.profiles?.username || t.artist || '';
     const row = el(`<div class="npq-row${isCur ? ' cur' : ''}${isPast ? ' past' : ''}" data-id="${esc(String(id))}">
-      ${canDrag ? '<button class="npq-grip" data-grip title="Arrastra para reordenar"><svg fill="none" stroke="currentColor"><use href="#i-menu"/></svg></button>' : '<span class="npq-grip-sp"></span>'}
       <div class="npq-cover"${t.cover_url ? ` style="background-image:url('${esc(t.cover_url)}')"` : ''}>${isCur ? '<span class="npq-eq"><i></i><i></i><i></i></span>' : ''}</div>
       <div class="npq-info"><div class="npq-title">${esc(t.title)}</div><div class="npq-artist">${esc(who)}</div></div>
       ${isCur ? '<span class="npq-now">sonando</span>' : `<button class="npq-x" data-rm title="Quitar de la cola"><svg><use href="#i-x"/></svg></button>`}
     </div>`);
-    row.onclick = (e) => {
-      if (e.target.closest('[data-rm]') || e.target.closest('[data-grip]')) return;
-      if (!isCur) { const tt = state.tracks.find(x => x.id === id); if (tt) playTrack(tt); }
-    };
-    const grip = row.querySelector('[data-grip]');
-    if (grip) grip.addEventListener('pointerdown', (e) => startQueueDrag(e, row));
+    attachQueueRow(row, id, isCur, isPast);
     list.appendChild(row);
   });
+  if (!list._noCtx) { list.addEventListener('contextmenu', (e) => e.preventDefault()); list._noCtx = true; }
   const upcoming = curIdx >= 0 ? state.queue.length - curIdx - 1 : state.queue.length;
   $('npqCount').textContent = upcoming > 0 ? `${upcoming} a continuación` : 'Fin de la cola';
 }
-// arrastrar para reordenar la cola (toque + ratón). Las pistas "a continuación"
-// no pueden subir por encima de la que suena.
-function startQueueDrag(e, row) {
-  e.preventDefault(); e.stopPropagation();
+
+/* ---- Reordenar la cola: mantener pulsado para "levantar" y arrastrar ----
+   Funciona con toque y ratón. Bloquea el menú nativo de selección y el scroll
+   mientras se arrastra. Las pistas "a continuación" no pueden subir por encima
+   de la que está sonando. ------------------------------------------------- */
+let qDrag = null;
+function attachQueueRow(row, id, isCur, isPast) {
+  const rm = row.querySelector('[data-rm]');
+  if (rm) rm.addEventListener('click', (e) => { e.stopPropagation(); removeFromQueue(id); });
+  const canDrag = !isCur && !isPast;
+  let timer = 0, sx = 0, sy = 0, lastE = null, longFired = false, moved = false, downId = null;
+  row.addEventListener('pointerdown', (e) => {
+    if (e.target.closest('[data-rm]')) return;
+    downId = e.pointerId; sx = e.clientX; sy = e.clientY; lastE = e; moved = false; longFired = false;
+    if (canDrag) { row.classList.add('press'); timer = setTimeout(() => { longFired = true; row.classList.remove('press'); beginQueueDrag(lastE, row); }, 230); }
+  });
+  row.addEventListener('pointermove', (e) => {
+    if (downId == null) return;
+    lastE = e;
+    if (!longFired && (Math.abs(e.clientX - sx) > 8 || Math.abs(e.clientY - sy) > 8)) { moved = true; clearTimeout(timer); row.classList.remove('press'); }
+    if (longFired) qDragMove(e);
+  });
+  const finish = () => {
+    if (downId == null) return;
+    clearTimeout(timer); row.classList.remove('press');
+    if (longFired) qDragEnd();
+    else if (!moved && !isCur) { const tt = state.tracks.find(x => x.id === id); if (tt) playTrack(tt); }
+    downId = null; longFired = false; moved = false;
+  };
+  row.addEventListener('pointerup', finish);
+  row.addEventListener('pointercancel', finish);
+}
+// FLIP: anima el desplazamiento de las demás filas al reordenar
+function flipQueue(list, exclude, mutate) {
+  const rows = [...list.querySelectorAll('.npq-row')].filter(r => r !== exclude);
+  const first = rows.map(r => [r, r.getBoundingClientRect().top]);
+  mutate();
+  for (const [r, top0] of first) {
+    const dy = top0 - r.getBoundingClientRect().top;
+    if (!dy) continue;
+    r.style.transition = 'none';
+    r.style.transform = `translateY(${dy}px)`;
+    requestAnimationFrame(() => { r.style.transition = 'transform .2s var(--ease)'; r.style.transform = ''; });
+  }
+}
+function beginQueueDrag(e, row) {
   const list = $('npqList'); if (!list) return;
+  const rect = row.getBoundingClientRect();
+  qDrag = { row, list, grab: e.clientY - rect.top, prevent: (ev) => ev.preventDefault() };
   row.classList.add('dragging');
-  haptic(12);
+  document.body.classList.add('q-dragging');
+  haptic(18);
   try { row.setPointerCapture(e.pointerId); } catch {}
-  const move = (ev) => {
-    const cur = list.querySelector('.npq-row.cur');
-    const others = [...list.querySelectorAll('.npq-row:not(.dragging)')];
-    const y = ev.clientY;
-    let target = null;
-    for (const r of others) { const b = r.getBoundingClientRect(); if (y < b.top + b.height / 2) { target = r; break; } }
-    // no permitir colocarla por encima de la pista actual
-    if (cur && target && others.indexOf(target) <= others.indexOf(cur)) {
-      if (cur.nextSibling !== row) list.insertBefore(row, cur.nextSibling);
-      return;
-    }
-    if (target) list.insertBefore(row, target); else list.appendChild(row);
-  };
-  const up = () => {
-    row.removeEventListener('pointermove', move);
-    row.removeEventListener('pointerup', up);
-    row.removeEventListener('pointercancel', up);
-    row.classList.remove('dragging');
-    // reconstruir la cola a partir del orden del DOM (conservando el tipo de id)
-    const orig = new Map(state.queue.map(q => [String(q), q]));
-    const ids = [...list.querySelectorAll('.npq-row')].map(r => r.dataset.id);
-    const rebuilt = ids.map(s => orig.get(s)).filter(v => v != null);
-    if (rebuilt.length === state.queue.length) state.queue = rebuilt;
-    renderQueuePanel();
-  };
-  row.addEventListener('pointermove', move);
-  row.addEventListener('pointerup', up);
-  row.addEventListener('pointercancel', up);
+  document.addEventListener('touchmove', qDrag.prevent, { passive: false });
+  qDragMove(e);
+}
+function qDragMove(e) {
+  if (!qDrag) return;
+  const { row, list, grab } = qDrag;
+  const cur = list.querySelector('.npq-row.cur');
+  let desiredTop = e.clientY - grab;
+  if (cur) desiredTop = Math.max(desiredTop, cur.getBoundingClientRect().top);   // no por encima de la actual
+  const center = desiredTop + row.offsetHeight / 2;
+  const others = [...list.querySelectorAll('.npq-row:not(.dragging)')];
+  const start = cur ? others.indexOf(cur) + 1 : 0;
+  let target = null;
+  for (let i = start; i < others.length; i++) { const b = others[i].getBoundingClientRect(); if (center < b.top + b.height / 2) { target = others[i]; break; } }
+  const changes = target ? (row.nextElementSibling !== target) : (row.nextElementSibling !== null);
+  if (target !== row && changes) flipQueue(list, row, () => { if (target) list.insertBefore(row, target); else list.appendChild(row); });
+  // la fila arrastrada sigue al dedo (recalcular su posición de layout sin transform)
+  row.style.transform = 'none';
+  const layoutTop = row.getBoundingClientRect().top;
+  row.style.transform = `translateY(${(desiredTop - layoutTop).toFixed(1)}px) scale(1.03)`;
+}
+function qDragEnd() {
+  if (!qDrag) return;
+  const { row, list, prevent } = qDrag;
+  document.removeEventListener('touchmove', prevent, { passive: false });
+  document.body.classList.remove('q-dragging');
+  // reconstruir la cola con el nuevo orden (conservando el tipo de id)
+  const orig = new Map(state.queue.map(q => [String(q), q]));
+  const ids = [...list.querySelectorAll('.npq-row')].map(r => r.dataset.id);
+  const rebuilt = ids.map(s => orig.get(s)).filter(v => v != null);
+  if (rebuilt.length === state.queue.length) state.queue = rebuilt;
+  // aterrizaje suave
+  row.style.transition = 'transform .2s var(--ease)';
+  row.style.transform = 'none';
+  setTimeout(() => { row.classList.remove('dragging'); row.style.transition = ''; row.style.transform = ''; }, 200);
+  qDrag = null;
+  const curIdx = state.queue.indexOf(state.current?.id);
+  const upcoming = curIdx >= 0 ? state.queue.length - curIdx - 1 : state.queue.length;
+  const c = $('npqCount'); if (c) c.textContent = upcoming > 0 ? `${upcoming} a continuación` : 'Fin de la cola';
 }
 async function step(dir) {
   if (!state.current) return;
