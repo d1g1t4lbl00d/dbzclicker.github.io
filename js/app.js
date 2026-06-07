@@ -567,6 +567,7 @@ async function switchView(view) {
   if (view === 'playlists') return renderPlaylists();
   if (view === 'dashboard') return renderDashboard();
   if (view === 'events') return renderEvents();
+  if (view === 'beats') return renderBeats();
   if (view === 'tools') return renderTools();
   if (view === 'presskit') return renderPressKit();
   if (view === 'smartlinks') return renderSmartLinks();
@@ -826,6 +827,7 @@ function trackCard(t) {
           <div class="t-artist">por <a data-act="profile">${esc(prof.display_name || prof.username || t.artist || 'anónimo')}</a>${verifiedBadge(prof)}${displayBadgeHtml(prof)}${ft}</div>
         </div>
         ${t.genre ? `<span class="t-genre">${esc(t.genre)}</span>` : ''}
+        ${t.is_beat ? `<span class="t-genre beat-tag">BEAT${t.bpm ? ' · ' + t.bpm + ' BPM' : ''}${t.song_key ? ' · ' + esc(t.song_key) : ''}</span>` : ''}
       </div>
       <div class="wave-row">
         <button class="play-lg" data-act="play" title="Reproducir"><svg class="ci-play"><use href="#i-play"/></svg><svg class="ci-pause"><use href="#i-pause"/></svg></button>
@@ -864,6 +866,11 @@ function openEditTrack(t, card) {
       </div>
       <div class="field"><label>Título</label><input type="text" id="eTitle" value="${esc(t.title)}" /></div>
       <div class="field"><label>Género</label><input type="text" id="eGenre" value="${esc(t.genre || '')}" /></div>
+      <div class="field"><label class="pk-tg" style="font-weight:600"><input type="checkbox" id="eIsBeat" style="width:auto" ${t.is_beat ? 'checked' : ''} /> <span>Es un <b>beat</b> · permitir descarga gratis</span></label></div>
+      <div class="pk-row2 ${t.is_beat ? '' : 'hidden'}" id="eBeatRow">
+        <div><label class="pk-l">BPM</label><input type="number" id="eBpm" min="40" max="300" value="${t.bpm || ''}" placeholder="140" /></div>
+        <div><label class="pk-l">Tonalidad</label><input type="text" id="eKey" maxlength="16" value="${esc(t.song_key || '')}" placeholder="C min, F#…" /></div>
+      </div>
       <div class="field">
         <label>Colaboradores (ft.)</label>
         <div class="collab-chips" id="collabChips"></div>
@@ -877,6 +884,7 @@ function openEditTrack(t, card) {
   m.querySelector('#dzCover').onclick = () => fC.click();
   const setCover = (f) => { if (!f || !f.type.startsWith('image')) { toast('Selecciona una imagen'); return; } coverFile = f; m.querySelector('#coverName').textContent = f.name; m.querySelector('#coverPrev').innerHTML = `<img src="${URL.createObjectURL(f)}" alt="" />`; };
   fC.onchange = () => { if (fC.files[0]) setCover(fC.files[0]); };
+  m.querySelector('#eIsBeat').onchange = (e) => m.querySelector('#eBeatRow').classList.toggle('hidden', !e.target.checked);
   const collab = mountCollab(m, t.collaborators || []);
   m.querySelector('#eSave').onclick = async () => {
     const title = m.querySelector('#eTitle').value.trim();
@@ -894,7 +902,10 @@ function openEditTrack(t, card) {
         cover_url = sb.storage.from('covers').getPublicUrl(path).data.publicUrl;
       }
       // regenerar la onda real si la pista no la tiene (pistas antiguas)
-      const patch = { title, genre: genre || null, cover_url, collaborators: collab.get() };
+      const patch = { title, genre: genre || null, cover_url, collaborators: collab.get(),
+        is_beat: m.querySelector('#eIsBeat').checked,
+        bpm: parseInt(m.querySelector('#eBpm').value, 10) || null,
+        song_key: m.querySelector('#eKey').value.trim() || null };
       if (!Array.isArray(t.waveform) || !t.waveform.length) {
         eMsg.textContent = 'Generando la onda real…';
         try { const r = await fetch(t.audio_url); const wf = await computeWaveformPeaks(await r.blob()); if (wf) patch.waveform = wf; } catch {}
@@ -1640,6 +1651,11 @@ function openUploadModal() {
       </div>
       <div class="field"><label>Título</label><input type="text" id="uTitle" placeholder="Nombre de la pista" /></div>
       <div class="field"><label>Género</label><input type="text" id="uGenre" placeholder="Hip-Hop, House, Lo-Fi…" /></div>
+      <div class="field"><label class="pk-tg" style="font-weight:600"><input type="checkbox" id="uIsBeat" style="width:auto" /> <span>Es un <b>beat</b> · permitir descarga gratis</span></label></div>
+      <div class="pk-row2 hidden" id="uBeatRow">
+        <div><label class="pk-l">BPM</label><input type="number" id="uBpm" min="40" max="300" placeholder="140" /></div>
+        <div><label class="pk-l">Tonalidad</label><input type="text" id="uKey" maxlength="16" placeholder="C min, F#…" /></div>
+      </div>
       <div class="field">
         <label>Colaboradores (ft.)</label>
         <div class="collab-chips" id="collabChips"></div>
@@ -1683,11 +1699,15 @@ function openUploadModal() {
     tmp.addEventListener('loadedmetadata', () => { duration = tmp.duration || 0; });
   }
 
+  m.querySelector('#uIsBeat').onchange = (e) => m.querySelector('#uBeatRow').classList.toggle('hidden', !e.target.checked);
   const collab = mountCollab(m);
 
   m.querySelector('#uSubmit').onclick = async () => {
     const title = m.querySelector('#uTitle').value.trim();
     const genre = m.querySelector('#uGenre').value.trim();
+    const isBeat = m.querySelector('#uIsBeat').checked;
+    const bpm = parseInt(m.querySelector('#uBpm').value, 10) || null;
+    const songKey = m.querySelector('#uKey').value.trim() || null;
     const msg = m.querySelector('#uMsg'); msg.className = 'auth-msg';
     if (!audioFile) { msg.className='auth-msg error'; msg.textContent='Selecciona un archivo de audio.'; return; }
     if (!title) { msg.className='auth-msg error'; msg.textContent='Ponle un título a tu pista.'; return; }
@@ -1744,6 +1764,7 @@ function openUploadModal() {
         artist: state.profile.display_name || state.profile.username,
         audio_url: audioUrl, cover_url: coverUrl, duration: Math.round(duration),
         waveform, collaborators: collab.get(),
+        is_beat: isBeat, bpm, song_key: songKey,
       });
       if (error) throw error;
       fill.style.width = '100%';
@@ -3037,15 +3058,33 @@ function openStoryViewer(groups, gIdx = 0, startIdx = 0) {
       foot.innerHTML = `<button class="sv-viewers" type="button"><svg fill="none" stroke="#fff"><use href="#i-people"/></svg> <b class="sv-vc">0</b> <span>vistas</span></button>`;
       foot.querySelector('.sv-viewers').onclick = () => { pause(); openStoryViewers(curStory().id, resume); };
     } else {
-      foot.innerHTML = `<form class="sv-reply"><input type="text" placeholder="Responder a ${esc(g.user.display_name || g.user.username || '')}…" maxlength="500" /><button type="submit" aria-label="Enviar"><svg fill="none" stroke="#fff"><use href="#i-send"/></svg></button></form>`;
+      const REACTS = ['❤️', '🔥', '😂', '😮', '😢', '👏'];
+      foot.innerHTML = `
+        <div class="sv-react-bar">${REACTS.map(e => `<button type="button" class="sv-react-b" data-e="${e}">${e}</button>`).join('')}</div>
+        <form class="sv-reply"><input type="text" placeholder="Responder a ${esc(g.user.display_name || g.user.username || '')}…" maxlength="500" /><button type="submit" aria-label="Enviar"><svg fill="none" stroke="#fff"><use href="#i-send"/></svg></button></form>`;
+      // envía un DM con la miniatura de la historia como contexto
+      const sendStoryDM = async (body) => {
+        if (!requireNotBanned()) return;
+        const s = curStory();
+        const { error } = await sb.from('direct_messages').insert({
+          sender_id: state.user.id, recipient_id: g.userId, body,
+          attachment_url: s.image_url, attachment_type: 'image', attachment_name: 'historia.jpg',
+        });
+        toast(error ? 'No se pudo enviar' : 'Enviado 💬');
+      };
+      foot.querySelectorAll('.sv-react-b').forEach(b => b.onclick = () => {
+        // animación de emoji flotando
+        const fx = el(`<span class="sv-react-fx">${b.dataset.e}</span>`); overlay.appendChild(fx);
+        setTimeout(() => fx.remove(), 1100);
+        haptic(12);
+        sendStoryDM(b.dataset.e);
+      });
       const form = foot.querySelector('.sv-reply'); const inp = form.querySelector('input');
       inp.onfocus = pause; inp.onblur = () => resume();
-      form.onsubmit = async (e) => {
+      form.onsubmit = (e) => {
         e.preventDefault();
-        if (!requireNotBanned()) return;
         const body = inp.value.trim(); if (!body) return; inp.value = ''; inp.blur();
-        const { error } = await sb.from('direct_messages').insert({ sender_id: state.user.id, recipient_id: g.userId, body: '↩️ Respuesta a tu historia: ' + body });
-        toast(error ? 'No se pudo enviar' : 'Respuesta enviada 💬');
+        sendStoryDM('↩️ Respuesta a tu historia: ' + body);
       };
     }
   }
@@ -3518,6 +3557,34 @@ function proposeCollab(userId) {
   if (state.blocked.has(userId) || state.hidden.has(userId)) { toast('No puedes escribir a este usuario'); return; }
   openDM(userId);
   setTimeout(() => { const i = $('dmInput'); if (i && !i.value) { i.value = '¡Hey! Me mola tu rollo 🔥 ¿te animas a hacer un feat juntos?'; i.focus(); } }, 420);
+}
+
+/* =======================================================================
+   BEATS — pistas marcadas como beat, descargables
+   ======================================================================= */
+async function renderBeats() {
+  setActiveNav('beats');
+  const main = $('main');
+  main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
+  main.innerHTML = `
+    <div class="main-head"><div><h2>Beats</h2><div class="sub">Beats que suben los productores · descárgalos gratis</div></div></div>
+    <div class="beats-search"><svg fill="none" stroke="currentColor"><use href="#i-search"/></svg><input type="text" id="beatsSearch" placeholder="Buscar por título, género, BPM o tono…" /></div>
+    <div id="beatsList" class="feed-list compact"><div class="loading" style="padding:30px"><div class="spinner"></div></div></div>`;
+  const { data } = await sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)').eq('is_beat', true).order('created_at', { ascending: false }).limit(80);
+  const all = (data || []).filter(t => !isHidden(t.user_id));
+  const list = $('beatsList');
+  const renderList = (arr) => {
+    list.innerHTML = '';
+    if (!arr.length) { list.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-headphones"/></svg><p>Aún no hay beats.<br>Sube una pista y marca <b>"Es un beat"</b> para que aparezca aquí.</p></div>`; return; }
+    state.tracks = arr; state.queue = arr.map(t => t.id);
+    arr.forEach(t => list.appendChild(trackCard(t)));
+    if (state.current && audio && !audio.paused) markPlayingCard();
+  };
+  renderList(all);
+  $('beatsSearch').oninput = (e) => {
+    const q = e.target.value.trim().toLowerCase();
+    renderList(!q ? all : all.filter(t => (t.title || '').toLowerCase().includes(q) || (t.genre || '').toLowerCase().includes(q) || String(t.bpm || '').includes(q) || (t.song_key || '').toLowerCase().includes(q)));
+  };
 }
 
 /* =======================================================================
