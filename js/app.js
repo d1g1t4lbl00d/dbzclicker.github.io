@@ -2195,7 +2195,7 @@ function openFramePicker(imgUrl, mode, initial, onSave) {
 function czHref(u) { if (typeof u !== 'string' || !u) return '#'; return /^https?:\/\//i.test(u) ? u : 'https://' + u.replace(/^\/+/, ''); }
 function bgStyle(theme) {
   const bg = (theme && theme.bg) ? theme.bg : {};
-  if (bg.type === 'image' && czUrl(bg.image)) return `background-image:linear-gradient(rgba(244,247,251,.5),rgba(238,241,246,.68)),url('${czUrl(bg.image)}');background-size:cover;background-position:center;`;
+  if (bg.type === 'image' && czUrl(bg.image)) return `background-image:url('${czUrl(bg.image)}');background-size:cover;background-position:center;`;
   if (bg.type === 'solid' && czColor(bg.c1)) return `background:${czColor(bg.c1)};`;
   if (bg.type === 'gradient' && (czColor(bg.c1) || czColor(bg.c2))) return `background:linear-gradient(160deg, ${czColor(bg.c1) || '#f3f6fb'}, ${czColor(bg.c2) || '#e0e6f0'});`;
   return '';
