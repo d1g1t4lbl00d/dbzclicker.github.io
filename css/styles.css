@@ -1890,3 +1890,22 @@ textarea.pk-in { resize: vertical; line-height: 1.5; }
 .an-note { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; font-size: 13px; color: var(--ink-soft); line-height: 1.55; }
 .an-note.bad { color: #e5484d; border-color: rgba(229,72,77,.4); }
 @media (max-width: 540px) { .an-stats { grid-template-columns: repeat(2, 1fr); } .an-big-val { font-size: 38px; } }
+
+/* ===================== ECOSISTEMA DE HERRAMIENTAS ===================== */
+.tool-card { --ta: #3e57fc; }
+.tool-card:not(.soon):hover { border-color: color-mix(in srgb, var(--ta) 45%, transparent); }
+.tool-ico { background: var(--ta) !important; box-shadow: 0 6px 16px color-mix(in srgb, var(--ta) 36%, transparent) !important; }
+.tool-go { color: var(--ta) !important; }
+
+/* barra de cabecera compartida */
+.tool-bar { display: flex; align-items: center; gap: 13px; margin-bottom: 18px; }
+.tool-back { width: 38px; height: 38px; border-radius: 11px; border: 1px solid var(--line); background: var(--panel); display: grid; place-items: center; cursor: pointer; flex-shrink: 0; color: var(--ink-soft); transition: background .15s, border-color .15s, color .15s, transform .12s; }
+.tool-back:hover { border-color: color-mix(in srgb, var(--ta) 55%, transparent); color: var(--ta); background: color-mix(in srgb, var(--ta) 9%, var(--panel)); }
+.tool-back:active { transform: scale(.92); }
+.tool-back svg { width: 19px; height: 19px; }
+.tool-bar-ico { width: 42px; height: 42px; border-radius: 12px; background: var(--ta); display: grid; place-items: center; flex-shrink: 0; box-shadow: 0 6px 16px color-mix(in srgb, var(--ta) 36%, transparent); }
+.tool-bar-ico svg { width: 22px; height: 22px; }
+.tool-bar-txt { min-width: 0; flex: 1; }
+.tool-bar-txt h2 { font-size: 21px; font-weight: 820; color: var(--ink); letter-spacing: -.3px; line-height: 1.15; }
+.tool-bar-txt .sub { color: var(--ink-soft); font-size: 12.5px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.an-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }

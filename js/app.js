@@ -3626,48 +3626,53 @@ async function renderBeats() {
 /* =======================================================================
    HERRAMIENTAS — Press Kit / EPK
    ======================================================================= */
+// Registro central de herramientas: icono, acento e info — fuente única para
+// el hub y las cabeceras, para que todo se sienta parte del mismo ecosistema.
+const TOOLS = {
+  presskit:  { icon: 'i-doc',   accent: '#3e57fc', view: 'presskit',   name: 'Press Kit / EPK', go: 'Crear ahora',
+    desc: 'Tu dossier de artista: bio, estadísticas, temas destacados y contacto. Compártelo con salas, sellos y promotores con un enlace o en PDF.' },
+  smartlink: { icon: 'i-share', accent: '#8b5cf6', view: 'smartlinks',  name: 'Smart link', go: 'Crear ahora',
+    desc: 'Una página por lanzamiento con tu portada y botones a Spotify, YouTube, Apple… Un solo enlace para tu bio.' },
+  split:     { icon: 'i-files', accent: '#0ea5e9', view: 'splits',      name: 'Split sheet', go: 'Crear ahora',
+    desc: 'Reparto de autoría de una colaboración: quién hizo qué y el % de cada uno. Fírmalo y expórtalo a PDF.' },
+  analyzer:  { icon: 'i-mixer', accent: '#10b981', view: 'analyzer',    name: 'Analizador de audio', go: 'Analizar ahora',
+    desc: 'Sube una canción y obtén el tono (para el autotune), el BPM y un análisis de volumen, picos y clipping. Todo en tu navegador.' },
+};
+
+// Cabecera unificada de cualquier página de herramientas.
+// back = { id, label } para el botón de volver (la lógica onclick se asigna fuera).
+function toolBar(key, title, sub, back) {
+  const t = TOOLS[key] || {};
+  return `<div class="tool-bar" style="--ta:${t.accent || '#3e57fc'}">
+    ${back ? `<button class="tool-back" id="${back.id}" title="${esc(back.label || 'Atrás')}" aria-label="${esc(back.label || 'Atrás')}"><svg fill="none" stroke="currentColor"><use href="#i-chevron-left"/></svg></button>` : ''}
+    <div class="tool-bar-ico"><svg fill="none" stroke="#fff"><use href="#${t.icon || 'i-mixer'}"/></svg></div>
+    <div class="tool-bar-txt"><h2>${esc(title)}</h2>${sub ? `<div class="sub">${esc(sub)}</div>` : ''}</div>
+  </div>`;
+}
+
 function renderTools() {
   setActiveNav('tools');
   const main = $('main');
   main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
+  const card = (key) => { const t = TOOLS[key]; return `
+    <button class="tool-card" data-tool="${key}" style="--ta:${t.accent}">
+      <div class="tool-ico"><svg fill="none" stroke="#fff"><use href="#${t.icon}"/></svg></div>
+      <div class="tool-name">${t.name}</div>
+      <div class="tool-desc">${t.desc}</div>
+      <span class="tool-go">${t.go} →</span>
+    </button>`; };
   main.innerHTML = `
-    <div class="main-head"><div><h2>Herramientas</h2><div class="sub">Utilidades para artistas</div></div></div>
+    <div class="main-head"><div><h2>Herramientas</h2><div class="sub">Tu kit de artista — todo en un mismo sitio</div></div></div>
     <div class="tools-grid">
-      <button class="tool-card" id="toolPresskit">
-        <div class="tool-ico"><svg fill="none" stroke="currentColor"><use href="#i-doc"/></svg></div>
-        <div class="tool-name">Press Kit / EPK</div>
-        <div class="tool-desc">Crea tu dossier de artista profesional y compártelo con salas, sellos y promotores con un solo enlace o en PDF.</div>
-        <span class="tool-go">Crear ahora →</span>
-      </button>
-      <button class="tool-card" id="toolSmartlink">
-        <div class="tool-ico"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg></div>
-        <div class="tool-name">Smart link</div>
-        <div class="tool-desc">Una página por lanzamiento con tu portada y botones a Spotify, YouTube, Apple… Un solo enlace para tu bio.</div>
-        <span class="tool-go">Crear ahora →</span>
-      </button>
-      <button class="tool-card" id="toolSplit">
-        <div class="tool-ico"><svg fill="none" stroke="currentColor"><use href="#i-doc"/></svg></div>
-        <div class="tool-name">Split sheet</div>
-        <div class="tool-desc">Documento de reparto de una colaboración: quién hizo qué y el % de cada uno. Exporta a PDF.</div>
-        <span class="tool-go">Crear ahora →</span>
-      </button>
-      <button class="tool-card" id="toolAnalyzer">
-        <div class="tool-ico"><svg fill="none" stroke="currentColor"><use href="#i-mixer"/></svg></div>
-        <div class="tool-name">Analizador de audio</div>
-        <div class="tool-desc">Sube una canción y obtén el <b>tono</b> (para el autotune), el <b>BPM</b> y un análisis de volumen, picos y clipping. Todo en tu navegador.</div>
-        <span class="tool-go">Analizar ahora →</span>
-      </button>
-      <div class="tool-card soon">
-        <div class="tool-ico"><svg fill="none" stroke="currentColor"><use href="#i-image"/></svg></div>
+      ${['presskit', 'smartlink', 'split', 'analyzer'].map(card).join('')}
+      <div class="tool-card soon" style="--ta:#f59e0b">
+        <div class="tool-ico"><svg fill="none" stroke="#fff"><use href="#i-image"/></svg></div>
         <div class="tool-name">Portada / flyer</div>
-        <div class="tool-desc">Genera carátulas y carteles con tu marca.</div>
+        <div class="tool-desc">Genera carátulas y carteles con tu marca, listos para subir.</div>
         <span class="tool-soon">Próximamente</span>
       </div>
     </div>`;
-  $('toolPresskit').onclick = () => switchView('presskit');
-  $('toolSmartlink').onclick = () => switchView('smartlinks');
-  $('toolSplit').onclick = () => switchView('splits');
-  $('toolAnalyzer').onclick = () => switchView('analyzer');
+  main.querySelectorAll('.tool-card[data-tool]').forEach(c => c.onclick = () => switchView(TOOLS[c.dataset.tool].view));
 }
 
 /* =======================================================================
@@ -3810,10 +3815,7 @@ async function renderAudioAnalyzer() {
   const main = $('main');
   main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
   main.innerHTML = `
-    <div class="main-head">
-      <div><h2>Analizador de audio</h2><div class="sub">Tono · BPM · volumen — sin salir del navegador</div></div>
-      <button class="btn sm" id="anBack"><svg fill="none" stroke="currentColor"><use href="#i-chevron-left"/></svg> Herramientas</button>
-    </div>
+${toolBar('analyzer', 'Analizador de audio', 'Tono · BPM · volumen — sin salir del navegador', { id: 'anBack', label: 'Herramientas' })}
     <div class="an-wrap">
       <div class="dropzone an-dz" id="anDz">
         <svg fill="none" stroke="currentColor"><use href="#i-upload"/></svg>
@@ -3887,7 +3889,12 @@ async function renderAudioAnalyzer() {
           <div class="an-stat"><div class="an-stat-l">Clipping</div><div class="an-stat-v ${clipWarn ? 'bad' : 'good'}">${clipWarn ? clipPct.toFixed(2) + '%' : 'OK'}</div></div>
         </div>
         <div class="an-note">${clipWarn ? '⚠️ Hay clipping (saturación digital): baja el nivel antes de exportar. ' : ''}${loudHint} <span style="opacity:.6">Referencia de plataformas: ~${target} LUFS.</span></div>
-        <button class="btn sm ghost" id="anAgain" style="margin-top:14px"><svg fill="none" stroke="currentColor"><use href="#i-upload"/></svg> Analizar otra canción</button>`;
+        <div class="an-actions">
+          <button class="btn sm primary" id="anCopy"><svg fill="none" stroke="#fff"><use href="#i-copy"/></svg> Copiar tono + BPM</button>
+          <button class="btn sm ghost" id="anAgain"><svg fill="none" stroke="currentColor"><use href="#i-upload"/></svg> Analizar otra</button>
+        </div>`;
+      const summary = `Tono: ${note}${key.mode === 'minor' ? 'm' : ''} (${NOTE_ES[note]} ${modeEs}) · BPM: ${bpm ?? '—'} · Camelot ${camelot}`;
+      $('anCopy').onclick = () => { try { navigator.clipboard.writeText(summary); toast('Copiado ✓ ' + summary); } catch { toast('No se pudo copiar'); } };
       $('anAgain').onclick = () => { fi.value = ''; $('anName').textContent = ''; res.innerHTML = ''; };
     } catch (err) {
       console.error(err);
@@ -3943,15 +3950,12 @@ async function renderPressKit() {
   setActiveNav('tools');
   const main = $('main');
   main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
-  main.innerHTML = `<div class="main-head"><div><h2>Press Kit</h2><div class="sub">Tu dossier de artista</div></div></div><div class="loading" style="padding:40px"><div class="spinner"></div></div>`;
+  main.innerHTML = `${toolBar('presskit', 'Press Kit / EPK', 'Tu dossier de artista')}<div class="loading" style="padding:40px"><div class="spinner"></div></div>`;
   pkState = await pkLoadOrDefault();
   const k = pkState;
   const tpls = [['dark', 'Oscuro'], ['light', 'Claro'], ['gradient', 'Degradado']];
   main.innerHTML = `
-    <div class="main-head">
-      <div><h2>Press Kit / EPK</h2><div class="sub">Edita a la izquierda, mira el resultado a la derecha</div></div>
-      <button class="btn sm" id="pkBack"><svg fill="none" stroke="currentColor"><use href="#i-chevron-left"/></svg> Herramientas</button>
-    </div>
+${toolBar('presskit', 'Press Kit / EPK', 'Edita a la izquierda, mira el resultado a la derecha', { id: 'pkBack', label: 'Herramientas' })}
     <div class="pk-builder">
       <div class="pk-form">
         <div class="pk-fsec"><h4>Identidad</h4>
@@ -4204,8 +4208,7 @@ async function renderSmartLinks() {
   const main = $('main');
   main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
   main.innerHTML = `
-    <div class="main-head"><div><h2>Smart links</h2><div class="sub">Un enlace para tu bio que lleva a todas las plataformas</div></div>
-      <button class="btn sm" id="smBack"><svg fill="none" stroke="currentColor"><use href="#i-chevron-left"/></svg> Herramientas</button></div>
+${toolBar('smartlink', 'Smart links', 'Un enlace para tu bio que lleva a todas las plataformas', { id: 'smBack', label: 'Herramientas' })}
     <button class="btn primary" id="smNew" style="margin-bottom:14px"><svg fill="none" stroke="#fff"><use href="#i-plus"/></svg> Nuevo smart link</button>
     <div id="smList" class="loading" style="padding:30px"><div class="spinner"></div></div>`;
   $('smBack').onclick = () => switchView('tools');
@@ -4234,7 +4237,7 @@ async function renderSmartLinks() {
 async function renderSmartLinkBuilder() {
   setActiveNav('tools');
   const main = $('main');
-  main.innerHTML = `<div class="main-head"><div><h2>Smart link</h2></div></div><div class="loading" style="padding:40px"><div class="spinner"></div></div>`;
+  main.innerHTML = `${toolBar('smartlink', 'Smart link', '')}<div class="loading" style="padding:40px"><div class="spinner"></div></div>`;
   const uid = state.user.id;
   const { data: tracks } = await sb.from('tracks').select('id,title,cover_url,audio_url').eq('user_id', uid).order('created_at', { ascending: false }).limit(30);
   const myTracks = tracks || [];
@@ -4244,8 +4247,7 @@ async function renderSmartLinkBuilder() {
   smState = d;
   const tpls = [['dark', 'Oscuro'], ['light', 'Claro'], ['gradient', 'Degradado']];
   main.innerHTML = `
-    <div class="main-head"><div><h2>Smart link</h2><div class="sub">Edita y publica tu página de lanzamiento</div></div>
-      <button class="btn sm" id="slBack"><svg fill="none" stroke="currentColor"><use href="#i-chevron-left"/></svg> Mis smart links</button></div>
+${toolBar('smartlink', 'Smart link', 'Edita y publica tu página de lanzamiento', { id: 'slBack', label: 'Mis smart links' })}
     <div class="pk-builder">
       <div class="pk-form">
         <div class="pk-fsec"><h4>Lanzamiento</h4>
@@ -4403,8 +4405,7 @@ async function renderSplitSheets() {
   const main = $('main');
   main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
   main.innerHTML = `
-    <div class="main-head"><div><h2>Split sheets</h2><div class="sub">Reparto de autoría de tus colaboraciones</div></div>
-      <button class="btn sm" id="ssBack"><svg fill="none" stroke="currentColor"><use href="#i-chevron-left"/></svg> Herramientas</button></div>
+${toolBar('split', 'Split sheets', 'Reparto de autoría de tus colaboraciones', { id: 'ssBack', label: 'Herramientas' })}
     <button class="btn primary" id="ssNew" style="margin-bottom:14px"><svg fill="none" stroke="#fff"><use href="#i-plus"/></svg> Nuevo split sheet</button>
     <div id="ssList" class="loading" style="padding:30px"><div class="spinner"></div></div>`;
   $('ssBack').onclick = () => switchView('tools');
@@ -4428,14 +4429,13 @@ async function renderSplitSheets() {
 async function renderSplitBuilder() {
   setActiveNav('tools');
   const main = $('main');
-  main.innerHTML = `<div class="main-head"><div><h2>Split sheet</h2></div></div><div class="loading" style="padding:40px"><div class="spinner"></div></div>`;
+  main.innerHTML = `${toolBar('split', 'Split sheet', '')}<div class="loading" style="padding:40px"><div class="spinner"></div></div>`;
   let d = null;
   if (ssEditId) { const { data } = await sb.from('split_sheets').select('data').eq('id', ssEditId).maybeSingle(); d = data && data.data; }
   if (!d) d = { title: '', date: new Date().toISOString().slice(0, 10), people: [{ name: state.profile.display_name || state.profile.username, role: 'Autor / intérprete', share: 100, contact: '' }], notes: '' };
   ssState = d;
   main.innerHTML = `
-    <div class="main-head"><div><h2>Split sheet</h2><div class="sub">Reparto de autoría · exporta a PDF</div></div>
-      <button class="btn sm" id="spBack"><svg fill="none" stroke="currentColor"><use href="#i-chevron-left"/></svg> Mis split sheets</button></div>
+${toolBar('split', 'Split sheet', 'Reparto de autoría · exporta a PDF', { id: 'spBack', label: 'Mis split sheets' })}
     <div class="pk-builder">
       <div class="pk-form">
         <div class="pk-fsec"><h4>Obra</h4>
