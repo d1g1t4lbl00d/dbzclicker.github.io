@@ -1909,3 +1909,10 @@ textarea.pk-in { resize: vertical; line-height: 1.5; }
 .tool-bar-txt h2 { font-size: 21px; font-weight: 820; color: var(--ink); letter-spacing: -.3px; line-height: 1.15; }
 .tool-bar-txt .sub { color: var(--ink-soft); font-size: 12.5px; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .an-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+
+/* analizador: reproductor de previsualización */
+.an-player { display: flex; align-items: stretch; gap: 10px; margin-bottom: 12px; }
+.an-player .an-wave { flex: 1; margin-bottom: 0; }
+.an-play { width: 56px; flex-shrink: 0; border: none; border-radius: 14px; background: var(--accent-grad); display: grid; place-items: center; cursor: pointer; box-shadow: var(--sh-blue); transition: transform .12s; }
+.an-play:active { transform: scale(.93); }
+.an-play svg { width: 22px; height: 22px; }

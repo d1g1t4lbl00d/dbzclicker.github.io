@@ -1661,7 +1661,7 @@ function mountCollab(scope, initial = []) {
   return { get: () => list };
 }
 
-function openUploadModal() {
+function openUploadModal(prefill) {
   if (!requireNotBanned()) return;
   const m = openModal(`
     <div class="modal-head"><h3>Subir pista</h3><button class="close">&times;</button></div>
@@ -1734,6 +1734,13 @@ function openUploadModal() {
   }
 
   m.querySelector('#uIsBeat').onchange = (e) => m.querySelector('#uBeatRow').classList.toggle('hidden', !e.target.checked);
+  // prerelleno desde el Analizador de audio (tono/BPM detectados)
+  if (prefill) {
+    if (prefill.isBeat) { m.querySelector('#uIsBeat').checked = true; m.querySelector('#uBeatRow').classList.remove('hidden'); }
+    if (prefill.bpm) m.querySelector('#uBpm').value = prefill.bpm;
+    if (prefill.key) m.querySelector('#uKey').value = prefill.key;
+    if (prefill.title && !m.querySelector('#uTitle').value) m.querySelector('#uTitle').value = prefill.title;
+  }
   const collab = mountCollab(m);
 
   m.querySelector('#uSubmit').onclick = async () => {
@@ -3749,14 +3756,17 @@ function detectKey(mono, sr) {
   if (mx > 0) for (let i = 0; i < 12; i++) chroma[i] /= mx;
   const major = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88];
   const minor = [6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
-  let best = { score: -2, tonic: 0, mode: 'major' };
+  const cand = [];
   for (let t = 0; t < 12; t++) {
     const rot = new Array(12);
     for (let j = 0; j < 12; j++) rot[j] = chroma[(t + j) % 12];
-    const sMaj = _pearson(rot, major), sMin = _pearson(rot, minor);
-    if (sMaj > best.score) best = { score: sMaj, tonic: t, mode: 'major' };
-    if (sMin > best.score) best = { score: sMin, tonic: t, mode: 'minor' };
+    cand.push({ score: _pearson(rot, major), tonic: t, mode: 'major' });
+    cand.push({ score: _pearson(rot, minor), tonic: t, mode: 'minor' });
   }
+  cand.sort((a, b) => b.score - a.score);
+  const best = cand[0] || { score: -2, tonic: 0, mode: 'major' };
+  best.alt = cand[1] || null;          // 2ª tonalidad más probable (suele ser la relativa)
+  best.margin = best.alt ? best.score - best.alt.score : 1;
   return best;
 }
 
@@ -3777,10 +3787,14 @@ function detectBPM(mono, sr) {
     if (l0 + 1 >= nF) continue;
     let sum = 0;
     for (let i = 0; i + l0 + 1 < nF; i++) sum += onset[i] * (onset[i + l0] * (1 - frac) + onset[i + l0 + 1] * frac);
-    if (sum > best) { best = sum; bestBpm = bpm; }
+    // peso perceptual (resonancia log-gaussiana centrada en ~125 BPM):
+    // resuelve los errores de octava prefiriendo el tempo más natural en vez
+    // de forzar a la fuerza el rango con divisiones/multiplicaciones.
+    const lg = Math.log2(bpm / 125);
+    const w = Math.exp(-0.5 * (lg / 0.55) * (lg / 0.55));
+    const score = sum * w;
+    if (score > best) { best = score; bestBpm = bpm; }
   }
-  while (bestBpm < 70) bestBpm *= 2;
-  while (bestBpm > 150) bestBpm /= 2;
   return Math.round(bestBpm * 10) / 10;
 }
 
@@ -3856,6 +3870,9 @@ ${toolBar('analyzer', 'Analizador de audio', 'Tono · BPM · volumen — sin sal
       const modeEs = key.mode === 'major' ? 'mayor' : 'menor';
       const camelot = CAMELOT[`${note} ${key.mode}`] || '—';
       const conf = Math.max(0, Math.min(100, Math.round((key.score + 0.2) / 1.0 * 100)));
+      const alt = key.alt, altNote = alt ? NOTE_NAMES[alt.tonic] : '';
+      const altLabel = alt ? `${altNote}${alt.mode === 'minor' ? 'm' : ''} (${NOTE_ES[altNote]} ${alt.mode === 'major' ? 'mayor' : 'menor'})` : '';
+      const showAlt = alt && key.margin < 0.07;
       const peaks = [];
       const n = 120, block = Math.floor(mono.length / n) || 1;
       for (let i = 0; i < n; i++) { let m = 0; const st = i * block; for (let j = 0; j < block; j += 16) { const v = Math.abs(mono[st + j] || 0); if (v > m) m = v; } peaks.push(m); }
@@ -3877,10 +3894,13 @@ ${toolBar('analyzer', 'Analizador de audio', 'Tono · BPM · volumen — sin sal
             <div class="an-big-sub">${dur ? fmtTime(dur) : ''} de duración</div>
           </div>
         </div>
-        <div class="an-wave">${bars}</div>
+        <div class="an-player">
+          <button class="an-play" id="anPlay" aria-label="Reproducir"><svg fill="none" stroke="#fff"><use href="#i-play"/></svg></button>
+          <div class="an-wave">${bars}</div>
+        </div>
         <div class="an-key-detail">
           <b>Para el autotune:</b> ajusta a <b>${note} ${modeEs}</b>. Notas de la escala: <span class="an-scale">${scaleNotes(key.tonic, key.mode)}</span>
-          <span class="an-conf">fiabilidad del tono ~${conf}%</span>
+          <span class="an-conf">fiabilidad del tono ~${conf}%${showAlt ? ` · alternativa probable: <b>${altLabel}</b>` : ''}</span>
         </div>
         <div class="an-stats">
           <div class="an-stat"><div class="an-stat-l">Pico</div><div class="an-stat-v ${peakDb > -0.1 ? 'bad' : ''}">${peakDb.toFixed(1)} dBFS</div></div>
@@ -3890,12 +3910,24 @@ ${toolBar('analyzer', 'Analizador de audio', 'Tono · BPM · volumen — sin sal
         </div>
         <div class="an-note">${clipWarn ? '⚠️ Hay clipping (saturación digital): baja el nivel antes de exportar. ' : ''}${loudHint} <span style="opacity:.6">Referencia de plataformas: ~${target} LUFS.</span></div>
         <div class="an-actions">
-          <button class="btn sm primary" id="anCopy"><svg fill="none" stroke="#fff"><use href="#i-copy"/></svg> Copiar tono + BPM</button>
+          <button class="btn sm primary" id="anUpload"><svg fill="none" stroke="#fff"><use href="#i-upload"/></svg> Subir como beat</button>
+          <button class="btn sm" id="anCopy"><svg fill="none" stroke="currentColor"><use href="#i-copy"/></svg> Copiar tono + BPM</button>
           <button class="btn sm ghost" id="anAgain"><svg fill="none" stroke="currentColor"><use href="#i-upload"/></svg> Analizar otra</button>
         </div>`;
-      const summary = `Tono: ${note}${key.mode === 'minor' ? 'm' : ''} (${NOTE_ES[note]} ${modeEs}) · BPM: ${bpm ?? '—'} · Camelot ${camelot}`;
+      const keyTag = `${note}${key.mode === 'minor' ? 'm' : ''}`;
+      const summary = `Tono: ${keyTag} (${NOTE_ES[note]} ${modeEs}) · BPM: ${bpm ?? '—'} · Camelot ${camelot}`;
+      // reproductor de previsualización
+      const prevUrl = URL.createObjectURL(file);
+      const prevAudio = new Audio(prevUrl);
+      const playBtn = $('anPlay'), playUse = playBtn.querySelector('use');
+      prevAudio.onplay = () => playUse.setAttribute('href', '#i-pause');
+      prevAudio.onpause = () => playUse.setAttribute('href', '#i-play');
+      prevAudio.onended = () => playUse.setAttribute('href', '#i-play');
+      playBtn.onclick = () => { if (prevAudio.paused) { try { audio && audio.pause(); } catch {} prevAudio.play(); } else prevAudio.pause(); };
+      const cleanup = () => { try { prevAudio.pause(); URL.revokeObjectURL(prevUrl); } catch {} };
+      $('anUpload').onclick = () => { cleanup(); openUploadModal({ isBeat: true, bpm: bpm || '', key: keyTag, title: file.name.replace(/\.[^.]+$/, '') }); };
       $('anCopy').onclick = () => { try { navigator.clipboard.writeText(summary); toast('Copiado ✓ ' + summary); } catch { toast('No se pudo copiar'); } };
-      $('anAgain').onclick = () => { fi.value = ''; $('anName').textContent = ''; res.innerHTML = ''; };
+      $('anAgain').onclick = () => { cleanup(); fi.value = ''; $('anName').textContent = ''; res.innerHTML = ''; };
     } catch (err) {
       console.error(err);
       res.innerHTML = `<div class="an-note bad">No se pudo analizar el archivo. Prueba con un MP3 o WAV estándar.</div>`;
@@ -4215,7 +4247,7 @@ ${toolBar('smartlink', 'Smart links', 'Un enlace para tu bio que lleva a todas l
   $('smNew').onclick = () => { smEditId = null; switchView('smartlink'); };
   const { data } = await sb.from('smart_links').select('id,slug,data,published,created_at').eq('user_id', state.user.id).order('created_at', { ascending: false });
   const list = $('smList'); list.className = '';
-  if (!data || !data.length) { list.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-share"/></svg><p>Aún no has creado ningún smart link.<br>Pulsa <b>Nuevo smart link</b> para tu próximo lanzamiento.</p></div>`; return; }
+  if (!data || !data.length) { list.innerHTML = `<div class="empty"><svg fill="none" style="stroke:#8b5cf6"><use href="#i-share"/></svg><p>Aún no has creado ningún smart link.<br>Pulsa <b>Nuevo smart link</b> para tu próximo lanzamiento.</p></div>`; return; }
   list.innerHTML = '';
   data.forEach(r => {
     const d = r.data || {}; const url = location.origin + '/?l=' + r.slug;
@@ -4412,7 +4444,7 @@ ${toolBar('split', 'Split sheets', 'Reparto de autoría de tus colaboraciones', 
   $('ssNew').onclick = () => { ssEditId = null; switchView('split'); };
   const { data } = await sb.from('split_sheets').select('id,data,updated_at').eq('user_id', state.user.id).order('updated_at', { ascending: false });
   const list = $('ssList'); list.className = '';
-  if (!data || !data.length) { list.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-doc"/></svg><p>Aún no tienes ningún split sheet.<br>Crea uno para tu próxima colaboración.</p></div>`; return; }
+  if (!data || !data.length) { list.innerHTML = `<div class="empty"><svg fill="none" style="stroke:#0ea5e9"><use href="#i-files"/></svg><p>Aún no tienes ningún split sheet.<br>Crea uno para tu próxima colaboración.</p></div>`; return; }
   list.innerHTML = '';
   data.forEach(r => {
     const d = r.data || {};
