@@ -894,6 +894,86 @@ function renderFeed(head, tracks, view) {
 /* =======================================================================
    TARJETA DE PISTA
    ======================================================================= */
+/* =======================================================================
+   MENÚ CONTEXTUAL — mantener pulsado (táctil) o clic derecho (ratón) para
+   abrir un menú de acciones. Reutiliza el estilo de action-sheet de los
+   mensajes para que sea consistente en toda la app.
+   ======================================================================= */
+function openActionSheet(menu) {
+  const items = (menu.items || []).filter(Boolean);
+  if (!items.length) return null;
+  const head = (menu.title || menu.subtitle)
+    ? `<div class="as-head">${menu.title ? `<div class="as-title">${esc(menu.title)}</div>` : ''}${menu.subtitle ? `<div class="as-sub">${esc(menu.subtitle)}</div>` : ''}</div>`
+    : '';
+  const rows = items.map((it, i) => `<button class="as-item${it.danger ? ' danger' : ''}${it.on ? ' on' : ''}" data-i="${i}"><svg fill="none" stroke="currentColor"><use href="#i-${it.icon || 'plus'}"/></svg> ${esc(it.label)}</button>`).join('');
+  const sheet = el(`<div class="modal-backdrop sheet"><div class="action-sheet">${head}${rows}<button class="as-item cancel" data-cancel>Cancelar</button></div></div>`);
+  const close = () => sheet.remove();
+  sheet.addEventListener('click', (e) => { if (e.target === sheet) close(); });
+  sheet.querySelector('[data-cancel]').onclick = close;
+  items.forEach((it, i) => { const b = sheet.querySelector(`[data-i="${i}"]`); if (b) b.onclick = () => { close(); haptic(8); try { it.onClick && it.onClick(); } catch (err) { console.error(err); } }; });
+  $('modalRoot').appendChild(sheet);
+  haptic(12);
+  return sheet;
+}
+function attachLongPress(node, build, opts = {}) {
+  const delay = opts.delay || 480;
+  let timer = 0, sx = 0, sy = 0, fired = false, active = false;
+  node.classList.add('lp-target');
+  const cancel = () => { clearTimeout(timer); timer = 0; active = false; };
+  const fire = () => { fired = true; const menu = build(); if (menu) openActionSheet(menu); };
+  node.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'mouse') return;            // en ratón se usa clic derecho
+    e.stopPropagation();                              // evita que un lp-target padre también dispare
+    active = true; fired = false; sx = e.clientX; sy = e.clientY;
+    timer = setTimeout(() => { if (active) fire(); }, delay);
+  });
+  node.addEventListener('pointermove', (e) => { if (active && (Math.abs(e.clientX - sx) > 10 || Math.abs(e.clientY - sy) > 10)) cancel(); });
+  node.addEventListener('pointerup', () => {
+    if (fired) { const sup = (ev) => { ev.stopPropagation(); ev.preventDefault(); }; node.addEventListener('click', sup, { capture: true, once: true }); setTimeout(() => node.removeEventListener('click', sup, { capture: true }), 350); }
+    cancel();
+  });
+  node.addEventListener('pointercancel', cancel);
+  node.addEventListener('contextmenu', (e) => { e.preventDefault(); e.stopPropagation(); fire(); });
+}
+function trackMenu(t, card) {
+  const mine = t.user_id === state.user.id;
+  const liked = state.likes.has(t.id);
+  const reposted = state.reposts.has(t.id);
+  return { title: t.title, subtitle: t.profiles?.display_name || t.profiles?.username || t.artist || '', items: [
+    { label: 'Reproducir', icon: 'play', onClick: () => playTrack(t) },
+    { label: liked ? 'Quitar me gusta' : 'Me gusta', icon: 'heart', on: liked, onClick: () => toggleLike(t, card) },
+    mine ? null : { label: reposted ? 'Quitar resubida' : 'Resubir', icon: 'repeat', on: reposted, onClick: () => toggleRepost(t, card) },
+    { label: 'Reproducir a continuación', icon: 'next', onClick: () => enqueue(t, true) },
+    { label: 'Añadir a la cola', icon: 'list', onClick: () => enqueue(t) },
+    { label: 'Añadir a playlist', icon: 'listadd', onClick: () => openPlaylistPicker(t) },
+    { label: 'Compartir', icon: 'share', onClick: () => shareTrack(t) },
+    { label: 'Descargar', icon: 'download', onClick: () => downloadTrack(t) },
+    mine ? { label: 'Editar', icon: 'settings', onClick: () => openEditTrack(t, card) } : null,
+    mine ? null : { label: 'Reportar', icon: 'bell', onClick: () => openReportModal('track', t.id, t.user_id, '“' + (t.title || 'pista') + '”') },
+    (mine || state.profile.is_admin) ? { label: mine ? 'Borrar' : 'Borrar (mod)', icon: 'trash', danger: true, onClick: () => deleteTrack(t, card) } : null,
+  ] };
+}
+function postMenu(p, card) {
+  const mine = p.user_id === state.user.id;
+  const liked = card.querySelector('[data-act="like"]')?.classList.contains('on');
+  return { title: p.profiles?.display_name || p.profiles?.username || 'Publicación', subtitle: p.caption || '', items: [
+    { label: liked ? 'Quitar me gusta' : 'Me gusta', icon: 'heart', on: liked, onClick: () => togglePostLike(p, card) },
+    { label: 'Comentar', icon: 'comment', onClick: () => togglePostComments(p, card) },
+    { label: 'Compartir', icon: 'share', onClick: () => sharePost(p) },
+    mine ? { label: 'Editar pie de foto', icon: 'settings', onClick: () => openEditPost(p, card) } : null,
+    mine ? null : { label: 'Reportar', icon: 'bell', onClick: () => openReportModal('post', p.id, p.user_id, 'esta publicación') },
+    (mine || state.profile.is_admin) ? { label: mine ? 'Borrar' : 'Borrar (mod)', icon: 'trash', danger: true, onClick: () => deletePost(p, card) } : null,
+  ] };
+}
+// menú para una fila de comentario (sirve para pistas y publicaciones)
+function commentMenu(box, c, canDel, onDelete) {
+  return { title: c.profiles?.display_name || c.profiles?.username || 'Comentario', items: [
+    { label: 'Responder', icon: 'reply', onClick: () => { const i = box.querySelector('.comment-form input'); if (i) { const u = c.profiles?.username; i.value = u ? `@${u} ` : ''; i.focus(); } } },
+    c.body ? { label: 'Copiar', icon: 'copy', onClick: () => { try { navigator.clipboard.writeText(c.body); toast('Copiado'); } catch {} } } : null,
+    canDel ? { label: 'Borrar', icon: 'trash', danger: true, onClick: onDelete } : null,
+  ] };
+}
+
 function trackCard(t) {
   const liked = state.likes.has(t.id);
   const reposted = state.reposts.has(t.id);
@@ -935,6 +1015,7 @@ function trackCard(t) {
 
   card.querySelectorAll('[data-collab]').forEach(a => a.onclick = (e) => { e.stopPropagation(); openProfile(a.dataset.collab); });
   card.addEventListener('click', (e) => handleTrackClick(e, t, card));
+  attachLongPress(card, () => trackMenu(t, card));
   return card;
 }
 
@@ -1317,6 +1398,15 @@ function renderComments(box, t, comments) {
       if (error) { toast('No se pudo borrar el comentario'); return; }
       renderComments(box, t, comments.filter(x => x.id !== id));
     };
+  });
+  box.querySelectorAll('.comment').forEach(row => {
+    const c = comments.find(x => String(x.id) === String(row.dataset.cid)); if (!c) return;
+    const canDel = c.user_id === state.user.id || state.profile.is_admin;
+    attachLongPress(row, () => commentMenu(box, c, canDel, async () => {
+      const { error } = await sb.from('comments').delete().eq('id', c.id);
+      if (error) { toast('No se pudo borrar el comentario'); return; }
+      renderComments(box, t, comments.filter(x => x.id !== c.id));
+    }));
   });
   const form = el(`<form class="comment-form"><input type="text" placeholder="Añade un comentario... (@ para mencionar)" maxlength="400" required /><button class="comment-send" type="submit" aria-label="Enviar"><svg fill="none" stroke="#fff"><use href="#i-send"/></svg></button></form>`);
   attachMentionAutocomplete(form.querySelector('input'));
@@ -2285,6 +2375,7 @@ function postCard(p, liked) {
       <div class="comments hidden" data-comments></div>
     </div>`);
   card.addEventListener('click', (e) => handlePostClick(e, p, card));
+  attachLongPress(card, () => postMenu(p, card));
   return card;
 }
 
@@ -2449,6 +2540,15 @@ function renderPostComments(box, p, comments) {
       if (error) { toast('No se pudo borrar el comentario'); return; }
       renderPostComments(box, p, comments.filter(x => x.id !== id));
     };
+  });
+  box.querySelectorAll('.comment').forEach(row => {
+    const c = comments.find(x => String(x.id) === String(row.dataset.cid)); if (!c) return;
+    const canDel = c.user_id === state.user.id || state.profile.is_admin;
+    attachLongPress(row, () => commentMenu(box, c, canDel, async () => {
+      const { error } = await sb.from('post_comments').delete().eq('id', c.id);
+      if (error) { toast('No se pudo borrar el comentario'); return; }
+      renderPostComments(box, p, comments.filter(x => x.id !== c.id));
+    }));
   });
   const form = el(`<form class="comment-form"><input type="text" placeholder="Añade un comentario... (@ para mencionar)" maxlength="400" required /><button class="comment-send" type="submit" aria-label="Enviar"><svg fill="none" stroke="#fff"><use href="#i-send"/></svg></button></form>`);
   attachMentionAutocomplete(form.querySelector('input'));
@@ -3005,6 +3105,12 @@ function playlistCard(pl) {
   const n = (pl.playlist_tracks || []).length;
   const card = el(`<div class="pl-card">${playlistCovers(pl)}<div class="pl-info"><div class="pl-title">${esc(pl.title)}</div><div class="pl-count">${n} ${n === 1 ? 'pista' : 'pistas'}</div></div></div>`);
   card.onclick = () => openPlaylist(pl.id);
+  const mine = pl.user_id === state.user.id;
+  attachLongPress(card, () => ({ title: pl.title, items: [
+    { label: 'Abrir', icon: 'play', onClick: () => openPlaylist(pl.id) },
+    mine ? { label: 'Renombrar', icon: 'settings', onClick: () => renamePlaylist(pl) } : null,
+    mine ? { label: 'Borrar', icon: 'trash', danger: true, onClick: () => deletePlaylist(pl) } : null,
+  ] }));
   return card;
 }
 function createPlaylistModal() {
@@ -4992,6 +5098,13 @@ function eventCard(ev) {
   card.addEventListener('click', (e) => {
     if (e.target.closest('[data-ev-save]')) { e.stopPropagation(); toggleEventSave(ev, card); return; }
     openEvent(ev.id);
+  });
+  attachLongPress(card, () => {
+    const sv = state.eventSaves.has(ev.id);
+    return { title: ev.title, items: [
+      { label: 'Ver detalles', icon: 'calendar', onClick: () => openEvent(ev.id) },
+      { label: sv ? 'Quitar de guardados' : 'Guardar', icon: 'bookmark', on: sv, onClick: () => toggleEventSave(ev, card) },
+    ] };
   });
   return card;
 }
