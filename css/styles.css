@@ -1236,7 +1236,7 @@ img { display: block; }
 
 /* ---- perfil personalizable ---- */
 .profile-view { min-height: calc(100dvh - var(--topbar-h)); margin: -22px -26px calc(-1 * (var(--player-h) + 30px)); padding: 22px 26px calc(var(--player-h) + 30px); }
-@media (max-width: 720px) { .profile-view { min-height: calc(100dvh - var(--topbar-h) - 14px); margin: -14px -13px calc(-1 * (var(--nav-h) + 94px + env(safe-area-inset-bottom,0px))); padding: 14px 13px calc(var(--nav-h) + 94px + env(safe-area-inset-bottom,0px)); } }
+@media (max-width: 720px) { .profile-view { min-height: calc(100dvh - var(--topbar-h) - 14px); margin: -14px -13px calc(-1 * (var(--nav-h) + 126px + env(safe-area-inset-bottom,0px))); padding: 14px 13px calc(var(--nav-h) + 126px + env(safe-area-inset-bottom,0px)); } }
 /* (banner antiguo sustituido por .profile-cover) */
 .profile-head .btn.primary { background: var(--accent, var(--blue-2)); border-color: transparent; }
 .profile-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; justify-content: center; }
@@ -1388,7 +1388,7 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
   .upload-cta { padding: 14px; }
 
   /* MAIN: hueco para reproductor + nav + safe-area, así nada queda tapado */
-  .main { padding: 14px 13px calc(var(--nav-h) + 94px + env(safe-area-inset-bottom,0px)); }
+  .main { padding: 14px 13px calc(var(--nav-h) + 126px + env(safe-area-inset-bottom,0px)); }
   .main-head h2 { font-size: 19px; }
   .track { padding: 13px; gap: 12px; border-radius: var(--r); }
   .track .cover { width: 78px; height: 78px; }
@@ -1397,7 +1397,7 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
 
   /* PLAYER: tarjeta flotante con márgenes, barra de tiempo integrada abajo */
   .player {
-    left: 12px; right: 12px; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom,0px) + 8px);
+    left: 12px; right: 12px; bottom: calc(var(--nav-h) + env(safe-area-inset-bottom,0px) + 40px);
     height: 66px; gap: 12px; padding: 0 10px 11px; border-radius: 18px;
     border: 1px solid var(--line); box-shadow: var(--sh-3); z-index: 46;
     background: rgba(255,255,255,.92); backdrop-filter: blur(18px) saturate(1.5); overflow: visible;
@@ -1417,7 +1417,7 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
   .player .seek:hover, .player .seek.scrub { height: 5px; }
   .player .seek .seek-tip { bottom: 15px; }
 
-  .toast-wrap { bottom: calc(var(--nav-h) + 92px + env(safe-area-inset-bottom,0px)); }
+  .toast-wrap { bottom: calc(var(--nav-h) + 124px + env(safe-area-inset-bottom,0px)); }
 
   /* BOTTOM NAV con safe-area */
   .bottom-nav {
