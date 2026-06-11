@@ -39,6 +39,9 @@ const state = {
   dmReplyTo: null,     // mensaje al que se está respondiendo
   dmConv: null,        // canal realtime de la conversación abierta
   dmPendingFile: null,
+  groupId: null,       // id de la conversación de grupo abierta (null = DM 1-a-1)
+  groupConv: null,     // datos de la conversación de grupo abierta
+  groupMembers: {},    // miembros del grupo abierto (id → perfil)
 };
 
 /* ---- TEMA (claro / oscuro) ---- */
@@ -5551,6 +5554,27 @@ function initDM() {
       const r = document.querySelector(`.dm-row[data-mid="${payload.old.id}"]`); if (r) r.remove();
     })
     .subscribe();
+
+  // bandeja de grupos en tiempo real (RLS limita a los grupos del usuario)
+  sb.channel('group-inbox-' + state.user.id)
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_messages' }, async (payload) => {
+      const msg = payload.new;
+      if (state.groupId === msg.conversation_id) {
+        if (!state.dmMsgs.has(msg.id)) dmAppendMessage(msg, { scroll: true });
+        if (msg.sender_id !== state.user.id) markGroupRead(msg.conversation_id);
+      } else if (msg.sender_id !== state.user.id) {
+        toast('💬 Grupo: ' + (msg.body || mediaLabel(msg) || 'Adjunto').slice(0, 38));
+        if (state.view === 'messages') renderMessages();
+      }
+    })
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'group_messages' }, (payload) => {
+      const m = payload.new;
+      if (state.groupId === m.conversation_id && state.dmMsgs.has(m.id)) { state.dmMsgs.set(m.id, m); replaceRow(m); }
+    })
+    .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'group_messages' }, (payload) => {
+      const r = document.querySelector(`.dm-row[data-mid="${payload.old.id}"]`); if (r) r.remove();
+    })
+    .subscribe();
 }
 
 /* ---- helpers ---- */
@@ -5583,7 +5607,7 @@ function dmStatusText() {
 /* ---- render de burbujas ---- */
 function quotedHTML(id) {
   const q = state.dmMsgs.get(id);
-  const who = q ? (q.sender_id === state.user.id ? 'Tú' : (state.dmPeerProfile?.display_name || state.dmPeerProfile?.username || '')) : '';
+  const who = q ? (q.sender_id === state.user.id ? 'Tú' : (state.groupId ? groupSenderName(q.sender_id) : (state.dmPeerProfile?.display_name || state.dmPeerProfile?.username || ''))) : '';
   const snip = q ? (q.deleted ? 'mensaje eliminado' : (q.body || mediaLabel(q))) : 'Mensaje';
   return `<button class="dm-quote" data-jump="${esc(id)}"><span class="dq-who">${esc(who)}</span><span class="dq-snip">${esc((snip || '').slice(0, 90))}</span></button>`;
 }
@@ -5614,19 +5638,21 @@ function mediaHTML(msg) {
   }
   return `<a class="dm-filechip" href="${esc(czHref(msg.attachment_url))}" target="_blank" rel="noopener"><svg fill="none"><use href="#i-file"/></svg><span class="fn">${esc(msg.attachment_name || 'archivo')}</span></a>`;
 }
+function groupSenderName(id) { const p = state.groupMembers[id]; return p ? (p.display_name || p.username || 'usuario') : 'usuario'; }
 function bubbleHTML(msg) {
   const mine = msg.sender_id === state.user.id;
+  const sender = (state.groupId && !mine) ? `<span class="dm-sender">${esc(groupSenderName(msg.sender_id))}</span>` : '';
   if (msg.deleted) {
-    return `<div class="dm-bubble ${mine ? 'me' : 'them'} dm-deleted"><svg class="dm-del-ico"><use href="#i-x"/></svg><i>Se eliminó este mensaje</i><span class="t">${dmTime(msg.created_at)}</span></div>`;
+    return `<div class="dm-bubble ${mine ? 'me' : 'them'} dm-deleted">${sender}<svg class="dm-del-ico"><use href="#i-x"/></svg><i>Se eliminó este mensaje</i><span class="t">${dmTime(msg.created_at)}</span></div>`;
   }
   const quote = msg.reply_to ? quotedHTML(msg.reply_to) : '';
   const media = mediaHTML(msg);
   const isTrack = msg.attachment_type === 'track';
   const cap = (msg.body && !isTrack) ? `<div class="dm-cap">${linkifyMentions(msg.body)}</div>` : '';
   const edited = msg.edited ? `<span class="dm-edited">editado</span>` : '';
-  const ticks = mine ? statusTicks(msg) : '';
+  const ticks = (mine && !state.groupId) ? statusTicks(msg) : '';
   const meta = `<span class="t">${edited}${dmTime(msg.created_at)}${ticks}</span>`;
-  return `<div class="dm-bubble ${mine ? 'me' : 'them'} ${media ? 'has-media' : ''}">${quote}${media}${cap}${meta}</div>`;
+  return `<div class="dm-bubble ${mine ? 'me' : 'them'} ${media ? 'has-media' : ''}">${sender}${quote}${media}${cap}${meta}</div>`;
 }
 function reactionsInner(messageId) {
   const map = state.dmReacts.get(messageId); if (!map) return '';
@@ -5731,17 +5757,17 @@ function attachBubbleGestures(node, msg) {
 }
 function openMsgMenu(msg, node) {
   const mine = msg.sender_id === state.user.id;
-  const quick = DM_QUICK_EMOJI.map(e => `<button class="as-react" data-e="${e}">${e}</button>`).join('') + `<button class="as-react more" data-more aria-label="Más emojis"><svg fill="none" stroke="currentColor"><use href="#i-plus"/></svg></button>`;
+  const reactBar = state.groupId ? '' : `<div class="as-reactbar">${DM_QUICK_EMOJI.map(e => `<button class="as-react" data-e="${e}">${e}</button>`).join('')}<button class="as-react more" data-more aria-label="Más emojis"><svg fill="none" stroke="currentColor"><use href="#i-plus"/></svg></button></div>`;
   const items = [`<button class="as-item" data-a="reply"><svg fill="none" stroke="currentColor"><use href="#i-reply"/></svg> Responder</button>`];
   if (msg.body) items.push(`<button class="as-item" data-a="copy"><svg fill="none" stroke="currentColor"><use href="#i-copy"/></svg> Copiar</button>`);
   if (mine && msg.body) items.push(`<button class="as-item" data-a="edit"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg> Editar</button>`);
   if (mine) items.push(`<button class="as-item danger" data-a="del"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg> Eliminar para todos</button>`);
   if (!mine && !msg.deleted) items.push(`<button class="as-item danger" data-a="report"><svg fill="none" stroke="currentColor"><use href="#i-bell"/></svg> Reportar mensaje</button>`);
-  const sheet = el(`<div class="modal-backdrop sheet"><div class="action-sheet"><div class="as-reactbar">${quick}</div>${items.join('')}<button class="as-item cancel" data-a="cancel">Cancelar</button></div></div>`);
+  const sheet = el(`<div class="modal-backdrop sheet"><div class="action-sheet">${reactBar}${items.join('')}<button class="as-item cancel" data-a="cancel">Cancelar</button></div></div>`);
   const close = () => sheet.remove();
   sheet.addEventListener('click', (e) => { if (e.target === sheet) close(); });
   sheet.querySelectorAll('.as-react[data-e]').forEach(b => b.onclick = () => { close(); toggleReaction(msg.id, b.dataset.e); });
-  sheet.querySelector('[data-more]').onclick = () => { close(); openReactPicker(msg); };
+  sheet.querySelector('[data-more]')?.addEventListener('click', () => { close(); openReactPicker(msg); });
   sheet.querySelector('[data-a="cancel"]').onclick = close;
   sheet.querySelector('[data-a="reply"]').onclick = () => { close(); startReply(msg); };
   const cp = sheet.querySelector('[data-a="copy"]'); if (cp) cp.onclick = () => { close(); copyMessage(msg); };
@@ -5761,7 +5787,7 @@ function openReactPicker(msg) {
 }
 function startReply(msg) {
   state.dmReplyTo = msg;
-  const who = msg.sender_id === state.user.id ? 'Tú' : (state.dmPeerProfile?.display_name || state.dmPeerProfile?.username || '');
+  const who = msg.sender_id === state.user.id ? 'Tú' : (state.groupId ? groupSenderName(msg.sender_id) : (state.dmPeerProfile?.display_name || state.dmPeerProfile?.username || ''));
   const snip = (msg.deleted ? 'mensaje eliminado' : (msg.body || mediaLabel(msg))) || '';
   const bar = $('dmReplyBar');
   bar.innerHTML = `<svg class="rb-ico"><use href="#i-reply"/></svg><div class="rb-main"><div class="rb-who">${esc(who)}</div><div class="rb-snip">${esc(snip.slice(0, 120))}</div></div><button class="rb-x" title="Cancelar"><svg><use href="#i-x"/></svg></button>`;
@@ -5785,7 +5811,7 @@ function editMessage(msg) {
   m.querySelector('#edSave').onclick = async () => {
     const nb = m.querySelector('#edBody').value.trim();
     if (!nb) { toast('El mensaje no puede quedar vacío'); return; }
-    const { error } = await sb.from('direct_messages').update({ body: nb, edited: true }).eq('id', msg.id);
+    const { error } = await sb.from(msg.conversation_id ? 'group_messages' : 'direct_messages').update({ body: nb, edited: true }).eq('id', msg.id);
     if (error) { toast('No se pudo editar'); return; }
     msg.body = nb; msg.edited = true; state.dmMsgs.set(msg.id, msg); replaceRow(msg);
     m.remove(); toast('Mensaje editado');
@@ -5793,7 +5819,7 @@ function editMessage(msg) {
 }
 async function softDeleteMessage(msg) {
   if (!confirm('¿Eliminar este mensaje para todos?')) return;
-  const { error } = await sb.from('direct_messages').update({ deleted: true }).eq('id', msg.id);
+  const { error } = await sb.from(msg.conversation_id ? 'group_messages' : 'direct_messages').update({ deleted: true }).eq('id', msg.id);
   if (error) { toast('No se pudo eliminar'); return; }
   msg.deleted = true; state.dmMsgs.set(msg.id, msg); replaceRow(msg);
 }
@@ -5926,9 +5952,13 @@ function clearDmPending() {
 async function sendDm(e) {
   e.preventDefault();
   if (!requireNotBanned()) return;
-  const other = state.dmPeer; if (!other) return;
-  if (state.blocked.has(other)) { toast('Has bloqueado a este usuario. Desbloquéalo para escribirle.'); return; }
-  if (state.hidden.has(other)) { toast('No puedes enviar mensajes a este usuario.'); return; }
+  const isGroup = !!state.groupId;
+  const other = state.dmPeer;
+  if (!isGroup) {
+    if (!other) return;
+    if (state.blocked.has(other)) { toast('Has bloqueado a este usuario. Desbloquéalo para escribirle.'); return; }
+    if (state.hidden.has(other)) { toast('No puedes enviar mensajes a este usuario.'); return; }
+  }
   const input = $('dmInput'); const body = input.value.trim(); const file = state.dmPendingFile;
   if (!body && !file) return;
   input.value = ''; dmHideEmoji();
@@ -5948,14 +5978,18 @@ async function sendDm(e) {
     } catch (err) { toast('No se pudo subir el archivo'); sendBtn.disabled = false; return; }
     sendBtn.disabled = false; clearDmPending();
   }
-  const { data: sent, error } = await sb.from('direct_messages')
-    .insert({ sender_id: state.user.id, recipient_id: other, body, attachment_url, attachment_type, attachment_name, reply_to })
-    .select().single();
+  const baseRow = isGroup
+    ? { conversation_id: state.groupId, sender_id: state.user.id, body, attachment_url, attachment_type, attachment_name, reply_to }
+    : { sender_id: state.user.id, recipient_id: other, body, attachment_url, attachment_type, attachment_name, reply_to };
+  const { data: sent, error } = await sb.from(isGroup ? 'group_messages' : 'direct_messages')
+    .insert(baseRow).select().single();
   if (error) { toast('No se pudo enviar'); return; }
   dmAppendMessage(sent, { scroll: true });
 }
 async function dmSendAudio(blob, secs, peaks) {
-  const other = state.dmPeer; if (!other || !requireNotBanned()) return;
+  const isGroup = !!state.groupId;
+  const other = state.dmPeer;
+  if ((!isGroup && !other) || !requireNotBanned()) return;
   try {
     const path = `${state.user.id}/${Date.now()}.webm`;
     const up = await sb.storage.from('chat').upload(path, blob, { contentType: blob.type || 'audio/webm' });
@@ -5963,9 +5997,11 @@ async function dmSendAudio(blob, secs, peaks) {
     const url = sb.storage.from('chat').getPublicUrl(path).data.publicUrl;
     const reply_to = state.dmReplyTo?.id || null; cancelReply();
     const name = JSON.stringify({ d: secs, w: (peaks && peaks.length) ? peaks : undefined });
-    const { data: sent, error } = await sb.from('direct_messages')
-      .insert({ sender_id: state.user.id, recipient_id: other, body: '', attachment_url: url, attachment_type: 'audio', attachment_name: name, reply_to })
-      .select().single();
+    const baseRow = isGroup
+      ? { conversation_id: state.groupId, sender_id: state.user.id, body: '', attachment_url: url, attachment_type: 'audio', attachment_name: name, reply_to }
+      : { sender_id: state.user.id, recipient_id: other, body: '', attachment_url: url, attachment_type: 'audio', attachment_name: name, reply_to };
+    const { data: sent, error } = await sb.from(isGroup ? 'group_messages' : 'direct_messages')
+      .insert(baseRow).select().single();
     if (error) { toast('No se pudo enviar'); return; }
     dmAppendMessage(sent, { scroll: true });
   } catch (err) { toast('No se pudo enviar la nota de voz'); }
@@ -6099,6 +6135,7 @@ function dmRunSearch(q) {
 
 /* ---- menú de cabecera ---- */
 function dmHeaderMenu() {
+  if (state.groupId) { openGroupInfo(state.groupId); return; }
   const other = state.dmPeer;
   const blocked = state.blocked.has(other);
   const peerName = state.dmPeerProfile ? (state.dmPeerProfile.display_name || state.dmPeerProfile.username) : '';
@@ -6125,6 +6162,7 @@ function closeDmScreen() {
   if (dmMediaRec) dmStopRec(false);
   if (dmVoiceEl) { dmVoiceEl.pause(); dmVoiceEl = null; }
   state.dmPeer = null; state.dmPeerProfile = null; state.dmMsgs.clear(); state.dmReacts.clear();
+  state.groupId = null; state.groupConv = null; state.groupMembers = {};
   cancelReply(); clearDmPending(); dmCloseSearch(); dmHideEmoji(); dmShowTyping(false);
   if (state.view === 'messages') renderMessages();
 }
@@ -6175,8 +6213,9 @@ function convoRow(c, p) {
 }
 async function renderMessages() {
   setActiveNav('messages');
-  $('main').innerHTML = `<div class="main-head"><div><h2>Chats</h2><div class="sub">Tus conversaciones</div></div><div id="pushBtnWrap" class="push-btn-wrap"></div></div><div id="convoList" class="loading"><div class="spinner"></div></div>`;
+  $('main').innerHTML = `<div class="main-head"><div><h2>Chats</h2><div class="sub">Tus conversaciones</div></div><div style="display:flex;gap:8px;align-items:center"><button class="btn sm" id="newGroupBtn"><svg fill="none" stroke="currentColor"><use href="#i-people"/></svg> Nuevo grupo</button><div id="pushBtnWrap" class="push-btn-wrap"></div></div></div><div id="convoList" class="loading"><div class="spinner"></div></div>`;
   renderPushButton();
+  $('newGroupBtn').onclick = openCreateGroup;
   const { data } = await sb.from('direct_messages').select('*')
     .or(`sender_id.eq.${state.user.id},recipient_id.eq.${state.user.id}`)
     .order('created_at', { ascending: false }).limit(400);
@@ -6199,6 +6238,27 @@ async function renderMessages() {
     </div>`);
   comm.onclick = openCommunityChat;
   list.appendChild(comm);
+
+  // Grupos del usuario
+  try {
+    const { data: memberRows } = await sb.from('conversation_members')
+      .select('last_read_at, conversations:conversation_id(*)').eq('user_id', state.user.id);
+    const groups = (memberRows || []).filter(r => r.conversations).map(r => ({ ...r.conversations, last_read_at: r.last_read_at }));
+    if (groups.length) {
+      const gIds = groups.map(g => g.id);
+      const { data: gms } = await sb.from('group_messages').select('*').in('conversation_id', gIds)
+        .order('created_at', { ascending: false }).limit(300);
+      const lastByConv = {}, unreadByConv = {};
+      (gms || []).forEach(mm => {
+        if (!lastByConv[mm.conversation_id]) lastByConv[mm.conversation_id] = mm;
+        const g = groups.find(x => x.id === mm.conversation_id);
+        if (g && mm.sender_id !== state.user.id && (!g.last_read_at || new Date(mm.created_at) > new Date(g.last_read_at))) unreadByConv[mm.conversation_id] = (unreadByConv[mm.conversation_id] || 0) + 1;
+      });
+      groups.sort((a, b) => new Date((lastByConv[b.id]?.created_at) || b.created_at) - new Date((lastByConv[a.id]?.created_at) || a.created_at));
+      list.appendChild(el(`<div class="convo-section"><svg style="width:14px;height:14px;vertical-align:-2px" fill="none" stroke="currentColor"><use href="#i-people"/></svg> Grupos (${groups.length})</div>`));
+      groups.forEach(g => list.appendChild(groupRow(g, lastByConv[g.id], unreadByConv[g.id] || 0)));
+    }
+  } catch (err) { console.error('grupos', err); }
 
   if (convos.size === 0) {
     list.appendChild(el(`<div class="empty"><svg fill="none"><use href="#i-mail"/></svg><p>Aún no tienes conversaciones privadas.<br>Pulsa <b>Mensaje</b> en alguien de <b>Bro's</b> o en su perfil para empezar.</p></div>`));
@@ -6256,6 +6316,186 @@ async function openDM(other) {
   renderThread(msgs);
   markDmRead(other);
   setTimeout(() => $('dmInput')?.focus(), 120);
+}
+
+/* =======================================================================
+   GRUPOS DE CHAT  (reutilizan la pantalla y las burbujas de los DM)
+   ======================================================================= */
+function groupAvatarHTML(conv) {
+  if (conv && conv.avatar_url) return `<div class="avatar group-av"><img src="${esc(czUrl(conv.avatar_url))}" alt="" /></div>`;
+  return `<div class="avatar group-av group-av-empty"><svg width="20" height="20" fill="none" stroke="#fff"><use href="#i-people"/></svg></div>`;
+}
+function markGroupRead(convId) {
+  sb.from('conversation_members').update({ last_read_at: new Date().toISOString() })
+    .eq('conversation_id', convId).eq('user_id', state.user.id).then(() => {}, () => {});
+}
+function groupRow(conv, last, unread) {
+  let snip = 'Grupo creado';
+  if (last) {
+    if (last.deleted) snip = '🚫 Mensaje eliminado';
+    else if (last.attachment_url) snip = mediaLabel(last) || '📎 Adjunto';
+    else snip = last.body || '';
+  }
+  const who = last ? (last.sender_id === state.user.id ? 'Tú: ' : (groupLastSenderPrefix(conv, last))) : '';
+  const row = el(`
+    <div class="convo">
+      ${groupAvatarHTML(conv)}
+      <div class="c-main">
+        <div class="c-top"><span class="c-name">${esc(conv.name)}</span>${last ? `<span class="c-when">${timeAgo(last.created_at)}</span>` : ''}</div>
+        <div class="c-snippet ${unread ? 'unread' : ''}">${who}${esc(snip)}</div>
+      </div>
+      ${unread ? `<span class="c-unread">${unread}</span>` : ''}
+    </div>`);
+  row.onclick = () => openGroup(conv);
+  return row;
+}
+function groupLastSenderPrefix() { return ''; }
+async function openGroup(conv) {
+  if (!conv || !conv.id) return;
+  state.dmPeer = null; state.dmPeerProfile = null;
+  state.groupId = conv.id; state.groupConv = conv;
+  cancelReply(); clearDmPending(); dmCloseSearch(); dmHideEmoji();
+  if (state.dmConv) { try { sb.removeChannel(state.dmConv); } catch (_) {} state.dmConv = null; }
+  const { data: members } = await sb.from('conversation_members').select('user_id, role, profiles:user_id(*)').eq('conversation_id', conv.id);
+  state.groupMembers = {};
+  (members || []).forEach(mm => { if (mm.profiles) state.groupMembers[mm.user_id] = { ...mm.profiles, role: mm.role }; });
+  const count = (members || []).length;
+  $('dmPeerHead').innerHTML = `${groupAvatarHTML(conv)}<div class="dm-peer-meta"><div class="dm-name">${esc(conv.name)}</div><div class="dm-status" id="dmStatus">${count} ${count === 1 ? 'miembro' : 'miembros'}</div></div>`;
+  $('dmPeerHead').onclick = () => openGroupInfo(conv.id);
+  $('dmInput').placeholder = 'Mensaje al grupo...';
+  $('dmThread').innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
+  $('dmScreen').classList.add('open');
+  hideDrawers();
+  const { data } = await sb.from('group_messages').select('*').eq('conversation_id', conv.id).order('created_at', { ascending: true }).limit(400);
+  state.dmReacts.clear();
+  renderThread(data || []);
+  markGroupRead(conv.id);
+  setTimeout(() => $('dmInput')?.focus(), 120);
+}
+// selector de personas con búsqueda y multi-selección (para crear/añadir)
+async function pickPeople({ title, confirmLabel, exclude = [], onConfirm }) {
+  const m = openModal(`
+    <div class="modal-head"><h3>${esc(title)}</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <div class="field" style="margin-bottom:8px"><input type="text" id="ppSearch" placeholder="Buscar persona…" autocomplete="off" /></div>
+      <div id="ppList" class="grp-pick-list"><div class="loading" style="padding:20px"><div class="spinner"></div></div></div>
+      <button class="btn primary" id="ppGo" style="width:100%;margin-top:10px" disabled>${esc(confirmLabel)}</button>
+    </div>`);
+  const sel = new Set();
+  const exSet = new Set([state.user.id, ...exclude]);
+  const { data: people } = await sb.from('profiles').select('id, username, display_name, avatar_url').order('display_name').limit(500);
+  const all = (people || []).filter(p => !exSet.has(p.id) && !isHidden(p.id));
+  const listBox = m.querySelector('#ppList'), goBtn = m.querySelector('#ppGo');
+  const refresh = () => { goBtn.disabled = sel.size === 0; goBtn.textContent = sel.size ? `${confirmLabel} (${sel.size})` : confirmLabel; };
+  const render = (q) => {
+    const arr = !q ? all : all.filter(p => (p.display_name || '').toLowerCase().includes(q) || (p.username || '').toLowerCase().includes(q));
+    listBox.innerHTML = arr.length ? '' : '<div class="sub" style="font-size:12px;color:var(--ink-soft);padding:14px;text-align:center">Sin resultados.</div>';
+    arr.forEach(p => {
+      const row = el(`<div class="grp-pick ${sel.has(p.id) ? 'on' : ''}" data-id="${p.id}">${avatarHTML(p)}<div class="gp-main"><div class="gp-name">${esc(p.display_name || p.username)}</div><div class="gp-handle">@${esc(p.username || '')}</div></div><span class="gp-check"><svg fill="none" stroke="currentColor"><use href="#i-check"/></svg></span></div>`);
+      row.onclick = () => { if (sel.has(p.id)) sel.delete(p.id); else sel.add(p.id); row.classList.toggle('on', sel.has(p.id)); refresh(); };
+      listBox.appendChild(row);
+    });
+  };
+  render('');
+  m.querySelector('#ppSearch').oninput = (e) => render(e.target.value.trim().toLowerCase());
+  goBtn.onclick = () => { if (!sel.size) return; m.remove(); onConfirm([...sel]); };
+}
+async function openCreateGroup() {
+  if (!requireNotBanned()) return;
+  const m = openModal(`
+    <div class="modal-head"><h3>Nuevo grupo</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Nombre del grupo</label><input type="text" id="grpName" maxlength="60" placeholder="Mi grupo" /></div>
+      <div class="field" style="margin-bottom:6px"><label>Miembros</label><input type="text" id="grpSearch" placeholder="Buscar persona…" autocomplete="off" /></div>
+      <div id="grpList" class="grp-pick-list"><div class="loading" style="padding:20px"><div class="spinner"></div></div></div>
+      <button class="btn primary" id="grpCreate" style="width:100%;margin-top:10px">Crear grupo</button>
+      <div class="auth-msg" id="grpMsg"></div>
+    </div>`);
+  const sel = new Set();
+  const { data: people } = await sb.from('profiles').select('id, username, display_name, avatar_url').neq('id', state.user.id).order('display_name').limit(500);
+  const all = (people || []).filter(p => !isHidden(p.id));
+  const listBox = m.querySelector('#grpList');
+  const render = (q) => {
+    const arr = !q ? all : all.filter(p => (p.display_name || '').toLowerCase().includes(q) || (p.username || '').toLowerCase().includes(q));
+    listBox.innerHTML = '';
+    arr.forEach(p => {
+      const row = el(`<div class="grp-pick ${sel.has(p.id) ? 'on' : ''}" data-id="${p.id}">${avatarHTML(p)}<div class="gp-main"><div class="gp-name">${esc(p.display_name || p.username)}</div><div class="gp-handle">@${esc(p.username || '')}</div></div><span class="gp-check"><svg fill="none" stroke="currentColor"><use href="#i-check"/></svg></span></div>`);
+      row.onclick = () => { if (sel.has(p.id)) sel.delete(p.id); else sel.add(p.id); row.classList.toggle('on', sel.has(p.id)); };
+      listBox.appendChild(row);
+    });
+  };
+  render('');
+  m.querySelector('#grpSearch').oninput = (e) => render(e.target.value.trim().toLowerCase());
+  m.querySelector('#grpCreate').onclick = async () => {
+    const name = m.querySelector('#grpName').value.trim();
+    const msg = m.querySelector('#grpMsg'); msg.className = 'auth-msg';
+    if (!name) { msg.className = 'auth-msg error'; msg.textContent = 'Ponle un nombre al grupo.'; return; }
+    if (!sel.size) { msg.className = 'auth-msg error'; msg.textContent = 'Añade al menos a una persona.'; return; }
+    const btn = m.querySelector('#grpCreate'); btn.disabled = true; btn.textContent = 'Creando…';
+    try {
+      const { data: conv, error } = await sb.from('conversations').insert({ name, created_by: state.user.id }).select().single();
+      if (error) throw error;
+      const rows = [{ conversation_id: conv.id, user_id: state.user.id, role: 'admin' }, ...[...sel].map(uid => ({ conversation_id: conv.id, user_id: uid, role: 'member' }))];
+      const { error: e2 } = await sb.from('conversation_members').insert(rows);
+      if (e2) throw e2;
+      m.remove();
+      openGroup(conv);
+    } catch (err) { console.error(err); msg.className = 'auth-msg error'; msg.textContent = 'No se pudo crear el grupo.'; btn.disabled = false; btn.textContent = 'Crear grupo'; }
+  };
+}
+async function openGroupInfo(convId) {
+  const conv = state.groupConv; if (!conv) return;
+  const { data: members } = await sb.from('conversation_members').select('user_id, role, profiles:user_id(*)').eq('conversation_id', convId);
+  const list = members || [];
+  const amCreator = conv.created_by === state.user.id;
+  const m = openModal(`
+    <div class="modal-head"><h3>Grupo</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <div class="grp-info-head">${groupAvatarHTML(conv)}<div class="gih-main"><input type="text" id="giName" value="${esc(conv.name)}" maxlength="60" ${amCreator ? '' : 'disabled'} /><div class="gih-sub">${list.length} ${list.length === 1 ? 'miembro' : 'miembros'}</div></div></div>
+      ${amCreator ? `<button class="btn sm" id="giRename" style="margin-bottom:10px">Guardar nombre</button>` : ''}
+      <button class="btn sm" id="giAdd" style="margin-bottom:10px"><svg fill="none" stroke="currentColor"><use href="#i-plus"/></svg> Añadir personas</button>
+      <div class="grp-members" id="giMembers"></div>
+      <button class="btn" id="giLeave" style="width:100%;margin-top:12px;border-color:#e3b7b0;color:#c0533f">Salir del grupo</button>
+    </div>`);
+  const membersBox = m.querySelector('#giMembers');
+  list.forEach(mm => {
+    const p = mm.profiles || {};
+    const isCreator = conv.created_by === mm.user_id;
+    const canKick = amCreator && mm.user_id !== state.user.id;
+    const row = el(`<div class="grp-member"><span class="gm-av" data-uid="${mm.user_id}">${avatarHTML(p)}</span><div class="gm-main"><div class="gm-name">${esc(p.display_name || p.username || 'usuario')}${isCreator ? ' <span class="gm-tag">admin</span>' : ''}</div><div class="gm-handle">@${esc(p.username || '')}</div></div>${canKick ? `<button class="gm-kick" data-kick title="Quitar del grupo"><svg fill="none" stroke="currentColor"><use href="#i-x"/></svg></button>` : ''}</div>`);
+    row.querySelector('[data-uid]').onclick = () => { m.remove(); closeDmScreen(); openProfile(mm.user_id); };
+    const kick = row.querySelector('[data-kick]');
+    if (kick) kick.onclick = async () => {
+      if (!confirm(`¿Quitar a ${p.display_name || p.username} del grupo?`)) return;
+      const { error } = await sb.from('conversation_members').delete().eq('conversation_id', convId).eq('user_id', mm.user_id);
+      if (error) { toast('No se pudo quitar'); return; }
+      row.remove(); delete state.groupMembers[mm.user_id]; toast('Persona retirada');
+    };
+    membersBox.appendChild(row);
+  });
+  const renameBtn = m.querySelector('#giRename');
+  if (renameBtn) renameBtn.onclick = async () => {
+    const name = m.querySelector('#giName').value.trim(); if (!name) return;
+    const { error } = await sb.from('conversations').update({ name }).eq('id', convId);
+    if (error) { toast('No se pudo renombrar'); return; }
+    conv.name = name; const nm = $('dmPeerHead').querySelector('.dm-name'); if (nm) nm.textContent = name; toast('Grupo renombrado');
+  };
+  m.querySelector('#giAdd').onclick = () => {
+    m.remove();
+    pickPeople({ title: 'Añadir personas', confirmLabel: 'Añadir', exclude: Object.keys(state.groupMembers), onConfirm: async (ids) => {
+      const rows = ids.map(uid => ({ conversation_id: convId, user_id: uid, role: 'member' }));
+      const { error } = await sb.from('conversation_members').insert(rows);
+      if (error) { toast('No se pudieron añadir'); return; }
+      toast(ids.length === 1 ? 'Persona añadida' : `${ids.length} personas añadidas`);
+      openGroup(conv);
+    } });
+  };
+  m.querySelector('#giLeave').onclick = async () => {
+    if (!confirm('¿Salir de este grupo?')) return;
+    const { error } = await sb.from('conversation_members').delete().eq('conversation_id', convId).eq('user_id', state.user.id);
+    if (error) { toast('No se pudo salir'); return; }
+    m.remove(); closeDmScreen(); toast('Has salido del grupo');
+  };
 }
 
 /* =======================================================================
