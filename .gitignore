@@ -4,3 +4,19 @@ android-build/
 *.keystore
 *.jks
 twa-manifest.json.bak
+
+# Proyecto Android generado por Bubblewrap (NO subir a la web)
+/app/
+/gradle/
+/.gradle/
+/build/
+gradlew
+gradlew.bat
+build.gradle
+settings.gradle
+gradle.properties
+local.properties
+manifest-checksum.txt
+store_icon.png
+*.aab
+*.apk
