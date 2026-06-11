@@ -5,7 +5,8 @@
       "namespace": "android_app",
       "package_name": "app.underbro.twa",
       "sha256_cert_fingerprints": [
-        "REEMPLAZAR_CON_LA_HUELLA_SHA256_DE_PLAY_APP_SIGNING"
+        "0B:2C:AC:A6:7D:37:57:D0:33:0C:0E:EB:39:BB:C3:AB:33:93:55:05:90:AB:2A:97:E0:C4:62:7B:D8:87:7D:35",
+        "REEMPLAZAR_CON_SHA256_DE_PLAY_APP_SIGNING"
       ]
     }
   }

@@ -1,0 +1,6 @@
+
+# Android build (NO subir: contiene la clave de firma)
+android-build/
+*.keystore
+*.jks
+twa-manifest.json.bak
