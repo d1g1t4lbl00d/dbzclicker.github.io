@@ -590,11 +590,11 @@ async function switchView(view) {
 
   try {
     if (view === 'feed') {
-      if (state.tab === 'trending') { tracks = await fetchTracks({ order: 'plays' }); head = { title: 'Trending', sub: 'Lo más escuchado en UnderBro' }; }
+      if (state.tab === 'trending') { tracks = await fetchTrending(); head = { title: 'Trending', sub: 'Lo que está pegando estos días' }; }
       else if (state.tab === 'new') { tracks = await fetchTracks({ order: 'created_at' }); head = { title: 'New', sub: 'Lo último que se ha subido' }; }
       else { tracks = await fetchFollowingTracks(); head = { title: 'Following', sub: 'Pistas de gente que sigues' }; }
     } else if (view === 'feed-trending') {
-      tracks = await fetchTracks({ order: 'plays' }); head = { title: 'Trending', sub: 'Lo más escuchado' };
+      tracks = await fetchTrending(); head = { title: 'Trending', sub: 'Lo que está pegando estos días' };
     } else if (view === 'all') {
       tracks = await fetchTracks({ order: 'created_at' }); head = { title: 'All Tracks', sub: 'Toda la biblioteca' };
     } else if (view === 'favorites') {
@@ -761,6 +761,21 @@ async function fetchTracks({ order='created_at', userId=null, limit=50 } = {}) {
   const { data, error } = await q;
   if (error) throw error;
   return data || [];
+}
+// Trending dinámico vía RPC (hot score con ventana reciente). Embebe el perfil;
+// si el embed no estuviera disponible, lo adjunta con una segunda consulta.
+async function fetchTrending({ days = 2, limit = 50 } = {}) {
+  try {
+    const { data, error } = await sb.rpc('trending_tracks', { p_days: days, p_limit: limit })
+      .select('*, profiles!tracks_user_id_fkey(*)');
+    if (!error && Array.isArray(data)) return data;
+  } catch (_) {}
+  const { data: rows } = await sb.rpc('trending_tracks', { p_days: days, p_limit: limit });
+  if (!rows || !rows.length) return [];
+  const ids = [...new Set(rows.map(t => t.user_id))];
+  const { data: profs } = await sb.from('profiles').select('*').in('id', ids);
+  const byId = Object.fromEntries((profs || []).map(p => [p.id, p]));
+  return rows.map(t => ({ ...t, profiles: byId[t.user_id] || null }));
 }
 async function fetchFollowingTracks() {
   if (state.follows.size === 0) return [];
@@ -2529,6 +2544,26 @@ async function loadProfilePosts(userId, grid) {
   });
 }
 
+// Pistas que un usuario ha reposteado (pestaña Reposts del perfil)
+async function loadProfileReposts(userId, container, isMe) {
+  container.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
+  let rows = [];
+  try {
+    const { data } = await sb.from('reposts')
+      .select('created_at, tracks(*, profiles!tracks_user_id_fkey(*))')
+      .eq('user_id', userId).order('created_at', { ascending: false }).limit(60);
+    rows = data || [];
+  } catch (e) { console.error(e); }
+  const tracks = rows.map(r => r.tracks).filter(t => t && !isHidden(t.user_id));
+  if (!tracks.length) {
+    container.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-repeat"/></svg><p>${isMe ? 'Aún no has reposteado nada. Pulsa “Resubir” en una pista para compartirla con tus seguidores.' : 'Sin reposts todavía.'}</p></div>`;
+    return [];
+  }
+  container.innerHTML = '';
+  tracks.forEach(t => container.appendChild(trackCard(t)));
+  return tracks;
+}
+
 // Abre una publicación a tamaño completo (con likes y comentarios)
 async function openPostModal(p) {
   let liked = false;
@@ -2834,12 +2869,13 @@ async function openProfile(userId) {
   main.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
   const { data: prof } = await sb.from('profiles').select('*').eq('id', userId).single();
   if (!prof) { main.innerHTML = '<div class="empty">Perfil no encontrado.</div>'; return; }
-  const [{ count: followers }, { count: following }, ownTracks, collabRes, badgesRes] = await Promise.all([
+  const [{ count: followers }, { count: following }, ownTracks, collabRes, badgesRes, { count: repostCount }] = await Promise.all([
     sb.from('follows').select('follower_id', { count:'exact', head:true }).eq('following_id', userId),
     sb.from('follows').select('following_id', { count:'exact', head:true }).eq('follower_id', userId),
     fetchTracks({ order: 'created_at', userId }),
     sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)').contains('collaborators', JSON.stringify([{ id: userId }])).order('created_at', { ascending: false }),
     sb.from('user_badges').select('badge').eq('user_id', userId),
+    sb.from('reposts').select('track_id', { count:'exact', head:true }).eq('user_id', userId),
   ]);
   const profBadges = (prof.is_admin ? Object.keys(BADGES) : (badgesRes.data || []).map(r => r.badge)).filter(b => BADGES[b]);
   const profBadgesHtml = profBadges.length ? `<div class="profile-badges">${profBadges.map(k => `<span class="bdg ${BADGES[k].cls}" title="${esc(BADGES[k].name)}">${BADGES[k].glyph} <span class="bdg-txt">${esc(BADGES[k].name)}</span></span>`).join('')}</div>` : '';
@@ -2898,11 +2934,13 @@ async function openProfile(userId) {
         <button class="active" data-ptab="tracks"><svg fill="none" stroke="currentColor"><use href="#i-music"/></svg> Pistas <span class="ptab-n">${myTracks.length}</span></button>
         <button data-ptab="posts"><svg fill="none" stroke="currentColor"><use href="#i-camera"/></svg> Fotos</button>
         <button data-ptab="feats"><svg fill="none" stroke="currentColor"><use href="#i-people"/></svg> Feats <span class="ptab-n">${featTracks.length}</span></button>
+        <button data-ptab="reposts"><svg fill="none" stroke="currentColor"><use href="#i-repeat"/></svg> Reposts <span class="ptab-n">${repostCount || 0}</span></button>
         <button data-ptab="events"><svg fill="none" stroke="currentColor"><use href="#i-calendar"/></svg> Eventos</button>
       </div>
       <div id="feedList" class="feed-list"></div>
       <div id="postGrid" class="post-grid hidden"></div>
       <div id="featList" class="feed-list hidden"></div>
+      <div id="repostList" class="feed-list hidden"></div>
       <div id="profEvents" class="hidden"></div>
     </div>`;
   $('profileBack').onclick = () => switchView(backTo);
@@ -2924,19 +2962,25 @@ async function openProfile(userId) {
   state.tracks = myTracks; state.queue = myTracks.map(t => t.id);
 
   // pestañas Pistas / Fotos / Feats / Eventos
-  const tabsEl = $('profileTabs'), gridEl = $('postGrid'), evEl = $('profEvents');
-  let postsLoaded = false, eventsLoaded = false;
+  const tabsEl = $('profileTabs'), gridEl = $('postGrid'), evEl = $('profEvents'), repEl = $('repostList');
+  let postsLoaded = false, eventsLoaded = false, repostsLoaded = false, repostTracks = [];
   tabsEl.querySelectorAll('button').forEach(b => b.onclick = () => {
     tabsEl.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
     const tab = b.dataset.ptab;
     list.classList.toggle('hidden', tab !== 'tracks');
     gridEl.classList.toggle('hidden', tab !== 'posts');
     featEl.classList.toggle('hidden', tab !== 'feats');
+    repEl.classList.toggle('hidden', tab !== 'reposts');
     evEl.classList.toggle('hidden', tab !== 'events');
     if (tab === 'tracks') { state.tracks = myTracks; state.queue = myTracks.map(t => t.id); }
     else if (tab === 'feats') { state.tracks = featTracks; state.queue = featTracks.map(t => t.id); }
+    else if (tab === 'reposts' && repostsLoaded) { state.tracks = repostTracks; state.queue = repostTracks.map(t => t.id); }
     if (tab === 'posts' && !postsLoaded) { postsLoaded = true; loadProfilePosts(userId, gridEl); }
     if (tab === 'events' && !eventsLoaded) { eventsLoaded = true; loadProfileEvents(userId, evEl); }
+    if (tab === 'reposts' && !repostsLoaded) {
+      repostsLoaded = true;
+      loadProfileReposts(userId, repEl, isMe).then(ts => { repostTracks = ts; state.tracks = ts; state.queue = ts.map(t => t.id); });
+    }
   });
 
   // estadísticas clicables: pistas → pestaña Pistas · seguidores/siguiendo → lista

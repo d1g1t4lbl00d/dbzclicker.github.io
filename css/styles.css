@@ -1558,8 +1558,9 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
 .profile-tabs button.active svg { stroke: #fff; }
 .profile-tabs .ptab-n { font-size: 11px; opacity: .82; font-weight: 700; }
 @media (max-width: 460px) {
-  .profile-tabs { display: flex; width: 100%; border-radius: 16px; }
-  .profile-tabs button { flex: 1; justify-content: center; padding: 9px 6px; gap: 5px; }
+  .profile-tabs { display: flex; width: 100%; border-radius: 16px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  .profile-tabs::-webkit-scrollbar { display: none; }
+  .profile-tabs button { flex: 1 0 auto; justify-content: center; padding: 9px 11px; gap: 5px; white-space: nowrap; }
   .profile-tabs button svg { width: 14px; height: 14px; }
 }
 
