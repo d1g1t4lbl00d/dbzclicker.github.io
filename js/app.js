@@ -1648,6 +1648,7 @@ function closePlayer() {
   state.current = null; state.queue = [];
   closeNowPlaying();
   $('player').classList.add('hidden');
+  document.body.classList.remove('has-player');
   document.querySelectorAll('.track.playing, .dm-track.playing').forEach(c => c.classList.remove('playing'));
 }
 function setNpPlayIcon(playing) { const u = $('npPlay').querySelector('use'); if (u) u.setAttribute('href', playing ? '#i-pause' : '#i-play'); }
@@ -1704,6 +1705,7 @@ async function playTrack(t) {
   if (state.current?.id === t.id) { togglePlay(); return; }
   state.current = t;
   $('player').classList.remove('hidden');
+  document.body.classList.add('has-player');
   $('pTitle').textContent = t.title;
   $('pArtist').textContent = (t.profiles?.display_name || t.profiles?.username || t.artist || '');
   $('pCover').innerHTML = t.cover_url ? `<img src="${esc(t.cover_url)}" alt="" />` : `<svg width="22" height="22" fill="none" stroke="#fff" style="margin:15px"><use href="#i-music"/></svg>`;
@@ -5629,7 +5631,9 @@ const CALL_ICE_SERVERS = [
   { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
   { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
   { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turns:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
 ];
+function candType(s) { const m = / typ (\w+)/.exec(s || ''); return m ? m[1] : '?'; }
 let callRing = null;        // canal "ring" propio (escucha)
 let callAudioCtx = null, callRingTimer = null;
 
@@ -5740,36 +5744,58 @@ function gumErrorMsg(err, video) {
 function buildCallPc() {
   const c = state.call;
   const pc = new RTCPeerConnection({ iceServers: CALL_ICE_SERVERS, iceCandidatePoolSize: 4 });
-  c.pc = pc; c.remoteStream = new MediaStream();
+  c.pc = pc; c.remoteStream = new MediaStream(); c.gotRelay = false; c.gotRemoteCand = false;
   pc.onicecandidate = (e) => {
-    if (!e.candidate) return;
+    if (!e.candidate) { console.log('[call] gathering ICE completo'); return; }
     const cand = e.candidate.toJSON ? e.candidate.toJSON() : e.candidate;
+    const ty = candType(cand.candidate);
+    if (ty === 'relay') c.gotRelay = true;
+    console.log('[call] candidato local:', ty);
     sendSignal(c, 'ice', { candidate: cand });
   };
   // usar el stream del evento (Safari no renderiza pistas añadidas a un srcObject ya asignado)
   pc.ontrack = (e) => {
+    console.log('[call] ontrack', e.track && e.track.kind);
     if (e.streams && e.streams[0]) c.remoteStream = e.streams[0];
     else { try { c.remoteStream.addTrack(e.track); } catch (_) {} }
     attachCallRemote();
   };
   // Safari/iOS dispara de forma fiable iceConnectionState; Chrome/FF connectionState.
-  // Escuchamos ambos para no quedarnos colgados en "Conectando…".
   const onState = (s) => {
     if (s === 'connected' || s === 'completed') onCallConnected();
-    else if (s === 'failed') { if (state.call && !state.call.ending) { toast('No se pudo conectar la llamada'); callHangupBtn(); } }
+    else if (s === 'failed') { if (state.call && !state.call.ending) { callDiagnose(c); callHangupBtn(); } }
   };
-  pc.onconnectionstatechange = () => onState(pc.connectionState);
-  pc.oniceconnectionstatechange = () => onState(pc.iceConnectionState);
+  pc.oniceconnectionstatechange = () => { console.log('[call] iceConnectionState:', pc.iceConnectionState); onState(pc.iceConnectionState); };
+  pc.onconnectionstatechange = () => { console.log('[call] connectionState:', pc.connectionState); onState(pc.connectionState); };
 }
 // si tras contestar no se conecta en ~25s, abortamos (en vez de cargar para siempre)
 function armConnectWatchdog() {
   const c = state.call; if (!c) return;
   clearTimeout(c.connectTO);
-  c.connectTO = setTimeout(() => {
-    if (state.call && state.call.id === c.id && !state.call.everConnected) {
-      toast('No se pudo establecer la conexión'); callHangupBtn();
-    }
+  c.connectTO = setTimeout(async () => {
+    if (!(state.call && state.call.id === c.id && !state.call.everConnected)) return;
+    await callDiagnose(c);
+    callHangupBtn();
   }, 25000);
+}
+// diagnóstico concreto de por qué no conectó (TURN vs intercambio de rutas)
+async function callDiagnose(c) {
+  if (!c || c.diagnosed) return; c.diagnosed = true;
+  let hadRemote = c.gotRemoteCand, pairOk = false;
+  try {
+    const stats = await c.pc.getStats();
+    stats.forEach(r => {
+      if (r.type === 'remote-candidate') hadRemote = true;
+      if (r.type === 'candidate-pair' && (r.state === 'succeeded' || r.nominated)) pairOk = true;
+    });
+  } catch (_) {}
+  console.warn('[call] DIAGNÓSTICO →', { relayLocal: c.gotRelay, recibioCandidatosRemotos: hadRemote, parejaOk: pairOk });
+  let msg;
+  if (pairOk) msg = 'Conexión establecida pero sin medios. Reinténtalo.';
+  else if (!hadRemote) msg = 'No llegaron las rutas de red del otro usuario (señalización).';
+  else if (!c.gotRelay) msg = 'No hay servidor TURN disponible: en esta red la llamada necesita TURN.';
+  else msg = 'No se encontró ruta entre los dispositivos. Hace falta un TURN fiable.';
+  toast(msg);
 }
 
 function onCallConnected() {
@@ -5820,7 +5846,8 @@ async function onCallSignal(p) {
     try { await c.pc.setRemoteDescription(p.sdp); flushPendingIce(); } catch (e) { console.error('[call] setRemoteDescription(answer)', e); }
     if (c.status === 'calling' || c.status === 'connecting') { c.status = 'connecting'; $('callStatus').textContent = 'Conectando…'; showCallScreen('active'); armConnectWatchdog(); }
   } else if (p.kind === 'ice') {
-    if (c.pc && c.pc.remoteDescription && c.pc.remoteDescription.type) { try { await c.pc.addIceCandidate(p.candidate); } catch (_) {} }
+    c.gotRemoteCand = true;
+    if (c.pc && c.pc.remoteDescription && c.pc.remoteDescription.type) { try { await c.pc.addIceCandidate(p.candidate); } catch (e) { console.error('[call] addIceCandidate', e); } }
     else c.pendingIce.push(p.candidate);
   } else if (p.kind === 'reject') {
     toast(p.reason === 'busy' ? 'Usuario ocupado' : p.reason === 'media' ? 'El otro usuario no pudo activar su micrófono/cámara' : 'Llamada rechazada');
