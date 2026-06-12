@@ -5624,7 +5624,11 @@ function initDM() {
      ahí los mensajes de señalización (oferta/respuesta/ICE/colgar).
    ======================================================================= */
 const CALL_ICE_SERVERS = [
-  { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+  { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] },
+  // TURN público de respaldo (relay) para redes móviles / NAT estricto donde STUN no basta.
+  { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+  { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
 ];
 let callRing = null;        // canal "ring" propio (escucha)
 let callAudioCtx = null, callRingTimer = null;
@@ -5708,7 +5712,7 @@ function sendOffer() {
 
 function buildCallPc() {
   const c = state.call;
-  const pc = new RTCPeerConnection({ iceServers: CALL_ICE_SERVERS });
+  const pc = new RTCPeerConnection({ iceServers: CALL_ICE_SERVERS, iceCandidatePoolSize: 4 });
   c.pc = pc; c.remoteStream = new MediaStream();
   pc.onicecandidate = (e) => {
     if (!e.candidate) return;
@@ -5716,18 +5720,37 @@ function buildCallPc() {
     c.localIce.push(cand);
     c.out.send({ kind: 'ice', call_id: c.id, from: state.user.id, candidate: cand });
   };
-  pc.ontrack = (e) => { (e.streams[0] ? e.streams[0].getTracks() : [e.track]).forEach(t => { try { c.remoteStream.addTrack(t); } catch (_) {} }); attachCallRemote(); };
-  pc.onconnectionstatechange = () => {
-    const s = pc.connectionState;
-    if (s === 'connected') onCallConnected();
-    else if (s === 'failed') { if (state.call) { toast('Se perdió la conexión'); callHangupBtn(); } }
+  // usar el stream del evento (Safari no renderiza pistas añadidas a un srcObject ya asignado)
+  pc.ontrack = (e) => {
+    if (e.streams && e.streams[0]) c.remoteStream = e.streams[0];
+    else { try { c.remoteStream.addTrack(e.track); } catch (_) {} }
+    attachCallRemote();
   };
+  // Safari/iOS dispara de forma fiable iceConnectionState; Chrome/FF connectionState.
+  // Escuchamos ambos para no quedarnos colgados en "Conectando…".
+  const onState = (s) => {
+    if (s === 'connected' || s === 'completed') onCallConnected();
+    else if (s === 'failed') { if (state.call && !state.call.ending) { toast('No se pudo conectar la llamada'); callHangupBtn(); } }
+  };
+  pc.onconnectionstatechange = () => onState(pc.connectionState);
+  pc.oniceconnectionstatechange = () => onState(pc.iceConnectionState);
+}
+// si tras contestar no se conecta en ~25s, abortamos (en vez de cargar para siempre)
+function armConnectWatchdog() {
+  const c = state.call; if (!c) return;
+  clearTimeout(c.connectTO);
+  c.connectTO = setTimeout(() => {
+    if (state.call && state.call.id === c.id && !state.call.everConnected) {
+      toast('No se pudo establecer la conexión'); callHangupBtn();
+    }
+  }, 25000);
 }
 
 function onCallConnected() {
   const c = state.call; if (!c || c.everConnected) return;
   c.everConnected = true; c.status = 'connected'; c.startedAt = Date.now();
-  stopRing(); clearTimeout(c.noAnswerTO);
+  stopRing(); clearTimeout(c.noAnswerTO); clearTimeout(c.connectTO);
+  attachCallRemote();
   if (c.resend) { clearInterval(c.resend); c.resend = null; }
   $('callStatus').textContent = '0:00';
   c.timer = setInterval(() => {
@@ -5756,10 +5779,12 @@ async function onCallSignal(p) {
   const c = state.call;
   if (!c || c.id !== p.call_id) return;
   if (p.kind === 'answer') {
-    try { await c.pc.setRemoteDescription(new RTCSessionDescription(p.sdp)); flushPendingIce(); } catch (_) {}
-    if (c.status === 'calling') { c.status = 'connecting'; $('callStatus').textContent = 'Conectando…'; showCallScreen('active'); }
+    if (c.role !== 'caller' || c.answered) return; // ignora respuestas duplicadas/cruzadas
+    c.answered = true;
+    try { await c.pc.setRemoteDescription(p.sdp); flushPendingIce(); } catch (e) { console.error('setRemoteDescription(answer)', e); }
+    if (c.status === 'calling' || c.status === 'connecting') { c.status = 'connecting'; $('callStatus').textContent = 'Conectando…'; showCallScreen('active'); armConnectWatchdog(); }
   } else if (p.kind === 'ice') {
-    if (c.pc && c.pc.remoteDescription && c.pc.remoteDescription.type) { try { await c.pc.addIceCandidate(new RTCIceCandidate(p.candidate)); } catch (_) {} }
+    if (c.pc && c.pc.remoteDescription && c.pc.remoteDescription.type) { try { await c.pc.addIceCandidate(p.candidate); } catch (_) {} }
     else c.pendingIce.push(p.candidate);
   } else if (p.kind === 'reject') {
     toast(p.reason === 'busy' ? 'Usuario ocupado' : 'Llamada rechazada');
@@ -5797,13 +5822,13 @@ async function acceptCall() {
   buildCallPc();
   stream.getTracks().forEach(t => c.pc.addTrack(t, stream));
   try {
-    await c.pc.setRemoteDescription(new RTCSessionDescription(c.offer));
+    await c.pc.setRemoteDescription(c.offer);
     flushPendingIce();
     const answer = await c.pc.createAnswer();
     await c.pc.setLocalDescription(answer);
     c.out.send({ kind: 'answer', call_id: c.id, from: state.user.id, sdp: answer });
-  } catch (_) { toast('No se pudo conectar la llamada'); callHangupBtn(); return; }
-  showCallScreen('active'); $('callStatus').textContent = 'Conectando…'; attachCallLocal();
+  } catch (e) { console.error('acceptCall', e); toast('No se pudo conectar la llamada'); callHangupBtn(); return; }
+  showCallScreen('active'); $('callStatus').textContent = 'Conectando…'; attachCallLocal(); armConnectWatchdog();
 }
 
 function declineCall(isTimeout) {
@@ -5827,7 +5852,7 @@ function callHangupBtn() {
 function flushPendingIce() {
   const c = state.call; if (!c || !c.pc) return;
   const list = c.pendingIce.splice(0);
-  list.forEach(cand => { try { c.pc.addIceCandidate(new RTCIceCandidate(cand)); } catch (_) {} });
+  list.forEach(cand => { try { c.pc.addIceCandidate(cand); } catch (_) {} });
 }
 
 // el que llama inserta la fila de la llamada al empezar (dispara la push al receptor)
@@ -5882,6 +5907,7 @@ function showCallScreen(mode) {
   if (mode === 'incoming') $('callStatus').textContent = c.video ? 'Videollamada entrante…' : 'Llamada entrante…';
   else if (mode === 'outgoing') $('callStatus').textContent = 'Llamando…';
   attachCallRemote();
+  if (mode !== 'incoming') attachCallLocal();   // self-view también mientras suena
 }
 function attachCallLocal() {
   const c = state.call; if (!c) return; const v = $('callLocalVideo'); const wrap = v.parentElement;
@@ -5891,10 +5917,17 @@ function attachCallLocal() {
 }
 function attachCallRemote() {
   const c = state.call; if (!c) return; const v = $('callRemoteVideo');
-  v.srcObject = c.remoteStream || null;
-  v.play && v.play().catch(() => {});
+  if (v.srcObject !== c.remoteStream) v.srcObject = c.remoteStream || null;
+  v.muted = false; v.volume = 1;
+  playRemoteMedia();
   const hasVideo = !!(c.remoteStream && c.remoteStream.getVideoTracks().length);
   $('callPoster').classList.toggle('show', !hasVideo);
+}
+// iOS/Safari a veces rechaza el primer play(); reintentamos unas cuantas veces.
+function playRemoteMedia(tries = 6) {
+  const v = $('callRemoteVideo'); if (!v || !v.srcObject) return;
+  const p = v.play && v.play();
+  if (p && p.catch) p.catch(() => { if (tries > 0) setTimeout(() => playRemoteMedia(tries - 1), 350); });
 }
 function hideCallScreen() {
   const cs = $('callScreen'); cs.classList.remove('open', 'video-call', 'minimized'); cs.setAttribute('aria-hidden', 'true');
@@ -5958,12 +5991,11 @@ async function switchCallCamera() {
 function minimizeCall() { if (state.call) $('callScreen').classList.add('minimized'); }
 function expandCall() { $('callScreen').classList.remove('minimized'); }
 function cleanupCall() {
-  const c = state.call; if (!c) return; state.call = null;
+  const c = state.call; if (!c) return; c.ending = true; state.call = null;
   stopRing();
-  clearTimeout(c.noAnswerTO); clearTimeout(c.incomingTO); clearInterval(c.timer); if (c.resend) clearInterval(c.resend);
+  clearTimeout(c.noAnswerTO); clearTimeout(c.incomingTO); clearTimeout(c.connectTO); clearInterval(c.timer); if (c.resend) clearInterval(c.resend);
   try { c.localStream && c.localStream.getTracks().forEach(t => t.stop()); } catch (_) {}
-  try { c.remoteStream && c.remoteStream.getTracks().forEach(t => t.stop()); } catch (_) {}
-  try { c.pc && (c.pc.onicecandidate = c.pc.ontrack = c.pc.onconnectionstatechange = null, c.pc.close()); } catch (_) {}
+  try { c.pc && (c.pc.onicecandidate = c.pc.ontrack = c.pc.onconnectionstatechange = c.pc.oniceconnectionstatechange = null, c.pc.close()); } catch (_) {}
   try { c.out && c.out.close(); } catch (_) {}
   $('callRemoteVideo').srcObject = null; $('callLocalVideo').srcObject = null;
   hideCallScreen();
