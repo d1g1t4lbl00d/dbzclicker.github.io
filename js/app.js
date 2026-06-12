@@ -5708,10 +5708,11 @@ async function startCall(video) {
   let stream;
   try { stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: video ? { facingMode: 'user' } : false }); }
   catch (err) { toast(gumErrorMsg(err, video)); return; }
+  const ice = await getCallIceServers();
   const id = callId();
   state.call = {
     id, peer, peerProfile: state.dmPeerProfile, video, role: 'caller', status: 'calling',
-    out: callOutChan(peer), localStream: stream, remoteStream: null, pc: null,
+    out: callOutChan(peer), localStream: stream, remoteStream: null, pc: null, iceServers: ice,
     pendingIce: [], muted: false, camOff: false, facing: 'user',
     speaker: true, startedAt: 0, everConnected: false, logId: null, finalized: false, timer: null,
   };
@@ -5741,9 +5742,30 @@ function gumErrorMsg(err, video) {
   return video ? 'No se pudo acceder a la cámara/micrófono' : 'No se pudo acceder al micrófono';
 }
 
+// devuelve los servidores ICE: STUN + TURN de Cloudflare (credenciales temporales
+// vía edge function). Si Cloudflare no responde, usa el TURN público de respaldo.
+let callTurnCache = null;
+async function getCallIceServers() {
+  const base = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }];
+  try {
+    if (!callTurnCache || Date.now() > callTurnCache.exp) {
+      const { data, error } = await sb.functions.invoke('turn-credentials');
+      if (error) throw error;
+      const ice = data && data.iceServers;
+      if (ice) { callTurnCache = { servers: Array.isArray(ice) ? ice : [ice], exp: Date.now() + 3600000 }; }
+      else throw new Error('sin iceServers');
+    }
+    console.log('[call] TURN: Cloudflare');
+    return [...base, ...callTurnCache.servers];
+  } catch (e) {
+    console.warn('[call] TURN Cloudflare no disponible, uso respaldo público', e);
+    return [...base, ...CALL_ICE_SERVERS.slice(1)];
+  }
+}
+
 function buildCallPc() {
   const c = state.call;
-  const pc = new RTCPeerConnection({ iceServers: CALL_ICE_SERVERS, iceCandidatePoolSize: 4 });
+  const pc = new RTCPeerConnection({ iceServers: c.iceServers || CALL_ICE_SERVERS, iceCandidatePoolSize: 4 });
   c.pc = pc; c.remoteStream = new MediaStream(); c.gotRelay = false; c.gotRemoteCand = false;
   pc.onicecandidate = (e) => {
     if (!e.candidate) { console.log('[call] gathering ICE completo'); return; }
@@ -5881,6 +5903,7 @@ async function acceptCall() {
   let stream;
   try { stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: c.video ? { facingMode: 'user' } : false }); }
   catch (err) { console.error('[call] gUM accept', err); toast(gumErrorMsg(err, c.video)); declineCall(false, 'media'); return; }
+  c.iceServers = await getCallIceServers();
   c.localStream = stream; c.status = 'connecting';
   buildCallPc();
   stream.getTracks().forEach(t => c.pc.addTrack(t, stream));
