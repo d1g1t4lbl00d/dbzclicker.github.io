@@ -147,7 +147,7 @@ function avatarHTML(profile, cls='') {
   const pos = czPos(profile?.theme?.avatarPos);
   const zoom = czZoom(profile?.theme?.avatarZoom);
   const st = (pos || zoom > 1) ? ` style="${pos ? `object-position:${pos};` : ''}${zoom > 1 ? `transform:scale(${zoom});` : ''}"` : '';
-  if (url) return `<div class="avatar ${cls}"><img src="${esc(url)}" alt=""${st} /></div>`;
+  if (url) return `<div class="avatar ${cls}"><img src="${esc(url)}" alt="" loading="lazy" decoding="async"${st} /></div>`;
   return `<div class="avatar ${cls}">${esc(initials(name))}</div>`;
 }
 
@@ -1228,28 +1228,37 @@ async function handleDeepLink() {
 
 /* ---- LIKES ---- */
 async function toggleLike(t, card) {
+  const busy = (toggleLike._busy ||= new Set());
+  if (busy.has(t.id)) return;            // ignora toques repetidos mientras se procesa
+  busy.add(t.id);
   const btn = card.querySelector('[data-act="like"]');
   const cntEl = card.querySelector('.likecount');
   const liked = state.likes.has(t.id);
-  if (liked) {
-    state.likes.delete(t.id);
-    t.likes_count = Math.max(0, (t.likes_count || 0) - 1);
-    btn.classList.remove('on'); btn.querySelector('.ln').textContent = 'Me gusta';
-    await sb.from('likes').delete().eq('track_id', t.id).eq('user_id', state.user.id);
-  } else {
-    state.likes.add(t.id);
-    t.likes_count = (t.likes_count || 0) + 1;
-    btn.classList.add('on'); btn.querySelector('.ln').textContent = 'Te gusta';
-    await sb.from('likes').insert({ track_id: t.id, user_id: state.user.id });
-  }
-  if (cntEl) cntEl.textContent = t.likes_count;
-  updateCounts();
+  const setLn = (txt) => { const ln = btn?.querySelector('.ln'); if (ln) ln.textContent = txt; };
+  try {
+    if (liked) {
+      state.likes.delete(t.id);
+      t.likes_count = Math.max(0, (t.likes_count || 0) - 1);
+      btn?.classList.remove('on'); setLn('Me gusta');
+      await sb.from('likes').delete().eq('track_id', t.id).eq('user_id', state.user.id);
+    } else {
+      state.likes.add(t.id);
+      t.likes_count = (t.likes_count || 0) + 1;
+      btn?.classList.add('on'); setLn('Te gusta');
+      await sb.from('likes').insert({ track_id: t.id, user_id: state.user.id });
+    }
+    if (cntEl) cntEl.textContent = t.likes_count;
+    updateCounts();
+  } finally { busy.delete(t.id); }
 }
 
 /* ---- REPOST ---- */
 async function toggleRepost(t, card) {
   if (typeof requireNotBanned === 'function' && !requireNotBanned()) return;
   if (t.user_id === state.user.id) { toast('No puedes repostear tu propia pista'); return; }
+  const busy = (toggleRepost._busy ||= new Set());
+  if (busy.has(t.id)) return;
+  busy.add(t.id);
   const btn = card.querySelector('[data-act="repost"]');
   const cntEl = card.querySelector('.repostcount');
   const reposted = state.reposts.has(t.id);
@@ -1268,6 +1277,7 @@ async function toggleRepost(t, card) {
   }
   // actualizar el contador en todas las copias de la pista
   document.querySelectorAll(`.track[data-id="${t.id}"] .repostcount`).forEach(e => e.textContent = t.reposts_count);
+  busy.delete(t.id);
 }
 
 /* ---- DESCARGA ---- */
@@ -1635,7 +1645,7 @@ function updateNpProgress(pct) {
   $('npDur').textContent = (npShowRemaining && dur) ? '-' + fmtTime(Math.max(0, dur - audio.currentTime)) : fmtTime(dur);
 }
 function setPlayIcon(playing) {
-  $('pPlay').querySelector('use').setAttribute('href', playing ? '#i-pause' : '#i-play');
+  const u = $('pPlay')?.querySelector('use'); if (u) u.setAttribute('href', playing ? '#i-pause' : '#i-play');
 }
 function togglePlay() { if (audio.paused) audio.play(); else audio.pause(); }
 
@@ -2429,19 +2439,25 @@ function openEditPost(p, card) {
 }
 
 async function togglePostLike(p, card) {
+  const busy = (togglePostLike._busy ||= new Set());
+  if (busy.has(p.id)) return;
+  busy.add(p.id);
   const btn = card.querySelector('[data-act="like"]');
   const cntEl = card.querySelector('.likecount');
-  const liked = btn.classList.contains('on');
-  if (liked) {
-    p.likes_count = Math.max(0, (p.likes_count || 0) - 1);
-    btn.classList.remove('on'); btn.querySelector('.ln').textContent = 'Me gusta';
-    await sb.from('post_likes').delete().eq('post_id', p.id).eq('user_id', state.user.id);
-  } else {
-    p.likes_count = (p.likes_count || 0) + 1;
-    btn.classList.add('on'); btn.querySelector('.ln').textContent = 'Te gusta';
-    await sb.from('post_likes').insert({ post_id: p.id, user_id: state.user.id });
-  }
-  if (cntEl) cntEl.textContent = p.likes_count;
+  const liked = btn ? btn.classList.contains('on') : false;
+  const setLn = (txt) => { const ln = btn?.querySelector('.ln'); if (ln) ln.textContent = txt; };
+  try {
+    if (liked) {
+      p.likes_count = Math.max(0, (p.likes_count || 0) - 1);
+      btn?.classList.remove('on'); setLn('Me gusta');
+      await sb.from('post_likes').delete().eq('post_id', p.id).eq('user_id', state.user.id);
+    } else {
+      p.likes_count = (p.likes_count || 0) + 1;
+      btn?.classList.add('on'); setLn('Te gusta');
+      await sb.from('post_likes').insert({ post_id: p.id, user_id: state.user.id });
+    }
+    if (cntEl) cntEl.textContent = p.likes_count;
+  } finally { busy.delete(p.id); }
 }
 
 async function deletePost(p, card) {

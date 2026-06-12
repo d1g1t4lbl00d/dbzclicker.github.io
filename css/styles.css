@@ -873,6 +873,7 @@ img { display: block; }
   background: rgba(255,255,255,.97); backdrop-filter: blur(12px); border: 1px solid var(--line);
   border-radius: 16px; box-shadow: var(--sh-3); padding: 14px 16px; animation: fadeUp .35s var(--ease);
 }
+:root[data-theme="dark"] .cookie-banner { background: rgba(18,23,38,.96); border-color: var(--line); }
 .cookie-banner .ck-text { font-size: 12.8px; color: var(--ink-2); line-height: 1.45; flex: 1; }
 .cookie-banner .ck-text a { color: var(--blue-deep); font-weight: 650; cursor: pointer; text-decoration: underline; }
 .cookie-banner .ck-actions { display: flex; gap: 8px; flex-shrink: 0; }
