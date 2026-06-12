@@ -5652,6 +5652,10 @@ function initCalls() {
       .subscribe();
     callSignalCatchUp();
     getCallIceServers();   // pre-carga credenciales TURN: descolgar es instantáneo
+    // al volver del segundo plano (móvil), el vídeo puede quedarse pausado: relánzalo
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && state.call) { playRemoteMedia(); attachCallLocal(); }
+    });
   }
   $('dmCallBtn').onclick = () => startCall(false);
   $('dmVideoBtn').onclick = () => startCall(true);
@@ -5706,19 +5710,22 @@ async function startCall(video) {
   if (state.call) { toast('Ya tienes una llamada en curso'); return; }
   const peer = state.dmPeer;
   if (state.blocked.has(peer) || state.hidden.has(peer)) { toast('No puedes llamar a este usuario'); return; }
-  let stream;
-  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: video ? { facingMode: 'user' } : false }); }
+  let media;
+  try { media = await getCallStream(video); }
   catch (err) { toast(gumErrorMsg(err, video)); return; }
+  const { stream, camOk } = media;
   const ice = await getCallIceServers();
   const id = callId();
   state.call = {
     id, peer, peerProfile: state.dmPeerProfile, video, role: 'caller', status: 'calling',
     out: callOutChan(peer), localStream: stream, remoteStream: null, pc: null, iceServers: ice,
-    pendingIce: [], muted: false, camOff: false, facing: 'user',
+    pendingIce: [], muted: false, camOff: video && !camOk, facing: 'user',
     speaker: true, startedAt: 0, everConnected: false, logId: null, finalized: false, timer: null,
   };
   buildCallPc();
   stream.getTracks().forEach(t => state.call.pc.addTrack(t, stream));
+  // sin cámara: aun así negociamos vídeo de entrada para VER al otro
+  if (video && !camOk) { try { state.call.pc.addTransceiver('video', { direction: 'recvonly' }); } catch (_) {} toast('Tu cámara no está disponible: envías solo audio'); }
   showCallScreen('outgoing');
   startRingback();
   haptic(20);
@@ -5732,6 +5739,23 @@ async function startCall(video) {
   state.call.noAnswerTO = setTimeout(() => {
     if (state.call && state.call.id === id && state.call.status === 'calling') { toast('Sin respuesta'); callHangupBtn(); }
   }, 45000);
+}
+
+// pide micro (+cámara si video). Si la cámara falla o no existe, degrada a
+// solo-audio en vez de tumbar la llamada: camOk indica si hay vídeo local.
+async function getCallStream(video) {
+  if (!video) return { stream: await navigator.mediaDevices.getUserMedia({ audio: true }), camOk: false };
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: true,
+      video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 } },
+    });
+    return { stream, camOk: true };
+  } catch (e) {
+    console.warn('[call] cámara no disponible, sigo con audio', e && e.name);
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });  // si esto también falla, lanza
+    return { stream, camOk: false };
+  }
 }
 
 // mensajes de error claros al pedir micrófono/cámara
@@ -5791,6 +5815,8 @@ function buildCallPc() {
     console.log('[call] ontrack', e.track && e.track.kind);
     if (e.streams && e.streams[0]) c.remoteStream = e.streams[0];
     else { try { c.remoteStream.addTrack(e.track); } catch (_) {} }
+    // cuando empiezan a llegar frames de verdad (iOS los marca muted al inicio)
+    e.track.onunmute = () => { attachCallRemote(); playRemoteMedia(); };
     attachCallRemote();
   };
   // Safari/iOS dispara de forma fiable iceConnectionState; Chrome/FF connectionState.
@@ -5886,6 +5912,9 @@ async function onCallSignal(p) {
     toast(p.reason === 'busy' ? 'Usuario ocupado' : p.reason === 'media' ? 'El otro usuario no pudo activar su micrófono/cámara' : 'Llamada rechazada');
     finalizeCall(p.reason === 'busy' ? 'busy' : (p.reason === 'timeout' ? 'missed' : 'declined'));
     cleanupCall();
+  } else if (p.kind === 'camstate') {
+    c.remoteCamOff = !!p.off;          // el otro encendió/apagó su cámara
+    attachCallRemote();
   } else if (p.kind === 'cancel') {
     toast('Llamada perdida'); cleanupCall();
   } else if (p.kind === 'hangup') {
@@ -5911,9 +5940,11 @@ async function handleIncomingCall(p) {
 async function acceptCall() {
   const c = state.call; if (!c || c.role !== 'callee' || c.status !== 'incoming') return;
   clearTimeout(c.incomingTO); stopRing();
-  let stream;
-  try { stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: c.video ? { facingMode: 'user' } : false }); }
+  let media;
+  try { media = await getCallStream(c.video); }
   catch (err) { console.error('[call] gUM accept', err); toast(gumErrorMsg(err, c.video)); declineCall(false, 'media'); return; }
+  const stream = media.stream;
+  if (c.video && !media.camOk) { c.camOff = true; toast('Tu cámara no está disponible: envías solo audio'); }
   c.iceServers = await getCallIceServers();
   c.localStream = stream; c.status = 'connecting';
   buildCallPc();
@@ -5999,6 +6030,8 @@ function showCallScreen(mode) {
   $('callIncoming').classList.toggle('show', mode === 'incoming');
   $('callControls').classList.toggle('show', mode !== 'incoming');
   $('callVideoBtn').style.display = c.video ? '' : 'none';
+  $('callVideoBtn').classList.toggle('off', !!c.camOff);
+  $('callVideoBtn').querySelector('use').setAttribute('href', c.camOff ? '#i-video-off' : '#i-video');
   $('callFlipBtn').style.display = (c.video && mode !== 'incoming') ? '' : 'none';
   $('callMinBtn').style.display = mode === 'incoming' ? 'none' : '';
   $('callMiniName').textContent = c.peerProfile ? (c.peerProfile.display_name || c.peerProfile.username || 'Usuario') : 'Usuario';
@@ -6018,7 +6051,7 @@ function attachCallRemote() {
   if (v.srcObject !== c.remoteStream) v.srcObject = c.remoteStream || null;
   v.muted = false; v.volume = 1;
   playRemoteMedia();
-  const hasVideo = !!(c.remoteStream && c.remoteStream.getVideoTracks().length);
+  const hasVideo = !!(c.remoteStream && c.remoteStream.getVideoTracks().length) && !c.remoteCamOff;
   $('callPoster').classList.toggle('show', !hasVideo);
 }
 // iOS/Safari a veces rechaza el primer play(); reintentamos unas cuantas veces.
@@ -6045,8 +6078,9 @@ function toggleCallMute() {
 function toggleCallCam() {
   const c = state.call; if (!c || !c.localStream) return;
   const vt = c.localStream.getVideoTracks();
-  if (!vt.length) { toast('Llamada solo de voz'); return; }
+  if (!vt.length) { toast(c.video ? 'No tienes cámara disponible' : 'Llamada solo de voz'); return; }
   c.camOff = !c.camOff; vt.forEach(t => t.enabled = !c.camOff);
+  sendSignal(c, 'camstate', { off: c.camOff });   // el otro lado muestra avatar/vídeo
   $('callVideoBtn').classList.toggle('off', c.camOff);
   $('callVideoBtn').querySelector('use').setAttribute('href', c.camOff ? '#i-video-off' : '#i-video');
   attachCallLocal();
