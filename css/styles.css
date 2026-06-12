@@ -998,7 +998,7 @@ img { display: block; }
 .mention { color: var(--accent); font-weight: 600; cursor: pointer; text-decoration: none; }
 .mention:hover { text-decoration: underline; }
 .dm-bubble.me .mention { color: #fff; text-decoration: underline; }
-.mention-dd { position: fixed; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 34px rgba(0,0,0,.22); max-height: 240px; overflow-y: auto; z-index: 9999; padding: 5px; }
+.mention-dd { position: fixed; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 34px rgba(0,0,0,.22); max-height: 240px; overflow-y: auto; z-index: 250; padding: 5px; }
 .mention-dd-item { display: flex; align-items: center; gap: 9px; padding: 6px 8px; border-radius: 9px; cursor: pointer; }
 .mention-dd-item:hover { background: rgba(62,87,252,.14); }
 .mention-dd-item .avatar { width: 30px !important; height: 30px !important; font-size: 12px !important; flex-shrink: 0; }

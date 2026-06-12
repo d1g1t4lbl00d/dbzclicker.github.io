@@ -2,14 +2,17 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <title>UnderBro — upload. share. connect.</title>
 <meta name="description" content="UnderBro — sube, comparte y conecta a través de la música." />
+<link rel="preconnect" href="https://hvpycejcaljgpxwnykuh.supabase.co" crossorigin />
+<link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin />
+<link rel="dns-prefetch" href="https://cdn.vercel-insights.com" />
 <link rel="icon" type="image/png" href="/assets/favicon-64.png?v=20260605b" />
 <link rel="manifest" href="/manifest.json?v=20260605l" />
 <meta name="theme-color" content="#0a0d18" />
 <link rel="apple-touch-icon" href="/icon-192.png?v=20260605l" />
-<link rel="stylesheet" href="css/styles.css?v=20260612c" />
+<link rel="stylesheet" href="css/styles.css?v=20260612d" />
 <script>(function(){try{var t=localStorage.getItem('ub_theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}try{if(sessionStorage.getItem('ub_splash'))document.documentElement.classList.add('no-splash');}catch(e){}})();</script>
 <!-- Vercel Web Analytics -->
 <script>
@@ -166,7 +169,7 @@ html.no-splash #splash{display:none}
 
   <!-- TOPBAR -->
   <div class="topbar">
-    <button class="icon-btn menu-toggle" id="menuToggle"><svg><use href="#i-menu"/></svg></button>
+    <button class="icon-btn menu-toggle" id="menuToggle" title="Menú" aria-label="Abrir menú"><svg><use href="#i-menu"/></svg></button>
     <div class="logo topbar-logo">Under<span class="u">Bro</span></div>
     <div class="tabs" id="feedTabs">
       <button data-tab="following">Following</button>
@@ -407,7 +410,7 @@ html.no-splash #splash{display:none}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
-<script src="js/config.js?v=20260612c"></script>
-<script src="js/app.js?v=20260612c"></script>
+<script src="js/config.js?v=20260612d"></script>
+<script src="js/app.js?v=20260612d"></script>
 </body>
 </html>

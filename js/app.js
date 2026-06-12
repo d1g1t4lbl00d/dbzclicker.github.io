@@ -326,6 +326,7 @@ async function ensureProfile() {
 }
 
 function renderMe() {
+  if (!state.profile) return;
   $('meName').innerHTML = esc(state.profile.display_name || state.profile.username) + verifiedBadge(state.profile) + displayBadgeHtml(state.profile) +
     (state.profile.is_admin ? ' <span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c;padding:1px 7px">MOD</span>' : '');
   $('meAvatar').outerHTML = avatarHTML(state.profile).replace('class="avatar ', 'id="meAvatar" class="avatar ');
@@ -847,6 +848,26 @@ async function renderSearch() {
   }
 }
 
+// alterna seguir/dejar de seguir con actualización optimista y reversión si falla
+async function toggleFollow(userId, btn) {
+  const was = state.follows.has(userId);
+  const paint = (following) => {
+    if (!btn || !btn.isConnected) return;
+    btn.classList.toggle('primary', !following);
+    btn.textContent = following ? 'Siguiendo ✓' : '+ Seguir';
+  };
+  if (was) state.follows.delete(userId); else state.follows.add(userId);
+  paint(!was);
+  const { error } = was
+    ? await sb.from('follows').delete().eq('follower_id', state.user.id).eq('following_id', userId)
+    : await sb.from('follows').insert({ follower_id: state.user.id, following_id: userId });
+  if (error) {
+    if (was) state.follows.add(userId); else state.follows.delete(userId);
+    paint(was);
+    toast('No se pudo actualizar el seguimiento');
+  }
+}
+
 function personSearchRow(p) {
   const f = state.follows.has(p.id);
   const row = el(`
@@ -859,18 +880,7 @@ function personSearchRow(p) {
       <button class="btn sm ${f ? '' : 'primary'}" data-act="follow">${f ? 'Siguiendo ✓' : '+ Seguir'}</button>
     </div>`);
   const fb = row.querySelector('[data-act="follow"]');
-  fb.onclick = async (e) => {
-    e.stopPropagation();
-    if (state.follows.has(p.id)) {
-      state.follows.delete(p.id);
-      await sb.from('follows').delete().eq('follower_id', state.user.id).eq('following_id', p.id);
-      fb.classList.add('primary'); fb.textContent = '+ Seguir';
-    } else {
-      state.follows.add(p.id);
-      await sb.from('follows').insert({ follower_id: state.user.id, following_id: p.id });
-      fb.classList.remove('primary'); fb.textContent = 'Siguiendo ✓';
-    }
-  };
+  fb.onclick = (e) => { e.stopPropagation(); toggleFollow(p.id, fb); };
   row.addEventListener('click', (e) => { if (e.target.closest('[data-act]')) return; openProfile(p.id); });
   return row;
 }
@@ -1631,7 +1641,7 @@ function syncNowPlaying() {
   $('npTitle').textContent = t.title;
   $('npArtist').textContent = t.profiles?.display_name || t.profiles?.username || t.artist || '';
   $('npCover').innerHTML = t.cover_url ? `<img src="${esc(t.cover_url)}" alt="" />` : `<svg fill="none" stroke="#fff"><use href="#i-music"/></svg>`;
-  $('npBg').style.backgroundImage = t.cover_url ? `url("${esc(t.cover_url)}")` : 'none';
+  $('npBg').style.backgroundImage = t.cover_url ? `url('${czUrl(t.cover_url)}')` : 'none';
   const npPeaks = Array.isArray(t.waveform) && t.waveform.length ? t.waveform : waveBars(t.id, 80);
   $('npWave').innerHTML = npPeaks.map(h => `<div class="bar" style="--h:${czNum(h)}%"></div>`).join('');
   setNpPlayIcon(!audio.paused);
@@ -2971,18 +2981,7 @@ async function openProfile(userId) {
     verifyBtn.textContent = newVal ? 'Quitar verificación' : 'Verificar';
     toast(newVal ? '✔ Usuario verificado' : 'Verificación quitada');
   };
-  if (!isMe) $('followBtn').onclick = async () => {
-    const btn = $('followBtn');
-    if (state.follows.has(userId)) {
-      state.follows.delete(userId);
-      await sb.from('follows').delete().eq('follower_id', state.user.id).eq('following_id', userId);
-      btn.className = 'btn primary'; btn.textContent = '+ Seguir';
-    } else {
-      state.follows.add(userId);
-      await sb.from('follows').insert({ follower_id: state.user.id, following_id: userId });
-      btn.className = 'btn'; btn.textContent = 'Siguiendo ✓';
-    }
-  };
+  if (!isMe) $('followBtn').onclick = () => toggleFollow(userId, $('followBtn'));
 }
 
 /* =======================================================================
@@ -3033,17 +3032,7 @@ async function renderPeople() {
       banBtn.textContent = newVal ? '↺' : '⊘'; banBtn.title = newVal ? 'Desbanear' : 'Banear';
       toast(newVal ? `${p.username} baneado` : `${p.username} desbaneado`);
     };
-    followBtn.onclick = async () => {
-      if (state.follows.has(p.id)) {
-        state.follows.delete(p.id);
-        await sb.from('follows').delete().eq('follower_id', state.user.id).eq('following_id', p.id);
-        followBtn.classList.add('primary'); followBtn.textContent = '+ Seguir';
-      } else {
-        state.follows.add(p.id);
-        await sb.from('follows').insert({ follower_id: state.user.id, following_id: p.id });
-        followBtn.classList.remove('primary'); followBtn.textContent = 'Siguiendo ✓';
-      }
-    };
+    followBtn.onclick = () => toggleFollow(p.id, followBtn);
     list.appendChild(row);
   });
 }
@@ -3083,18 +3072,7 @@ async function openFollowList(userId, mode) {
     const msgBtn = row.querySelector('[data-act="msg"]');
     if (msgBtn) msgBtn.onclick = (e) => { e.stopPropagation(); m.remove(); openDM(p.id); };
     const followBtn = row.querySelector('[data-act="follow"]');
-    if (followBtn) followBtn.onclick = async (e) => {
-      e.stopPropagation();
-      if (state.follows.has(p.id)) {
-        state.follows.delete(p.id);
-        await sb.from('follows').delete().eq('follower_id', state.user.id).eq('following_id', p.id);
-        followBtn.classList.add('primary'); followBtn.textContent = '+ Seguir';
-      } else {
-        state.follows.add(p.id);
-        await sb.from('follows').insert({ follower_id: state.user.id, following_id: p.id });
-        followBtn.classList.remove('primary'); followBtn.textContent = 'Siguiendo ✓';
-      }
-    };
+    if (followBtn) followBtn.onclick = (e) => { e.stopPropagation(); toggleFollow(p.id, followBtn); };
     body.appendChild(row);
   });
 }
