@@ -5749,7 +5749,7 @@ async function getCallIceServers() {
   const base = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }];
   try {
     if (!callTurnCache || Date.now() > callTurnCache.exp) {
-      const { data, error } = await sb.functions.invoke('turn-credentials');
+      const { data, error } = await sb.rpc('get_turn_credentials');
       if (error) throw error;
       const ice = data && data.iceServers;
       if (ice) { callTurnCache = { servers: Array.isArray(ice) ? ice : [ice], exp: Date.now() + 3600000 }; }
