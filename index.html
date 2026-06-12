@@ -9,7 +9,7 @@
 <link rel="manifest" href="/manifest.json?v=20260605l" />
 <meta name="theme-color" content="#0a0d18" />
 <link rel="apple-touch-icon" href="/icon-192.png?v=20260605l" />
-<link rel="stylesheet" href="css/styles.css?v=20260612b" />
+<link rel="stylesheet" href="css/styles.css?v=20260612c" />
 <script>(function(){try{var t=localStorage.getItem('ub_theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}try{if(sessionStorage.getItem('ub_splash'))document.documentElement.classList.add('no-splash');}catch(e){}})();</script>
 <!-- Vercel Web Analytics -->
 <script>
@@ -109,6 +109,8 @@ html.no-splash #splash{display:none}
     <symbol id="i-video" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></symbol>
     <symbol id="i-video-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 16v1a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2m5.66 0H14a2 2 0 0 1 2 2v3.34l1 1L23 7v10"/><line x1="1" y1="1" x2="23" y2="23"/></symbol>
     <symbol id="i-mic-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="1" y1="1" x2="23" y2="23"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V4a3 3 0 0 0-5.94-.6"/><path d="M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></symbol>
+    <symbol id="i-vol-off" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="23" y1="9" x2="17" y2="15"/><line x1="17" y1="9" x2="23" y2="15"/></symbol>
+    <symbol id="i-camera-flip" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h3l2-3h8l2 3h3a2 2 0 0 1 2 2z"/><path d="M9.5 12.5a2.5 2.5 0 0 1 4.6-1.3M14.5 13.5a2.5 2.5 0 0 1-4.6 1.3"/><polyline points="14.3 9.4 14.1 11.2 12.3 11"/><polyline points="9.7 16.6 9.9 14.8 11.7 15"/></symbol>
   </defs>
 </svg>
 
@@ -349,17 +351,22 @@ html.no-splash #splash{display:none}
 <div class="call-screen" id="callScreen" aria-hidden="true">
   <video class="call-remote-video" id="callRemoteVideo" autoplay playsinline></video>
   <div class="call-poster show" id="callPoster"></div>
-  <video class="call-local-video" id="callLocalVideo" autoplay playsinline muted></video>
+  <div class="call-local-wrap">
+    <video class="call-local-video" id="callLocalVideo" autoplay playsinline muted></video>
+    <button class="call-flip" id="callFlipBtn" title="Cambiar cámara"><svg><use href="#i-camera-flip"/></svg></button>
+  </div>
   <div class="call-overlay">
     <div class="call-top">
+      <button class="call-min" id="callMinBtn" title="Minimizar"><svg><use href="#i-chevron-down"/></svg></button>
       <div class="call-peer-name" id="callPeerName"></div>
       <div class="call-status" id="callStatus">Llamando…</div>
     </div>
     <div class="call-actions">
       <div class="call-controls" id="callControls">
         <button class="call-btn" id="callMuteBtn" title="Silenciar micro"><svg><use href="#i-mic"/></svg></button>
-        <button class="call-btn hang" id="callHangBtn" title="Colgar"><svg><use href="#i-phone-off"/></svg></button>
         <button class="call-btn" id="callVideoBtn" title="Cámara"><svg><use href="#i-video"/></svg></button>
+        <button class="call-btn hang" id="callHangBtn" title="Colgar"><svg><use href="#i-phone-off"/></svg></button>
+        <button class="call-btn" id="callSpeakerBtn" title="Altavoz"><svg><use href="#i-vol"/></svg></button>
       </div>
       <div class="call-incoming" id="callIncoming">
         <button class="call-btn decline" id="callDeclineBtn" title="Rechazar"><svg><use href="#i-phone-off"/></svg></button>
@@ -367,6 +374,11 @@ html.no-splash #splash{display:none}
       </div>
     </div>
   </div>
+  <button class="call-mini" id="callMini">
+    <span class="call-mini-dot"></span>
+    <span class="call-mini-info"><b id="callMiniName"></b><span id="callMiniTime">0:00</span></span>
+    <span class="call-mini-label">Toca para volver</span>
+  </button>
 </div>
 
 <!-- ===================== DRAWER BACKDROP + MOBILE NAV ===================== -->
@@ -395,7 +407,7 @@ html.no-splash #splash{display:none}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
-<script src="js/config.js?v=20260612b"></script>
-<script src="js/app.js?v=20260612b"></script>
+<script src="js/config.js?v=20260612c"></script>
+<script src="js/app.js?v=20260612c"></script>
 </body>
 </html>
