@@ -5635,11 +5635,18 @@ let callAudioCtx = null, callRingTimer = null;
 
 function callSupported() { return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.RTCPeerConnection); }
 function callId() { try { return crypto.randomUUID(); } catch { return 'c' + Date.now() + Math.random().toString(36).slice(2); } }
+const callSeenSigs = new Set();  // dedupe broadcast+BD (cada señal llega por dos vías)
 
 function initCalls() {
   if (!callRing) {
     callRing = sb.channel('calls:' + state.user.id, { config: { broadcast: { self: false } } });
     callRing.on('broadcast', { event: 'signal' }, ({ payload }) => onCallSignal(payload)).subscribe();
+    // vía de respaldo con entrega garantizada: señales por BD (como los DMs)
+    sb.channel('call-signals-' + state.user.id)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'call_signals', filter: `recipient_id=eq.${state.user.id}` },
+        (p) => { const row = p.new; if (row && row.payload) onCallSignal(row.payload); })
+      .subscribe();
+    callSignalCatchUp();
   }
   $('dmCallBtn').onclick = () => startCall(false);
   $('dmVideoBtn').onclick = () => startCall(true);
@@ -5652,6 +5659,27 @@ function initCalls() {
   $('callFlipBtn').onclick = switchCallCamera;
   $('callMinBtn').onclick = minimizeCall;
   $('callMini').onclick = expandCall;
+}
+
+// al abrir la app: procesa señales recientes pendientes (p. ej. llamada entrante
+// que sonó mientras la app estaba cerrada y se abrió desde la notificación push)
+async function callSignalCatchUp() {
+  try {
+    const since = new Date(Date.now() - 45000).toISOString();
+    const { data } = await sb.from('call_signals').select('payload')
+      .eq('recipient_id', state.user.id).gt('created_at', since).order('created_at');
+    (data || []).forEach(r => { try { onCallSignal(r.payload); } catch (_) {} });
+    sb.from('call_signals').delete().eq('recipient_id', state.user.id).lt('created_at', since).then(() => {}, () => {});
+  } catch (_) {}
+}
+
+// envía una señal por las DOS vías: broadcast (instantáneo) y BD (garantizado)
+function sendSignal(c, kind, extra = {}) {
+  const payload = { kind, call_id: c.id, from: state.user.id, sig: callId(), ...extra };
+  try { c.out.send(payload); } catch (_) {}
+  sb.from('call_signals')
+    .insert({ call_id: c.id, sender_id: state.user.id, recipient_id: c.peer, kind, payload })
+    .then(() => {}, (e) => console.error('[call] señal BD', e));
 }
 
 // canal de salida hacia el "ring" del peer (con buffer hasta SUBSCRIBED)
@@ -5675,13 +5703,13 @@ async function startCall(video) {
   if (state.blocked.has(peer) || state.hidden.has(peer)) { toast('No puedes llamar a este usuario'); return; }
   let stream;
   try { stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: video ? { facingMode: 'user' } : false }); }
-  catch (_) { toast(video ? 'No se pudo acceder a la cámara/micrófono' : 'No se pudo acceder al micrófono'); return; }
+  catch (err) { toast(gumErrorMsg(err, video)); return; }
   const id = callId();
   state.call = {
     id, peer, peerProfile: state.dmPeerProfile, video, role: 'caller', status: 'calling',
     out: callOutChan(peer), localStream: stream, remoteStream: null, pc: null,
-    pendingIce: [], localIce: [], offerSdp: null, muted: false, camOff: false, facing: 'user',
-    speaker: true, startedAt: 0, everConnected: false, logId: null, finalized: false, timer: null, resend: null,
+    pendingIce: [], muted: false, camOff: false, facing: 'user',
+    speaker: true, startedAt: 0, everConnected: false, logId: null, finalized: false, timer: null,
   };
   buildCallPc();
   stream.getTracks().forEach(t => state.call.pc.addTrack(t, stream));
@@ -5691,23 +5719,22 @@ async function startCall(video) {
   try {
     const offer = await state.call.pc.createOffer();
     await state.call.pc.setLocalDescription(offer);
-    state.call.offerSdp = offer;
-    sendOffer();
-  } catch (_) { toast('No se pudo iniciar la llamada'); cleanupCall(); return; }
+    console.log('[call] oferta enviada', id);
+    sendSignal(state.call, 'offer', { sdp: { type: offer.type, sdp: offer.sdp }, video, ts: Date.now() });
+  } catch (e) { console.error('[call] createOffer', e); toast('No se pudo iniciar la llamada'); cleanupCall(); return; }
   createCallLog();           // inserta la fila de llamada → dispara la push al receptor
-  // reenvía la oferta + ICE mientras suena, para que el receptor que abre la app
-  // desde la notificación reciba la llamada aunque no estuviera conectado al canal.
-  state.call.resend = setInterval(() => { if (state.call && state.call.status === 'calling') sendOffer(); }, 3000);
   state.call.noAnswerTO = setTimeout(() => {
     if (state.call && state.call.id === id && state.call.status === 'calling') { toast('Sin respuesta'); callHangupBtn(); }
-  }, 35000);
+  }, 45000);
 }
 
-function sendOffer() {
-  const c = state.call; if (!c || !c.offerSdp) return;
-  c.out.send({ kind: 'offer', call_id: c.id, from: state.user.id, sdp: c.offerSdp, video: c.video });
-  // reenvía también todos los candidatos ICE ya recogidos (idempotente)
-  c.localIce.forEach(cand => c.out.send({ kind: 'ice', call_id: c.id, from: state.user.id, candidate: cand }));
+// mensajes de error claros al pedir micrófono/cámara
+function gumErrorMsg(err, video) {
+  const n = err && err.name;
+  if (n === 'NotAllowedError' || n === 'SecurityError') return 'Permiso denegado. Activa el micrófono' + (video ? ' y la cámara' : '') + ' en los ajustes del navegador.';
+  if (n === 'NotFoundError' || n === 'OverconstrainedError') return video ? 'No se encontró cámara o micrófono' : 'No se encontró micrófono';
+  if (n === 'NotReadableError') return 'El micrófono/cámara está siendo usado por otra app';
+  return video ? 'No se pudo acceder a la cámara/micrófono' : 'No se pudo acceder al micrófono';
 }
 
 function buildCallPc() {
@@ -5717,8 +5744,7 @@ function buildCallPc() {
   pc.onicecandidate = (e) => {
     if (!e.candidate) return;
     const cand = e.candidate.toJSON ? e.candidate.toJSON() : e.candidate;
-    c.localIce.push(cand);
-    c.out.send({ kind: 'ice', call_id: c.id, from: state.user.id, candidate: cand });
+    sendSignal(c, 'ice', { candidate: cand });
   };
   // usar el stream del evento (Safari no renderiza pistas añadidas a un srcObject ya asignado)
   pc.ontrack = (e) => {
@@ -5749,9 +5775,9 @@ function armConnectWatchdog() {
 function onCallConnected() {
   const c = state.call; if (!c || c.everConnected) return;
   c.everConnected = true; c.status = 'connected'; c.startedAt = Date.now();
+  console.log('[call] conectada');
   stopRing(); clearTimeout(c.noAnswerTO); clearTimeout(c.connectTO);
   attachCallRemote();
-  if (c.resend) { clearInterval(c.resend); c.resend = null; }
   $('callStatus').textContent = '0:00';
   c.timer = setInterval(() => {
     const cc = state.call; if (!cc || !cc.startedAt) return;
@@ -5763,12 +5789,22 @@ function onCallConnected() {
 
 async function onCallSignal(p) {
   if (!p || !p.kind) return;
+  // dedupe: cada señal llega por broadcast Y por BD
+  if (p.sig) {
+    if (callSeenSigs.has(p.sig)) return;
+    callSeenSigs.add(p.sig);
+    if (callSeenSigs.size > 800) callSeenSigs.clear();
+  }
+  console.log('[call] señal recibida:', p.kind);
   if (p.kind === 'offer') {
+    if (p.ts && Date.now() - p.ts > 40000) return; // oferta caducada (llamada ya terminada)
     if (state.call) {
-      if (state.call.id === p.call_id) return; // reenvío de la misma llamada: ignorar
+      if (state.call.id === p.call_id) return; // duplicado de la misma llamada
       // ocupado con otra llamada distinta: rechaza automáticamente
       const tmp = callOutChan(p.from);
-      tmp.send({ kind: 'reject', call_id: p.call_id, from: state.user.id, reason: 'busy' });
+      const payload = { kind: 'reject', call_id: p.call_id, from: state.user.id, sig: callId(), reason: 'busy' };
+      tmp.send(payload);
+      sb.from('call_signals').insert({ call_id: p.call_id, sender_id: state.user.id, recipient_id: p.from, kind: 'reject', payload }).then(() => {}, () => {});
       setTimeout(() => tmp.close(), 1500);
       return;
     }
@@ -5781,13 +5817,13 @@ async function onCallSignal(p) {
   if (p.kind === 'answer') {
     if (c.role !== 'caller' || c.answered) return; // ignora respuestas duplicadas/cruzadas
     c.answered = true;
-    try { await c.pc.setRemoteDescription(p.sdp); flushPendingIce(); } catch (e) { console.error('setRemoteDescription(answer)', e); }
+    try { await c.pc.setRemoteDescription(p.sdp); flushPendingIce(); } catch (e) { console.error('[call] setRemoteDescription(answer)', e); }
     if (c.status === 'calling' || c.status === 'connecting') { c.status = 'connecting'; $('callStatus').textContent = 'Conectando…'; showCallScreen('active'); armConnectWatchdog(); }
   } else if (p.kind === 'ice') {
     if (c.pc && c.pc.remoteDescription && c.pc.remoteDescription.type) { try { await c.pc.addIceCandidate(p.candidate); } catch (_) {} }
     else c.pendingIce.push(p.candidate);
   } else if (p.kind === 'reject') {
-    toast(p.reason === 'busy' ? 'Usuario ocupado' : 'Llamada rechazada');
+    toast(p.reason === 'busy' ? 'Usuario ocupado' : p.reason === 'media' ? 'El otro usuario no pudo activar su micrófono/cámara' : 'Llamada rechazada');
     finalizeCall(p.reason === 'busy' ? 'busy' : (p.reason === 'timeout' ? 'missed' : 'declined'));
     cleanupCall();
   } else if (p.kind === 'cancel') {
@@ -5803,8 +5839,8 @@ async function handleIncomingCall(p) {
   state.call = {
     id: p.call_id, peer: p.from, peerProfile: prof, video: !!p.video, role: 'callee', status: 'incoming',
     out: callOutChan(p.from), offer: p.sdp, localStream: null, remoteStream: null, pc: null,
-    pendingIce: [], localIce: [], muted: false, camOff: false, facing: 'user', speaker: true,
-    startedAt: 0, everConnected: false, logId: null, finalized: false, timer: null, resend: null,
+    pendingIce: [], muted: false, camOff: false, facing: 'user', speaker: true,
+    startedAt: 0, everConnected: false, logId: null, finalized: false, timer: null,
   };
   showCallScreen('incoming');
   startRingtone();
@@ -5817,7 +5853,7 @@ async function acceptCall() {
   clearTimeout(c.incomingTO); stopRing();
   let stream;
   try { stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: c.video ? { facingMode: 'user' } : false }); }
-  catch (_) { toast('No se pudo acceder al micrófono/cámara'); declineCall(false); return; }
+  catch (err) { console.error('[call] gUM accept', err); toast(gumErrorMsg(err, c.video)); declineCall(false, 'media'); return; }
   c.localStream = stream; c.status = 'connecting';
   buildCallPc();
   stream.getTracks().forEach(t => c.pc.addTrack(t, stream));
@@ -5826,25 +5862,26 @@ async function acceptCall() {
     flushPendingIce();
     const answer = await c.pc.createAnswer();
     await c.pc.setLocalDescription(answer);
-    c.out.send({ kind: 'answer', call_id: c.id, from: state.user.id, sdp: answer });
-  } catch (e) { console.error('acceptCall', e); toast('No se pudo conectar la llamada'); callHangupBtn(); return; }
+    console.log('[call] respuesta enviada');
+    sendSignal(c, 'answer', { sdp: { type: answer.type, sdp: answer.sdp } });
+  } catch (e) { console.error('[call] acceptCall', e); toast('No se pudo conectar la llamada'); callHangupBtn(); return; }
   showCallScreen('active'); $('callStatus').textContent = 'Conectando…'; attachCallLocal(); armConnectWatchdog();
 }
 
-function declineCall(isTimeout) {
+function declineCall(isTimeout, reason) {
   const c = state.call; if (!c || c.role !== 'callee') return;
-  c.out.send({ kind: 'reject', call_id: c.id, from: state.user.id, reason: isTimeout ? 'timeout' : 'declined' });
+  sendSignal(c, 'reject', { reason: reason || (isTimeout ? 'timeout' : 'declined') });
   cleanupCall();
 }
 
 function callHangupBtn() {
   const c = state.call; if (!c) return;
   if (c.role === 'caller') {
-    if (c.status === 'calling') { c.out.send({ kind: 'cancel', call_id: c.id, from: state.user.id }); finalizeCall('missed'); }
-    else { c.out.send({ kind: 'hangup', call_id: c.id, from: state.user.id }); finalizeCall(c.everConnected ? 'completed' : 'missed'); }
+    if (c.status === 'calling') { sendSignal(c, 'cancel', {}); finalizeCall('missed'); }
+    else { sendSignal(c, 'hangup', {}); finalizeCall(c.everConnected ? 'completed' : 'missed'); }
   } else {
     if (c.status === 'incoming') { declineCall(false); return; }
-    c.out.send({ kind: 'hangup', call_id: c.id, from: state.user.id });
+    sendSignal(c, 'hangup', {});
   }
   cleanupCall();
 }
@@ -5993,10 +6030,11 @@ function expandCall() { $('callScreen').classList.remove('minimized'); }
 function cleanupCall() {
   const c = state.call; if (!c) return; c.ending = true; state.call = null;
   stopRing();
-  clearTimeout(c.noAnswerTO); clearTimeout(c.incomingTO); clearTimeout(c.connectTO); clearInterval(c.timer); if (c.resend) clearInterval(c.resend);
+  clearTimeout(c.noAnswerTO); clearTimeout(c.incomingTO); clearTimeout(c.connectTO); clearInterval(c.timer);
   try { c.localStream && c.localStream.getTracks().forEach(t => t.stop()); } catch (_) {}
   try { c.pc && (c.pc.onicecandidate = c.pc.ontrack = c.pc.onconnectionstatechange = c.pc.oniceconnectionstatechange = null, c.pc.close()); } catch (_) {}
   try { c.out && c.out.close(); } catch (_) {}
+  sb.from('call_signals').delete().eq('call_id', c.id).then(() => {}, () => {});  // limpia señales de esta llamada
   $('callRemoteVideo').srcObject = null; $('callLocalVideo').srcObject = null;
   hideCallScreen();
 }
