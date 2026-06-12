@@ -39,6 +39,7 @@ const state = {
   dmReplyTo: null,     // mensaje al que se está respondiendo
   dmConv: null,        // canal realtime de la conversación abierta
   dmPendingFile: null,
+  hiddenConvos: new Set(JSON.parse(localStorage.getItem('ub_hidden_convos') || '[]')), // chats ocultados localmente
   groupId: null,       // id de la conversación de grupo abierta (null = DM 1-a-1)
   groupConv: null,     // datos de la conversación de grupo abierta
   groupMembers: {},    // miembros del grupo abierto (id → perfil)
@@ -1908,8 +1909,9 @@ async function loadRadioBatch() {
   _radioLoading = true;
   try {
     const exclude = new Set(state.queue);
-    const { data } = await sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)').order('plays', { ascending: false }).limit(80);
-    let pool = (data || []).filter(t => !exclude.has(t.id));
+    const beatsOnly = state._radioMode === 'beats';
+    const { data } = await sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)').order('plays', { ascending: false }).limit(200);
+    let pool = (data || []).filter(t => !exclude.has(t.id) && (beatsOnly ? t.is_beat : !t.is_beat));
     for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
     const batch = pool.slice(0, 20);
     batch.forEach(t => { if (!state.tracks.find(x => x.id === t.id)) state.tracks.push(t); });
@@ -1919,11 +1921,12 @@ async function loadRadioBatch() {
   finally { _radioLoading = false; }
 }
 // inicia una sesión de radio (mezcla sin fin) desde cero
-async function startRadio() {
-  toast('📻 Iniciando radio…');
-  const { data } = await sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)').order('created_at', { ascending: false }).limit(80);
-  let pool = (data || []).slice();
-  if (!pool.length) { toast('Aún no hay pistas para la radio'); return; }
+async function startRadio(beatsOnly = false) {
+  toast(beatsOnly ? '📻 Radio de beats…' : '📻 Iniciando radio…');
+  state._radioMode = beatsOnly ? 'beats' : 'tracks';
+  const { data } = await sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)').order('created_at', { ascending: false }).limit(200);
+  let pool = (data || []).filter(t => beatsOnly ? t.is_beat : !t.is_beat);
+  if (!pool.length) { toast(beatsOnly ? 'Aún no hay beats para la radio' : 'Aún no hay pistas para la radio'); return; }
   for (let i = pool.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [pool[i], pool[j]] = [pool[j], pool[i]]; }
   state.tracks = pool;
   state.queue = pool.map(t => t.id);
@@ -2871,14 +2874,14 @@ async function openProfile(userId) {
   main.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
   const { data: prof } = await sb.from('profiles').select('*').eq('id', userId).single();
   if (!prof) { main.innerHTML = '<div class="empty">Perfil no encontrado.</div>'; return; }
-  const [{ count: followers }, { count: following }, ownTracks, collabRes, badgesRes, { count: repostCount }] = await Promise.all([
+  const [{ count: followers }, ownTracks, collabRes, badgesRes] = await Promise.all([
     sb.from('follows').select('follower_id', { count:'exact', head:true }).eq('following_id', userId),
-    sb.from('follows').select('following_id', { count:'exact', head:true }).eq('follower_id', userId),
     fetchTracks({ order: 'created_at', userId }),
     sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)').contains('collaborators', JSON.stringify([{ id: userId }])).order('created_at', { ascending: false }),
     sb.from('user_badges').select('badge').eq('user_id', userId),
-    sb.from('reposts').select('track_id', { count:'exact', head:true }).eq('user_id', userId),
   ]);
+  // "likes" del perfil = total de me gusta recibidos en sus pistas
+  const totalLikes = (ownTracks || []).reduce((s, t) => s + (t.likes_count || 0), 0);
   const profBadges = (prof.is_admin ? Object.keys(BADGES) : (badgesRes.data || []).map(r => r.badge)).filter(b => BADGES[b]);
   const profBadgesHtml = profBadges.length ? `<div class="profile-badges">${profBadges.map(k => `<span class="bdg ${BADGES[k].cls}" title="${esc(BADGES[k].name)}">${BADGES[k].glyph} <span class="bdg-txt">${esc(BADGES[k].name)}</span></span>`).join('')}</div>` : '';
   // pistas propias y "feats" (cualquier colaboración que te involucra: tuyas con invitados
@@ -2918,7 +2921,7 @@ async function openProfile(userId) {
         <div class="pstats">
           <span class="pstat" data-pstat="tracks"><b>${myTracks.length}</b><i>pistas</i></span>
           <span class="pstat" data-pstat="followers"><b>${followers||0}</b><i>seguidores</i></span>
-          <span class="pstat" data-pstat="following"><b>${following||0}</b><i>siguiendo</i></span>
+          <span class="pstat" data-pstat="likes"><b>${totalLikes}</b><i>likes</i></span>
         </div>
         <div class="pactions">
           ${isMe ? `<button class="btn primary" id="customizeBtn"><svg fill="none" stroke="#fff"><use href="#i-palette"/></svg> Personalizar</button><button class="btn" id="editProfBtn"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg> Editar perfil</button><button class="btn" id="logoutBtn"><svg fill="none" stroke="currentColor"><use href="#i-logout"/></svg> Cerrar sesión</button>`
@@ -2936,7 +2939,7 @@ async function openProfile(userId) {
         <button class="active" data-ptab="tracks"><svg fill="none" stroke="currentColor"><use href="#i-music"/></svg> Pistas <span class="ptab-n">${myTracks.length}</span></button>
         <button data-ptab="posts"><svg fill="none" stroke="currentColor"><use href="#i-camera"/></svg> Fotos</button>
         <button data-ptab="feats"><svg fill="none" stroke="currentColor"><use href="#i-people"/></svg> Feats <span class="ptab-n">${featTracks.length}</span></button>
-        <button data-ptab="reposts"><svg fill="none" stroke="currentColor"><use href="#i-repeat"/></svg> Reposts <span class="ptab-n">${repostCount || 0}</span></button>
+        <button data-ptab="reposts"><svg fill="none" stroke="currentColor"><use href="#i-repeat"/></svg> Reposts</button>
         <button data-ptab="events"><svg fill="none" stroke="currentColor"><use href="#i-calendar"/></svg> Eventos</button>
       </div>
       <div id="feedList" class="feed-list"></div>
@@ -2985,14 +2988,14 @@ async function openProfile(userId) {
     }
   });
 
-  // estadísticas clicables: pistas → pestaña Pistas · seguidores/siguiendo → lista
+  // estadísticas clicables: pistas → pestaña Pistas · seguidores → lista · likes → no abre nada
   main.querySelectorAll('.pstat').forEach(s => s.onclick = () => {
     const k = s.dataset.pstat;
     if (k === 'tracks') {
       const tb = tabsEl.querySelector('[data-ptab="tracks"]');
       if (tb) tb.click();
       list.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    } else {
+    } else if (k === 'followers' || k === 'following') {
       openFollowList(userId, k);
     }
   });
@@ -4071,7 +4074,7 @@ async function renderBeats() {
   const main = $('main');
   main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
   main.innerHTML = `
-    <div class="main-head"><div><h2>Beats</h2><div class="sub">Beats que suben los productores · descárgalos gratis</div></div></div>
+    <div class="main-head"><div><h2>Beats</h2><div class="sub">Beats que suben los productores · descárgalos gratis</div></div><button class="btn sm" id="beatsRadioBtn"><svg fill="none" stroke="currentColor"><use href="#i-radio"/></svg> Radio de beats</button></div>
     <div class="beats-search"><svg fill="none" stroke="currentColor"><use href="#i-search"/></svg><input type="text" id="beatsSearch" placeholder="Buscar por título, género, BPM o tono…" /></div>
     <div id="beatsList" class="feed-list compact"><div class="loading" style="padding:30px"><div class="spinner"></div></div></div>`;
   const { data } = await sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)').eq('is_beat', true).order('created_at', { ascending: false }).limit(80);
@@ -4085,6 +4088,7 @@ async function renderBeats() {
     if (state.current && audio && !audio.paused) markPlayingCard();
   };
   renderList(all);
+  $('beatsRadioBtn').onclick = () => startRadio(true);
   $('beatsSearch').oninput = (e) => {
     const q = e.target.value.trim().toLowerCase();
     renderList(!q ? all : all.filter(t => (t.title || '').toLowerCase().includes(q) || (t.genre || '').toLowerCase().includes(q) || String(t.bpm || '').includes(q) || (t.song_key || '').toLowerCase().includes(q)));
@@ -5578,6 +5582,7 @@ function initDM() {
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'direct_messages', filter: `recipient_id=eq.${state.user.id}` }, async (payload) => {
       const msg = payload.new;
       if (isHidden(msg.sender_id)) return; // ignora DMs de usuarios bloqueados
+      if (state.hiddenConvos.has(msg.sender_id)) { state.hiddenConvos.delete(msg.sender_id); saveHiddenConvos(); } // un chat oculto reaparece con un mensaje nuevo
       if (state.dmPeer === msg.sender_id) {
         dmAppendMessage(msg, { scroll: true }); markDmRead(msg.sender_id); dmShowTyping(false);
       } else {
@@ -6823,8 +6828,26 @@ function convoRow(c, p) {
       ${c.unread ? '<span class="c-unread"></span>' : (online ? '<span class="conv-dot" title="En línea"></span>' : '')}
     </div>`);
   row.onclick = () => openDM(c.other);
+  attachLongPress(row, () => convoMenu(c, p));
   return row;
 }
+// menú al mantener pulsado una conversación en la lista de chats
+function convoMenu(c, p) {
+  const other = c.other;
+  const name = p.display_name || p.username || 'usuario';
+  const blocked = state.blocked.has(other);
+  return {
+    title: name,
+    items: [
+      { label: 'Ver perfil', icon: 'people', onClick: () => openProfile(other) },
+      c.unread ? { label: 'Marcar como leído', icon: 'check-double', onClick: () => { markDmRead(other); renderMessages(); } } : null,
+      { label: 'Eliminar chat', icon: 'trash', danger: true, onClick: () => { state.hiddenConvos.add(other); saveHiddenConvos(); renderMessages(); toast('Chat eliminado de tu lista'); } },
+      { label: blocked ? 'Desbloquear' : 'Bloquear', icon: 'x', danger: !blocked, onClick: () => { if (blocked) unblockUser(other, () => renderMessages()); else blockUser(other, name, () => renderMessages()); } },
+      { label: 'Reportar usuario', icon: 'bell', danger: true, onClick: () => openReportModal('user', other, other, '@' + (p.username || '')) },
+    ],
+  };
+}
+function saveHiddenConvos() { try { localStorage.setItem('ub_hidden_convos', JSON.stringify([...state.hiddenConvos])); } catch (_) {} }
 async function renderMessages() {
   setActiveNav('messages');
   $('main').innerHTML = `<div class="main-head"><div><h2>Chats</h2><div class="sub">Tus conversaciones</div></div><div style="display:flex;gap:8px;align-items:center"><button class="btn sm" id="newGroupBtn"><svg fill="none" stroke="currentColor"><use href="#i-people"/></svg> Nuevo grupo</button><div id="pushBtnWrap" class="push-btn-wrap"></div></div></div><div id="convoList" class="loading"><div class="spinner"></div></div>`;
@@ -6837,6 +6860,7 @@ async function renderMessages() {
   (data || []).forEach(mm => {
     const other = mm.sender_id === state.user.id ? mm.recipient_id : mm.sender_id;
     if (isHidden(other)) return; // ocultar conversaciones con usuarios bloqueados
+    if (state.hiddenConvos.has(other)) return; // chats eliminados localmente
     if (!convos.has(other)) convos.set(other, { other, last: mm, unread: 0 });
     if (mm.recipient_id === state.user.id && !mm.read) convos.get(other).unread++;
   });
@@ -6898,6 +6922,7 @@ async function renderMessages() {
 
 async function openDM(other) {
   if (!other || other === state.user.id) return;
+  if (state.hiddenConvos.has(other)) { state.hiddenConvos.delete(other); saveHiddenConvos(); }
   const { data: prof } = await sb.from('profiles').select('*').eq('id', other).single();
   if (!prof) { toast('Usuario no encontrado'); return; }
   state.dmPeer = other; state.dmPeerProfile = prof;

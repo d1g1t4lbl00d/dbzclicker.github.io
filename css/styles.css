@@ -1646,6 +1646,10 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
 :root[data-theme="dark"] .np-controls button:not(.np-play) { background: linear-gradient(180deg, #242b37, #1b212b); }
 :root[data-theme="dark"] .seek, :root[data-theme="dark"] .vol-slider { background: var(--line); }
 :root[data-theme="dark"] .wave .bar::before, :root[data-theme="dark"] .np-wave .bar::before { background: #2c3550; }
+/* la parte reproducida debe ganar a la regla oscura de arriba (más especificidad) */
+:root[data-theme="dark"] .wave .bar.played::before { background: linear-gradient(180deg, var(--aqua), var(--blue-deep)); }
+:root[data-theme="dark"] .np-wave .bar.played::before { background: linear-gradient(180deg, var(--aqua), var(--blue)); }
+:root[data-theme="dark"] .track.has-bg .wave .bar.played::before { background: #fff; }
 :root[data-theme="dark"] .now-playing { background: linear-gradient(180deg, #0b0f1c 0%, var(--bg) 55%, var(--bg-2) 100%); }
 :root[data-theme="dark"] .np-bg::after { background: linear-gradient(180deg, rgba(8,11,22,.4), rgba(5,6,15,.88)); }
 :root[data-theme="dark"] .np-close { background: rgba(255,255,255,.12); }
