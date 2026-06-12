@@ -5651,6 +5651,7 @@ function initCalls() {
         (p) => { const row = p.new; if (row && row.payload) onCallSignal(row.payload); })
       .subscribe();
     callSignalCatchUp();
+    getCallIceServers();   // pre-carga credenciales TURN: descolgar es instantáneo
   }
   $('dmCallBtn').onclick = () => startCall(false);
   $('dmVideoBtn').onclick = () => startCall(true);
@@ -5742,25 +5743,35 @@ function gumErrorMsg(err, video) {
   return video ? 'No se pudo acceder a la cámara/micrófono' : 'No se pudo acceder al micrófono';
 }
 
-// devuelve los servidores ICE: STUN + TURN de Cloudflare (credenciales temporales
-// vía edge function). Si Cloudflare no responde, usa el TURN público de respaldo.
+// Servidores ICE: STUN + TURN de Cloudflare con credenciales temporales.
+// Se intentan dos fuentes (RPC de Supabase y función /api/turn de Vercel) y,
+// solo si ambas fallan, el TURN público de respaldo. Se cachea ~12h.
 let callTurnCache = null;
+async function fetchTurnServers() {
+  // 1) RPC en Supabase (si está desplegada)
+  try {
+    const { data, error } = await sb.rpc('get_turn_credentials');
+    const ice = !error && data && data.iceServers;
+    if (ice) { console.log('[call] TURN: Cloudflare (RPC)'); return Array.isArray(ice) ? ice : [ice]; }
+  } catch (_) {}
+  // 2) función serverless en la propia web
+  try {
+    const r = await fetch('/api/turn', { method: 'POST' });
+    if (r.ok) {
+      const d = await r.json();
+      const ice = d && d.iceServers;
+      if (ice) { console.log('[call] TURN: Cloudflare (/api/turn)'); return Array.isArray(ice) ? ice : [ice]; }
+    }
+  } catch (_) {}
+  return null;
+}
 async function getCallIceServers() {
   const base = [{ urls: ['stun:stun.l.google.com:19302', 'stun:stun.cloudflare.com:3478'] }];
-  try {
-    if (!callTurnCache || Date.now() > callTurnCache.exp) {
-      const { data, error } = await sb.rpc('get_turn_credentials');
-      if (error) throw error;
-      const ice = data && data.iceServers;
-      if (ice) { callTurnCache = { servers: Array.isArray(ice) ? ice : [ice], exp: Date.now() + 3600000 }; }
-      else throw new Error('sin iceServers');
-    }
-    console.log('[call] TURN: Cloudflare');
-    return [...base, ...callTurnCache.servers];
-  } catch (e) {
-    console.warn('[call] TURN Cloudflare no disponible, uso respaldo público', e);
-    return [...base, ...CALL_ICE_SERVERS.slice(1)];
-  }
+  if (callTurnCache && Date.now() < callTurnCache.exp) return [...base, ...callTurnCache.servers];
+  const servers = await fetchTurnServers();
+  if (servers) { callTurnCache = { servers, exp: Date.now() + 12 * 3600000 }; return [...base, ...servers]; }
+  console.warn('[call] TURN Cloudflare no disponible, uso respaldo público');
+  return [...base, ...CALL_ICE_SERVERS.slice(1)];
 }
 
 function buildCallPc() {
