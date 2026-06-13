@@ -2090,6 +2090,7 @@ function openUploadModal(prefill) {
           <div class="fname" id="audioName"></div>
         </div>
         <input type="file" id="fAudio" accept="audio/*" hidden />
+        <audio id="audioPreview" class="up-preview hidden" controls preload="metadata"></audio>
       </div>
       <div class="field">
         <label>Portada (opcional)</label>
@@ -2116,7 +2117,7 @@ function openUploadModal(prefill) {
       <div class="auth-msg" id="uMsg"></div>
     </div>`);
 
-  let audioFile = null, coverFile = null, duration = 0;
+  let audioFile = null, coverFile = null, duration = 0, audioPreviewUrl = null;
   const dzA = m.querySelector('#dzAudio'), fA = m.querySelector('#fAudio');
   const dzC = m.querySelector('#dzCover'), fC = m.querySelector('#fCover');
 
@@ -2145,8 +2146,13 @@ function openUploadModal(prefill) {
     audioFile = f;
     m.querySelector('#audioName').textContent = f.name;
     if (!m.querySelector('#uTitle').value) m.querySelector('#uTitle').value = f.name.replace(/\.[^.]+$/,'');
-    const tmp = new Audio(URL.createObjectURL(f));
-    tmp.addEventListener('loadedmetadata', () => { duration = tmp.duration || 0; });
+    // preview: escucha la pista antes de subirla para confirmar que es la correcta
+    const prev = m.querySelector('#audioPreview');
+    if (audioPreviewUrl) { try { URL.revokeObjectURL(audioPreviewUrl); } catch (_) {} }
+    audioPreviewUrl = URL.createObjectURL(f);
+    prev.src = audioPreviewUrl;
+    prev.classList.remove('hidden');
+    prev.onloadedmetadata = () => { duration = prev.duration || 0; };
     analyzeUploadAudio(f);
   }
   // Pasa la pista por el analizador y autocompleta BPM/tono (sin pisar lo que el
