@@ -5723,7 +5723,7 @@ async function startCall(video) {
   if (state.blocked.has(peer) || state.hidden.has(peer)) { toast('No puedes llamar a este usuario'); return; }
   let media;
   try { media = await getCallStream(video); }
-  catch (err) { toast(gumErrorMsg(err, video)); return; }
+  catch (err) { handleGumError(err, video); return; }
   const { stream, camOk } = media;
   const ice = await getCallIceServers();
   const id = callId();
@@ -5776,6 +5776,46 @@ function gumErrorMsg(err, video) {
   if (n === 'NotFoundError' || n === 'OverconstrainedError') return video ? 'No se encontró cámara o micrófono' : 'No se encontró micrófono';
   if (n === 'NotReadableError') return 'El micrófono/cámara está siendo usado por otra app';
   return video ? 'No se pudo acceder a la cámara/micrófono' : 'No se pudo acceder al micrófono';
+}
+// ¿el error de getUserMedia es por permiso bloqueado/denegado?
+function isPermDenied(err) { const n = err && err.name; return n === 'NotAllowedError' || n === 'SecurityError'; }
+// Maneja el error: si es de permisos, abre la guía con pasos; si no, un aviso.
+function handleGumError(err, video) {
+  if (isPermDenied(err)) callPermHelp(video);
+  else toast(gumErrorMsg(err, video));
+}
+// Guía visual con los pasos exactos para activar micro/cámara en CADA dispositivo.
+// (El navegador no deja cambiar el permiso desde la web; solo podemos explicar cómo.)
+function callPermHelp(video) {
+  const ua = navigator.userAgent || '';
+  const isIOS = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isAndroid = /Android/i.test(ua);
+  const standalone = window.matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const que = video ? 'el <b>micrófono</b> y la <b>cámara</b>' : 'el <b>micrófono</b>';
+  let pasos;
+  if (isIOS) {
+    pasos = standalone
+      ? ['Abre los <b>Ajustes</b> de tu iPhone.', 'Baja hasta encontrar <b>UnderBro</b> en la lista de apps.', `Activa ${que}.`, 'Vuelve a UnderBro e intenta la llamada otra vez.']
+      : ['En Safari, toca el icono <b>“aA”</b> a la izquierda de la barra de dirección.', 'Pulsa <b>“Ajustes del sitio web”</b>.', `Pon ${que} en <b>“Permitir”</b>.`, 'Recarga la página.'];
+  } else if (isAndroid) {
+    pasos = standalone
+      ? ['Mantén pulsado el icono de <b>UnderBro</b> en tu pantalla.', 'Toca <b>“Información de la app”</b> (ⓘ).', `Entra en <b>Permisos</b> y activa ${que}.`, 'Vuelve a UnderBro e intenta de nuevo.']
+      : ['Toca el <b>candado 🔒</b> a la izquierda de la barra de dirección.', 'Pulsa <b>“Permisos”</b> (o “Configuración del sitio”).', `Activa ${que}.`, 'Recarga la página.'];
+  } else {
+    pasos = ['Haz clic en el icono de <b>cámara</b> o el <b>candado 🔒</b> a la izquierda de la barra de dirección.', `Selecciona <b>“Permitir”</b> para ${que}.`, 'Recarga la página y vuelve a llamar.'];
+  }
+  const lista = pasos.map((p, i) => `<li><span class="ph-n">${i + 1}</span><span>${p}</span></li>`).join('');
+  const m = openModal(`
+    <div class="modal-head"><h3>Activar ${video ? 'micro y cámara' : 'micrófono'}</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <p style="margin:0 0 14px;color:var(--ink-soft);font-size:14px">Para las llamadas, UnderBro necesita permiso para ${que}. Tu dispositivo lo bloqueó; actívalo así:</p>
+      <ol class="perm-steps">${lista}</ol>
+      <button class="btn primary" id="permRetry" style="width:100%;margin-top:6px">Ya lo activé · reintentar</button>
+    </div>`);
+  m.querySelector('#permRetry').onclick = async () => {
+    try { const s = await navigator.mediaDevices.getUserMedia({ audio: true, video }); s.getTracks().forEach(t => t.stop()); m.remove(); toast('¡Permiso concedido! Ya puedes llamar.'); }
+    catch (_) { toast('Aún bloqueado. Si acabas de cambiarlo, recarga la página.'); }
+  };
 }
 
 // Servidores ICE: STUN + TURN de Cloudflare con credenciales temporales.
@@ -6005,7 +6045,7 @@ async function acceptCall() {
   clearTimeout(c.incomingTO); stopRing();
   let media;
   try { media = await getCallStream(c.video); }
-  catch (err) { console.error('[call] gUM accept', err); toast(gumErrorMsg(err, c.video)); declineCall(false, 'media'); return; }
+  catch (err) { console.error('[call] gUM accept', err); handleGumError(err, c.video); declineCall(false, 'media'); return; }
   const stream = media.stream;
   if (c.video && !media.camOk) { c.camOff = true; toast('Tu cámara no está disponible: envías solo audio'); }
   c.iceServers = await getCallIceServers();
