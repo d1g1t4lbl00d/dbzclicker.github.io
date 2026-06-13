@@ -1352,6 +1352,15 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
 @keyframes twinkle { 0%,100%{ opacity:.12; transform: scale(.8);} 50%{ opacity:.95; transform: scale(1.2);} }
 .pfx-notes i { position: absolute; bottom: -30px; color: var(--accent); opacity: .55; animation: rise linear infinite; font-style: normal; }
 @keyframes rise { 0%{ transform: translateY(0) rotate(0); opacity:0;} 12%{opacity:.6;} 100%{ transform: translateY(-820px) rotate(40deg); opacity:0;} }
+.pfx-hearts i { position: absolute; bottom: -30px; color: var(--accent); opacity: .6; animation: rise linear infinite; font-style: normal; }
+.pfx-bubbles i { position: absolute; bottom: -40px; border-radius: 50%; background: radial-gradient(circle at 30% 30%, rgba(255,255,255,.75), color-mix(in srgb, var(--accent) 35%, transparent)); border: 1px solid rgba(255,255,255,.35); animation: rise linear infinite; }
+.pfx-snow i { position: absolute; top: -12px; width: var(--sz,3px); height: var(--sz,3px); background: #fff; border-radius: 50%; box-shadow: 0 0 4px rgba(255,255,255,.7); animation: fall linear infinite; }
+.pfx-rain i { position: absolute; top: -20px; width: 2px; background: linear-gradient(180deg, transparent, color-mix(in srgb, var(--accent) 70%, #8fb6ff)); border-radius: 2px; opacity: .6; animation: fall linear infinite; }
+.pfx-confetti i { position: absolute; top: -16px; width: 8px; height: 12px; border-radius: 2px; animation: confetti-fall linear infinite; }
+.pfx-fireflies i { position: absolute; width: 4px; height: 4px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px 2px var(--accent); animation: firefly ease-in-out infinite; }
+@keyframes fall { 0%{ transform: translateY(0); opacity:0;} 10%{opacity:1;} 100%{ transform: translateY(780px); opacity:.15;} }
+@keyframes confetti-fall { 0%{ transform: translateY(0) rotate(0); opacity:0;} 10%{opacity:1;} 100%{ transform: translateY(780px) rotate(620deg); opacity:.25;} }
+@keyframes firefly { 0%,100%{ opacity:.1; transform: translate(0,0);} 50%{ opacity:1; transform: translate(12px,-14px);} }
 
 /* estilos de tarjeta */
 .cards-glass .track { background: rgba(255,255,255,.5); backdrop-filter: blur(10px) saturate(1.25); border-color: rgba(255,255,255,.6); }
@@ -1366,6 +1375,36 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
 .cards-dark .comment .c-name { color: #eef2fb; }
 .cards-dark .comment .c-body p { color: #c3cde0; }
 .cards-dark .comment-form input, .cards-dark .t-genre { background: #232a3d; border-color: #2c3550; color: #c3cde0; }
+.cards-minimal .track { background: transparent; border-color: transparent; box-shadow: none; border-bottom: 1px solid var(--line-soft); border-radius: 0; }
+.cards-gradient .track { background: linear-gradient(135deg, color-mix(in srgb, var(--accent) 16%, var(--panel)), var(--panel)); border-color: color-mix(in srgb, var(--accent) 30%, var(--line)); }
+.cards-outline .track { background: transparent; border: 1.5px solid color-mix(in srgb, var(--accent) 45%, var(--line)); box-shadow: none; }
+
+/* estilos del nombre */
+.name-gradient { background: linear-gradient(90deg, var(--accent), color-mix(in srgb, var(--accent) 35%, #b06bff)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
+.name-neon { color: var(--accent); text-shadow: 0 0 6px var(--accent), 0 0 18px var(--accent); }
+.name-outline { color: transparent; -webkit-text-stroke: 1.4px var(--accent); }
+.name-shadow { color: var(--ink); text-shadow: 2px 2px 0 color-mix(in srgb, var(--accent) 70%, transparent), 4px 4px 0 color-mix(in srgb, var(--accent) 32%, transparent); }
+
+/* borde / anillo del avatar */
+.ph-avatar.ring-accent .avatar { box-shadow: 0 0 0 3px var(--panel), 0 0 0 6px var(--accent); }
+.ph-avatar.ring-glow .avatar { box-shadow: 0 0 0 3px var(--panel), 0 0 22px 4px var(--accent); }
+.ph-avatar.ring-gradient, .ph-avatar.ring-rainbow { display: inline-block; padding: 4px; border-radius: 50%; }
+.ph-avatar.ring-gradient .avatar, .ph-avatar.ring-rainbow .avatar { display: block; box-shadow: 0 0 0 3px var(--panel); }
+.ph-avatar.ring-gradient::before, .ph-avatar.ring-rainbow::before { content: ""; position: absolute; inset: 0; border-radius: 50%; z-index: -1; }
+.ph-avatar.ring-gradient::before { background: linear-gradient(135deg, var(--accent), #b06bff); }
+.ph-avatar.ring-rainbow::before { background: conic-gradient(#ff5b8d,#ffd23f,#7CFC00,#3ec5ff,#b06bff,#ff5b8d); animation: ringspin 6s linear infinite; }
+@keyframes ringspin { to { transform: rotate(360deg); } }
+
+/* altura del banner */
+.profile-cover.cover-short { height: 130px; }
+.profile-cover.cover-tall { height: 300px; }
+@media (max-width: 560px) { .profile-cover.cover-short { height: 100px; } .profile-cover.cover-tall { height: 220px; } }
+
+/* presets del personalizador */
+.preset-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.preset-chip { padding: 7px 13px; border-radius: 20px; border: 1px solid var(--line); background: var(--panel-2); font-size: 12.5px; font-weight: 700; cursor: pointer; color: var(--ink-2); transition: border-color .15s, background .15s; }
+.preset-chip:hover { border-color: var(--accent, var(--blue)); }
+.preset-chip.on { background: var(--accent-grad, var(--blue)); color: #fff; border-color: transparent; }
 
 .empty { text-align: center; color: var(--ink-soft); padding: 56px 20px; animation: fadeIn .3s; }
 .empty svg { width: 50px; height: 50px; stroke: var(--ink-faint); margin-bottom: 14px; opacity: .6; animation: floaty 3.5s ease-in-out infinite; }
