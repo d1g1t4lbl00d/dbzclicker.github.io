@@ -5661,6 +5661,17 @@ function initCalls() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'call_signals', filter: `recipient_id=eq.${state.user.id}` },
         (p) => { const row = p.new; if (row && row.payload) onCallSignal(row.payload); })
       .subscribe();
+    // ¿se abrió la app desde la notificación de llamada? (Aceptar/Rechazar)
+    try {
+      const ucall = new URLSearchParams(location.search).get('ucall');
+      if (ucall) { setAutoCallAction(ucall); history.replaceState(null, '', location.pathname); }
+    } catch (_) {}
+    // acciones de la notificación cuando la app ya estaba abierta en segundo plano
+    if (navigator.serviceWorker) {
+      navigator.serviceWorker.addEventListener('message', (e) => {
+        if (e.data && e.data.type === 'callAction') { setAutoCallAction(e.data.action); applyAutoCallAction(); }
+      });
+    }
     callSignalCatchUp();
     getCallIceServers();   // pre-carga credenciales TURN: descolgar es instantáneo
     // al volver del segundo plano (móvil), el vídeo puede quedarse pausado: relánzalo
@@ -6026,6 +6037,22 @@ async function onCallSignal(p) {
   }
 }
 
+// acción pendiente pedida desde la notificación (aceptar/rechazar al abrir)
+function setAutoCallAction(a) {
+  state._autoCallAction = a;
+  clearTimeout(state._autoCallTO);
+  state._autoCallTO = setTimeout(() => { state._autoCallAction = null; }, 25000);
+}
+function applyAutoCallAction() {
+  const a = state._autoCallAction;
+  if (!a) return;
+  const c = state.call;
+  if (c && c.role === 'callee' && c.status === 'incoming') {
+    state._autoCallAction = null; clearTimeout(state._autoCallTO);
+    if (a === 'decline') declineCall(false); else acceptCall();
+  }
+}
+
 async function handleIncomingCall(p) {
   let prof = null; try { ({ data: prof } = await sb.from('profiles').select('*').eq('id', p.from).single()); } catch (_) {}
   state.call = {
@@ -6038,6 +6065,7 @@ async function handleIncomingCall(p) {
   startRingtone();
   haptic(30);
   state.call.incomingTO = setTimeout(() => { if (state.call && state.call.id === p.call_id && state.call.status === 'incoming') declineCall(true); }, 35000);
+  applyAutoCallAction();   // si se abrió desde la notificación con Aceptar/Rechazar
 }
 
 async function acceptCall() {
@@ -7331,7 +7359,18 @@ function urlBase64ToUint8Array(base64String) {
 async function setupPush() {
   if (!pushSupported()) return;
   try { swRegistration = await navigator.serviceWorker.register('/sw.js'); } catch (_) { return; }
-  if (Notification.permission === 'granted') { try { await subscribeAndSave(); } catch (_) {} }
+  if (Notification.permission === 'granted') { try { await subscribeAndSave(); } catch (_) {} return; }
+  // pedir permiso una sola vez (clave para recibir llamadas/mensajes con la app cerrada)
+  if (Notification.permission === 'default' && !localStorage.getItem('ub_push_asked')) {
+    localStorage.setItem('ub_push_asked', '1');
+    setTimeout(async () => {
+      try {
+        const perm = await Notification.requestPermission();
+        if (perm === 'granted') { await subscribeAndSave(); toast('🔔 Avisos activados: recibirás llamadas y mensajes'); }
+      } catch (_) {}
+      renderPushButton();
+    }, 3000);
+  }
 }
 async function subscribeAndSave() {
   if (!swRegistration) swRegistration = await navigator.serviceWorker.ready;
