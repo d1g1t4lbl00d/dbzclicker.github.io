@@ -4632,7 +4632,7 @@ async function renderAudioAnalyzer() {
   const main = $('main');
   main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
   main.innerHTML = `
-${toolBar('analyzer', 'Analizador de audio', 'Tono · BPM · volumen — sin salir del navegador', { id: 'anBack', label: 'Herramientas' })}
+${toolBar('analyzer', 'Analizador de audio', 'Tono · BPM · volumen — sin salir del navegador', { id: 'anBack', label: 'Workflow' })}
     <div class="an-wrap">
       <div class="dropzone an-dz" id="anDz">
         <svg fill="none" stroke="currentColor"><use href="#i-upload"/></svg>
@@ -4790,7 +4790,7 @@ async function renderPressKit() {
   const k = pkState;
   const tpls = [['dark', 'Oscuro'], ['light', 'Claro'], ['gradient', 'Degradado']];
   main.innerHTML = `
-${toolBar('presskit', 'Press Kit / EPK', 'Edita a la izquierda, mira el resultado a la derecha', { id: 'pkBack', label: 'Herramientas' })}
+${toolBar('presskit', 'Press Kit / EPK', 'Edita a la izquierda, mira el resultado a la derecha', { id: 'pkBack', label: 'Workflow' })}
     <div class="pk-builder">
       <div class="pk-form">
         <div class="pk-fsec"><h4>Identidad</h4>
@@ -5061,7 +5061,7 @@ async function renderSmartLinks() {
   const main = $('main');
   main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
   main.innerHTML = `
-${toolBar('smartlink', 'Smart links', 'Un enlace para tu bio que lleva a todas las plataformas', { id: 'smBack', label: 'Herramientas' })}
+${toolBar('smartlink', 'Smart links', 'Un enlace para tu bio que lleva a todas las plataformas', { id: 'smBack', label: 'Workflow' })}
     <button class="btn primary" id="smNew" style="margin-bottom:14px"><svg fill="none" stroke="#fff"><use href="#i-plus"/></svg> Nuevo smart link</button>
     <div id="smList" class="loading" style="padding:30px"><div class="spinner"></div></div>`;
   $('smBack').onclick = () => switchView('tools');
@@ -5259,7 +5259,7 @@ async function renderSplitSheets() {
   const main = $('main');
   main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
   main.innerHTML = `
-${toolBar('split', 'Split sheets', 'Reparto de autoría de tus colaboraciones', { id: 'ssBack', label: 'Herramientas' })}
+${toolBar('split', 'Split sheets', 'Reparto de autoría de tus colaboraciones', { id: 'ssBack', label: 'Workflow' })}
     <button class="btn primary" id="ssNew" style="margin-bottom:14px"><svg fill="none" stroke="#fff"><use href="#i-plus"/></svg> Nuevo split sheet</button>
     <div id="ssList" class="loading" style="padding:30px"><div class="spinner"></div></div>`;
   $('ssBack').onclick = () => switchView('tools');
