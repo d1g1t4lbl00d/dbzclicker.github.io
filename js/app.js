@@ -2705,6 +2705,17 @@ const FONTS = {
   'Orbitron': 'Orbitron:wght@600;800',
   'Righteous': 'Righteous',
   'Caveat': 'Caveat:wght@600;700',
+  'Anton': 'Anton',
+  'Audiowide': 'Audiowide',
+  'Press Start 2P': 'Press+Start+2P',
+  'Permanent Marker': 'Permanent+Marker',
+  'Dancing Script': 'Dancing+Script:wght@600;700',
+  'Playfair Display': 'Playfair+Display:wght@600;800',
+  'Russo One': 'Russo+One',
+  'Satisfy': 'Satisfy',
+  'Rubik Mono One': 'Rubik+Mono+One',
+  'Quicksand': 'Quicksand:wght@500;700',
+  'Monoton': 'Monoton',
 };
 const _fontsLoaded = new Set();
 function loadFont(name) {
@@ -2716,9 +2727,23 @@ function loadFont(name) {
   link.href = `https://fonts.googleapis.com/css2?family=${spec}&display=swap`;
   document.head.appendChild(link);
 }
-const EFFECTS = { 'none': 'Ninguno', 'aurora': 'Aurora', 'stars': 'Estrellas', 'notes': 'Notas musicales' };
+const EFFECTS = { 'none': 'Ninguno', 'aurora': 'Aurora', 'stars': 'Estrellas', 'notes': 'Notas musicales', 'hearts': 'Corazones', 'snow': 'Nieve', 'bubbles': 'Burbujas', 'fireflies': 'Luciérnagas', 'rain': 'Lluvia', 'confetti': 'Confeti' };
 const GLOWS = { 'none': 'Ninguno', 'soft': 'Suave', 'neon': 'Neón' };
-const CARD_STYLES = { 'default': 'Normal', 'glass': 'Cristal', 'dark': 'Oscuro', 'neon': 'Neón' };
+const CARD_STYLES = { 'default': 'Normal', 'glass': 'Cristal', 'dark': 'Oscuro', 'neon': 'Neón', 'minimal': 'Minimal', 'gradient': 'Degradado', 'outline': 'Contorno' };
+const NAME_STYLES = { 'none': 'Normal', 'gradient': 'Degradado', 'neon': 'Neón', 'outline': 'Contorno', 'shadow': 'Sombra 3D' };
+const AVATAR_RINGS = { 'none': 'Ninguno', 'accent': 'Acento', 'glow': 'Brillo', 'gradient': 'Degradado', 'rainbow': 'Arcoíris' };
+const BANNER_HEIGHTS = { 'normal': 'Normal', 'short': 'Bajo', 'tall': 'Alto' };
+// presets de un clic: aplican varias opciones a la vez (luego se pueden retocar)
+const THEME_PRESETS = {
+  'Neón':       { accent: '#00e5ff', font: 'Orbitron', glow: 'neon', cards: 'neon', effect: 'stars', nameStyle: 'neon', avatarRing: 'glow', bg: { type: 'gradient', c1: '#0a0e23', c2: '#1a1040', animated: true } },
+  'Vaporwave':  { accent: '#ff77e9', font: 'Audiowide', glow: 'soft', cards: 'glass', effect: 'bubbles', nameStyle: 'gradient', avatarRing: 'gradient', bg: { type: 'gradient', c1: '#ff77e9', c2: '#7b5cff', animated: true } },
+  'Atardecer':  { accent: '#ff7a45', font: 'Poppins', glow: 'soft', cards: 'glass', effect: 'none', nameStyle: 'gradient', avatarRing: 'accent', bg: { type: 'gradient', c1: '#ff9a5a', c2: '#ff5b8d', animated: false } },
+  'Minimal':    { accent: '#111418', font: 'Montserrat', glow: 'none', cards: 'minimal', effect: 'none', nameStyle: 'none', avatarRing: 'none', bg: { type: 'solid', c1: '#f7f8fb' } },
+  'Oscuro Pro': { accent: '#6f8fc6', font: 'Poppins', glow: 'soft', cards: 'dark', effect: 'fireflies', nameStyle: 'shadow', avatarRing: 'glow', bg: { type: 'gradient', c1: '#0e1320', c2: '#161d33', animated: false } },
+  'Romántico':  { accent: '#ff5b8d', font: 'Dancing Script', glow: 'soft', cards: 'glass', effect: 'hearts', nameStyle: 'gradient', avatarRing: 'gradient', bg: { type: 'gradient', c1: '#ffd9e6', c2: '#ffb3d1', animated: false } },
+  'Gamer':      { accent: '#7CFC00', font: 'Press Start 2P', glow: 'neon', cards: 'neon', effect: 'confetti', nameStyle: 'neon', avatarRing: 'rainbow', bg: { type: 'gradient', c1: '#0d0d12', c2: '#1a1030', animated: true } },
+  'Invierno':   { accent: '#56b6ff', font: 'Quicksand', glow: 'soft', cards: 'glass', effect: 'snow', nameStyle: 'none', avatarRing: 'accent', bg: { type: 'gradient', c1: '#dff1ff', c2: '#bfe0ff', animated: false } },
+};
 function buildEffect(kind) {
   const fx = document.createElement('div');
   fx.className = 'pfx pfx-' + kind;
@@ -2729,6 +2754,19 @@ function buildEffect(kind) {
     for (let i = 0; i < 18; i++) { const s = document.createElement('i'); s.textContent = g[i % g.length]; s.style.left = (Math.random()*100)+'%'; s.style.animationDelay = (Math.random()*9)+'s'; s.style.animationDuration = (8+Math.random()*8)+'s'; s.style.fontSize = (12+Math.random()*18)+'px'; fx.appendChild(s); }
   } else if (kind === 'aurora') {
     fx.innerHTML = '<span></span><span></span><span></span>';
+  } else if (kind === 'hearts') {
+    for (let i = 0; i < 16; i++) { const s = document.createElement('i'); s.textContent = '❤'; s.style.left = (Math.random()*100)+'%'; s.style.animationDelay = (Math.random()*9)+'s'; s.style.animationDuration = (8+Math.random()*8)+'s'; s.style.fontSize = (12+Math.random()*20)+'px'; fx.appendChild(s); }
+  } else if (kind === 'snow') {
+    for (let i = 0; i < 50; i++) { const s = document.createElement('i'); s.style.left = (Math.random()*100)+'%'; s.style.animationDelay = (Math.random()*8)+'s'; s.style.animationDuration = (6+Math.random()*8)+'s'; s.style.setProperty('--sz', (2+Math.random()*4).toFixed(1)+'px'); s.style.opacity = (0.3+Math.random()*0.6).toFixed(2); fx.appendChild(s); }
+  } else if (kind === 'bubbles') {
+    for (let i = 0; i < 22; i++) { const s = document.createElement('i'); s.style.left = (Math.random()*100)+'%'; s.style.animationDelay = (Math.random()*10)+'s'; s.style.animationDuration = (9+Math.random()*9)+'s'; const sz = (8+Math.random()*34)|0; s.style.width = sz+'px'; s.style.height = sz+'px'; fx.appendChild(s); }
+  } else if (kind === 'fireflies') {
+    for (let i = 0; i < 30; i++) { const s = document.createElement('i'); s.style.left = (Math.random()*100)+'%'; s.style.top = (Math.random()*100)+'%'; s.style.animationDelay = (Math.random()*5)+'s'; s.style.animationDuration = (3+Math.random()*5)+'s'; fx.appendChild(s); }
+  } else if (kind === 'rain') {
+    for (let i = 0; i < 45; i++) { const s = document.createElement('i'); s.style.left = (Math.random()*100)+'%'; s.style.animationDelay = (Math.random()*2)+'s'; s.style.animationDuration = (0.5+Math.random()*0.7).toFixed(2)+'s'; s.style.height = (10+Math.random()*16)+'px'; fx.appendChild(s); }
+  } else if (kind === 'confetti') {
+    const cols = ['#ff5b8d','#ffd23f','#3ec5ff','#7CFC00','#b06bff','#ff7a45'];
+    for (let i = 0; i < 36; i++) { const s = document.createElement('i'); s.style.left = (Math.random()*100)+'%'; s.style.animationDelay = (Math.random()*6)+'s'; s.style.animationDuration = (5+Math.random()*6)+'s'; s.style.background = cols[i % cols.length]; s.style.transform = `rotate(${Math.random()*360}deg)`; fx.appendChild(s); }
   }
   return fx;
 }
@@ -2740,6 +2778,9 @@ function openProfileCustomizer() {
   const m = openModal(`
     <div class="modal-head"><h3>Personalizar perfil</h3><button class="close">&times;</button></div>
     <div class="modal-body">
+      <div class="field"><label>Estilos rápidos (presets)</label>
+        <div class="preset-row" id="presetRow">${Object.keys(THEME_PRESETS).map(n => `<button type="button" class="preset-chip" data-preset="${esc(n)}">${esc(n)}</button>`).join('')}</div>
+      </div>
       <div class="field"><label>Banner (cabecera)</label>
         <div class="cover-pick" id="bannerPick">
           <div class="cover-prev cz-banner" id="bannerPrev">${t.banner ? `<img src="${esc(t.banner)}" alt="" ${czPos(t.bannerPos) ? `style="object-position:${czPos(t.bannerPos)}"` : ''} />` : `<svg width="22" height="22" fill="none" stroke="currentColor"><use href="#i-image"/></svg>`}</div>
@@ -2765,6 +2806,9 @@ function openProfileCustomizer() {
         </div>
         <input type="file" id="bgFile" accept="image/*" hidden />
       </div>
+      <div class="field"><label>Estilo del nombre</label><select class="cz-select" id="thName">${Object.entries(NAME_STYLES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+      <div class="field"><label>Borde del avatar</label><select class="cz-select" id="thRing">${Object.entries(AVATAR_RINGS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
+      <div class="field"><label>Altura del banner</label><select class="cz-select" id="thBannerH">${Object.entries(BANNER_HEIGHTS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
       <div class="field"><label>Brillo (glow)</label><select class="cz-select" id="thGlow">${Object.entries(GLOWS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
       <div class="field"><label>Efecto animado</label><select class="cz-select" id="thEffect">${Object.entries(EFFECTS).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
       <div class="field"><label>Estilo de tarjetas</label><select class="cz-select" id="thCards">${Object.entries(CARD_STYLES).map(([k, v]) => `<option value="${k}">${v}</option>`).join('')}</select></div>
@@ -2805,7 +2849,30 @@ function openProfileCustomizer() {
   m.querySelector('#thGlow').value = GLOWS[t.glow] ? t.glow : 'none';
   m.querySelector('#thEffect').value = EFFECTS[t.effect] ? t.effect : 'none';
   m.querySelector('#thCards').value = CARD_STYLES[t.cards] ? t.cards : 'default';
+  m.querySelector('#thName').value = NAME_STYLES[t.nameStyle] ? t.nameStyle : 'none';
+  m.querySelector('#thRing').value = AVATAR_RINGS[t.avatarRing] ? t.avatarRing : 'none';
+  m.querySelector('#thBannerH').value = BANNER_HEIGHTS[t.bannerH] ? t.bannerH : 'normal';
   m.querySelector('#bgAnim').checked = !!t.bg.animated;
+  // presets: aplican varias opciones a los controles (sin guardar todavía)
+  m.querySelectorAll('[data-preset]').forEach(b => b.onclick = () => {
+    const p = THEME_PRESETS[b.dataset.preset]; if (!p) return;
+    if (p.accent) m.querySelector('#thAccent').value = p.accent;
+    if (p.font) { m.querySelector('#thFont').value = p.font; loadFont(p.font); }
+    if (p.glow) m.querySelector('#thGlow').value = p.glow;
+    if (p.effect) m.querySelector('#thEffect').value = p.effect;
+    if (p.cards) m.querySelector('#thCards').value = p.cards;
+    if (p.nameStyle) m.querySelector('#thName').value = p.nameStyle;
+    if (p.avatarRing) m.querySelector('#thRing').value = p.avatarRing;
+    if (p.bg) {
+      bgType.value = p.bg.type || 'gradient';
+      if (p.bg.c1) m.querySelector('#bgC1').value = p.bg.c1;
+      if (p.bg.c2) m.querySelector('#bgC2').value = p.bg.c2;
+      m.querySelector('#bgAnim').checked = !!p.bg.animated;
+      syncBgType(); syncAnim();
+    }
+    m.querySelectorAll('[data-preset]').forEach(x => x.classList.toggle('on', x === b));
+    toast('Preset “' + b.dataset.preset + '” aplicado · ajústalo y guarda');
+  });
   const syncAnim = () => { m.querySelector('#bgAnimRow').style.display = (bgType.value === 'gradient') ? 'flex' : 'none'; };
   bgType.addEventListener('change', syncAnim); syncAnim();
   // previsualizar la fuente al elegirla
@@ -2847,6 +2914,9 @@ function openProfileCustomizer() {
         glow: m.querySelector('#thGlow').value,
         effect: m.querySelector('#thEffect').value,
         cards: m.querySelector('#thCards').value,
+        nameStyle: m.querySelector('#thName').value,
+        avatarRing: m.querySelector('#thRing').value,
+        bannerH: m.querySelector('#thBannerH').value,
       };
       if (bannerFile) {
         const ext = (bannerFile.name.split('.').pop() || 'jpg').toLowerCase();
@@ -2910,16 +2980,19 @@ async function openProfile(userId) {
   const glowCls = theme.glow === 'neon' ? 'glow-neon' : theme.glow === 'soft' ? 'glow-soft' : '';
   const cardsCls = (theme.cards && theme.cards !== 'default' && CARD_STYLES[theme.cards]) ? 'cards-' + theme.cards : '';
   const animCls = (theme.bg && theme.bg.type === 'gradient' && theme.bg.animated) ? 'bg-animated' : '';
+  const nameCls = (theme.nameStyle && theme.nameStyle !== 'none' && NAME_STYLES[theme.nameStyle]) ? 'name-' + theme.nameStyle : '';
+  const ringCls = (theme.avatarRing && theme.avatarRing !== 'none' && AVATAR_RINGS[theme.avatarRing]) ? 'ring-' + theme.avatarRing : '';
+  const bannerHCls = (theme.bannerH && theme.bannerH !== 'normal' && BANNER_HEIGHTS[theme.bannerH]) ? 'cover-' + theme.bannerH : '';
   const tagline = (typeof theme.tagline === 'string') ? theme.tagline.slice(0, 140) : '';
   const backTo = ['feed','posts','people','messages','favorites','mytracks','all','downloads','notifications','search'].includes(state.view) ? state.view : 'feed';
   main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
   main.innerHTML = `
     <div class="profile-view ${glowCls} ${cardsCls} ${animCls}" style="--accent:${accent};${fontVar}${bgStyle(theme)}">
       <button class="profile-back" id="profileBack"><svg fill="none" stroke="currentColor"><use href="#i-chevron-left"/></svg> Volver</button>
-      ${banner ? `<div class="profile-cover"><img class="cover-img" src="${banner}" alt="" style="object-position:${bannerPos};transform:scale(${bannerZoom})" /></div>` : `<div class="profile-cover profile-cover-grad"></div>`}
+      ${banner ? `<div class="profile-cover ${bannerHCls}"><img class="cover-img" src="${banner}" alt="" style="object-position:${bannerPos};transform:scale(${bannerZoom})" /></div>` : `<div class="profile-cover profile-cover-grad ${bannerHCls}"></div>`}
       <div class="profile-head ${banner ? 'has-banner' : ''}">
-        <div class="ph-avatar">${avatarHTML(prof)}</div>
-        <h2 class="accent-name">${esc(prof.display_name || prof.username)}${verifiedBadge(prof)}${displayBadgeHtml(prof)} ${prof.is_admin?'<span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c;vertical-align:middle">MOD</span>':''} ${prof.banned?'<span class="t-genre" style="background:#fae3e0;border-color:#f0c2bc;color:#c0533f;vertical-align:middle">baneado</span>':''}</h2>
+        <div class="ph-avatar ${ringCls}">${avatarHTML(prof)}</div>
+        <h2 class="accent-name ${nameCls}" data-name="${esc(prof.display_name || prof.username)}">${esc(prof.display_name || prof.username)}${verifiedBadge(prof)}${displayBadgeHtml(prof)} ${prof.is_admin?'<span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c;vertical-align:middle">MOD</span>':''} ${prof.banned?'<span class="t-genre" style="background:#fae3e0;border-color:#f0c2bc;color:#c0533f;vertical-align:middle">baneado</span>':''}</h2>
         <div class="ph-handle">@${esc(prof.username)}</div>
         ${prof.show_badges ? profBadgesHtml : ''}
         ${tagline ? `<div class="profile-tagline">${esc(tagline)}</div>` : ''}
