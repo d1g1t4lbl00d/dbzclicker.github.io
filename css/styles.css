@@ -1406,6 +1406,42 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
 .preset-chip:hover { border-color: var(--accent, var(--blue)); }
 .preset-chip.on { background: var(--accent-grad, var(--blue)); color: #fff; border-color: transparent; }
 
+/* ===== ECOSYSTEMS ===== */
+.eco-map { display: flex; flex-direction: column; align-items: center; gap: 0; max-width: 560px; margin: 0 auto; padding: 6px 0 30px; }
+.eco-node { width: 100%; display: flex; align-items: center; gap: 14px; text-align: left; padding: 16px 18px; border-radius: var(--r-lg); border: 1px solid var(--line); background: var(--panel); box-shadow: var(--sh-1); cursor: pointer; position: relative; transition: transform .15s var(--ease), box-shadow .2s, border-color .2s; }
+.eco-node:hover { transform: translateY(-2px); box-shadow: var(--sh-2); border-color: var(--ea); }
+.eco-node .eco-n { position: absolute; top: -9px; left: 14px; width: 22px; height: 22px; border-radius: 50%; background: var(--ea); color: #fff; font-size: 12px; font-weight: 800; display: grid; place-items: center; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
+.eco-node .eco-ico { width: 52px; height: 52px; flex: none; border-radius: 15px; background: var(--ea); display: grid; place-items: center; box-shadow: 0 6px 16px color-mix(in srgb, var(--ea) 40%, transparent); }
+.eco-node .eco-ico svg { width: 26px; height: 26px; stroke: #fff; fill: none; }
+.eco-node .eco-txt { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.eco-node .eco-txt b { font-size: 16px; font-weight: 800; color: var(--ink); }
+.eco-node .eco-txt span { font-size: 12.5px; color: var(--ink-soft); }
+.eco-node .eco-go { font-size: 20px; color: var(--ea); font-weight: 700; flex: none; }
+.eco-link { width: 2px; height: 20px; background: linear-gradient(var(--line), transparent); }
+.eco-head-l { display: flex; align-items: center; gap: 10px; }
+.eco-sec { font-size: 14px; font-weight: 800; color: var(--ink); margin: 20px 0 10px; }
+.eco-hint { font-size: 13px; color: var(--ink-soft); padding: 4px 2px 8px; }
+.eco-tabs { display: flex; gap: 6px; margin: 4px 0 14px; overflow-x: auto; scrollbar-width: none; }
+.eco-tabs::-webkit-scrollbar { display: none; }
+.eco-tabs button { flex: none; padding: 8px 16px; border-radius: 22px; border: 1px solid var(--line); background: var(--panel-2); font-weight: 700; font-size: 13px; color: var(--ink-soft); cursor: pointer; white-space: nowrap; }
+.eco-tabs button.active { background: var(--accent-grad); color: #fff; border-color: transparent; }
+/* Skins */
+.skin-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 10px; }
+.skin-card { display: flex; align-items: center; gap: 9px; padding: 11px 13px; border-radius: 14px; border: 1.5px solid var(--line); background: var(--panel); font-weight: 700; font-size: 13.5px; color: var(--ink); cursor: pointer; }
+.skin-card.on { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(62,87,252,.15); }
+.skin-card .skin-sw { width: 26px; height: 26px; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.1); }
+.skin-css { width: 100%; min-height: 150px; resize: vertical; font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; padding: 12px; border-radius: 12px; border: 1px solid var(--line); background: var(--panel-2); color: var(--ink); }
+.skin-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+/* Contratos */
+.ctr-list { display: flex; flex-direction: column; gap: 10px; margin-top: 16px; }
+.ctr-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border-radius: var(--r); border: 1px solid var(--line); background: var(--panel); cursor: pointer; box-shadow: var(--sh-1); }
+.ctr-card:hover { border-color: var(--blue); }
+.ctr-main { display: flex; flex-direction: column; min-width: 0; }
+.ctr-main b { font-size: 15px; font-weight: 800; }
+.ctr-main span { font-size: 12.5px; color: var(--ink-soft); }
+.ctr-status { flex: none; font-size: 11.5px; font-weight: 700; padding: 4px 10px; border-radius: 20px; background: var(--panel-2); color: var(--ink-soft); }
+.ctr-status.on { background: rgba(47,179,68,.16); color: #2fb344; }
+
 .empty { text-align: center; color: var(--ink-soft); padding: 56px 20px; animation: fadeIn .3s; }
 .empty svg { width: 50px; height: 50px; stroke: var(--ink-faint); margin-bottom: 14px; opacity: .6; animation: floaty 3.5s ease-in-out infinite; }
 .empty p { font-size: 13.5px; }
