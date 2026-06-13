@@ -1179,6 +1179,7 @@ function shareTrack(t) {
       <div class="share-meta"><b>${esc(t.title)}</b><span> · ${esc(who)}</span></div>
       <div class="share-link"><input type="text" id="shareUrl" readonly value="${esc(url)}" /><button class="btn sm primary" id="copyLink">Copiar</button></div>
       <div class="share-actions">
+        <button class="btn btn-ig" id="shareStory"><svg fill="none" stroke="#fff"><use href="#i-camera"/></svg> Historia (Instagram)</button>
         ${navigator.share ? `<button class="btn" id="nativeShare"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg> Compartir…</button>` : ''}
         <button class="btn" id="shareToChat"><svg fill="none" stroke="currentColor"><use href="#i-mail"/></svg> Enviar por chat</button>
       </div>
@@ -1191,7 +1192,95 @@ function shareTrack(t) {
   };
   const ns = m.querySelector('#nativeShare');
   if (ns) ns.onclick = () => { navigator.share({ title, text: title, url }).catch(() => {}); };
+  m.querySelector('#shareStory').onclick = () => shareStory(t);
   m.querySelector('#shareToChat').onclick = () => { m.remove(); shareToChatPicker(t); };
+}
+
+/* ---- HISTORIA / STORY: genera una tarjeta 1080x1920 muy vistosa ---- */
+function _loadImg(url) {
+  return new Promise((resolve, reject) => { const img = new Image(); img.crossOrigin = 'anonymous'; img.onload = () => resolve(img); img.onerror = reject; img.src = url; });
+}
+function _roundRect(ctx, x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+function _fitText(ctx, text, max, size, weight) {
+  ctx.font = `${weight} ${size}px Poppins, system-ui, sans-serif`;
+  while (size > 30 && ctx.measureText(text).width > max) { size -= 4; ctx.font = `${weight} ${size}px Poppins, system-ui, sans-serif`; }
+  let t = text;
+  if (ctx.measureText(t).width > max) { while (t.length > 1 && ctx.measureText(t + '…').width > max) t = t.slice(0, -1); t += '…'; }
+  return t;
+}
+async function generateStoryBlob(t) {
+  try { loadFont('Poppins'); await Promise.race([Promise.all([document.fonts.load('800 80px Poppins'), document.fonts.load('600 48px Poppins')]), new Promise(r => setTimeout(r, 1500))]); } catch (_) {}
+  const W = 1080, H = 1920;
+  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  let cover = null;
+  if (t.cover_url) { try { cover = await _loadImg(czUrl(t.cover_url)); } catch (_) {} }
+  // fondo: carátula difuminada a pantalla completa o degradado de marca
+  if (cover) {
+    const scale = Math.max(W / cover.width, H / cover.height) * 1.15;
+    const cw = cover.width * scale, ch = cover.height * scale;
+    ctx.filter = 'blur(60px)'; ctx.drawImage(cover, (W - cw) / 2, (H - ch) / 2, cw, ch); ctx.filter = 'none';
+  } else {
+    const g = ctx.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#0a0e23'); g.addColorStop(1, '#1a1040'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+  // velo oscuro + degradado inferior para legibilidad
+  ctx.fillStyle = 'rgba(8,10,20,.55)'; ctx.fillRect(0, 0, W, H);
+  const gv = ctx.createLinearGradient(0, H * 0.45, 0, H); gv.addColorStop(0, 'rgba(8,10,20,0)'); gv.addColorStop(1, 'rgba(8,10,20,.85)'); ctx.fillStyle = gv; ctx.fillRect(0, 0, W, H);
+  // wordmark arriba
+  ctx.textAlign = 'center'; ctx.fillStyle = '#fff';
+  ctx.font = '800 50px Poppins, system-ui, sans-serif';
+  ctx.shadowColor = 'rgba(0,0,0,.4)'; ctx.shadowBlur = 18;
+  ctx.fillText('UnderBro', W / 2, 170);
+  ctx.shadowBlur = 0;
+  // carátula central con sombra y borde
+  const S = 700, cx = (W - S) / 2, cy = 470;
+  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 60; ctx.shadowOffsetY = 24;
+  _roundRect(ctx, cx, cy, S, S, 44); ctx.fillStyle = '#11162a'; ctx.fill(); ctx.restore();
+  ctx.save(); _roundRect(ctx, cx, cy, S, S, 44); ctx.clip();
+  if (cover) ctx.drawImage(cover, cx, cy, S, S);
+  else { const g2 = ctx.createLinearGradient(cx, cy, cx + S, cy + S); g2.addColorStop(0, '#3e57fc'); g2.addColorStop(1, '#27a9ff'); ctx.fillStyle = g2; ctx.fillRect(cx, cy, S, S); ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.font = '800 200px system-ui'; ctx.fillText('♪', W / 2, cy + S / 2 + 70); }
+  ctx.restore();
+  _roundRect(ctx, cx, cy, S, S, 44); ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.stroke();
+  // barra de onda decorativa (acento)
+  const wy = cy + S + 70, bars = 42, bw = 10, gap = 7, totalW = bars * (bw + gap) - gap, sx = (W - totalW) / 2;
+  const gb = ctx.createLinearGradient(sx, 0, sx + totalW, 0); gb.addColorStop(0, '#3e57fc'); gb.addColorStop(1, '#27a9ff');
+  ctx.fillStyle = gb;
+  for (let i = 0; i < bars; i++) { const h = 14 + Math.abs(Math.sin(i * 0.9)) * 60 + (i % 3) * 8; _roundRect(ctx, sx + i * (bw + gap), wy - h / 2, bw, h, 5); ctx.fill(); }
+  // título + artista
+  const who = t.profiles?.display_name || t.profiles?.username || t.artist || 'UnderBro';
+  ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
+  const title = _fitText(ctx, t.title || 'Sin título', W - 140, 80, '800');
+  ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 14;
+  ctx.fillText(title, W / 2, wy + 130);
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(255,255,255,.78)';
+  const artist = _fitText(ctx, who, W - 200, 48, '600');
+  ctx.fillText(artist, W / 2, wy + 195);
+  // CTA inferior tipo pastilla
+  const pw = 560, ph = 96, px = (W - pw) / 2, py = H - 230;
+  const gp = ctx.createLinearGradient(px, 0, px + pw, 0); gp.addColorStop(0, '#3e57fc'); gp.addColorStop(1, '#27a9ff');
+  ctx.fillStyle = gp; _roundRect(ctx, px, py, pw, ph, 48); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font = '700 40px Poppins, system-ui, sans-serif';
+  ctx.fillText('▶  Escúchala en UnderBro', W / 2, py + ph / 2 + 14);
+  ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.font = '500 32px Poppins, system-ui, sans-serif';
+  ctx.fillText('underbro.app', W / 2, H - 90);
+  return await new Promise((resolve) => cv.toBlob((b) => resolve(b), 'image/png', 0.95));
+}
+async function shareStory(t) {
+  toast('Generando historia…');
+  let blob;
+  try { blob = await generateStoryBlob(t); } catch (e) { console.error('[story]', e); toast('No se pudo generar la historia'); return; }
+  if (!blob) { toast('No se pudo generar la historia'); return; }
+  const file = new File([blob], 'underbro-story.png', { type: 'image/png' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], text: `${t.title} — escúchala en UnderBro` }); return; }
+    catch (err) { if (err && err.name === 'AbortError') return; }
+  }
+  // respaldo: descarga + vista previa
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'underbro-story.png'; a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  toast('Imagen guardada · súbela a tu historia de Instagram 📸');
 }
 /* ---- COMPARTIR FOTO ---- */
 function postShareUrl(p) { return `${location.origin}/p/${p.id}`; }
