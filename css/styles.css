@@ -132,6 +132,8 @@ input, textarea, select { font-family: inherit; font-size: 14px; color: var(--in
 img { display: block; }
 ::selection { background: rgba(111,143,198,.28); }
 .hidden { display: none !important; }
+.up-preview { display: block; width: 100%; height: 40px; margin-top: 10px; border-radius: 10px; }
+.up-preview.hidden { display: none !important; }
 
 /* scrollbars finos */
 * { scrollbar-width: thin; scrollbar-color: #cdd6e6 transparent; }
