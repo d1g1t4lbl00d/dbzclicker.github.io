@@ -1,6 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": true,
+  "rewrites": [
+    { "source": "/t/:id", "destination": "/api/share?track=:id" },
+    { "source": "/p/:id", "destination": "/api/share?post=:id" },
+    { "source": "/pl/:id", "destination": "/api/share?playlist=:id" }
+  ],
   "headers": [
     {
       "source": "/(.*)",
