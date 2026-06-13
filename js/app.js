@@ -305,6 +305,17 @@ async function onAuthenticated() {
   ubBack.init();
   switchView('feed');
   handleDeepLink();
+  maybeOnboard();
+}
+// muestra el onboarding solo a usuarios nuevos (sin seguir a nadie y sin haberlo visto)
+function maybeOnboard() {
+  try {
+    if (localStorage.getItem('ub_onboarded')) return;
+    if (state.follows.size > 0) { localStorage.setItem('ub_onboarded', '1'); return; }
+    const p = new URLSearchParams(location.search);
+    if (p.get('track') || p.get('post') || p.get('playlist') || p.get('ucall')) return; // no tapar un enlace compartido
+    setTimeout(openOnboarding, 700);
+  } catch (_) {}
 }
 
 async function ensureProfile() {
@@ -1157,7 +1168,7 @@ async function handleTrackClick(e, t, card) {
 }
 
 /* ---- COMPARTIR ---- */
-function trackShareUrl(t) { return `${location.origin}/?track=${t.id}`; }
+function trackShareUrl(t) { return `${location.origin}/t/${t.id}`; }
 function shareTrack(t) {
   const url = trackShareUrl(t);
   const who = t.profiles?.display_name || t.profiles?.username || t.artist || 'UnderBro';
@@ -1183,7 +1194,7 @@ function shareTrack(t) {
   m.querySelector('#shareToChat').onclick = () => { m.remove(); shareToChatPicker(t); };
 }
 /* ---- COMPARTIR FOTO ---- */
-function postShareUrl(p) { return `${location.origin}/?post=${p.id}`; }
+function postShareUrl(p) { return `${location.origin}/p/${p.id}`; }
 function sharePost(p) {
   const url = postShareUrl(p);
   const who = p.profiles?.display_name || p.profiles?.username || 'UnderBro';
@@ -5793,9 +5804,22 @@ async function fetchNotifications() {
     (lk||[]).forEach(l => out.push({ ts: l.created_at, type:'like', who: l.profiles, text: `marcó ♥ tu pista "${titleById[l.track_id]||''}"` }));
     const { data: cm } = await sb.from('comments').select('created_at, track_id, body, profiles(*)').in('track_id', ids).neq('user_id', state.user.id).order('created_at',{ascending:false}).limit(20);
     (cm||[]).forEach(c => out.push({ ts: c.created_at, type:'comment', who: c.profiles, text: `comentó en "${titleById[c.track_id]||''}": ${c.body}` }));
+    const { data: rp } = await sb.from('reposts').select('created_at, track_id, profiles!reposts_user_id_fkey(*)').in('track_id', ids).neq('user_id', state.user.id).order('created_at',{ascending:false}).limit(20);
+    (rp||[]).forEach(r => out.push({ ts: r.created_at, type:'repost', who: r.profiles, text: `🔁 reposteó tu pista "${titleById[r.track_id]||''}"` }));
   }
+  // actividad en tus fotos
+  try {
+    const { data: myPosts } = await sb.from('posts').select('id').eq('user_id', state.user.id);
+    const pids = (myPosts||[]).map(p => p.id);
+    if (pids.length) {
+      const { data: pl } = await sb.from('post_likes').select('created_at, profiles(*)').in('post_id', pids).neq('user_id', state.user.id).order('created_at',{ascending:false}).limit(20);
+      (pl||[]).forEach(l => out.push({ ts: l.created_at, type:'like', who: l.profiles, text: 'marcó ♥ tu foto' }));
+      const { data: pc } = await sb.from('post_comments').select('created_at, body, profiles!post_comments_user_id_fkey(*)').in('post_id', pids).neq('user_id', state.user.id).order('created_at',{ascending:false}).limit(20);
+      (pc||[]).forEach(c => out.push({ ts: c.created_at, type:'comment', who: c.profiles, text: `comentó tu foto: ${c.body}` }));
+    }
+  } catch (_) {}
   out.sort((a,b) => new Date(b.ts) - new Date(a.ts));
-  return out.slice(0, 40);
+  return out.slice(0, 50);
 }
 async function renderNotifications() {
   setActiveNav('notifications');
@@ -5811,6 +5835,53 @@ async function renderNotifications() {
     row.onclick = () => i.who && openProfile(i.who.id);
     list.appendChild(row);
   });
+}
+
+/* =======================================================================
+   ONBOARDING — primer arranque de un usuario nuevo
+   ======================================================================= */
+const ONB_GENRES = ['Trap', 'Reggaetón', 'Drill', 'Hip-Hop', 'R&B', 'Afrobeat', 'Dembow', 'House', 'Techno', 'Pop', 'Lo-Fi', 'Electrónica', 'Rock', 'Punk', 'Experimental'];
+async function openOnboarding() {
+  if (state.view === 'ecosystems') {/*noop*/}
+  const chosen = new Set();
+  const m = openModal(`<div class="modal-head"><h3>Bienvenido a UnderBro 🎵</h3></div><div class="modal-body" id="onbBody"></div>`);
+  let step = 1, suggested = [];
+  const body = m.querySelector('#onbBody');
+  const finish = () => { try { localStorage.setItem('ub_onboarded', '1'); } catch (_) {} m.remove(); switchView('feed'); };
+  const render = async () => {
+    if (step === 1) {
+      body.innerHTML = `
+        <p style="color:var(--ink-soft);margin-top:0">La red social de la música underground. Dejamos tu cuenta lista en 2 pasos.</p>
+        <h4 class="onb-h">¿Qué te gusta escuchar?</h4>
+        <div class="onb-chips">${ONB_GENRES.map(g => `<button class="onb-chip" data-g="${esc(g)}">${esc(g)}</button>`).join('')}</div>
+        <button class="btn primary" id="onbNext" style="width:100%;margin-top:18px">Continuar</button>
+        <button class="btn" id="onbSkip" style="width:100%;margin-top:8px">Saltar</button>`;
+      body.querySelectorAll('[data-g]').forEach(b => b.onclick = () => { const g = b.dataset.g; if (chosen.has(g)) { chosen.delete(g); b.classList.remove('on'); } else { chosen.add(g); b.classList.add('on'); } });
+      body.querySelector('#onbNext').onclick = async () => { try { localStorage.setItem('ub_genres', JSON.stringify([...chosen])); } catch (_) {} step = 2; await render(); };
+      body.querySelector('#onbSkip').onclick = finish;
+    } else {
+      body.innerHTML = `<h4 class="onb-h">Sigue a artistas para llenar tu feed</h4><div id="onbArtists"><div class="loading"><div class="spinner"></div></div></div>
+        <button class="btn primary" id="onbDone" style="width:100%;margin-top:16px">Empezar a usar UnderBro</button>`;
+      body.querySelector('#onbDone').onclick = finish;
+      if (!suggested.length) {
+        try {
+          const { data } = await sb.from('tracks').select('user_id, profiles!tracks_user_id_fkey(*)').order('plays', { ascending: false }).limit(80);
+          const seen = new Set();
+          (data || []).forEach(t => { const p = t.profiles; if (p && p.id !== state.user.id && !seen.has(p.id) && !isHidden(p.id)) { seen.add(p.id); suggested.push(p); } });
+          suggested = suggested.slice(0, 12);
+        } catch (_) {}
+      }
+      const boxA = body.querySelector('#onbArtists'); boxA.innerHTML = '';
+      if (!suggested.length) { boxA.innerHTML = `<div class="eco-hint">Aún no hay artistas que sugerir. ¡Sé de los primeros en subir!</div>`; return; }
+      suggested.forEach(p => {
+        const f = state.follows.has(p.id);
+        const row = el(`<div class="follow-row">${avatarHTML(p)}<div class="fr-info"><div class="fr-name">${esc(p.display_name || p.username)}</div><div class="fr-handle">@${esc(p.username)}</div></div><div class="fr-actions"><button class="btn sm ${f ? '' : 'primary'}" data-f>${f ? 'Siguiendo ✓' : '+ Seguir'}</button></div></div>`);
+        row.querySelector('[data-f]').onclick = (e) => { e.stopPropagation(); toggleFollow(p.id, e.currentTarget); };
+        boxA.appendChild(row);
+      });
+    }
+  };
+  render();
 }
 
 /* =======================================================================
