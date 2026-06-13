@@ -5777,21 +5777,26 @@ function gumErrorMsg(err, video) {
 // solo si ambas fallan, el TURN público de respaldo. Se cachea ~12h.
 let callTurnCache = null;
 async function fetchTurnServers() {
-  // 1) RPC en Supabase (si está desplegada)
-  try {
-    const { data, error } = await sb.rpc('get_turn_credentials');
-    const ice = !error && data && data.iceServers;
-    if (ice) { console.log('[call] TURN: Cloudflare (RPC)'); return Array.isArray(ice) ? ice : [ice]; }
-  } catch (_) {}
-  // 2) función serverless en la propia web
-  try {
-    const r = await fetch('/api/turn', { method: 'POST' });
-    if (r.ok) {
-      const d = await r.json();
-      const ice = d && d.iceServers;
-      if (ice) { console.log('[call] TURN: Cloudflare (/api/turn)'); return Array.isArray(ice) ? ice : [ice]; }
-    }
-  } catch (_) {}
+  for (let attempt = 0; attempt < 2; attempt++) {
+    // 1) RPC en Supabase (si está desplegada)
+    try {
+      const { data, error } = await sb.rpc('get_turn_credentials');
+      const ice = !error && data && data.iceServers;
+      if (ice) { console.log('[call] TURN: Cloudflare (RPC)'); return Array.isArray(ice) ? ice : [ice]; }
+    } catch (_) {}
+    // 2) función serverless en la propia web (con timeout para no colgar)
+    try {
+      const ctrl = new AbortController();
+      const to = setTimeout(() => ctrl.abort(), 8000);
+      const r = await fetch('/api/turn', { method: 'POST', signal: ctrl.signal });
+      clearTimeout(to);
+      if (r.ok) {
+        const d = await r.json();
+        const ice = d && d.iceServers;
+        if (ice) { console.log('[call] TURN: Cloudflare (/api/turn)'); return Array.isArray(ice) ? ice : [ice]; }
+      }
+    } catch (_) {}
+  }
   return null;
 }
 async function getCallIceServers() {
@@ -5826,11 +5831,44 @@ function buildCallPc() {
   };
   // Safari/iOS dispara de forma fiable iceConnectionState; Chrome/FF connectionState.
   const onState = (s) => {
-    if (s === 'connected' || s === 'completed') onCallConnected();
-    else if (s === 'failed') { if (state.call && !state.call.ending) { callDiagnose(c); callHangupBtn(); } }
+    if (s === 'connected' || s === 'completed') { clearTimeout(c.disconnectTO); onCallConnected(); }
+    else if (s === 'disconnected') {
+      // transitorio: damos margen antes de intentar recuperar (no cortamos)
+      clearTimeout(c.disconnectTO);
+      c.disconnectTO = setTimeout(() => {
+        const st = pc.iceConnectionState;
+        if (state.call === c && st !== 'connected' && st !== 'completed') tryRecoverCall(c);
+      }, 6000);
+    } else if (s === 'failed') {
+      tryRecoverCall(c);   // re-negociar ICE en vez de colgar a la primera
+    }
   };
   pc.oniceconnectionstatechange = () => { console.log('[call] iceConnectionState:', pc.iceConnectionState); onState(pc.iceConnectionState); };
   pc.onconnectionstatechange = () => { console.log('[call] connectionState:', pc.connectionState); onState(pc.connectionState); };
+}
+// recuperación automática: re-negocia la ruta (ICE restart) sin cortar la llamada.
+// Solo el que llamó crea la nueva oferta; el receptor pide reinicio al que llamó.
+async function tryRecoverCall(c) {
+  if (!state.call || state.call !== c || c.ending) return;
+  if (c.recovering) return;
+  c.recoverN = (c.recoverN || 0) + 1;
+  if (c.recoverN > 4) {   // ya hemos intentado bastante
+    if (!c.everConnected) callDiagnose(c); else toast('Se perdió la conexión');
+    callHangupBtn();
+    return;
+  }
+  console.log('[call] recuperando conexión (intento ' + c.recoverN + ')');
+  c.recovering = true;
+  setTimeout(() => { if (state.call === c) c.recovering = false; }, 7000);
+  if (c.role === 'caller') {
+    try {
+      const offer = await c.pc.createOffer({ iceRestart: true });
+      await c.pc.setLocalDescription(offer);
+      sendSignal(c, 'reoffer', { sdp: { type: offer.type, sdp: offer.sdp } });
+    } catch (e) { console.error('[call] iceRestart', e); }
+  } else {
+    sendSignal(c, 'needrestart', {});   // el receptor no puede reiniciar: lo pide
+  }
 }
 // si tras contestar no se conecta en ~25s, abortamos (en vez de cargar para siempre)
 function armConnectWatchdog() {
@@ -5840,7 +5878,7 @@ function armConnectWatchdog() {
     if (!(state.call && state.call.id === c.id && !state.call.everConnected)) return;
     await callDiagnose(c);
     callHangupBtn();
-  }, 25000);
+  }, 40000);
 }
 // diagnóstico concreto de por qué no conectó (TURN vs intercambio de rutas)
 async function callDiagnose(c) {
@@ -5917,6 +5955,20 @@ async function onCallSignal(p) {
     toast(p.reason === 'busy' ? 'Usuario ocupado' : p.reason === 'media' ? 'El otro usuario no pudo activar su micrófono/cámara' : 'Llamada rechazada');
     finalizeCall(p.reason === 'busy' ? 'busy' : (p.reason === 'timeout' ? 'missed' : 'declined'));
     cleanupCall();
+  } else if (p.kind === 'reoffer') {
+    // ICE restart: el receptor aplica la nueva oferta y responde sin tocar la UI
+    if (!c.pc) return;
+    try {
+      await c.pc.setRemoteDescription(p.sdp); flushPendingIce();
+      const ans = await c.pc.createAnswer();
+      await c.pc.setLocalDescription(ans);
+      sendSignal(c, 'reanswer', { sdp: { type: ans.type, sdp: ans.sdp } });
+    } catch (e) { console.error('[call] reoffer', e); }
+  } else if (p.kind === 'reanswer') {
+    if (!c.pc) return;
+    try { await c.pc.setRemoteDescription(p.sdp); flushPendingIce(); } catch (e) { console.error('[call] reanswer', e); }
+  } else if (p.kind === 'needrestart') {
+    if (c.role === 'caller') tryRecoverCall(c);   // el receptor pidió reinicio
   } else if (p.kind === 'camstate') {
     c.remoteCamOff = !!p.off;          // el otro encendió/apagó su cámara
     attachCallRemote();
@@ -6130,7 +6182,7 @@ function expandCall() { $('callScreen').classList.remove('minimized'); }
 function cleanupCall() {
   const c = state.call; if (!c) return; c.ending = true; state.call = null;
   stopRing();
-  clearTimeout(c.noAnswerTO); clearTimeout(c.incomingTO); clearTimeout(c.connectTO); clearInterval(c.timer);
+  clearTimeout(c.noAnswerTO); clearTimeout(c.incomingTO); clearTimeout(c.connectTO); clearTimeout(c.disconnectTO); clearInterval(c.timer);
   try { c.localStream && c.localStream.getTracks().forEach(t => t.stop()); } catch (_) {}
   try { c.pc && (c.pc.onicecandidate = c.pc.ontrack = c.pc.onconnectionstatechange = c.pc.oniceconnectionstatechange = null, c.pc.close()); } catch (_) {}
   try { c.out && c.out.close(); } catch (_) {}
