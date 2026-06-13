@@ -264,6 +264,7 @@ $('btnLogout').onclick = logout;
    ======================================================================= */
 let bootDone = false;
 async function init() {
+  loadSavedSkin();   // aplica el tema/CSS personalizado del usuario antes de pintar
   // rutas públicas (sin sesión): ?kit=usuario (press kit) · ?l=slug (smart link)
   const _q = new URLSearchParams(location.search);
   const kitSlug = _q.get('kit');
@@ -578,6 +579,11 @@ async function switchView(view) {
   if (view === 'events') return renderEvents();
   if (view === 'beats') return renderBeats();
   if (view === 'tools') return renderTools();
+  if (view === 'ecosystems') return renderEcosystems();
+  if (view === 'uploads') return renderUploads();
+  if (view === 'partners') return renderPartnersView();
+  if (view === 'skins') return renderSkins();
+  if (view === 'contracts') return renderContratos();
   if (view === 'presskit') return renderPressKit();
   if (view === 'smartlinks') return renderSmartLinks();
   if (view === 'smartlink') return renderSmartLinkBuilder();
@@ -3809,9 +3815,10 @@ function spotifyEmbedHtml(links) {
 }
 
 async function renderDashboard() {
-  setActiveNav('dashboard');
+  setActiveNav('ecosystems');
   const main = $('main');
-  main.innerHTML = `<div class="main-head"><div><h2>Estudio</h2><div class="sub">Tu panel de artista</div></div></div><div id="dashBody"><div class="loading" style="padding:30px"><div class="spinner"></div></div></div>`;
+  main.innerHTML = ecoHead('Stats', 'Tu panel de artista') + `<div id="dashBody"><div class="loading" style="padding:30px"><div class="spinner"></div></div></div>`;
+  wireEcoBack();
   const uid = state.user.id;
   const [tracksRes, followersRes, postsRes, refRes] = await Promise.all([
     sb.from('tracks').select('id,title,cover_url,plays,likes_count,reposts_count,created_at,genre').eq('user_id', uid).order('plays', { ascending: false }),
@@ -4202,7 +4209,7 @@ function toolBar(key, title, sub, back) {
 }
 
 function renderTools() {
-  setActiveNav('tools');
+  setActiveNav('ecosystems');
   const main = $('main');
   main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
   const card = (key) => { const t = TOOLS[key]; return `
@@ -4213,7 +4220,7 @@ function renderTools() {
       <span class="tool-go">${t.go} →</span>
     </button>`; };
   main.innerHTML = `
-    <div class="main-head"><div><h2>Herramientas</h2><div class="sub">Tu kit de artista — todo en un mismo sitio</div></div></div>
+    ${ecoHead('Workflow', 'Tu kit de artista — todo en un mismo sitio')}
     <div class="tools-grid">
       ${['presskit', 'smartlink', 'split', 'analyzer'].map(card).join('')}
       <div class="tool-card soon" style="--ta:#f59e0b">
@@ -4224,6 +4231,246 @@ function renderTools() {
       </div>
     </div>`;
   main.querySelectorAll('.tool-card[data-tool]').forEach(c => c.onclick = () => switchView(TOOLS[c.dataset.tool].view));
+  wireEcoBack();
+}
+
+/* =======================================================================
+   ECOSYSTEMS — centro de mando del artista (hub con croquis + 6 secciones)
+   ======================================================================= */
+const ECOSYSTEMS = [
+  { key: 'partners',  n: 1, name: 'Partners',  icon: 'i-people',  accent: '#3e57fc', desc: 'Feats, tus partners y artistas que sigues' },
+  { key: 'workflow',  n: 2, name: 'Workflow',  icon: 'i-tools',   accent: '#7c5cff', desc: 'Todas tus herramientas de artista' },
+  { key: 'contracts', n: 3, name: 'Contratos', icon: 'i-doc',     accent: '#e0a83e', desc: 'Acuerdos con artistas, salas, productores…' },
+  { key: 'stats',     n: 4, name: 'Stats',     icon: 'i-chart',   accent: '#2fb344', desc: 'Tus estadísticas y crecimiento' },
+  { key: 'skins',     n: 5, name: 'Skins',     icon: 'i-palette', accent: '#ff5b8d', desc: 'Personaliza UnderBro y crea tu skin' },
+  { key: 'uploads',   n: 6, name: 'Subidas',   icon: 'i-files',   accent: '#27a9ff', desc: 'Pistas, beats, fotos y playlists' },
+];
+function renderEcosystems() {
+  setActiveNav('ecosystems');
+  const main = $('main');
+  main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
+  main.innerHTML = `
+    <div class="main-head"><div><h2>Ecosystems</h2><div class="sub">Tu centro de mando como artista</div></div></div>
+    <div class="eco-map">
+      ${ECOSYSTEMS.map((e, i) => `
+        <button class="eco-node" data-eco="${e.key}" style="--ea:${e.accent}">
+          <span class="eco-n">${e.n}</span>
+          <span class="eco-ico"><svg fill="none" stroke="#fff"><use href="#${e.icon}"/></svg></span>
+          <span class="eco-txt"><b>${e.name}</b><span>${esc(e.desc)}</span></span>
+          <span class="eco-go">→</span>
+        </button>${i < ECOSYSTEMS.length - 1 ? '<span class="eco-link"></span>' : ''}`).join('')}
+    </div>`;
+  main.querySelectorAll('.eco-node').forEach(b => b.onclick = () => openEco(b.dataset.eco));
+}
+function openEco(key) {
+  if (key === 'workflow') return switchView('tools');
+  if (key === 'stats') return switchView('dashboard');
+  switchView(key);
+}
+function ecoHead(title, sub) {
+  return `<div class="main-head"><div class="eco-head-l"><button class="icon-btn" id="ecoBack" title="Volver a Ecosystems"><svg fill="none" stroke="currentColor"><use href="#i-chevron-left"/></svg></button><div><h2>${esc(title)}</h2><div class="sub">${esc(sub)}</div></div></div></div>`;
+}
+function wireEcoBack() { const b = $('ecoBack'); if (b) b.onclick = () => switchView('ecosystems'); }
+
+/* ---- Subidas ---- */
+async function renderUploads() {
+  setActiveNav('ecosystems');
+  const main = $('main'); main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
+  main.innerHTML = ecoHead('Subidas', 'Todo lo que has subido · mantén pulsado para editar') + `
+    <div class="tabs eco-tabs" id="upTabs">
+      <button class="active" data-ut="tracks">Pistas</button>
+      <button data-ut="beats">Beats</button>
+      <button data-ut="photos">Fotos</button>
+      <button data-ut="playlists">Playlists</button>
+    </div>
+    <div id="upBody"><div class="loading"><div class="spinner"></div></div></div>`;
+  wireEcoBack();
+  const uid = state.user.id;
+  const load = async (tab) => {
+    const body = $('upBody'); body.className = ''; body.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
+    if (tab === 'tracks' || tab === 'beats') {
+      const all = await fetchTracks({ order: 'created_at', userId: uid, limit: 200 });
+      const list = all.filter(t => tab === 'beats' ? t.is_beat : !t.is_beat);
+      body.innerHTML = '';
+      if (!list.length) { body.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-music"/></svg><p>Nada por aquí todavía.</p></div>`; return; }
+      state.tracks = list; state.queue = list.map(t => t.id);
+      list.forEach(t => body.appendChild(trackCard(t)));
+    } else if (tab === 'photos') {
+      body.className = 'post-grid';
+      await loadProfilePosts(uid, body);
+    } else if (tab === 'playlists') {
+      const { data } = await sb.from('playlists').select('*, playlist_tracks(track_id, added_at, tracks(cover_url))').eq('user_id', uid).order('created_at', { ascending: false });
+      const lists = data || []; body.className = 'pl-grid'; body.innerHTML = '';
+      if (!lists.length) { body.innerHTML = `<div class="empty" style="grid-column:1/-1"><svg fill="none"><use href="#i-list"/></svg><p>No tienes playlists.</p></div>`; return; }
+      lists.forEach(pl => body.appendChild(playlistCard(pl)));
+    }
+  };
+  $('upTabs').querySelectorAll('button').forEach(b => b.onclick = () => { $('upTabs').querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b)); load(b.dataset.ut); });
+  load('tracks');
+}
+
+/* ---- Partners ---- */
+function getPartners() { try { return new Set(JSON.parse(localStorage.getItem('ub_partners') || '[]')); } catch { return new Set(); } }
+function savePartners(s) { try { localStorage.setItem('ub_partners', JSON.stringify([...s])); } catch (_) {} }
+async function renderPartnersView() {
+  setActiveNav('ecosystems');
+  const main = $('main'); main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
+  main.innerHTML = ecoHead('Partners', 'Colaboradores, partners y artistas que sigues') + `<div id="partBody"><div class="loading"><div class="spinner"></div></div></div>`;
+  wireEcoBack();
+  const body = $('partBody'); const uid = state.user.id; const partners = getPartners();
+  const followed = [...state.follows];
+  const [profsRes, feats] = await Promise.all([
+    followed.length ? sb.from('profiles').select('*').in('id', followed) : Promise.resolve({ data: [] }),
+    fetchTracks({ order: 'created_at', userId: uid, limit: 120 }),
+  ]);
+  const profList = (profsRes.data || []).filter(p => !isHidden(p.id));
+  const featTracks = (feats || []).filter(t => Array.isArray(t.collaborators) && t.collaborators.length);
+  const partnerProfs = profList.filter(p => partners.has(p.id));
+  body.innerHTML = '';
+  const sec = (t) => body.appendChild(el(`<h3 class="eco-sec">${t}</h3>`));
+  const hint = (t) => body.appendChild(el(`<div class="eco-hint">${t}</div>`));
+  sec('⭐ Partners');
+  if (!partnerProfs.length) hint('Marca a artistas como partner desde la lista de abajo.');
+  partnerProfs.forEach(p => body.appendChild(partnerRow(p, partners)));
+  sec('🎚️ Feats');
+  if (!featTracks.length) hint('Sin colaboraciones todavía.');
+  featTracks.forEach(t => body.appendChild(trackCard(t)));
+  sec('👥 Artistas que sigues');
+  if (!profList.length) hint('Todavía no sigues a nadie.');
+  profList.forEach(p => body.appendChild(partnerRow(p, partners)));
+}
+function partnerRow(p, partners) {
+  const isP = partners.has(p.id);
+  const row = el(`<div class="follow-row">${avatarHTML(p)}<div class="fr-info"><div class="fr-name">${esc(p.display_name || p.username)}</div><div class="fr-handle">@${esc(p.username)}</div></div><div class="fr-actions"><button class="btn sm ${isP ? '' : 'primary'}" data-partner>${isP ? '★ Partner' : '+ Partner'}</button></div></div>`);
+  row.querySelector('[data-partner]').onclick = (e) => { e.stopPropagation(); const ps = getPartners(); if (ps.has(p.id)) ps.delete(p.id); else ps.add(p.id); savePartners(ps); toast(ps.has(p.id) ? 'Añadido a Partners' : 'Quitado de Partners'); renderPartnersView(); };
+  row.addEventListener('click', (e) => { if (e.target.closest('[data-partner]')) return; openProfile(p.id); });
+  return row;
+}
+
+/* ---- Skins ---- */
+const APP_SKINS = {
+  'default': { name: 'UnderBro', grad: 'linear-gradient(135deg,#3e57fc,#27a9ff)', vars: {} },
+  'sunset':  { name: 'Sunset',   grad: 'linear-gradient(135deg,#ff9a5a,#ff5b8d)', vars: { '--blue': '#ff7a45', '--blue-2': '#ff5b8d', '--accent-grad': 'linear-gradient(135deg,#ff9a5a,#ff5b8d)' } },
+  'mint':    { name: 'Mint',     grad: 'linear-gradient(135deg,#34d399,#0ea5a5)', vars: { '--blue': '#10b981', '--blue-2': '#0ea5a5', '--accent-grad': 'linear-gradient(135deg,#34d399,#0ea5a5)' } },
+  'grape':   { name: 'Grape',    grad: 'linear-gradient(135deg,#a78bfa,#d946ef)', vars: { '--blue': '#8b5cf6', '--blue-2': '#d946ef', '--accent-grad': 'linear-gradient(135deg,#a78bfa,#d946ef)' } },
+  'crimson': { name: 'Crimson',  grad: 'linear-gradient(135deg,#fb7185,#f97316)', vars: { '--blue': '#ef4444', '--blue-2': '#f97316', '--accent-grad': 'linear-gradient(135deg,#fb7185,#f97316)' } },
+  'gold':    { name: 'Gold',     grad: 'linear-gradient(135deg,#f6d365,#d4922b)', vars: { '--blue': '#d4922b', '--blue-2': '#f6d365', '--accent-grad': 'linear-gradient(135deg,#f6d365,#d4922b)' } },
+};
+function applyAppSkin(key) {
+  const root = document.documentElement;
+  ['--blue', '--blue-2', '--accent-grad'].forEach(v => root.style.removeProperty(v));
+  const sk = APP_SKINS[key];
+  if (sk && sk.vars) Object.entries(sk.vars).forEach(([k, v]) => root.style.setProperty(k, v));
+}
+function applyCustomCss(css) {
+  let st = document.getElementById('ub-custom-skin');
+  if (!st) { st = document.createElement('style'); st.id = 'ub-custom-skin'; document.head.appendChild(st); }
+  st.textContent = css || '';
+}
+function loadSavedSkin() {
+  try {
+    const k = localStorage.getItem('ub_app_skin'); if (k && APP_SKINS[k]) applyAppSkin(k);
+    const css = localStorage.getItem('ub_custom_css'); if (css) applyCustomCss(css);
+  } catch (_) {}
+}
+function renderSkins() {
+  setActiveNav('ecosystems');
+  const main = $('main'); main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
+  const cur = localStorage.getItem('ub_app_skin') || 'default';
+  const css = localStorage.getItem('ub_custom_css') || '';
+  main.innerHTML = ecoHead('Skins', 'Personaliza el aspecto de UnderBro') + `
+    <div class="skins-wrap">
+      <h3 class="eco-sec">Temas de la app</h3>
+      <div class="skin-grid">${Object.entries(APP_SKINS).map(([k, s]) => `<button class="skin-card ${k === cur ? 'on' : ''}" data-skin="${k}"><span class="skin-sw" style="background:${s.grad}"></span>${esc(s.name)}</button>`).join('')}</div>
+      <h3 class="eco-sec">CSS personalizado</h3>
+      <p class="eco-hint">Pega CSS para modificar la web a tu gusto. Se aplica solo en tu dispositivo.</p>
+      <textarea id="skinCss" class="skin-css" placeholder=":root{ --blue:#ff0066; }">${esc(css)}</textarea>
+      <div class="skin-actions">
+        <button class="btn primary" id="skinApply">Aplicar CSS</button>
+        <button class="btn" id="skinTemplate"><svg fill="none" stroke="currentColor"><use href="#i-download"/></svg> Descargar plantilla</button>
+        <button class="btn" id="skinReset">Restablecer</button>
+      </div>
+      <div class="eco-hint" style="margin-top:14px">🌐 <b>Skins públicas</b> de la comunidad (subir y descargar): próximamente.</div>
+    </div>`;
+  wireEcoBack();
+  main.querySelectorAll('[data-skin]').forEach(b => b.onclick = () => { const k = b.dataset.skin; localStorage.setItem('ub_app_skin', k); applyAppSkin(k); main.querySelectorAll('[data-skin]').forEach(x => x.classList.toggle('on', x === b)); toast('Tema aplicado'); });
+  $('skinApply').onclick = () => { const v = $('skinCss').value; localStorage.setItem('ub_custom_css', v); applyCustomCss(v); toast('CSS aplicado'); };
+  $('skinReset').onclick = () => { localStorage.removeItem('ub_custom_css'); $('skinCss').value = ''; applyCustomCss(''); toast('CSS restablecido'); };
+  $('skinTemplate').onclick = downloadSkinTemplate;
+}
+function downloadSkinTemplate() {
+  const tpl = `/* Plantilla de skin para UnderBro\n   Edita las variables y pega el resultado en Ecosystems > Skins > CSS personalizado. */\n:root{\n  --blue: #3e57fc;       /* color principal */\n  --blue-2: #27a9ff;     /* color secundario */\n  --accent-grad: linear-gradient(135deg,#3e57fc,#27a9ff);\n  --bg: #f3f6fb;         /* fondo */\n  --panel: #ffffff;      /* tarjetas */\n  --ink: #10142a;        /* texto */\n}\n/* Ejemplos libres: */\n/* .track{ border-radius: 20px; } */\n/* .topbar{ backdrop-filter: blur(20px); } */\n`;
+  const blob = new Blob([tpl], { type: 'text/css' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'underbro-skin.css'; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+
+/* ---- Contratos ---- */
+const CONTRACT_TYPES = ['Colaboración (feat)', 'Productor / Beat', 'Sala / Concierto', 'Management', 'Distribución', 'Otro'];
+function getContracts() { try { return JSON.parse(localStorage.getItem('ub_contracts') || '[]'); } catch { return []; } }
+function saveContracts(a) { try { localStorage.setItem('ub_contracts', JSON.stringify(a)); } catch (_) {} }
+function renderContratos() {
+  setActiveNav('ecosystems');
+  const main = $('main'); main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
+  main.innerHTML = ecoHead('Contratos', 'Tus acuerdos legales en un solo sitio') + `
+    <div class="ctr-wrap">
+      <button class="btn primary" id="ctrNew"><svg fill="none" stroke="#fff"><use href="#i-plus"/></svg> Nuevo contrato</button>
+      <div id="ctrList" class="ctr-list"></div>
+      <div class="eco-hint" style="margin-top:14px">Se guardan en tu dispositivo. La firma entre usuarios llegará pronto.</div>
+    </div>`;
+  wireEcoBack();
+  renderContractList();
+  $('ctrNew').onclick = () => openContractForm();
+}
+function renderContractList() {
+  const box = $('ctrList'); if (!box) return; const list = getContracts();
+  if (!list.length) { box.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-doc"/></svg><p>Aún no tienes contratos. Crea el primero.</p></div>`; return; }
+  box.innerHTML = '';
+  list.forEach((c, i) => { const row = el(`<div class="ctr-card"><div class="ctr-main"><b>${esc(c.title || 'Contrato')}</b><span>${esc(c.type || '')} · ${esc(c.party || '—')}${c.date ? ' · ' + esc(c.date) : ''}</span></div><span class="ctr-status ${c.signed ? 'on' : ''}">${c.signed ? 'Firmado' : 'Borrador'}</span></div>`); row.onclick = () => openContractView(i); box.appendChild(row); });
+}
+function openContractForm(idx) {
+  const list = getContracts();
+  const c = (idx != null) ? list[idx] : { title: '', type: CONTRACT_TYPES[0], party: '', date: new Date().toISOString().slice(0, 10), split: '', terms: '', signed: false };
+  const m = openModal(`<div class="modal-head"><h3>${idx != null ? 'Editar' : 'Nuevo'} contrato</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Título</label><input id="cT" value="${esc(c.title)}" placeholder="Ej. Feat con XXX" /></div>
+      <div class="field"><label>Tipo</label><select id="cTy" class="cz-select">${CONTRACT_TYPES.map(x => `<option ${x === c.type ? 'selected' : ''}>${x}</option>`).join('')}</select></div>
+      <div class="field"><label>Contraparte</label><input id="cP" value="${esc(c.party)}" placeholder="Artista, sala, productor, manager…" /></div>
+      <div class="field"><label>Fecha</label><input id="cD" type="date" value="${esc(c.date)}" /></div>
+      <div class="field"><label>Reparto / % (opcional)</label><input id="cS" value="${esc(c.split || '')}" placeholder="Ej. 50/50, 70% yo…" /></div>
+      <div class="field"><label>Términos / cláusulas</label><textarea id="cTerms" rows="6" placeholder="Detalla el acuerdo…">${esc(c.terms || '')}</textarea></div>
+      <label class="pk-tg" style="font-weight:600"><input type="checkbox" id="cSigned" style="width:auto" ${c.signed ? 'checked' : ''} /> <span>Marcar como firmado</span></label>
+      <button class="btn primary" id="cSave" style="width:100%;margin-top:10px">Guardar</button>
+    </div>`);
+  m.querySelector('#cSave').onclick = () => {
+    const obj = { title: m.querySelector('#cT').value.trim() || 'Contrato', type: m.querySelector('#cTy').value, party: m.querySelector('#cP').value.trim(), date: m.querySelector('#cD').value, split: m.querySelector('#cS').value.trim(), terms: m.querySelector('#cTerms').value.trim(), signed: m.querySelector('#cSigned').checked };
+    const arr = getContracts(); if (idx != null) arr[idx] = obj; else arr.unshift(obj); saveContracts(arr); m.remove(); renderContractList(); toast('Contrato guardado');
+  };
+}
+function openContractView(idx) {
+  const c = getContracts()[idx]; if (!c) return;
+  const m = openModal(`<div class="modal-head"><h3>${esc(c.title)}</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <p><b>Tipo:</b> ${esc(c.type)}</p>
+      <p><b>Contraparte:</b> ${esc(c.party || '—')}</p>
+      <p><b>Fecha:</b> ${esc(c.date || '—')}</p>
+      ${c.split ? `<p><b>Reparto:</b> ${esc(c.split)}</p>` : ''}
+      <p><b>Términos:</b></p><p style="white-space:pre-wrap;color:var(--ink-soft)">${esc(c.terms || '—')}</p>
+      <p><b>Estado:</b> ${c.signed ? 'Firmado ✓' : 'Borrador'}</p>
+      <div class="skin-actions">
+        <button class="btn" id="ctrEdit">Editar</button>
+        <button class="btn" id="ctrPrint"><svg fill="none" stroke="currentColor"><use href="#i-doc"/></svg> Imprimir / PDF</button>
+        <button class="btn danger-btn" id="ctrDel"><svg fill="none" stroke="#fff"><use href="#i-trash"/></svg> Eliminar</button>
+      </div>
+    </div>`);
+  m.querySelector('#ctrEdit').onclick = () => { m.remove(); openContractForm(idx); };
+  m.querySelector('#ctrPrint').onclick = () => printContract(c);
+  m.querySelector('#ctrDel').onclick = () => { const arr = getContracts(); arr.splice(idx, 1); saveContracts(arr); m.remove(); renderContractList(); toast('Contrato eliminado'); };
+}
+function printContract(c) {
+  const w = window.open('', '_blank'); if (!w) { toast('Permite ventanas emergentes para imprimir'); return; }
+  w.document.write(`<html><head><title>${esc(c.title)}</title><meta charset="utf-8"><style>body{font-family:system-ui,Arial;max-width:720px;margin:40px auto;padding:0 22px;color:#111;line-height:1.55}h1{font-size:23px;margin:0}.muted{color:#666;margin-top:4px}hr{border:none;border-top:1px solid #ccc;margin:18px 0}</style></head><body><h1>${esc(c.title)}</h1><div class="muted">${esc(c.type)} · ${esc(c.date || '')}</div><hr><p><b>Contraparte:</b> ${esc(c.party || '—')}</p>${c.split ? `<p><b>Reparto:</b> ${esc(c.split)}</p>` : ''}<p><b>Términos:</b></p><p style="white-space:pre-wrap">${esc(c.terms || '')}</p><hr><p>Estado: ${c.signed ? 'Firmado' : 'Borrador'}</p><br><br><p>Firma de las partes:</p><p>______________________&nbsp;&nbsp;&nbsp;&nbsp;______________________</p></body></html>`);
+  w.document.close(); setTimeout(() => { try { w.print(); } catch (_) {} }, 350);
 }
 
 /* =======================================================================
@@ -4381,7 +4628,7 @@ function scaleNotes(tonic, mode) {
 }
 
 async function renderAudioAnalyzer() {
-  setActiveNav('tools');
+  setActiveNav('ecosystems');
   const main = $('main');
   main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
   main.innerHTML = `
@@ -4535,7 +4782,7 @@ async function pkLoadOrDefault() {
 }
 
 async function renderPressKit() {
-  setActiveNav('tools');
+  setActiveNav('ecosystems');
   const main = $('main');
   main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
   main.innerHTML = `${toolBar('presskit', 'Press Kit / EPK', 'Tu dossier de artista')}<div class="loading" style="padding:40px"><div class="spinner"></div></div>`;
@@ -4810,7 +5057,7 @@ let smEditId = null, smState = null;
 function slugify(s) { return (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40); }
 
 async function renderSmartLinks() {
-  setActiveNav('tools');
+  setActiveNav('ecosystems');
   const main = $('main');
   main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
   main.innerHTML = `
@@ -4841,7 +5088,7 @@ ${toolBar('smartlink', 'Smart links', 'Un enlace para tu bio que lleva a todas l
 }
 
 async function renderSmartLinkBuilder() {
-  setActiveNav('tools');
+  setActiveNav('ecosystems');
   const main = $('main');
   main.innerHTML = `${toolBar('smartlink', 'Smart link', '')}<div class="loading" style="padding:40px"><div class="spinner"></div></div>`;
   const uid = state.user.id;
@@ -5008,7 +5255,7 @@ async function renderPublicSmartLink(slug) {
 let ssEditId = null, ssState = null;
 
 async function renderSplitSheets() {
-  setActiveNav('tools');
+  setActiveNav('ecosystems');
   const main = $('main');
   main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
   main.innerHTML = `
@@ -5034,7 +5281,7 @@ ${toolBar('split', 'Split sheets', 'Reparto de autoría de tus colaboraciones', 
 }
 
 async function renderSplitBuilder() {
-  setActiveNav('tools');
+  setActiveNav('ecosystems');
   const main = $('main');
   main.innerHTML = `${toolBar('split', 'Split sheet', '')}<div class="loading" style="padding:40px"><div class="spinner"></div></div>`;
   let d = null;
