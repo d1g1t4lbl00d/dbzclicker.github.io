@@ -2321,3 +2321,7 @@ body.q-dragging .npq-list { overflow: hidden; }
 .admin-card textarea, .admin-card #admBcTitle { width: 100%; padding: 10px 14px; border: 1.5px solid var(--line); border-radius: 12px; background: var(--panel-2); color: var(--ink); margin-bottom: 10px; resize: vertical; }
 .admin-card textarea:focus, .admin-card #admBcTitle:focus { outline: none; border-color: var(--blue); }
 @media (max-width: 720px) { .admin-grid { grid-template-columns: 1fr; } .admin-card.span2 { grid-column: auto; } .adm-row-acts { width: 100%; justify-content: flex-start; margin-top: 4px; } .adm-row { flex-wrap: wrap; } }
+.adm-badges { display: inline-flex; gap: 4px; }
+.bdgbtn { width: 30px; height: 30px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); color: var(--ink-soft); font-size: 14px; font-weight: 800; cursor: pointer; display: grid; place-items: center; transition: all .15s var(--ease); }
+.bdgbtn.on { background: linear-gradient(180deg,#ffd96b,#f5b829); border-color: #e8a200; color: #5a3b00; box-shadow: 0 2px 8px rgba(245,184,41,.4); }
+.bdgbtn:active { transform: scale(.92); }

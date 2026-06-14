@@ -883,17 +883,30 @@ async function fetchTracks({ order='created_at', userId=null, limit=50 } = {}) {
 // Trending dinámico vía RPC (hot score con ventana reciente). Embebe el perfil;
 // si el embed no estuviera disponible, lo adjunta con una segunda consulta.
 async function fetchTrending({ days = 2, limit = 50 } = {}) {
+  let list = [];
   try {
     const { data, error } = await sb.rpc('trending_tracks', { p_days: days, p_limit: limit })
       .select('*, profiles!tracks_user_id_fkey(*)');
-    if (!error && Array.isArray(data)) return data;
+    if (!error && Array.isArray(data)) list = data;
   } catch (_) {}
-  const { data: rows } = await sb.rpc('trending_tracks', { p_days: days, p_limit: limit });
-  if (!rows || !rows.length) return [];
-  const ids = [...new Set(rows.map(t => t.user_id))];
-  const { data: profs } = await sb.from('profiles').select('*').in('id', ids);
-  const byId = Object.fromEntries((profs || []).map(p => [p.id, p]));
-  return rows.map(t => ({ ...t, profiles: byId[t.user_id] || null }));
+  if (!list.length) {
+    const { data: rows } = await sb.rpc('trending_tracks', { p_days: days, p_limit: limit });
+    if (rows && rows.length) {
+      const ids = [...new Set(rows.map(t => t.user_id))];
+      const { data: profs } = await sb.from('profiles').select('*').in('id', ids);
+      const byId = Object.fromEntries((profs || []).map(p => [p.id, p]));
+      list = rows.map(t => ({ ...t, profiles: byId[t.user_id] || null }));
+    }
+  }
+  return await withFeatured(list);
+}
+// antepone las pistas destacadas por un admin (columna tracks.featured)
+async function withFeatured(list) {
+  try {
+    const { data: feat, error } = await sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)').eq('featured', true).order('created_at', { ascending: false }).limit(12);
+    if (!error && feat && feat.length) { const seen = new Set(feat.map(t => t.id)); return [...feat.map(t => ({ ...t, _featured: true })), ...list.filter(t => !seen.has(t.id))]; }
+  } catch (_) {}
+  return list;
 }
 async function fetchFollowingTracks() {
   if (state.follows.size === 0) return [];
@@ -6108,7 +6121,7 @@ async function adminUserSearch(q) {
   const list = $('admUserList'); if (!list) return;
   list.innerHTML = '<div class="loading" style="padding:18px"><div class="spinner"></div></div>';
   const term = (q || '').replace('@', '').trim();
-  let query = sb.from('profiles').select('id,username,display_name,avatar_url,verified,banned,is_admin').limit(30);
+  let query = sb.from('profiles').select('id,username,display_name,avatar_url,verified,banned,is_admin,user_badges(badge)').limit(30);
   query = term ? query.or(`username.ilike.%${term}%,display_name.ilike.%${term}%`) : query.order('created_at', { ascending: false });
   const { data, error } = await query;
   if (error) { list.innerHTML = '<div class="sub">Error al buscar usuarios.</div>'; return; }
@@ -6117,11 +6130,15 @@ async function adminUserSearch(q) {
 }
 function adminUserRow(p) {
   const me = p.id === state.user.id;
+  const have = new Set((p.user_badges || []).map((b) => b.badge));
   const tag = `${p.is_admin ? ' <span class="adm-tag mod">ADMIN</span>' : ''}${p.verified ? ' <span class="adm-tag ok">✔</span>' : ''}${p.banned ? ' <span class="adm-tag ban">baneado</span>' : ''}`;
+  const badgeBtns = Object.keys(BADGES).map((k) => `<button class="bdgbtn ${have.has(k) ? 'on' : ''}" data-bdg="${k}" title="${esc(BADGES[k].name)}">${BADGES[k].glyph}</button>`).join('');
   const row = el(`<div class="adm-row">
     <span class="adm-av" data-open>${avatarHTML(p)}</span>
     <div class="adm-row-main" data-open><b>${esc(p.display_name || p.username || '—')}${tag}</b><span>@${esc(p.username || '')}</span></div>
     <div class="adm-row-acts">
+      <span class="adm-badges">${badgeBtns}</span>
+      ${me ? '' : `<button class="btn sm" data-a="dm">Mensaje</button>`}
       <button class="btn sm" data-a="verify">${p.verified ? 'Quitar ✔' : 'Verificar'}</button>
       ${me ? '' : `<button class="btn sm" data-a="ban">${p.banned ? 'Desbanear' : 'Banear'}</button>`}
       ${me ? '' : `<button class="btn sm" data-a="admin">${p.is_admin ? 'Quitar admin' : 'Hacer admin'}</button>`}
@@ -6130,10 +6147,16 @@ function adminUserRow(p) {
   </div>`);
   const upd = async (patch) => { const { error } = await sb.from('profiles').update(patch).eq('id', p.id); if (error) { toast('No se pudo: ' + (error.message || '')); return false; } Object.assign(p, patch); return true; };
   row.querySelector('[data-open]').onclick = () => openProfile(p.id);
+  const dmB = row.querySelector('[data-a="dm"]'); if (dmB) dmB.onclick = () => openDM(p.id);
   row.querySelector('[data-a="verify"]').onclick = async (e) => { if (await upd({ verified: !p.verified })) { e.target.textContent = p.verified ? 'Quitar ✔' : 'Verificar'; toast(p.verified ? 'Verificado' : 'Verificación quitada'); } };
   const banB = row.querySelector('[data-a="ban"]'); if (banB) banB.onclick = async (e) => { if (await upd({ banned: !p.banned })) { e.target.textContent = p.banned ? 'Desbanear' : 'Banear'; toast(p.banned ? 'Usuario baneado' : 'Usuario desbaneado'); } };
   const admB = row.querySelector('[data-a="admin"]'); if (admB) admB.onclick = async (e) => { if (!confirm(`¿${p.is_admin ? 'QUITAR admin a' : 'HACER admin a'} @${p.username}?`)) return; if (await upd({ is_admin: !p.is_admin })) { e.target.textContent = p.is_admin ? 'Quitar admin' : 'Hacer admin'; toast('Permisos actualizados'); } };
   const delB = row.querySelector('[data-a="del"]'); if (delB) delB.onclick = () => adminDeleteUser(p.id, p.username, () => row.remove());
+  row.querySelectorAll('[data-bdg]').forEach((b) => b.onclick = async () => {
+    const k = b.dataset.bdg, has = have.has(k);
+    if (has) { const { error } = await sb.from('user_badges').delete().eq('user_id', p.id).eq('badge', k); if (error) { toast('No se pudo (¿falta política RLS?)'); return; } have.delete(k); b.classList.remove('on'); toast(`Insignia "${BADGES[k].name}" quitada`); }
+    else { const { error } = await sb.from('user_badges').insert({ user_id: p.id, badge: k }); if (error) { toast('No se pudo (¿falta política RLS?)'); return; } have.add(k); b.classList.add('on'); toast(`Insignia "${BADGES[k].name}" otorgada`); }
+  });
   return row;
 }
 async function loadAdminContent(kind) {
@@ -6149,10 +6172,15 @@ async function loadAdminContent(kind) {
         box.appendChild(r);
       });
     } else {
-      const { data } = await sb.from('tracks').select('id,title,created_at,profiles!tracks_user_id_fkey(username,display_name)').order('created_at', { ascending: false }).limit(20);
+      let hasFeatured = true;
+      let res = await sb.from('tracks').select('id,title,featured,created_at,profiles!tracks_user_id_fkey(username,display_name)').order('created_at', { ascending: false }).limit(20);
+      if (res.error) { hasFeatured = false; res = await sb.from('tracks').select('id,title,created_at,profiles!tracks_user_id_fkey(username,display_name)').order('created_at', { ascending: false }).limit(20); }
+      const data = res.data;
       box.innerHTML = ''; if (!data || !data.length) { box.innerHTML = '<div class="sub">Sin pistas.</div>'; return; }
       data.forEach((t) => {
-        const r = el(`<div class="adm-row"><div class="adm-row-main"><b>${esc(t.title || '—')}</b><span>${esc(t.profiles?.display_name || t.profiles?.username || '')} · ${timeAgo(t.created_at)}</span></div><div class="adm-row-acts"><button class="btn sm danger" data-del>Borrar</button></div></div>`);
+        const featBtn = hasFeatured ? `<button class="btn sm ${t.featured ? 'primary' : ''}" data-feat>${t.featured ? '★ Quitar' : '☆ Destacar'}</button>` : '';
+        const r = el(`<div class="adm-row"><div class="adm-row-main"><b>${t.featured ? '★ ' : ''}${esc(t.title || '—')}</b><span>${esc(t.profiles?.display_name || t.profiles?.username || '')} · ${timeAgo(t.created_at)}</span></div><div class="adm-row-acts">${featBtn}<button class="btn sm danger" data-del>Borrar</button></div></div>`);
+        const fb = r.querySelector('[data-feat]'); if (fb) fb.onclick = async () => { const nv = !t.featured; const { error } = await sb.from('tracks').update({ featured: nv }).eq('id', t.id); if (error) { toast('No se pudo (¿falta política/columna?)'); return; } t.featured = nv; fb.textContent = nv ? '★ Quitar' : '☆ Destacar'; fb.classList.toggle('primary', nv); feedCache.delete('trending'); toast(nv ? 'Pista destacada en Trending' : 'Quitada de destacadas'); };
         r.querySelector('[data-del]').onclick = async () => { if (!confirm('¿Borrar esta pista?')) return; const { error } = await sb.from('tracks').delete().eq('id', t.id); if (error) { toast('No se pudo'); return; } r.remove(); toast('Pista borrada'); };
         box.appendChild(r);
       });
