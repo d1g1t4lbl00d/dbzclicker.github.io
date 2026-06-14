@@ -304,6 +304,7 @@ async function onAuthenticated() {
   loadNotifBadge();
   ubBack.init();
   switchView('feed');
+  setTimeout(warmFeeds, 1500);   // precarga following/trending/new para que pasar de pestaña sea instantáneo
   handleDeepLink();
   maybeOnboard();
 }
@@ -614,30 +615,62 @@ async function switchView(view) {
   if (view === 'analyzer') return renderAudioAnalyzer();
   if (view === 'radio') return startRadio();
 
-  main.innerHTML = skeletonFeed();
-  let tracks = [], head = { title: 'Stream', sub: '' };
-
-  try {
-    if (view === 'feed') {
-      if (state.tab === 'trending') { tracks = await fetchTrending(); head = { title: 'Trending', sub: 'Lo que está pegando estos días' }; }
-      else if (state.tab === 'new') { tracks = await fetchTracks({ order: 'created_at' }); head = { title: 'New', sub: 'Lo último que se ha subido' }; }
-      else { tracks = await fetchFollowingTracks(); head = { title: 'Following', sub: 'Pistas de gente que sigues' }; }
-    } else if (view === 'feed-trending') {
-      tracks = await fetchTrending(); head = { title: 'Trending', sub: 'Lo que está pegando estos días' };
-    } else if (view === 'all') {
-      tracks = await fetchTracks({ order: 'created_at' }); head = { title: 'All Tracks', sub: 'Toda la biblioteca' };
-    } else if (view === 'favorites') {
-      tracks = await fetchFavorites(); head = { title: 'Favorites', sub: 'Tus pistas favoritas' };
-    } else if (view === 'mytracks') {
-      tracks = await fetchTracks({ order: 'created_at', userId: state.user.id }); head = { title: 'My Uploads', sub: 'Pistas que has subido' };
-    } else if (view === 'downloads') {
-      tracks = await fetchByIds([...state.downloads]); head = { title: 'Downloads', sub: 'Pistas que descargaste' };
-    }
-  } catch (err) { console.error(err); toast('Error al cargar pistas'); tracks = []; }
-
-  state.tracks = tracks;
-  renderFeed(head, tracks, view);
+  return loadFeedView(view);
 }
+
+/* Carga de feeds con caché "stale-while-revalidate": si ya tenemos datos los
+   pintamos al instante (sin espera) y refrescamos en segundo plano; solo
+   re-renderizamos si el contenido cambió. Permite además precargar al detectar
+   un deslizamiento, para que no haya retraso al pasar de pantalla. */
+function feedSpec(view, tab) {
+  if (view === 'feed') {
+    if (tab === 'trending') return { key: 'trending', fetch: () => fetchTrending(), head: { title: 'Trending', sub: 'Lo que está pegando estos días' } };
+    if (tab === 'new') return { key: 'new', fetch: () => fetchTracks({ order: 'created_at' }), head: { title: 'New', sub: 'Lo último que se ha subido' } };
+    return { key: 'following', fetch: () => fetchFollowingTracks(), head: { title: 'Following', sub: 'Pistas de gente que sigues' } };
+  }
+  if (view === 'feed-trending') return { key: 'trending', fetch: () => fetchTrending(), head: { title: 'Trending', sub: 'Lo que está pegando estos días' } };
+  if (view === 'all') return { key: 'all', fetch: () => fetchTracks({ order: 'created_at' }), head: { title: 'All Tracks', sub: 'Toda la biblioteca' } };
+  if (view === 'favorites') return { key: 'favorites', fetch: () => fetchFavorites(), head: { title: 'Favorites', sub: 'Tus pistas favoritas' } };
+  if (view === 'mytracks') return { key: 'mytracks', fetch: () => fetchTracks({ order: 'created_at', userId: state.user.id }), head: { title: 'My Uploads', sub: 'Pistas que has subido' } };
+  if (view === 'downloads') return { key: 'downloads', fetch: () => fetchByIds([...state.downloads]), head: { title: 'Downloads', sub: 'Pistas que descargaste' } };
+  return null;
+}
+const feedCache = new Map();   // key -> { tracks, ts }
+const feedInflight = new Map(); // key -> Promise (evita peticiones duplicadas)
+function feedFetch(spec) {
+  if (feedInflight.has(spec.key)) return feedInflight.get(spec.key);
+  const p = spec.fetch().then((tracks) => { feedCache.set(spec.key, { tracks, ts: Date.now() }); feedInflight.delete(spec.key); return tracks; })
+    .catch((err) => { feedInflight.delete(spec.key); throw err; });
+  feedInflight.set(spec.key, p);
+  return p;
+}
+function sameTracks(a, b) { return a && b && a.length === b.length && a.every((t, i) => t.id === b[i].id); }
+async function loadFeedView(view) {
+  const spec = feedSpec(view, state.tab);
+  if (!spec) return;
+  const cached = feedCache.get(spec.key);
+  if (cached) { state.tracks = cached.tracks; renderFeed(spec.head, cached.tracks, view); }
+  else { $('main').innerHTML = skeletonFeed(); }
+  try {
+    const tracks = await feedFetch(spec);
+    const here = feedSpec(state.view, state.tab);
+    if (here && here.key === spec.key && !sameTracks(cached && cached.tracks, tracks)) {
+      state.tracks = tracks; renderFeed(spec.head, tracks, view);
+    }
+  } catch (err) {
+    console.error(err);
+    if (!cached) { toast('Error al cargar pistas'); state.tracks = []; renderFeed(spec.head, [], view); }
+  }
+}
+// precarga los datos de una pantalla del carrusel (al detectar el deslizamiento)
+function prefetchScreen(idx) {
+  if (idx < 0 || idx >= SWIPE_SEQ.length) return;
+  const key = SWIPE_SEQ[idx];
+  if (idx <= 2) { const spec = feedSpec('feed', key); const c = feedCache.get(spec.key); if (!c || Date.now() - c.ts > 20000) feedFetch(spec).catch(() => {}); }
+  else if (key === 'posts' && typeof prefetchPosts === 'function') prefetchPosts();
+}
+// precarga TODAS las pantallas del feed una vez tras arrancar (sin bloquear)
+function warmFeeds() { ['following', 'trending', 'new'].forEach((k) => { const s = feedSpec('feed', k); if (!feedCache.has(s.key)) feedFetch(s).catch(() => {}); }); }
 
 /* =======================================================================
    NAVEGACIÓN POR GESTOS (deslizar entre pantallas, solo móvil)
@@ -702,7 +735,10 @@ function initSwipeNav() {
       if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
       decided = true;
       horizontal = Math.abs(dx) > Math.abs(dy) * 1.25;
-      if (horizontal && cur >= 0) { dragging = true; main.style.willChange = 'transform'; main.style.transition = ''; document.body.classList.add('ub-swiping'); }
+      if (horizontal && cur >= 0) {
+        dragging = true; main.style.willChange = 'transform'; main.style.transition = ''; document.body.classList.add('ub-swiping');
+        prefetchScreen(cur + (dx < 0 ? 1 : -1));   // empieza a cargar la pantalla destino ya
+      }
       else { ignore = true; return; }   // intención vertical → dejar pasar el scroll
     }
     if (!dragging) return;
@@ -2714,6 +2750,7 @@ function openPhotoUploadModal() {
       fill.style.width = '100%';
       toast('¡Foto publicada! 📸');
       m.remove();
+      invalidatePosts();
       switchView('posts');
     } catch (err) {
       console.error(err);
@@ -2746,7 +2783,7 @@ async function renderPosts() {
   $('newPostBtn').onclick = openPhotoUploadModal;
 
   let posts = [];
-  try { posts = await fetchPosts(); }
+  try { posts = await prefetchPosts(); }
   catch (err) { console.error(err); toast('Error al cargar las fotos'); }
   posts = (posts || []).filter(p => !isHidden(p.user_id));
 
@@ -2765,6 +2802,16 @@ async function renderPosts() {
   posts.forEach(p => list.appendChild(postCard(p, likedSet.has(p.id))));
 }
 
+// caché corta + dedupe para las fotos (permite precargar al deslizar hacia Fotos)
+let _postsCache = null, _postsInflight = null;
+function prefetchPosts() {
+  if (_postsInflight) return _postsInflight;
+  if (_postsCache && Date.now() - _postsCache.ts < 10000) return Promise.resolve(_postsCache.posts);
+  _postsInflight = fetchPosts().then((p) => { _postsCache = { posts: p || [], ts: Date.now() }; _postsInflight = null; return _postsCache.posts; })
+    .catch((e) => { _postsInflight = null; throw e; });
+  return _postsInflight;
+}
+function invalidatePosts() { _postsCache = null; }
 function postCard(p, liked) {
   const prof = p.profiles || {};
   const mine = p.user_id === state.user.id;
@@ -2869,6 +2916,7 @@ async function deletePost(p, card) {
   if (!confirm('¿Borrar esta publicación? No se puede deshacer.')) return;
   const { error } = await sb.from('posts').delete().eq('id', p.id);
   if (error) { toast('No se pudo borrar'); return; }
+  invalidatePosts();
   try { const path = storagePathFromUrl(p.image_url, 'posts'); if (path) await sb.storage.from('posts').remove([path]); } catch {}
   const modal = card.closest('.modal-backdrop');
   card.remove();
