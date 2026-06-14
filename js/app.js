@@ -507,6 +507,12 @@ function bindUI() {
   $('meChip').onclick = () => openProfile(state.user.id);
   $('menuToggle').onclick = () => { const open = $('sidebar').classList.toggle('open'); $('drawerBackdrop').classList.toggle('show', open); };
   $('btnChatToggle').onclick = toggleRight;
+  // plegar paneles en escritorio (menú lateral y chat) para ver la feed a pantalla completa
+  const appEl = $('app');
+  if (localStorage.getItem('ub_side_collapsed') === '1') appEl.classList.add('side-collapsed');
+  if (localStorage.getItem('ub_right_collapsed') === '1') appEl.classList.add('right-collapsed');
+  $('toggleSideBtn').onclick = () => { const on = appEl.classList.toggle('side-collapsed'); localStorage.setItem('ub_side_collapsed', on ? '1' : '0'); };
+  $('toggleChatBtn').onclick = () => { const on = appEl.classList.toggle('right-collapsed'); localStorage.setItem('ub_right_collapsed', on ? '1' : '0'); };
   $('drawerBackdrop').onclick = hideDrawers;
   $('btnSearchToggle').onclick = () => {
     const tb = document.querySelector('.topbar');
@@ -570,12 +576,13 @@ async function updateCounts() {
 /* =======================================================================
    VISTAS
    ======================================================================= */
+let ubSwiping = false;
 async function switchView(view) {
   ubRecord({ kind: 'view', view });
   state.view = view;
   const main = $('main');
   $('feedTabs')?.classList.toggle('hidden', view !== 'feed');
-  main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
+  if (!ubSwiping) { main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap'); }
   if (['feed','feed-trending','all','favorites','mytracks','downloads','search'].includes(view)) setActiveNav(view === 'search' ? '' : view);
   else setActiveNav(view);
 
@@ -667,31 +674,73 @@ document.addEventListener('pointerdown', (e) => {
 function initSwipeNav() {
   if (initSwipeNav._done) return; initSwipeNav._done = true;
   const EXCLUDE = '.seek, .vol-slider, .wave, #npWave, .stories-bar, .dm-bubble, .dm-thread, .pl-cover-grid, input, textarea, select, .mention-dd, .post-grid';
-  let sx = 0, sy = 0, st = 0, ignore = true, moved = false;
+  const main = $('main');
+  let sx = 0, sy = 0, st = 0, ignore = true, decided = false, horizontal = false, dragging = false, cur = -1;
+  const W = () => window.innerWidth;
   const overlayOpen = () =>
     document.querySelector('.modal-backdrop, .story-viewer, .right.open') ||
     (typeof npIsOpen === 'function' && npIsOpen()) ||
     $('dmScreen')?.classList.contains('open') ||
     $('sidebar')?.classList.contains('open');
+  const clearStyle = () => { main.style.transition = ''; main.style.transform = ''; main.style.opacity = ''; main.style.willChange = ''; };
   document.addEventListener('touchstart', (e) => {
-    if (window.innerWidth > 720 || e.touches.length !== 1 || overlayOpen()) { ignore = true; return; }
+    if (W() > 720 || e.touches.length !== 1 || overlayOpen() || ubSwiping) { ignore = true; return; }
     const t = e.target;
     if (t && t.closest && t.closest(EXCLUDE)) { ignore = true; return; }
-    ignore = false; moved = false;
+    ignore = false; decided = false; horizontal = false; dragging = false;
     sx = e.touches[0].clientX; sy = e.touches[0].clientY; st = Date.now();
+    cur = curScreenIdx();
   }, { passive: true });
   document.addEventListener('touchmove', (e) => {
     if (ignore) return;
     const dx = e.touches[0].clientX - sx, dy = e.touches[0].clientY - sy;
-    if (Math.abs(dx) > 12 && Math.abs(dx) > Math.abs(dy) * 1.4) moved = true;
-  }, { passive: true });
+    if (!decided) {
+      if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
+      decided = true;
+      horizontal = Math.abs(dx) > Math.abs(dy) * 1.25;
+      if (horizontal && cur >= 0) { dragging = true; main.style.willChange = 'transform'; main.style.transition = ''; }
+      else { ignore = true; return; }   // intención vertical → dejar pasar el scroll
+    }
+    if (!dragging) return;
+    e.preventDefault();                  // bloquea el scroll vertical mientras arrastras en horizontal
+    let d = dx;
+    const atStart = cur <= 0, atEnd = cur >= SWIPE_SEQ.length - 1;
+    if ((d > 0 && atStart) || (d < 0 && atEnd)) d *= 0.32;   // resistencia en los extremos
+    main.style.transform = `translateX(${d}px)`;
+  }, { passive: false });
   document.addEventListener('touchend', (e) => {
-    if (ignore || !moved) return;
-    const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
-    if (Math.abs(dx) < 60 || Math.abs(dx) <= Math.abs(dy) * 1.6 || Date.now() - st > 700) return;
-    const cur = curScreenIdx();
-    if (cur < 0) return;
-    gotoScreenIdx(cur + (dx < 0 ? 1 : -1));
+    if (ignore || !dragging) { ignore = true; return; }
+    dragging = false; ignore = true;
+    const dx = e.changedTouches[0].clientX - sx, dt = Date.now() - st;
+    const vel = Math.abs(dx) / Math.max(dt, 1);
+    const pass = Math.abs(dx) > W() * 0.30 || (vel > 0.5 && Math.abs(dx) > 50);
+    const dir = dx < 0 ? 1 : -1, target = cur + dir;
+    if (pass && target >= 0 && target < SWIPE_SEQ.length) {
+      ubSwiping = true;
+      // 1) la pantalla actual termina de salir en la dirección del dedo
+      main.style.transition = 'transform .16s ease-out, opacity .16s ease-out';
+      main.style.transform = `translateX(${dir === 1 ? -100 : 100}%)`;
+      main.style.opacity = '0';
+      setTimeout(() => {
+        // 2) cargamos la nueva y la colocamos en el borde opuesto…
+        gotoScreenIdx(target);
+        main.style.transition = 'none';
+        main.style.transform = `translateX(${dir === 1 ? 100 : -100}%)`;
+        main.style.opacity = '0';
+        // 3) …y la deslizamos hasta su sitio
+        requestAnimationFrame(() => {
+          main.style.transition = 'transform .24s var(--ease), opacity .24s var(--ease)';
+          main.style.transform = 'translateX(0)';
+          main.style.opacity = '1';
+          setTimeout(() => { clearStyle(); ubSwiping = false; }, 250);
+        });
+      }, 160);
+    } else {
+      // no llega al umbral → vuelve a su sitio
+      main.style.transition = 'transform .2s var(--ease)';
+      main.style.transform = 'translateX(0)';
+      setTimeout(clearStyle, 210);
+    }
   }, { passive: true });
 }
 

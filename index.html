@@ -22,7 +22,7 @@
 <link rel="manifest" href="/manifest.json?v=20260605l" />
 <meta name="theme-color" content="#0a0d18" />
 <link rel="apple-touch-icon" href="/icon-192.png?v=20260605l" />
-<link rel="stylesheet" href="css/styles.css?v=20260613k" />
+<link rel="stylesheet" href="css/styles.css?v=20260614a" />
 <script>(function(){try{var t=localStorage.getItem('ub_theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}try{if(sessionStorage.getItem('ub_splash'))document.documentElement.classList.add('no-splash');}catch(e){}})();</script>
 <!-- Vercel Web Analytics -->
 <script>
@@ -180,6 +180,7 @@ html.no-splash #splash{display:none}
   <!-- TOPBAR -->
   <div class="topbar">
     <button class="icon-btn menu-toggle" id="menuToggle" title="Menú" aria-label="Abrir menú"><svg><use href="#i-menu"/></svg></button>
+    <button class="icon-btn desk-only" id="toggleSideBtn" title="Ocultar/mostrar menú" aria-label="Plegar menú lateral"><svg class="chev"><use href="#i-chevron-left"/></svg></button>
     <div class="logo topbar-logo">Under<span class="u">Bro</span></div>
     <div class="tabs" id="feedTabs">
       <button data-tab="following">Following</button>
@@ -192,6 +193,7 @@ html.no-splash #splash{display:none}
     </div>
     <div class="topbar-right">
       <button class="icon-btn search-toggle" id="btnSearchToggle" title="Buscar"><svg><use href="#i-search"/></svg></button>
+      <button class="icon-btn desk-only" id="toggleChatBtn" title="Ocultar/mostrar chat" aria-label="Plegar panel de chat"><svg class="chev"><use href="#i-comment"/></svg></button>
       <button class="icon-btn drawer-only" id="btnChatToggle" title="Chat y online"><svg><use href="#i-comment"/></svg></button>
       <button class="icon-btn mail-btn" id="btnMessages" title="Mensajes"><svg><use href="#i-mail"/></svg><span class="badge hidden" id="dmBadge">0</span></button>
       <button class="icon-btn" id="btnNotif" title="Notificaciones"><svg><use href="#i-bell"/></svg><span class="badge hidden" id="notifBadge">0</span></button>
@@ -418,7 +420,7 @@ html.no-splash #splash{display:none}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
-<script src="js/config.js?v=20260613k"></script>
-<script src="js/app.js?v=20260613k"></script>
+<script src="js/config.js?v=20260614a"></script>
+<script src="js/app.js?v=20260614a"></script>
 </body>
 </html>
