@@ -721,29 +721,25 @@ function initSwipeNav() {
     const dir = dx < 0 ? 1 : -1, target = cur + dir;
     if (pass && target >= 0 && target < SWIPE_SEQ.length) {
       ubSwiping = true;
-      // 1) la pantalla actual termina de salir en la dirección del dedo
-      main.style.transition = 'transform .16s ease-out, opacity .16s ease-out';
-      main.style.transform = `translateX(${dir === 1 ? -100 : 100}%)`;
-      main.style.opacity = '0';
-      setTimeout(() => {
-        // 2) cargamos la nueva y la colocamos en el borde opuesto…
-        gotoScreenIdx(target);
-        main.style.transition = 'none';
-        main.style.transform = `translateX(${dir === 1 ? 100 : -100}%)`;
-        main.style.opacity = '0';
-        // 3) …y la deslizamos hasta su sitio
-        requestAnimationFrame(() => {
-          main.style.transition = 'transform .24s var(--ease), opacity .24s var(--ease)';
-          main.style.transform = 'translateX(0)';
-          main.style.opacity = '1';
-          setTimeout(() => { clearStyle(); ubSwiping = false; }, 250);
-        });
-      }, 160);
+      // Render del contenido nuevo PRIMERO (el trabajo pesado pasa aquí, antes de
+      // animar) y lo colocamos al instante en el borde de entrada: como JS es
+      // síncrono no hay parpadeo. Luego una sola transición fluida lo desliza.
+      gotoScreenIdx(target);
+      main.style.transition = 'none';
+      main.style.transform = `translateX(${dir === 1 ? 100 : -100}%)`;
+      main.style.opacity = '0.5';
+      void main.offsetWidth;                                  // fija el punto de partida
+      requestAnimationFrame(() => {
+        main.style.transition = 'transform .34s cubic-bezier(.22,.61,.36,1), opacity .34s ease-out';
+        main.style.transform = 'translateX(0)';
+        main.style.opacity = '1';
+        setTimeout(() => { clearStyle(); ubSwiping = false; }, 360);
+      });
     } else {
-      // no llega al umbral → vuelve a su sitio
-      main.style.transition = 'transform .2s var(--ease)';
+      // no llega al umbral → vuelve a su sitio con un rebote suave
+      main.style.transition = 'transform .28s cubic-bezier(.22,.61,.36,1)';
       main.style.transform = 'translateX(0)';
-      setTimeout(clearStyle, 210);
+      setTimeout(clearStyle, 300);
     }
   }, { passive: true });
 }

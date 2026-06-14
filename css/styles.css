@@ -1580,9 +1580,11 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
   .main { overflow-x: hidden; }
   .brand { display: none; }
   .menu-toggle { display: grid; }
-  .search-toggle { display: grid; }
+  /* en móvil no hace falta buscar ni chat en el header: buscar está en Bros y
+     los chats en la barra inferior */
+  .search-toggle, .mail-btn, .drawer-only { display: none !important; }
 
-  /* TOPBAR en dos filas: [☰ · UnderBro · 🔍 🔔 avatar] / [tabs] */
+  /* TOPBAR: [☰ · UnderBro · 🔔 avatar] / [tabs] */
   .topbar { flex-wrap: wrap; align-items: center; gap: 8px 8px; padding: 9px 12px; }
   .topbar-logo { display: block; font-size: 22px; margin-right: auto; }
   .icon-btn { width: 42px; height: 42px; }
