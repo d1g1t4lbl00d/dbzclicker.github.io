@@ -1236,94 +1236,91 @@ function hexA(c, a) {
 }
 function _measureTracked(ctx, t, ls) { let w = 0; for (const ch of t) w += ctx.measureText(ch).width + ls; return w - ls; }
 function _fillTracked(ctx, t, cx, y, ls) { const w = _measureTracked(ctx, t, ls); let x = cx - w / 2; const prev = ctx.textAlign; ctx.textAlign = 'left'; for (const ch of t) { ctx.fillText(ch, x, y); x += ctx.measureText(ch).width + ls; } ctx.textAlign = prev; }
-// extrae un color de acento + tinte de una imagen (carátula) para tematizar la tarjeta
+function _rgb2hsl(r, g, b) { r /= 255; g /= 255; b /= 255; const mx = Math.max(r, g, b), mn = Math.min(r, g, b); let h, s, l = (mx + mn) / 2; if (mx === mn) { h = s = 0; } else { const d = mx - mn; s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn); h = mx === r ? (g - b) / d + (g < b ? 6 : 0) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h /= 6; } return [h, s, l]; }
+function _hsl2rgb(h, s, l) { let r, g, b; if (s === 0) { r = g = b = l; } else { const f = (p, q, t) => { if (t < 0) t += 1; if (t > 1) t -= 1; if (t < 1 / 6) return p + (q - p) * 6 * t; if (t < 1 / 2) return q; if (t < 2 / 3) return p + (q - p) * (2 / 3 - t) * 6; return p; }; const q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q; r = f(p, q, h + 1 / 3); g = f(p, q, h); b = f(p, q, h - 1 / 3); } return `rgb(${Math.round(r * 255)},${Math.round(g * 255)},${Math.round(b * 255)})`; }
+// extrae un color de acento vibrante (normalizado en HSL) y un tinte oscuro de la carátula
 function storyAccent(img) {
   try {
-    const c = document.createElement('canvas'); c.width = c.height = 26; const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(img, 0, 0, 26, 26);
-    const d = x.getImageData(0, 0, 26, 26).data; let ar = 0, ag = 0, ab = 0, n = 0, best = { s: -1, r: 62, g: 87, b: 252 };
-    for (let i = 0; i < d.length; i += 4) { const r = d[i], g = d[i + 1], b = d[i + 2], al = d[i + 3]; if (al < 128) continue; ar += r; ag += g; ab += b; n++; const mx = Math.max(r, g, b), mn = Math.min(r, g, b), s = mx === 0 ? 0 : (mx - mn) / mx, score = s * (mx / 255); if (score > best.s && mx > 70) best = { s: score, r, g, b }; }
-    if (!n) return null;
-    const rgb = (r, g, b) => `rgb(${Math.round(Math.min(255, r))},${Math.round(Math.min(255, g))},${Math.round(Math.min(255, b))})`;
-    return { a: rgb(best.r, best.g, best.b), a2: rgb(best.r * 1.3 + 30, best.g * 1.3 + 30, best.b * 1.3 + 40), tint: rgb(ar / n * 0.34, ag / n * 0.34, ab / n * 0.42) };
+    const c = document.createElement('canvas'); c.width = c.height = 30; const x = c.getContext('2d', { willReadFrequently: true }); x.drawImage(img, 0, 0, 30, 30);
+    const d = x.getImageData(0, 0, 30, 30).data; let best = { score: -1, h: 0.62, s: 0.8, l: 0.56 };
+    for (let i = 0; i < d.length; i += 4) { if (d[i + 3] < 128) continue; const [h, s, l] = _rgb2hsl(d[i], d[i + 1], d[i + 2]); const score = s * (1 - Math.abs(l - 0.55) * 1.6); if (score > best.score && l > 0.18 && l < 0.92) best = { score, h, s, l }; }
+    const h = best.h, s = Math.min(0.92, Math.max(0.62, best.s)), l = Math.min(0.62, Math.max(0.5, best.l));
+    return { a: _hsl2rgb(h, s, l), a2: _hsl2rgb((h + 0.05) % 1, Math.min(0.95, s + 0.06), Math.min(0.72, l + 0.12)), tint: _hsl2rgb(h, Math.min(0.5, s * 0.7), 0.11) };
   } catch (_) { return null; }
 }
 // Dibuja la tarjeta de historia 1080x1920. shape: 'square' (pista) | 'circle' (perfil) | 'photo' (foto)
+const STORY_S = 720, STORY_CY = 432;
+function _storyWaveY() { return STORY_CY + STORY_S + 320; }
 function drawStoryCard(ctx, o) {
+  _drawStoryBase(ctx, o);
+  _drawStoryWave(ctx, o, o.freq || null);
+  if (o.progress != null) _drawStoryTimeline(ctx, o, o.progress);
+}
+// CAPA ESTÁTICA — todo lo costoso (blurs) se dibuja una sola vez
+function _drawStoryBase(ctx, o) {
   const W = 1080, H = 1920;
-  const { shape = 'square', coverImg = null, avatarImg = null, title = '', subtitle = '', cta = 'Escúchalo en UnderBro', footer = 'underbro.app', freq = null, progress = null, clip = 10, label = '♫  Sonando en UnderBro', accent = '#3e57fc', accent2 = '#27c0ff', tint = null } = o;
+  const { shape = 'square', coverImg = null, avatarImg = null, title = '', subtitle = '', cta = 'Escúchalo en UnderBro', footer = 'underbro.app', label = '♫  Sonando en UnderBro', accent = '#3e57fc', accent2 = '#27c0ff', tint = null } = o;
+  const S = STORY_S, cx = (W - S) / 2, cy = STORY_CY, ccy = cy + S / 2;
   const grad = (x0, y0, x1, y1) => { const g = ctx.createLinearGradient(x0, y0, x1, y1); g.addColorStop(0, accent); g.addColorStop(1, accent2); return g; };
-  // fondo difuminado
-  if (coverImg) { const sc = Math.max(W / coverImg.width, H / coverImg.height) * 1.3, cw = coverImg.width * sc, ch = coverImg.height * sc; ctx.filter = 'blur(80px)'; ctx.drawImage(coverImg, (W - cw) / 2, (H - ch) / 2, cw, ch); ctx.filter = 'none'; }
-  else { const g = ctx.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#101733'); g.addColorStop(1, '#1c0f3a'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
-  if (tint) { ctx.save(); ctx.globalAlpha = 0.5; ctx.fillStyle = tint; ctx.fillRect(0, 0, W, H); ctx.restore(); }
-  ctx.fillStyle = 'rgba(8,10,20,.5)'; ctx.fillRect(0, 0, W, H);
-  const halo = ctx.createRadialGradient(W / 2, 650, 60, W / 2, 650, 760); halo.addColorStop(0, hexA(accent, .3)); halo.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = halo; ctx.fillRect(0, 0, W, H);
-  const vr = ctx.createRadialGradient(W / 2, H * 0.42, 200, W / 2, H * 0.5, 1150); vr.addColorStop(0, 'rgba(0,0,0,0)'); vr.addColorStop(1, 'rgba(0,0,0,.5)'); ctx.fillStyle = vr; ctx.fillRect(0, 0, W, H);
-  const gv = ctx.createLinearGradient(0, H * 0.35, 0, H); gv.addColorStop(0, 'rgba(8,10,20,0)'); gv.addColorStop(1, 'rgba(8,10,20,.92)'); ctx.fillStyle = gv; ctx.fillRect(0, 0, W, H);
+  // fondo difuminado de la carátula
+  if (coverImg) { const sc = Math.max(W / coverImg.width, H / coverImg.height) * 1.3, cw = coverImg.width * sc, ch = coverImg.height * sc; ctx.filter = 'blur(90px)'; ctx.drawImage(coverImg, (W - cw) / 2, (H - ch) / 2, cw, ch); ctx.filter = 'none'; }
+  else { const g = ctx.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#141b35'); g.addColorStop(1, '#1c1140'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
+  ctx.fillStyle = 'rgba(6,8,16,.5)'; ctx.fillRect(0, 0, W, H);
+  if (tint) { ctx.save(); ctx.globalAlpha = 0.4; ctx.fillStyle = tint; ctx.fillRect(0, 0, W, H); ctx.restore(); }
+  const halo = ctx.createRadialGradient(W / 2, cy + S * 0.25, 40, W / 2, cy + S * 0.25, 820); halo.addColorStop(0, hexA(accent, .32)); halo.addColorStop(1, 'rgba(0,0,0,0)'); ctx.fillStyle = halo; ctx.fillRect(0, 0, W, H);
+  const gv = ctx.createLinearGradient(0, H * 0.48, 0, H); gv.addColorStop(0, 'rgba(6,8,16,0)'); gv.addColorStop(1, 'rgba(6,8,16,.97)'); ctx.fillStyle = gv; ctx.fillRect(0, 0, W, H);
+  const gt = ctx.createLinearGradient(0, 0, 0, 320); gt.addColorStop(0, 'rgba(6,8,16,.55)'); gt.addColorStop(1, 'rgba(6,8,16,0)'); ctx.fillStyle = gt; ctx.fillRect(0, 0, W, 320);
   ctx.textAlign = 'center';
-  // pill superior (mayúsculas con tracking)
-  const lab = label.toUpperCase(); ctx.font = '700 31px Poppins, system-ui, sans-serif';
-  const lw = _measureTracked(ctx, lab, 3), plw = lw + 76;
-  ctx.fillStyle = 'rgba(255,255,255,.1)'; _roundRect(ctx, (W - plw) / 2, 120, plw, 64, 32); ctx.fill();
-  ctx.strokeStyle = 'rgba(255,255,255,.16)'; ctx.lineWidth = 1; _roundRect(ctx, (W - plw) / 2, 120, plw, 64, 32); ctx.stroke();
-  ctx.fillStyle = '#fff'; _fillTracked(ctx, lab, W / 2, 161, 3);
-  // media
-  const S = 700, cx = (W - S) / 2, cy = 400, ccy = cy + S / 2, wy = cy + S + 352;
-  const pathMedia = () => { if (shape === 'circle') { ctx.beginPath(); ctx.arc(W / 2, ccy, S / 2, 0, Math.PI * 2); } else { _roundRect(ctx, cx, cy, S, S, 56); } };
-  // glow de acento detrás de la carátula
-  ctx.save(); ctx.filter = 'blur(80px)'; ctx.fillStyle = grad(cx, cy, cx + S, cy + S); ctx.globalAlpha = 0.6; _roundRect(ctx, cx + 20, cy + 50, S - 40, S - 50, 90); ctx.fill(); ctx.restore();
-  // panel de cristal tras el texto
-  const panX = 60, panW = W - 120, panTop = cy + S - 28, panBot = wy + (progress != null ? 150 : 62), panH = panBot - panTop;
-  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = 40; ctx.shadowOffsetY = 16; ctx.fillStyle = 'rgba(12,15,26,.46)'; _roundRect(ctx, panX, panTop, panW, panH, 46); ctx.fill(); ctx.restore();
-  ctx.strokeStyle = 'rgba(255,255,255,.1)'; ctx.lineWidth = 1.5; _roundRect(ctx, panX, panTop, panW, panH, 46); ctx.stroke();
-  ctx.save(); _roundRect(ctx, panX, panTop, panW, panH, 46); ctx.clip(); const hl = ctx.createLinearGradient(0, panTop, 0, panTop + 70); hl.addColorStop(0, 'rgba(255,255,255,.07)'); hl.addColorStop(1, 'rgba(255,255,255,0)'); ctx.fillStyle = hl; ctx.fillRect(panX, panTop, panW, 90); ctx.restore();
+  // etiqueta superior
+  const lab = label.toUpperCase(); ctx.font = '700 30px Poppins, system-ui, sans-serif';
+  const lw = _measureTracked(ctx, lab, 2.5), plw = lw + 72;
+  ctx.fillStyle = 'rgba(255,255,255,.1)'; _roundRect(ctx, (W - plw) / 2, 116, plw, 62, 31); ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,.15)'; ctx.lineWidth = 1; _roundRect(ctx, (W - plw) / 2, 116, plw, 62, 31); ctx.stroke();
+  ctx.fillStyle = 'rgba(255,255,255,.95)'; _fillTracked(ctx, lab, W / 2, 155, 2.5);
+  // glow detrás de la carátula
+  const pathMedia = () => { if (shape === 'circle') { ctx.beginPath(); ctx.arc(W / 2, ccy, S / 2, 0, Math.PI * 2); } else { _roundRect(ctx, cx, cy, S, S, 52); } };
+  ctx.save(); ctx.filter = 'blur(85px)'; ctx.fillStyle = grad(cx, cy, cx + S, cy + S); ctx.globalAlpha = 0.55; _roundRect(ctx, cx + 25, cy + 55, S - 50, S - 50, 90); ctx.fill(); ctx.restore();
   // sombra + carátula
-  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 70; ctx.shadowOffsetY = 30; pathMedia(); ctx.fillStyle = '#11162a'; ctx.fill(); ctx.restore();
+  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 80; ctx.shadowOffsetY = 34; pathMedia(); ctx.fillStyle = '#0d1120'; ctx.fill(); ctx.restore();
   ctx.save(); pathMedia(); ctx.clip();
   if (coverImg) {
     if (shape === 'photo') { const r = Math.min(S / coverImg.width, S / coverImg.height), iw = coverImg.width * r, ih = coverImg.height * r; ctx.fillStyle = '#0b0f1c'; ctx.fillRect(cx, cy, S, S); ctx.drawImage(coverImg, cx + (S - iw) / 2, cy + (S - ih) / 2, iw, ih); }
     else { const r = Math.max(S / coverImg.width, S / coverImg.height), iw = coverImg.width * r, ih = coverImg.height * r; ctx.drawImage(coverImg, W / 2 - iw / 2, ccy - ih / 2, iw, ih); }
-  } else { ctx.fillStyle = grad(cx, cy, cx + S, cy + S); ctx.fillRect(cx, cy, S, S); ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.font = '800 220px system-ui'; ctx.fillText(shape === 'circle' ? '👤' : '♪', W / 2, ccy + 78); }
-  const sh = ctx.createLinearGradient(0, cy, 0, cy + S * 0.55); sh.addColorStop(0, 'rgba(255,255,255,.14)'); sh.addColorStop(1, 'rgba(255,255,255,0)'); ctx.fillStyle = sh; ctx.fillRect(cx, cy, S, S);
-  const ci = ctx.createLinearGradient(0, cy + S * 0.6, 0, cy + S); ci.addColorStop(0, 'rgba(0,0,0,0)'); ci.addColorStop(1, 'rgba(0,0,0,.28)'); ctx.fillStyle = ci; ctx.fillRect(cx, cy, S, S);
+  } else { ctx.fillStyle = grad(cx, cy, cx + S, cy + S); ctx.fillRect(cx, cy, S, S); ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.font = '800 230px system-ui'; ctx.fillText(shape === 'circle' ? '👤' : '♪', W / 2, ccy + 82); }
+  const sh = ctx.createLinearGradient(0, cy, 0, cy + S * 0.5); sh.addColorStop(0, 'rgba(255,255,255,.13)'); sh.addColorStop(1, 'rgba(255,255,255,0)'); ctx.fillStyle = sh; ctx.fillRect(cx, cy, S, S);
   ctx.restore();
-  ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(255,255,255,.22)'; pathMedia(); ctx.stroke();
-  // botón play (solo pista)
-  if (shape === 'square') {
-    const by = cy + S, br = 72;
-    ctx.save(); ctx.shadowColor = hexA(accent, .5); ctx.shadowBlur = 34; ctx.beginPath(); ctx.arc(W / 2, by, br, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.restore();
-    ctx.fillStyle = accent; ctx.beginPath(); ctx.moveTo(W / 2 - 22, by - 31); ctx.lineTo(W / 2 - 22, by + 31); ctx.lineTo(W / 2 + 35, by); ctx.closePath(); ctx.fill();
-  }
+  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,.18)'; pathMedia(); ctx.stroke();
   // título
-  ctx.fillStyle = '#fff'; const tt = _fitText(ctx, title || '', W - 180, 80, '800'); ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 14; ctx.fillText(tt, W / 2, cy + S + 168); ctx.shadowBlur = 0;
-  // artista (avatar + nombre)
+  ctx.fillStyle = '#fff'; const tt = _fitText(ctx, title || '', W - 150, 84, '800'); ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 2; ctx.fillText(tt, W / 2, cy + S + 148); ctx.shadowBlur = 0; ctx.shadowOffsetY = 0;
+  // artista
   if (subtitle) {
     ctx.font = '600 42px Poppins, system-ui, sans-serif';
-    const sub = _fitText(ctx, subtitle, W - 300, 42, '600');
-    const tw = ctx.measureText(sub).width, av = avatarImg ? 60 : 0, gpx = av ? 16 : 0, bW = av + gpx + tw, sX = (W - bW) / 2, ry = cy + S + 230;
-    if (avatarImg) { ctx.save(); ctx.beginPath(); ctx.arc(sX + av / 2, ry - 15, av / 2, 0, Math.PI * 2); ctx.clip(); const r = Math.max(av / avatarImg.width, av / avatarImg.height); ctx.drawImage(avatarImg, sX + av / 2 - avatarImg.width * r / 2, ry - 15 - avatarImg.height * r / 2, avatarImg.width * r, avatarImg.height * r); ctx.restore(); ctx.lineWidth = 2; ctx.strokeStyle = hexA(accent, .85); ctx.beginPath(); ctx.arc(sX + av / 2, ry - 15, av / 2, 0, Math.PI * 2); ctx.stroke(); }
-    ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.fillText(sub, sX + av + gpx, ry); ctx.textAlign = 'center';
-  }
-  // onda
-  const nb = 52, bw = 8, gap = 8, tot = nb * (bw + gap) - gap, sx = (W - tot) / 2;
-  const gb = grad(sx, 0, sx + tot, 0); ctx.fillStyle = gb;
-  for (let i = 0; i < nb; i++) { let h; if (freq) { const v = freq[Math.floor(i / nb * freq.length)] / 255; h = 10 + v * 120; } else { h = 10 + Math.abs(Math.sin(i * 0.5) * Math.cos(i * 0.17)) * 72; } const x = sx + i * (bw + gap); _roundRect(ctx, x, wy - h / 2, bw, h, 4); ctx.fill(); }
-  // línea de tiempo (vídeo)
-  if (progress != null) {
-    const tlw = 640, tlx = (W - tlw) / 2, tly = wy + 92, pp = Math.max(0, Math.min(1, progress));
-    ctx.fillStyle = 'rgba(255,255,255,.2)'; _roundRect(ctx, tlx, tly, tlw, 8, 4); ctx.fill();
-    ctx.fillStyle = gb; _roundRect(ctx, tlx, tly, tlw * pp, 8, 4); ctx.fill();
-    ctx.save(); ctx.shadowColor = hexA(accent, .7); ctx.shadowBlur = 14; ctx.beginPath(); ctx.arc(tlx + tlw * pp, tly + 4, 12, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.restore();
-    ctx.fillStyle = 'rgba(255,255,255,.72)'; ctx.font = '600 28px Poppins, system-ui, sans-serif';
-    ctx.textAlign = 'left'; ctx.fillText(fmtClock(pp * clip), tlx, tly + 50);
-    ctx.textAlign = 'right'; ctx.fillText(fmtClock(clip), tlx + tlw, tly + 50); ctx.textAlign = 'center';
+    const sub = _fitText(ctx, subtitle, W - 320, 42, '600');
+    const tw = ctx.measureText(sub).width, av = avatarImg ? 58 : 0, gpx = av ? 16 : 0, bW = av + gpx + tw, sX = (W - bW) / 2, ry = cy + S + 214;
+    if (avatarImg) { ctx.save(); ctx.beginPath(); ctx.arc(sX + av / 2, ry - 15, av / 2, 0, Math.PI * 2); ctx.clip(); const r = Math.max(av / avatarImg.width, av / avatarImg.height); ctx.drawImage(avatarImg, sX + av / 2 - avatarImg.width * r / 2, ry - 15 - avatarImg.height * r / 2, avatarImg.width * r, avatarImg.height * r); ctx.restore(); ctx.lineWidth = 2; ctx.strokeStyle = hexA(accent, .9); ctx.beginPath(); ctx.arc(sX + av / 2, ry - 15, av / 2, 0, Math.PI * 2); ctx.stroke(); }
+    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 10; ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(255,255,255,.9)'; ctx.fillText(sub, sX + av + gpx, ry); ctx.restore(); ctx.textAlign = 'center';
   }
   // CTA con brillo + footer
-  const pw = 620, ph = 104, px = (W - pw) / 2, py = H - 236;
-  ctx.save(); ctx.shadowColor = hexA(accent, .55); ctx.shadowBlur = 34; ctx.shadowOffsetY = 12; ctx.fillStyle = grad(px, 0, px + pw, 0); _roundRect(ctx, px, py, pw, ph, 52); ctx.fill(); ctx.restore();
-  ctx.save(); _roundRect(ctx, px, py, pw, ph, 52); ctx.clip(); const cg = ctx.createLinearGradient(0, py, 0, py + ph / 2); cg.addColorStop(0, 'rgba(255,255,255,.25)'); cg.addColorStop(1, 'rgba(255,255,255,0)'); ctx.fillStyle = cg; ctx.fillRect(px, py, pw, ph / 2); ctx.restore();
-  ctx.fillStyle = '#fff'; ctx.font = '700 40px Poppins, system-ui, sans-serif'; ctx.fillText(cta, W / 2, py + ph / 2 + 14);
-  ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.font = '600 28px Poppins, system-ui, sans-serif'; _fillTracked(ctx, footer.toUpperCase(), W / 2, H - 80, 2);
+  const pw = 640, ph = 108, px = (W - pw) / 2, py = H - 244;
+  ctx.save(); ctx.shadowColor = hexA(accent, .5); ctx.shadowBlur = 40; ctx.shadowOffsetY = 14; ctx.fillStyle = grad(px, 0, px + pw, 0); _roundRect(ctx, px, py, pw, ph, 54); ctx.fill(); ctx.restore();
+  ctx.save(); _roundRect(ctx, px, py, pw, ph, 54); ctx.clip(); const cg = ctx.createLinearGradient(0, py, 0, py + ph / 2); cg.addColorStop(0, 'rgba(255,255,255,.28)'); cg.addColorStop(1, 'rgba(255,255,255,0)'); ctx.fillStyle = cg; ctx.fillRect(px, py, pw, ph / 2); ctx.restore();
+  ctx.fillStyle = '#fff'; ctx.font = '700 41px Poppins, system-ui, sans-serif'; ctx.fillText(cta, W / 2, py + ph / 2 + 14);
+  ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.font = '600 27px Poppins, system-ui, sans-serif'; _fillTracked(ctx, footer.toUpperCase(), W / 2, H - 86, 2);
+}
+// CAPA DINÁMICA — barata, se dibuja cada fotograma
+function _drawStoryWave(ctx, o, freq) {
+  const W = 1080, wy = _storyWaveY(), accent = o.accent || '#3e57fc', accent2 = o.accent2 || '#27c0ff';
+  const nb = 56, bw = 7, gap = 8, tot = nb * (bw + gap) - gap, sx = (W - tot) / 2;
+  const g = ctx.createLinearGradient(sx, 0, sx + tot, 0); g.addColorStop(0, accent); g.addColorStop(1, accent2); ctx.fillStyle = g;
+  for (let i = 0; i < nb; i++) { let v; if (freq) v = freq[Math.floor(i / nb * freq.length)] / 255; else v = 0.12 + Math.abs(Math.sin(i * 0.5) * Math.cos(i * 0.16)) * 0.62; const h = 12 + v * 128, x = sx + i * (bw + gap); _roundRect(ctx, x, wy - h / 2, bw, h, bw / 2); ctx.fill(); }
+}
+function _drawStoryTimeline(ctx, o, progress) {
+  const W = 1080, wy = _storyWaveY(), accent = o.accent || '#3e57fc', accent2 = o.accent2 || '#27c0ff', clip = o.clip || 10;
+  const tlw = 640, tlx = (W - tlw) / 2, tly = wy + 96, pp = Math.max(0, Math.min(1, progress));
+  ctx.fillStyle = 'rgba(255,255,255,.18)'; _roundRect(ctx, tlx, tly, tlw, 8, 4); ctx.fill();
+  const g = ctx.createLinearGradient(tlx, 0, tlx + tlw, 0); g.addColorStop(0, accent); g.addColorStop(1, accent2); ctx.fillStyle = g; _roundRect(ctx, tlx, tly, tlw * pp, 8, 4); ctx.fill();
+  ctx.save(); ctx.shadowColor = hexA(accent, .7); ctx.shadowBlur = 14; ctx.beginPath(); ctx.arc(tlx + tlw * pp, tly + 4, 12, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.restore();
+  ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.font = '600 27px Poppins, system-ui, sans-serif'; ctx.textAlign = 'left'; ctx.fillText(fmtClock(pp * clip), tlx, tly + 52); ctx.textAlign = 'right'; ctx.fillText(fmtClock(clip), tlx + tlw, tly + 52); ctx.textAlign = 'center';
 }
 async function generateStoryImage(o) {
   await ensurePoppins();
@@ -1349,27 +1346,33 @@ function pickVideoMime() {
 // graba un vídeo 1080x1920 (tarjeta animada + el clip de audio elegido) en tiempo real
 async function renderTrackStoryVideo(t, coverImg, avatarImg, buffer, start, clip, onProgress) {
   await ensurePoppins();
+  const who = trackWho(t);
+  const acc = coverImg ? storyAccent(coverImg) : null;
+  const o = { shape: 'square', coverImg, avatarImg, title: t.title, subtitle: who, cta: '▶  Escúchala en UnderBro', footer: 'underbro.app', label: '♫  Sonando en UnderBro', clip, accent: acc ? acc.a : undefined, accent2: acc ? acc.a2 : undefined, tint: acc ? acc.tint : undefined };
+  // Capa estática (cara, fondo, blur): se dibuja UNA sola vez (el blur es caro)
+  const stat = document.createElement('canvas'); stat.width = 1080; stat.height = 1920; _drawStoryBase(stat.getContext('2d'), o);
   const cv = document.createElement('canvas'); cv.width = 1080; cv.height = 1920; const ctx = cv.getContext('2d');
   const ac = new (window.AudioContext || window.webkitAudioContext)();
   if (ac.state === 'suspended') { try { await ac.resume(); } catch (_) {} }
   const dest = ac.createMediaStreamDestination();
-  const analyser = ac.createAnalyser(); analyser.fftSize = 128; analyser.smoothingTimeConstant = 0.8;
+  const analyser = ac.createAnalyser(); analyser.fftSize = 128; analyser.smoothingTimeConstant = 0.78;
   const src = ac.createBufferSource(); src.buffer = buffer; src.connect(analyser); analyser.connect(dest);
-  const vstream = cv.captureStream(25);
+  const vstream = cv.captureStream(30);
   const mixed = new MediaStream([...vstream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
   const mime = pickVideoMime();
-  const rec = new MediaRecorder(mixed, mime ? { mimeType: mime, videoBitsPerSecond: 6000000 } : undefined);
+  const rec = new MediaRecorder(mixed, mime ? { mimeType: mime, videoBitsPerSecond: 8000000 } : undefined);
   const chunks = []; rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
   const stopped = new Promise((res) => { rec.onstop = res; });
-  const who = trackWho(t); const freq = new Uint8Array(analyser.frequencyBinCount);
-  const acc = coverImg ? storyAccent(coverImg) : null;
+  const freq = new Uint8Array(analyser.frequencyBinCount);
   rec.start(100); src.start(0, start, clip);
   const t0 = performance.now();
   await new Promise((resolve) => {
     const frame = () => {
       const el = (performance.now() - t0) / 1000, pr = Math.min(1, el / clip);
       analyser.getByteFrequencyData(freq);
-      drawStoryCard(ctx, { shape: 'square', coverImg, avatarImg, title: t.title, subtitle: who, cta: '▶  Escúchala en UnderBro', footer: 'underbro.app', freq, progress: pr, clip, label: '♫  Sonando en UnderBro', accent: acc ? acc.a : undefined, accent2: acc ? acc.a2 : undefined, tint: acc ? acc.tint : undefined });
+      ctx.drawImage(stat, 0, 0);
+      _drawStoryWave(ctx, o, freq);
+      _drawStoryTimeline(ctx, o, pr);
       if (onProgress) onProgress(pr);
       if (el < clip) requestAnimationFrame(frame); else resolve();
     };
