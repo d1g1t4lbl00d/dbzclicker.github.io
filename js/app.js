@@ -3865,6 +3865,7 @@ function pickTrackModal(cb) {
   const m = openModal(`<div class="modal-head"><h3>Elegir canción</h3><button class="close">&times;</button></div><div class="modal-body"><input type="text" id="stSearch" placeholder="Buscar pista…" style="width:100%;padding:10px 12px;border:1px solid var(--line-soft);border-radius:10px;margin-bottom:10px;background:var(--glass);color:var(--ink)" /><div id="stResults"><div class="loading" style="padding:16px"><div class="spinner"></div></div></div></div>`);
   const results = m.querySelector('#stResults');
   const run = async (q) => {
+    q = sanitizeTerm(q);
     let query = sb.from('tracks').select('id,title,cover_url,artist,audio_url,profiles!tracks_user_id_fkey(display_name,username)');
     query = q ? query.ilike('title', `%${q}%`).limit(30) : query.order('plays', { ascending: false }).limit(30);
     const { data } = await query;
@@ -6127,7 +6128,7 @@ async function loadAdminStats() {
 async function adminUserSearch(q) {
   const list = $('admUserList'); if (!list) return;
   list.innerHTML = '<div class="loading" style="padding:18px"><div class="spinner"></div></div>';
-  const term = (q || '').replace('@', '').trim();
+  const term = sanitizeTerm((q || '').replace('@', ''));
   let query = sb.from('profiles').select('id,username,display_name,avatar_url,verified,banned,is_admin,user_badges(badge)').limit(30);
   query = term ? query.or(`username.ilike.%${term}%,display_name.ilike.%${term}%`) : query.order('created_at', { ascending: false });
   const { data, error } = await query;
@@ -6629,7 +6630,8 @@ function initCalls() {
     // acciones de la notificación cuando la app ya estaba abierta en segundo plano
     if (navigator.serviceWorker) {
       navigator.serviceWorker.addEventListener('message', (e) => {
-        if (e.data && e.data.type === 'callAction') { setAutoCallAction(e.data.action); applyAutoCallAction(); }
+        if (e.origin && e.origin !== location.origin) return;   // solo mensajes del propio SW
+        if (e.data && e.data.type === 'callAction' && (e.data.action === 'accept' || e.data.action === 'decline')) { setAutoCallAction(e.data.action); applyAutoCallAction(); }
       });
     }
     callSignalCatchUp();
@@ -7363,7 +7365,7 @@ function reactionsInner(messageId) {
   const map = state.dmReacts.get(messageId); if (!map) return '';
   const uid = state.user.id;
   return Object.entries(map).filter(([, s]) => s.size).map(([e, s]) =>
-    `<button class="dm-react ${s.has(uid) ? 'mine' : ''}" data-emoji="${esc(e)}">${e}<span class="rc">${s.size}</span></button>`).join('');
+    `<button class="dm-react ${s.has(uid) ? 'mine' : ''}" data-emoji="${esc(e)}">${esc(e)}<span class="rc">${s.size}</span></button>`).join('');
 }
 function makeBubble(msg) {
   const mine = msg.sender_id === state.user.id;
@@ -7564,6 +7566,8 @@ async function toggleReaction(messageId, emoji) {
   } catch (_) {}
 }
 function applyRemoteReaction({ message_id, emoji, user_id, op }) {
+  // emoji llega por broadcast en tiempo real (no pasa por la BD/RLS): validar
+  if (typeof emoji !== 'string' || !emoji || emoji.length > 8 || /[<>&"']/.test(emoji)) return;
   let map = state.dmReacts.get(message_id); if (!map) { map = {}; state.dmReacts.set(message_id, map); }
   const set = map[emoji] || (map[emoji] = new Set());
   if (op === 'remove') { set.delete(user_id); if (!set.size) delete map[emoji]; }
