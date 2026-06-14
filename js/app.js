@@ -1208,79 +1208,157 @@ function _fitText(ctx, text, max, size, weight) {
   if (ctx.measureText(t).width > max) { while (t.length > 1 && ctx.measureText(t + '…').width > max) t = t.slice(0, -1); t += '…'; }
   return t;
 }
-async function generateStoryBlob(t) {
-  try { loadFont('Poppins'); await Promise.race([Promise.all([document.fonts.load('800 80px Poppins'), document.fonts.load('600 48px Poppins')]), new Promise(r => setTimeout(r, 1500))]); } catch (_) {}
-  const W = 1080, H = 1920;
-  const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
-  const ctx = cv.getContext('2d');
-  let cover = null;
-  if (t.cover_url) { try { cover = await _loadImg(czUrl(t.cover_url)); } catch (_) {} }
-  // fondo: carátula difuminada a pantalla completa o degradado de marca
-  if (cover) {
-    const scale = Math.max(W / cover.width, H / cover.height) * 1.15;
-    const cw = cover.width * scale, ch = cover.height * scale;
-    ctx.filter = 'blur(60px)'; ctx.drawImage(cover, (W - cw) / 2, (H - ch) / 2, cw, ch); ctx.filter = 'none';
-  } else {
-    const g = ctx.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#0a0e23'); g.addColorStop(1, '#1a1040'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-  }
-  // velo oscuro + degradado inferior para legibilidad
-  ctx.fillStyle = 'rgba(8,10,20,.55)'; ctx.fillRect(0, 0, W, H);
-  const gv = ctx.createLinearGradient(0, H * 0.45, 0, H); gv.addColorStop(0, 'rgba(8,10,20,0)'); gv.addColorStop(1, 'rgba(8,10,20,.85)'); ctx.fillStyle = gv; ctx.fillRect(0, 0, W, H);
-  // wordmark arriba
-  ctx.textAlign = 'center'; ctx.fillStyle = '#fff';
-  ctx.font = '800 50px Poppins, system-ui, sans-serif';
-  ctx.shadowColor = 'rgba(0,0,0,.4)'; ctx.shadowBlur = 18;
-  ctx.fillText('UnderBro', W / 2, 170);
-  ctx.shadowBlur = 0;
-  // carátula central con sombra y borde
-  const S = 700, cx = (W - S) / 2, cy = 470;
-  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 60; ctx.shadowOffsetY = 24;
-  _roundRect(ctx, cx, cy, S, S, 44); ctx.fillStyle = '#11162a'; ctx.fill(); ctx.restore();
-  ctx.save(); _roundRect(ctx, cx, cy, S, S, 44); ctx.clip();
-  if (cover) ctx.drawImage(cover, cx, cy, S, S);
-  else { const g2 = ctx.createLinearGradient(cx, cy, cx + S, cy + S); g2.addColorStop(0, '#3e57fc'); g2.addColorStop(1, '#27a9ff'); ctx.fillStyle = g2; ctx.fillRect(cx, cy, S, S); ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.font = '800 200px system-ui'; ctx.fillText('♪', W / 2, cy + S / 2 + 70); }
-  ctx.restore();
-  _roundRect(ctx, cx, cy, S, S, 44); ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.stroke();
-  // barra de onda decorativa (acento)
-  const wy = cy + S + 70, bars = 42, bw = 10, gap = 7, totalW = bars * (bw + gap) - gap, sx = (W - totalW) / 2;
-  const gb = ctx.createLinearGradient(sx, 0, sx + totalW, 0); gb.addColorStop(0, '#3e57fc'); gb.addColorStop(1, '#27a9ff');
-  ctx.fillStyle = gb;
-  for (let i = 0; i < bars; i++) { const h = 14 + Math.abs(Math.sin(i * 0.9)) * 60 + (i % 3) * 8; _roundRect(ctx, sx + i * (bw + gap), wy - h / 2, bw, h, 5); ctx.fill(); }
-  // título + artista
-  const who = t.profiles?.display_name || t.profiles?.username || t.artist || 'UnderBro';
-  ctx.fillStyle = '#fff'; ctx.textAlign = 'center';
-  const title = _fitText(ctx, t.title || 'Sin título', W - 140, 80, '800');
-  ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 14;
-  ctx.fillText(title, W / 2, wy + 130);
-  ctx.shadowBlur = 0;
-  ctx.fillStyle = 'rgba(255,255,255,.78)';
-  const artist = _fitText(ctx, who, W - 200, 48, '600');
-  ctx.fillText(artist, W / 2, wy + 195);
-  // CTA inferior tipo pastilla
-  const pw = 560, ph = 96, px = (W - pw) / 2, py = H - 230;
-  const gp = ctx.createLinearGradient(px, 0, px + pw, 0); gp.addColorStop(0, '#3e57fc'); gp.addColorStop(1, '#27a9ff');
-  ctx.fillStyle = gp; _roundRect(ctx, px, py, pw, ph, 48); ctx.fill();
-  ctx.fillStyle = '#fff'; ctx.font = '700 40px Poppins, system-ui, sans-serif';
-  ctx.fillText('▶  Escúchala en UnderBro', W / 2, py + ph / 2 + 14);
-  ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.font = '500 32px Poppins, system-ui, sans-serif';
-  ctx.fillText('underbro.app', W / 2, H - 90);
-  return await new Promise((resolve) => cv.toBlob((b) => resolve(b), 'image/png', 0.95));
+async function ensurePoppins() {
+  try { loadFont('Poppins'); await Promise.race([Promise.all([document.fonts.load('800 80px Poppins'), document.fonts.load('600 46px Poppins')]), new Promise(r => setTimeout(r, 1500))]); } catch (_) {}
 }
-async function shareStory(t) {
-  toast('Generando historia…');
-  let blob;
-  try { blob = await generateStoryBlob(t); } catch (e) { console.error('[story]', e); toast('No se pudo generar la historia'); return; }
+function trackWho(t) { return t.profiles?.display_name || t.profiles?.username || t.artist || 'UnderBro'; }
+function fmtClock(s) { s = Math.max(0, Math.floor(s || 0)); return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+// Dibuja la tarjeta de historia 1080x1920. shape: 'square' (pista) | 'circle' (perfil) | 'photo' (foto)
+function drawStoryCard(ctx, o) {
+  const W = 1080, H = 1920;
+  const { shape = 'square', coverImg = null, title = '', subtitle = '', cta = 'Escúchalo en UnderBro', footer = 'underbro.app', freq = null, progress = null } = o;
+  if (coverImg) { const sc = Math.max(W / coverImg.width, H / coverImg.height) * 1.15, cw = coverImg.width * sc, ch = coverImg.height * sc; ctx.filter = 'blur(60px)'; ctx.drawImage(coverImg, (W - cw) / 2, (H - ch) / 2, cw, ch); ctx.filter = 'none'; }
+  else { const g = ctx.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#0a0e23'); g.addColorStop(1, '#1a1040'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
+  ctx.fillStyle = 'rgba(8,10,20,.55)'; ctx.fillRect(0, 0, W, H);
+  const gv = ctx.createLinearGradient(0, H * 0.4, 0, H); gv.addColorStop(0, 'rgba(8,10,20,0)'); gv.addColorStop(1, 'rgba(8,10,20,.88)'); ctx.fillStyle = gv; ctx.fillRect(0, 0, W, H);
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#fff'; ctx.font = '800 50px Poppins, system-ui, sans-serif'; ctx.shadowColor = 'rgba(0,0,0,.4)'; ctx.shadowBlur = 18; ctx.fillText('UnderBro', W / 2, 170); ctx.shadowBlur = 0;
+  const S = 700, cx = (W - S) / 2, cy = 460, ccy = cy + S / 2;
+  const pathMedia = () => { if (shape === 'circle') { ctx.beginPath(); ctx.arc(W / 2, ccy, S / 2, 0, Math.PI * 2); } else { _roundRect(ctx, cx, cy, S, S, 44); } };
+  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 60; ctx.shadowOffsetY = 24; pathMedia(); ctx.fillStyle = '#11162a'; ctx.fill(); ctx.restore();
+  ctx.save(); pathMedia(); ctx.clip();
+  if (coverImg) {
+    if (shape === 'photo') { const r = Math.min(S / coverImg.width, S / coverImg.height), iw = coverImg.width * r, ih = coverImg.height * r; ctx.fillStyle = '#0b0f1c'; ctx.fillRect(cx, cy, S, S); ctx.drawImage(coverImg, cx + (S - iw) / 2, cy + (S - ih) / 2, iw, ih); }
+    else { const r = Math.max(S / coverImg.width, S / coverImg.height), iw = coverImg.width * r, ih = coverImg.height * r; ctx.drawImage(coverImg, W / 2 - iw / 2, ccy - ih / 2, iw, ih); }
+  } else { const g2 = ctx.createLinearGradient(cx, cy, cx + S, cy + S); g2.addColorStop(0, '#3e57fc'); g2.addColorStop(1, '#27a9ff'); ctx.fillStyle = g2; ctx.fillRect(cx, cy, S, S); ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.font = '800 200px system-ui'; ctx.fillText(shape === 'circle' ? '👤' : '♪', W / 2, ccy + 70); }
+  ctx.restore();
+  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,.18)'; pathMedia(); ctx.stroke();
+  const wy = cy + S + 70, nb = 42, bw = 10, gap = 7, tot = nb * (bw + gap) - gap, sx = (W - tot) / 2;
+  const gb = ctx.createLinearGradient(sx, 0, sx + tot, 0); gb.addColorStop(0, '#3e57fc'); gb.addColorStop(1, '#27a9ff'); ctx.fillStyle = gb;
+  for (let i = 0; i < nb; i++) { let h; if (freq) { const v = freq[Math.floor(i / nb * freq.length)] / 255; h = 14 + v * 130; } else { h = 14 + Math.abs(Math.sin(i * 0.9)) * 60 + (i % 3) * 8; } _roundRect(ctx, sx + i * (bw + gap), wy - h / 2, bw, h, 5); ctx.fill(); }
+  ctx.fillStyle = '#fff'; const tt = _fitText(ctx, title || '', W - 140, 80, '800'); ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 14; ctx.fillText(tt, W / 2, wy + 130); ctx.shadowBlur = 0;
+  if (subtitle) { ctx.fillStyle = 'rgba(255,255,255,.78)'; const st = _fitText(ctx, subtitle, W - 200, 46, '600'); ctx.fillText(st, W / 2, wy + 192); }
+  if (progress != null) { const lw = 560, lx = (W - lw) / 2, ly = wy + 240; ctx.fillStyle = 'rgba(255,255,255,.2)'; _roundRect(ctx, lx, ly, lw, 8, 4); ctx.fill(); ctx.fillStyle = gb; _roundRect(ctx, lx, ly, lw * Math.max(0, Math.min(1, progress)), 8, 4); ctx.fill(); }
+  const pw = 560, ph = 96, px = (W - pw) / 2, py = H - 230;
+  const gp = ctx.createLinearGradient(px, 0, px + pw, 0); gp.addColorStop(0, '#3e57fc'); gp.addColorStop(1, '#27a9ff'); ctx.fillStyle = gp; _roundRect(ctx, px, py, pw, ph, 48); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.font = '700 38px Poppins, system-ui, sans-serif'; ctx.fillText(cta, W / 2, py + ph / 2 + 13);
+  ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.font = '500 32px Poppins, system-ui, sans-serif'; ctx.fillText(footer, W / 2, H - 90);
+}
+async function generateStoryImage(o) {
+  await ensurePoppins();
+  const cv = document.createElement('canvas'); cv.width = 1080; cv.height = 1920;
+  drawStoryCard(cv.getContext('2d'), o);
+  return await new Promise((res) => cv.toBlob((b) => res(b), 'image/png', 0.95));
+}
+async function shareBlob(blob, name, text) {
   if (!blob) { toast('No se pudo generar la historia'); return; }
-  const file = new File([blob], 'underbro-story.png', { type: 'image/png' });
+  const file = new File([blob], name, { type: blob.type });
   if (navigator.canShare && navigator.canShare({ files: [file] })) {
-    try { await navigator.share({ files: [file], text: `${t.title} — escúchala en UnderBro` }); return; }
-    catch (err) { if (err && err.name === 'AbortError') return; }
+    try { await navigator.share({ files: [file], text }); return; } catch (err) { if (err && err.name === 'AbortError') return; }
   }
-  // respaldo: descarga + vista previa
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = 'underbro-story.png'; a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 4000);
-  toast('Imagen guardada · súbela a tu historia de Instagram 📸');
+  const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+  toast('Guardado · súbelo a tu historia de Instagram 📸');
+}
+function pickVideoMime() {
+  const c = ['video/mp4;codecs=h264,aac', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+  for (const m of c) { try { if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m; } catch (_) {} }
+  return '';
+}
+// graba un vídeo 1080x1920 (tarjeta animada + el clip de audio elegido) en tiempo real
+async function renderTrackStoryVideo(t, coverImg, buffer, start, clip, onProgress) {
+  await ensurePoppins();
+  const cv = document.createElement('canvas'); cv.width = 1080; cv.height = 1920; const ctx = cv.getContext('2d');
+  const ac = new (window.AudioContext || window.webkitAudioContext)();
+  if (ac.state === 'suspended') { try { await ac.resume(); } catch (_) {} }
+  const dest = ac.createMediaStreamDestination();
+  const analyser = ac.createAnalyser(); analyser.fftSize = 128; analyser.smoothingTimeConstant = 0.8;
+  const src = ac.createBufferSource(); src.buffer = buffer; src.connect(analyser); analyser.connect(dest);
+  const vstream = cv.captureStream(25);
+  const mixed = new MediaStream([...vstream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
+  const mime = pickVideoMime();
+  const rec = new MediaRecorder(mixed, mime ? { mimeType: mime, videoBitsPerSecond: 6000000 } : undefined);
+  const chunks = []; rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
+  const stopped = new Promise((res) => { rec.onstop = res; });
+  const who = trackWho(t); const freq = new Uint8Array(analyser.frequencyBinCount);
+  rec.start(100); src.start(0, start, clip);
+  const t0 = performance.now();
+  await new Promise((resolve) => {
+    const frame = () => {
+      const el = (performance.now() - t0) / 1000, pr = Math.min(1, el / clip);
+      analyser.getByteFrequencyData(freq);
+      drawStoryCard(ctx, { shape: 'square', coverImg, title: t.title, subtitle: who, cta: '▶  Escúchala en UnderBro', footer: 'underbro.app', freq, progress: pr });
+      if (onProgress) onProgress(pr);
+      if (el < clip) requestAnimationFrame(frame); else resolve();
+    };
+    frame();
+  });
+  try { rec.stop(); } catch (_) {} try { src.stop(); } catch (_) {}
+  await stopped; try { ac.close(); } catch (_) {}
+  return new Blob(chunks, { type: mime || 'video/webm' });
+}
+// selector de los 10s + creación de la historia (vídeo con sonido) para una pista
+function shareStory(t) { openTrackStoryPicker(t); }
+async function openTrackStoryPicker(t) {
+  const canVideo = !!(window.MediaRecorder && HTMLCanvasElement.prototype.captureStream && t.audio_url);
+  const m = openModal(`<div class="modal-head"><h3>Historia para Instagram</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <p class="eco-hint">${canVideo ? 'Elige los 10 segundos de la canción que sonarán en tu historia 🔊' : 'Tu navegador no permite vídeo con sonido; comparte la tarjeta como imagen.'}</p>
+      <div id="stStatus" class="eco-hint">${canVideo ? 'Cargando audio…' : ''}</div>
+      <div id="stCtrls" style="display:none">
+        <input type="range" id="stStart" min="0" max="100" value="0" step="0.5" style="width:100%" />
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--ink-soft);margin-top:4px"><span id="stFrom">0:00</span><span id="stTo">0:10</span></div>
+        <div class="skin-actions">
+          <button class="btn" id="stPrev">▶ Escuchar selección</button>
+          <button class="btn btn-ig" id="stMake">🎬 Crear historia con sonido</button>
+        </div>
+        <div class="progress-bar hidden" id="stBar"><div></div></div>
+      </div>
+      <button class="btn" id="stImg" style="width:100%;margin-top:10px">Compartir solo imagen</button>
+    </div>`);
+  let cover = null, buffer = null, clip = 10, prevSrc = null, prevCtx = null;
+  if (t.cover_url) { _loadImg(czUrl(t.cover_url)).then((im) => { cover = im; }).catch(() => {}); }
+  m.querySelector('#stImg').onclick = async () => {
+    m.remove(); toast('Generando historia…');
+    let cov = cover; if (!cov && t.cover_url) { try { cov = await _loadImg(czUrl(t.cover_url)); } catch (_) {} }
+    const blob = await generateStoryImage({ shape: 'square', coverImg: cov, title: t.title, subtitle: trackWho(t), cta: '▶  Escúchala en UnderBro', footer: 'underbro.app' });
+    shareBlob(blob, 'underbro-story.png', `${t.title} en UnderBro`);
+  };
+  if (!canVideo) { m.querySelector('#stStatus').textContent = ''; return; }
+  try {
+    const r = await fetch(czUrl(t.audio_url)); const ab = await r.arrayBuffer();
+    const dc = new (window.AudioContext || window.webkitAudioContext)(); buffer = await dc.decodeAudioData(ab); try { dc.close(); } catch (_) {}
+  } catch (e) { console.error('[story audio]', e); m.querySelector('#stStatus').textContent = 'No se pudo cargar el audio. Comparte como imagen.'; return; }
+  const dur = buffer.duration; clip = Math.min(10, dur);
+  const slider = m.querySelector('#stStart'); slider.max = Math.max(0, dur - clip);
+  const upd = () => { const s = +slider.value; m.querySelector('#stFrom').textContent = fmtClock(s); m.querySelector('#stTo').textContent = fmtClock(s + clip); };
+  slider.oninput = upd; upd();
+  m.querySelector('#stStatus').style.display = 'none'; m.querySelector('#stCtrls').style.display = '';
+  const stopPrev = () => { try { prevSrc && prevSrc.stop(); } catch (_) {} try { prevCtx && prevCtx.close(); } catch (_) {} prevSrc = null; prevCtx = null; };
+  m.querySelector('#stPrev').onclick = () => { stopPrev(); prevCtx = new (window.AudioContext || window.webkitAudioContext)(); prevSrc = prevCtx.createBufferSource(); prevSrc.buffer = buffer; prevSrc.connect(prevCtx.destination); prevSrc.start(0, +slider.value, clip); toast('🔊 Reproduciendo selección'); };
+  m.querySelector('#stMake').onclick = async () => {
+    stopPrev();
+    const mk = m.querySelector('#stMake'); mk.disabled = true; mk.textContent = 'Generando vídeo… (10s)';
+    const bar = m.querySelector('#stBar'); bar.classList.remove('hidden'); const fill = bar.querySelector('div');
+    let cov = cover; if (!cov && t.cover_url) { try { cov = await _loadImg(czUrl(t.cover_url)); } catch (_) {} }
+    try {
+      const blob = await renderTrackStoryVideo(t, cov, buffer, +slider.value, clip, (p) => { fill.style.width = (p * 100) + '%'; });
+      m.remove();
+      const ext = (blob.type.indexOf('mp4') >= 0) ? 'mp4' : 'webm';
+      await shareBlob(blob, 'underbro-story.' + ext, `${t.title} — escúchala en UnderBro`);
+    } catch (e) { console.error('[story video]', e); toast('No se pudo generar el vídeo'); mk.disabled = false; mk.textContent = '🎬 Crear historia con sonido'; }
+  };
+}
+async function shareProfileStory(prof) {
+  toast('Generando historia…');
+  let av = null; if (prof.avatar_url) { try { av = await _loadImg(czUrl(prof.avatar_url)); } catch (_) {} }
+  const blob = await generateStoryImage({ shape: 'circle', coverImg: av, title: prof.display_name || prof.username, subtitle: '@' + prof.username, cta: 'Sígueme en UnderBro', footer: 'underbro.app' });
+  shareBlob(blob, 'underbro-perfil.png', `Sígueme en UnderBro: @${prof.username}`);
+}
+async function sharePhotoStory(p) {
+  toast('Generando historia…');
+  let im = null; if (p.image_url) { try { im = await _loadImg(czUrl(p.image_url)); } catch (_) {} }
+  const blob = await generateStoryImage({ shape: 'photo', coverImg: im, title: (p.profiles?.display_name || p.profiles?.username || 'UnderBro'), subtitle: p.caption || '', cta: 'Míralo en UnderBro', footer: 'underbro.app' });
+  shareBlob(blob, 'underbro-foto.png', 'Mira esto en UnderBro');
 }
 /* ---- COMPARTIR FOTO ---- */
 function postShareUrl(p) { return `${location.origin}/p/${p.id}`; }
@@ -1294,6 +1372,7 @@ function sharePost(p) {
       <div class="share-photo-prev"><img src="${esc(p.image_url)}" alt="" /></div>
       <div class="share-link"><input type="text" id="shareUrl" readonly value="${esc(url)}" /><button class="btn sm primary" id="copyLink">Copiar</button></div>
       <div class="share-actions">
+        <button class="btn btn-ig" id="sharePhotoStory"><svg fill="none" stroke="#fff"><use href="#i-camera"/></svg> Historia (Instagram)</button>
         ${navigator.share ? `<button class="btn" id="nativeShare"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg> Compartir…</button>` : ''}
         <button class="btn" id="shareToChat"><svg fill="none" stroke="currentColor"><use href="#i-mail"/></svg> Enviar por chat</button>
       </div>
@@ -1306,6 +1385,7 @@ function sharePost(p) {
   };
   const ns = m.querySelector('#nativeShare');
   if (ns) ns.onclick = () => { navigator.share({ title, text: title, url }).catch(() => {}); };
+  m.querySelector('#sharePhotoStory').onclick = () => sharePhotoStory(p);
   m.querySelector('#shareToChat').onclick = () => {
     m.remove();
     openSharePicker(() => ({ body: p.caption ? p.caption.slice(0, 80) : '', attachment_type: 'image', attachment_url: p.image_url, attachment_name: 'foto' }), 'Foto enviada');
@@ -3117,6 +3197,7 @@ async function openProfile(userId) {
           ${(!isMe && state.profile.is_admin && !prof.is_admin) ? `<button class="btn danger-btn" id="delUserBtn"><svg fill="none" stroke="#fff"><use href="#i-trash"/></svg> Eliminar usuario</button>` : ''}
           ${!isMe ? `<button class="btn" id="blockBtn">${state.blocked.has(prof.id) ? 'Desbloquear' : 'Bloquear'}</button>` : ''}
           ${!isMe ? `<button class="btn" id="reportBtn"><svg fill="none" stroke="currentColor"><use href="#i-bell"/></svg> Reportar</button>` : ''}
+          <button class="btn btn-ig" id="shareProfBtn"><svg fill="none" stroke="#fff"><use href="#i-camera"/></svg> Historia</button>
         </div>
         ${links.length ? `<div class="profile-links">${links.map(l => `<a href="${esc(czHref(l.url))}" target="_blank" rel="noopener noreferrer"><svg fill="none" stroke="currentColor"><use href="#i-globe"/></svg>${esc(l.label || 'enlace')}</a>`).join('')}</div>` : ''}
       </div>
@@ -3195,6 +3276,8 @@ async function openProfile(userId) {
   };
   const reportBtn = $('reportBtn');
   if (reportBtn) reportBtn.onclick = () => openReportModal('user', userId, userId, '@' + prof.username);
+  const shareProfBtn = $('shareProfBtn');
+  if (shareProfBtn) shareProfBtn.onclick = () => shareProfileStory(prof);
   const delUserBtn = $('delUserBtn');
   if (delUserBtn) delUserBtn.onclick = () => adminDeleteUser(userId, prof.username, () => switchView('people'));
   const banBtn = $('banBtn');
