@@ -262,12 +262,24 @@ img { display: block; }
 
 /* ===================================================================== APP LAYOUT */
 .app {
+  --col-side: 244px; --col-right: 312px;
   display: grid;
-  grid-template-columns: 244px 1fr 312px;
+  grid-template-columns: var(--col-side) 1fr var(--col-right);
   grid-template-rows: var(--topbar-h) 1fr;
   grid-template-areas: "brand topbar topbar" "side main right";
   height: 100dvh; max-width: 1560px; margin: 0 auto;
+  transition: grid-template-columns .3s var(--ease);
 }
+/* plegar paneles en escritorio */
+.app.side-collapsed { --col-side: 0px; }
+.app.right-collapsed { --col-right: 0px; }
+.app.side-collapsed > .brand, .app.side-collapsed > .sidebar { opacity: 0; overflow: hidden; border: none; pointer-events: none; }
+.app.right-collapsed > .right { opacity: 0; overflow: hidden; border: none; pointer-events: none; }
+.app > .brand, .app > .sidebar, .app > .right { transition: opacity .2s var(--ease); }
+.desk-only { display: none; }
+.desk-only .chev { transition: transform .3s var(--ease); }
+#toggleChatBtn .chev { width: 18px; height: 18px; }
+.app.side-collapsed #toggleSideBtn .chev { transform: rotate(180deg); }
 .brand {
   grid-area: brand; display: flex; align-items: center; padding: 0 20px;
   border-bottom: 1px solid var(--line-soft); border-right: 1px solid var(--line-soft);
@@ -1531,10 +1543,14 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
 .search-toggle { display: none; }
 @media (max-width: 1024px) { .drawer-only { display: grid; } }
 @media (max-width: 720px) { .drawer-only { display: none; } }
+/* botones de plegado: solo en escritorio (3 columnas) */
+@media (min-width: 1025px) { .desk-only { display: grid; } }
+.app.right-collapsed #toggleChatBtn, .app.side-collapsed #toggleSideBtn { background: var(--blue); color: #fff; }
+.app.right-collapsed #toggleChatBtn svg, .app.side-collapsed #toggleSideBtn svg { stroke: #fff; }
 
 /* ===================================================================== RESPONSIVE */
 @media (max-width: 1180px) {
-  .app { grid-template-columns: 220px 1fr 280px; }
+  .app { --col-side: 220px; --col-right: 280px; }
 }
 @media (max-width: 1024px) {
   .app { grid-template-columns: 216px 1fr; grid-template-areas: "brand topbar" "side main"; }
@@ -1551,7 +1567,8 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
   /* inputs a 16px: evita el zoom automático de iOS al enfocar */
   input, textarea, select { font-size: 16px; }
 
-  .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; grid-template-areas: "topbar" "main"; }
+  .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; grid-template-areas: "topbar" "main"; overflow: hidden; }
+  .main { overflow-x: hidden; }
   .brand { display: none; }
   .menu-toggle { display: grid; }
   .search-toggle { display: grid; }
