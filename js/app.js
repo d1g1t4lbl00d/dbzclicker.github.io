@@ -773,10 +773,16 @@ function initSwipeNav() {
       main.style.opacity = '0.5';
       void main.offsetWidth;                                  // fija el punto de partida
       requestAnimationFrame(() => {
-        main.style.transition = 'transform .34s cubic-bezier(.22,.61,.36,1), opacity .34s ease-out';
+        main.style.transition = 'transform .28s cubic-bezier(.22,.61,.36,1), opacity .28s ease-out';
         main.style.transform = 'translateX(0)';
         main.style.opacity = '1';
-        setTimeout(() => { clearStyle(); ubSwiping = false; flushAfterSwipe(); }, 360);
+        // pinta el contenido en cuanto el deslizamiento termina (primer instante
+        // seguro sin tirón), no con un temporizador fijo
+        let fin = false;
+        const finish = () => { if (fin) return; fin = true; main.removeEventListener('transitionend', onEnd); clearStyle(); ubSwiping = false; flushAfterSwipe(); };
+        const onEnd = (ev) => { if (ev.target === main && ev.propertyName === 'transform') finish(); };
+        main.addEventListener('transitionend', onEnd);
+        setTimeout(finish, 320);                              // respaldo por si no dispara transitionend
       });
     } else {
       // no llega al umbral → vuelve a su sitio con un rebote suave
