@@ -1048,7 +1048,9 @@ function renderFeed(head, tracks, view) {
     return;
   }
   state.queue = tracks.map(t => t.id);
-  tracks.forEach(t => list.appendChild(trackCard(t)));
+  const frag = document.createDocumentFragment();
+  tracks.forEach(t => frag.appendChild(trackCard(t)));
+  list.appendChild(frag);   // un solo reflow en vez de uno por tarjeta
   if (state.current && audio && !audio.paused) markPlayingCard();
 }
 
@@ -1963,14 +1965,19 @@ function initPlayer() {
 
   // seek preciso (pointer events: ratón + táctil unificados) con vista previa
   const seek = $('pSeek'), fill = $('pFill'), knob = $('pKnob'), ghost = $('pGhost'), tip = $('pTip');
-  const pctFromX = (clientX) => { const r = seek.getBoundingClientRect(); return Math.min(1, Math.max(0, (clientX - r.left) / r.width)); };
+  // cacheamos el rect al empezar a interactuar (no se mueve durante el gesto):
+  // evita leer getBoundingClientRect en cada pointermove (layout thrash)
+  let seekRect = null;
+  const refreshSeekRect = () => { seekRect = seek.getBoundingClientRect(); };
+  const pctFromX = (clientX) => { const r = seekRect || seek.getBoundingClientRect(); return Math.min(1, Math.max(0, (clientX - r.left) / r.width)); };
+  seek.addEventListener('pointerenter', refreshSeekRect);
   const paint = (pct) => { fill.style.width = (pct*100)+'%'; knob.style.left = (pct*100)+'%'; };
   const preview = (pct) => { ghost.style.width = (pct*100)+'%'; tip.style.left = (pct*100)+'%'; if (audio.duration) tip.textContent = fmtTime(pct*audio.duration); };
   let rafSeek = 0, pendingPct = null;
   const commitLive = () => { rafSeek = 0; if (audio.duration && pendingPct != null) audio.currentTime = pendingPct * audio.duration; };
   const queueLive = (p) => { pendingPct = p; if (!rafSeek) rafSeek = requestAnimationFrame(commitLive); };
   seek.addEventListener('pointerdown', (e) => {
-    seeking = true; seek.classList.add('scrub');
+    seeking = true; seek.classList.add('scrub'); refreshSeekRect();
     try { seek.setPointerCapture(e.pointerId); } catch {}
     const p = pctFromX(e.clientX); paint(p); preview(p); $('pCur').textContent = fmtTime(p*(audio.duration||0)); queueLive(p);
   });
@@ -3858,6 +3865,7 @@ function pickTrackModal(cb) {
   const m = openModal(`<div class="modal-head"><h3>Elegir canción</h3><button class="close">&times;</button></div><div class="modal-body"><input type="text" id="stSearch" placeholder="Buscar pista…" style="width:100%;padding:10px 12px;border:1px solid var(--line-soft);border-radius:10px;margin-bottom:10px;background:var(--glass);color:var(--ink)" /><div id="stResults"><div class="loading" style="padding:16px"><div class="spinner"></div></div></div></div>`);
   const results = m.querySelector('#stResults');
   const run = async (q) => {
+    q = sanitizeTerm(q);
     let query = sb.from('tracks').select('id,title,cover_url,artist,audio_url,profiles!tracks_user_id_fkey(display_name,username)');
     query = q ? query.ilike('title', `%${q}%`).limit(30) : query.order('plays', { ascending: false }).limit(30);
     const { data } = await query;
@@ -6120,7 +6128,7 @@ async function loadAdminStats() {
 async function adminUserSearch(q) {
   const list = $('admUserList'); if (!list) return;
   list.innerHTML = '<div class="loading" style="padding:18px"><div class="spinner"></div></div>';
-  const term = (q || '').replace('@', '').trim();
+  const term = sanitizeTerm((q || '').replace('@', ''));
   let query = sb.from('profiles').select('id,username,display_name,avatar_url,verified,banned,is_admin,user_badges(badge)').limit(30);
   query = term ? query.or(`username.ilike.%${term}%,display_name.ilike.%${term}%`) : query.order('created_at', { ascending: false });
   const { data, error } = await query;
@@ -6622,7 +6630,8 @@ function initCalls() {
     // acciones de la notificación cuando la app ya estaba abierta en segundo plano
     if (navigator.serviceWorker) {
       navigator.serviceWorker.addEventListener('message', (e) => {
-        if (e.data && e.data.type === 'callAction') { setAutoCallAction(e.data.action); applyAutoCallAction(); }
+        if (e.origin && e.origin !== location.origin) return;   // solo mensajes del propio SW
+        if (e.data && e.data.type === 'callAction' && (e.data.action === 'accept' || e.data.action === 'decline')) { setAutoCallAction(e.data.action); applyAutoCallAction(); }
       });
     }
     callSignalCatchUp();
@@ -7356,7 +7365,7 @@ function reactionsInner(messageId) {
   const map = state.dmReacts.get(messageId); if (!map) return '';
   const uid = state.user.id;
   return Object.entries(map).filter(([, s]) => s.size).map(([e, s]) =>
-    `<button class="dm-react ${s.has(uid) ? 'mine' : ''}" data-emoji="${esc(e)}">${e}<span class="rc">${s.size}</span></button>`).join('');
+    `<button class="dm-react ${s.has(uid) ? 'mine' : ''}" data-emoji="${esc(e)}">${esc(e)}<span class="rc">${s.size}</span></button>`).join('');
 }
 function makeBubble(msg) {
   const mine = msg.sender_id === state.user.id;
@@ -7557,6 +7566,8 @@ async function toggleReaction(messageId, emoji) {
   } catch (_) {}
 }
 function applyRemoteReaction({ message_id, emoji, user_id, op }) {
+  // emoji llega por broadcast en tiempo real (no pasa por la BD/RLS): validar
+  if (typeof emoji !== 'string' || !emoji || emoji.length > 8 || /[<>&"']/.test(emoji)) return;
   let map = state.dmReacts.get(message_id); if (!map) { map = {}; state.dmReacts.set(message_id, map); }
   const set = map[emoji] || (map[emoji] = new Set());
   if (op === 'remove') { set.delete(user_id); if (!set.size) delete map[emoji]; }

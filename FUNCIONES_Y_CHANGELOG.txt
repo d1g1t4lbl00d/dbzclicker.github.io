@@ -1,0 +1,326 @@
+================================================================================
+  UNDERBRO · DOCUMENTACIÓN DE FUNCIONES Y CHANGELOG POR ACTUALIZACIÓN
+  underbro.app · La red social de la música underground
+  Documento generado: 2026-06-14
+================================================================================
+
+Este archivo tiene dos partes:
+  PARTE 1 — Catálogo completo de funciones (qué tiene la web, por categorías).
+  PARTE 2 — Changelog cronológico (qué se metió en cada actualización).
+
+La numeración de versiones de despliegue usa el formato AAAAMMDD+letra
+(ej. 20260614j) y vive en index.html + version.json (cache-busting y
+auto-actualización). Cada commit de git equivale a un cambio desplegado.
+
+
+================================================================================
+  PARTE 1 · CATÁLOGO DE FUNCIONES
+================================================================================
+
+── CUENTAS Y AUTENTICACIÓN ─────────────────────────────────────────────────
+  • Registro e inicio de sesión (email + contraseña) sobre Supabase Auth.
+  • "Continuar con Google" (OAuth).
+  • Eliminar cuenta de forma permanente (borra perfil, archivos y datos) vía
+    edge function delete-account.
+
+── PERFIL ──────────────────────────────────────────────────────────────────
+  • Cabecera de artista moderna: banner + avatar, biografía, enlaces/redes.
+  • Personalización avanzada: presets, varias fuentes y efectos, estilos de
+    tarjeta, estilo de nombre (degradados/animaciones), anillo de avatar,
+    altura del banner, imagen de fondo.
+  • Selector de encuadre (mover + zoom) para banner y avatar.
+  • Insignias (badges): Alpha (todos) y Tester dorado (referidos), opt-in para
+    mostrarlas; el admin posee todo el catálogo.
+  • Verificación (palomita) y etiqueta MOD para admins.
+  • Pestañas: pistas, fotos (grid estilo Instagram), Feats (colaboraciones en
+    ambos sentidos), eventos.
+  • Estadísticas clicables (seguidores / seguidos / pistas) que abren listas.
+  • Botones de seguir / mensaje en las listas de seguidores y seguidos.
+
+── MÚSICA / PISTAS ─────────────────────────────────────────────────────────
+  • Subir pistas con preview de audio antes de publicar.
+  • Autodetección de BPM y tono al seleccionar el archivo (autofill).
+  • Carátula usada como fondo completo de la pista + onda de audio a lo ancho.
+  • Me gusta (like), repost (resubir), comentarios, favoritos, descargas.
+  • Anti doble-toque en like/repost para evitar duplicados.
+  • Menú contextual al mantener pulsado (y clic derecho en escritorio).
+
+── FEED ────────────────────────────────────────────────────────────────────
+  • Pestañas Following / Trending / New (solo en Stream).
+  • Trending dinámico con "hot score" reciente (RPC trending_tracks).
+  • Pistas destacadas por admin aparecen arriba de Trending (featured).
+  • Deep links (?track= / ?post= / ?playlist=) y rutas /t/:id /p/:id /pl/:id.
+  • Caché "stale-while-revalidate" + prefetch al deslizar = cambio instantáneo.
+
+── REPRODUCTOR ─────────────────────────────────────────────────────────────
+  • Mini-reproductor + pantalla "Now Playing" con onda.
+  • Cola de reproducción visible y reordenable arrastrando (FLIP, aterrizaje
+    suave, mantener pulsado para arrastrar).
+  • Shuffle, repeat, velocidad, tiempo restante, prev/next.
+  • Cerrar con botón X o deslizando hacia abajo.
+  • Controles de medios del sistema (pantalla de bloqueo / notificación).
+
+── RADIO ───────────────────────────────────────────────────────────────────
+  • Radio con autoplay infinito.
+
+── PLAYLISTS ───────────────────────────────────────────────────────────────
+  • Crear/gestionar listas; portada por defecto = la de la primera pista.
+
+── FOTOS (POSTS) ───────────────────────────────────────────────────────────
+  • Subir fotos, feed de fotos, likes y comentarios.
+  • Grid estilo Instagram en el perfil; editar caption.
+  • Compartir foto (enlace + chat + historia de Instagram).
+
+── HISTORIAS (STORIES) ─────────────────────────────────────────────────────
+  • Historias de 24 h: foto + pista de fondo + botones de enlace.
+  • Selector de segmento por waveform para la canción.
+  • Reacciones rápidas y respuesta en hilo; avance entre usuarios estilo IG.
+
+── CHAT / MENSAJES ─────────────────────────────────────────────────────────
+  • Mensajería directa estilo WhatsApp (burbujas compactas).
+  • Notas de voz con onda congelada que se rellena al reproducir (seekable).
+  • Responder (quote), editar, borrar, adjuntos, emoji.
+  • Compartir una pista como mini-reproductor jugable dentro del chat.
+  • Grupos: crear, lista, hilo con remitentes, añadir/quitar/renombrar/salir,
+    miembros, en tiempo real.
+
+── LLAMADAS (WEBRTC) ───────────────────────────────────────────────────────
+  • Llamadas 1-a-1 de audio y vídeo dentro del chat.
+  • TURN de Cloudflare servido por función serverless de Vercel (/api/turn).
+  • Señalización fiable por doble vía (broadcast + base de datos).
+  • Recuperación automática (ICE restart) y degradación elegante sin cámara.
+  • Push de llamada entrante con la app cerrada; notificación en la barra del
+    móvil con botones Aceptar / Rechazar; guía de permisos por dispositivo.
+
+── NOTIFICACIONES ──────────────────────────────────────────────────────────
+  • Push de chat (con la app cerrada) vía service worker + VAPID.
+  • Push social: like, comentario, seguidor, repost y actividad en fotos
+    (triggers en base de datos → edge function send-push).
+  • Avisos in-app (campanita) con badge: seguidores, likes, comentarios,
+    reposts, difusiones de artista.
+  • Difusión de artista a seguidores (push + in-app).
+  • Recordatorio automático de eventos guardados.
+
+── BROS / GENTE ────────────────────────────────────────────────────────────
+  • Buscador de personas (en la barra de búsqueda principal / pestaña Bros).
+  • Lista de "online" y presencia en tiempo real.
+  • Tocar cualquier fila de usuario abre su perfil.
+
+── EVENTOS ─────────────────────────────────────────────────────────────────
+  • Tablero de eventos: crear, guardar, recordatorio automático.
+
+── ECOSYSTEMS / ESTUDIO / HERRAMIENTAS ─────────────────────────────────────
+  • Hub "Ecosystems" con croquis y 6 secciones (Estudio + Herramientas).
+  • Estudio (dashboard de artista): highlights, hitos, nivel de artista,
+    seguidores recientes, tarjeta de stats compartible, finder de
+    colaboraciones por género, difusión a seguidores, Spotify embebido.
+  • Herramientas: Press Kit / EPK (web pública o PDF, privado por defecto),
+    Smart link (link-in-bio por lanzamiento), Split sheet (PDF), Audio
+    Analyzer (tono/autotune, BPM perceptual, loudness), skins, contratos.
+
+── MENCIONES ───────────────────────────────────────────────────────────────
+  • @usuario clicable + autocompletado.
+
+── COMPARTIR ───────────────────────────────────────────────────────────────
+  • Enlaces con vistas previas Open Graph (carátula/título/artista) vía
+    función serverless /api/share.
+  • Compartir a chat; menú de compartir premium con cabecera de carátula
+    difuminada e iconos de marca (WhatsApp/Telegram/X).
+  • Historia para Instagram: tarjeta 1080x1920 muy vistosa; para pistas se
+    genera VÍDEO con 10 s elegibles de la canción (canvas + audio) y para
+    fotos imagen; selector de 10 s con waveform.
+
+── ADMIN / MODERACIÓN ──────────────────────────────────────────────────────
+  • Panel de Admin dedicado (solo is_admin), con:
+      - Estadísticas en vivo (usuarios, pistas, fotos, comentarios,
+        verificados, baneados, altas de 7 días).
+      - Gestión de usuarios: buscar + verificar / banear / hacer admin /
+        eliminar / otorgar insignias / mensaje directo.
+      - Moderar contenido: últimas pistas y fotos con borrado; destacar
+        pistas en Trending (featured).
+      - Difusión a la comunidad (push global a todos).
+      - Acceso a Reportes de la comunidad.
+  • Borrar cualquier pista/foto/comentario (moderación).
+  • Bloquear usuarios y reportar contenido (cumplimiento UGC de Play Store).
+
+── PWA / APP ───────────────────────────────────────────────────────────────
+  • Splash de inicio (logo) + rebrand alrededor del logo UB.
+  • Empaquetado TWA (Bubblewrap) como app Android (app.underbro.twa).
+  • Auto-actualización fiable (focus/online/intervalo) con versión en Ajustes.
+  • Botón atrás de Android: navega dentro de la app en vez de salir.
+  • Sin zoom por pellizco en móvil; modo oscuro; banner de cookies legible.
+  • Microinteracciones táctiles (juice) y háptica.
+  • Navegación por gestos: deslizar entre pantallas en móvil (drag real).
+  • En escritorio: paneles laterales plegables (el logo pliega el menú).
+  • Vercel Web Analytics.
+
+── SEGURIDAD ───────────────────────────────────────────────────────────────
+  • RLS en Supabase para todas las tablas (lectura/escritura controladas).
+  • Endurecimiento: bloqueo de escalada admin/ban; fix de XSS almacenado;
+    revocación de EXECUTE público en funciones SECURITY DEFINER.
+  • Helpers de DM/RLS restringidos a usuarios autenticados.
+
+── RENDIMIENTO ─────────────────────────────────────────────────────────────
+  • Auditoría integral de BD (índices, RLS initplan), caché y limpieza.
+  • Lazy-loading de avatares; cache-busting de assets.
+  • Deslizamiento fluido (blur desactivado durante el gesto, capa GPU,
+    render diferido del feed) y prefetch de pantallas.
+
+
+================================================================================
+  PARTE 2 · CHANGELOG POR ACTUALIZACIÓN (cronológico)
+================================================================================
+
+──────────────── 2026-06-02 ────────────────
+• Carátula como fondo de toda la pista + onda de audio a lo ancho.
+
+──────────────── 2026-06-03 ────────────────
+• Fotos (posts): subir, feed, likes y comentarios + grid estilo Instagram en
+  el perfil; corrección de carga y cache-busting móvil.
+• Edición de caption en fotos y mejora de pestañas de perfil.
+• Búsqueda de colaboradores por usuario o nombre con sugerencias.
+• Buscador de personas en la barra principal + Fotos en la barra inferior.
+• Pestaña Feats (colaboraciones) en perfil, en ambos sentidos.
+• Mecanismo de auto-actualización para tener siempre la última versión
+  (focus/online/intervalo 45 s).
+• Controles de medios de fondo (prev/next) + notificaciones push de chat.
+• Indicador de versión + comprobar actualizaciones + toggle de push en Ajustes.
+• Stats de perfil clicables; botones seguir/mensaje en listas de follow.
+• BLOQUE 1: Compartir, Radio con autoplay infinito, destacar Favoritos.
+• BLOQUE 2a: Repost (resubir) + guard de contenido propio.
+• BLOQUE 3: Playlists.
+• BLOQUE 4: Historias (foto 24 h + pista de fondo + botones de enlace).
+• Compartir una pista al chat como mini-reproductor jugable.
+
+──────────────── 2026-06-04 ────────────────
+• Compartir fotos + deep links de playlist.
+• Menciones @usuario clicables + autocompletado.
+• Modo oscuro (+ fix de iconos de la topbar en oscuro).
+• Tablero de eventos con guardar + recordatorio automático.
+• Endurecimiento de seguridad: bloqueo de escalada admin/ban + fix de XSS.
+• Artist Studio (dashboard) fase 1; rework de Estudio (enlaces + Spotify).
+• Marketing: invitaciones por referido + insignia Verificado/Fundador.
+• Navegación por deslizamiento entre pantallas (móvil) v1.
+• Orbe "Yo" centrado en la barra inferior + eventos en el perfil.
+• Sistema de insignias: Alpha (todos) + Tester dorado (referidos); el dev
+  posee todo el catálogo; iteraciones de estilo (glyph-only, sutil).
+• Rediseño de la cabecera de perfil (estilo artista) + selector de encuadre.
+
+──────────────── 2026-06-05 ────────────────
+• Preparación para Play Store (PWA/TWA), gráficos de portada, guía de testers.
+• Bloqueo de usuarios + reporte de contenido (cumplimiento UGC).
+• Auth: Continuar con Google (OAuth) + guía de configuración.
+• Chat: rediseño completo estilo WhatsApp + notas de voz con onda seekable,
+  responder, burbujas compactas, fixes de solapamiento.
+• Rebrand alrededor del nuevo logo UB + splash; intro de apertura.
+• Pestañas Following/Trending/New solo en Stream.
+• Pase de "juice": microinteracciones táctiles premium.
+
+──────────────── 2026-06-06 ────────────────
+• Estudio: highlights, hitos, nivel de artista, seguidores recientes, tarjeta
+  de stats compartible, finder de colaboraciones, difusión a seguidores.
+• Sección Herramientas + Press Kit/EPK (web pública o PDF, privado por
+  defecto, export aislado por iframe).
+• Herramientas: Smart link (link-in-bio) + Split sheet (PDF).
+• Historias: completar funciones estilo Instagram; selector por waveform;
+  avance entre usuarios; reacciones rápidas y respuesta en hilo.
+• Sección Beats.
+• Pase de auditoría: bugfixes + pulido de modo oscuro.
+
+──────────────── 2026-06-07 ────────────────
+• Herramientas: ecosistema unificado (cabecera compartida, registro de
+  herramientas, acentos por herramienta, hub rediseñado).
+• Audio Analyzer (tono/autotune, BPM, loudness) con preview y "subir como beat".
+• Subida: autoanálisis de BPM + tono en cada pista al seleccionar archivo;
+  mejora de detección de tono.
+• Reproductor: shuffle/repeat/velocidad + tiempo restante, prev/next en móvil,
+  cerrar (X) y deslizar para descartar el mini-reproductor.
+• Cola de reproducción visible y reordenable arrastrando (FLIP, mantener
+  pulsado, aterrizaje suave).
+• Menú contextual al mantener pulsado (y clic derecho en escritorio).
+• Botón atrás de Android dentro de la app; desactivar zoom por pellizco.
+• Playlists: portada por defecto = primera pista.
+
+──────────────── 2026-06-08 / 06-11 ────────────────
+• Fix móvil: el mini-reproductor ya no choca con el orbe "Yo".
+• Vercel Web Analytics.
+• Grupos de chat: crear, lista, hilo con remitentes, añadir/quitar/renombrar/
+  salir, miembros, en tiempo real (reutiliza el sistema rico de DM).
+• TWA: empaquetado Android con Bubblewrap (assetlinks + twa-manifest).
+
+──────────────── 2026-06-12 ────────────────
+• Auditoría integral: rendimiento de BD (índices, RLS initplan), accesibilidad,
+  caché y limpieza de código.
+• Trending dinámico (hot score reciente) y reposts visibles en el perfil.
+• LLAMADAS 1-a-1 de audio y vídeo (WebRTC) en el chat:
+    - Tono de espera, aviso push con app cerrada, opciones típicas.
+    - Arreglos críticos de conexión/audio/vídeo (PC, móvil, iPhone).
+    - Señalización fiable por doble vía (broadcast + BD).
+    - TURN de Cloudflare vía función serverless de Vercel (/api/turn).
+    - Degradación elegante sin cámara y estado de cámara remoto.
+    - Recuperación automática (ICE restart).
+• Seguridad: revocar EXECUTE público de funciones SECURITY DEFINER; restringir
+  helpers de DM/RLS a authenticated.
+• Fixes de chat (z-index de menús en móvil), anti doble-toque, lazy avatares,
+  banner de cookies legible en oscuro.
+
+──────────────── 2026-06-13 ────────────────
+• Llamadas: recuperación ICE restart; guía de permisos por dispositivo;
+  notificación de llamada en la barra del móvil (app cerrada) con
+  Aceptar/Rechazar.
+• Subir pista: preview de audio antes de publicar.
+• Perfil mucho más personalizable: presets, más fuentes/efectos/tarjetas,
+  estilo de nombre, anillo de avatar, altura de banner.
+• Nuevo sistema "Ecosystems": hub con croquis + 6 secciones (Estudio y
+  Herramientas integrados).
+• Crecimiento: vistas previas al compartir (OG /api/share), onboarding y
+  notificaciones sociales.
+• Compartir pista → generar tarjeta de Historia (Instagram) 1080x1920:
+    - Vídeo con sonido (10 s elegibles) para pistas + historia para perfiles
+      y fotos.
+    - Tarjeta más premium, menú de compartir mejorado, selector de 10 s con
+      waveform.
+    - Historias aún más premium (color tomado de la carátula); quitar la
+      historia de perfil (solo pistas y fotos).
+    - Fix de lag del vídeo (capa estática renderizada una sola vez).
+
+──────────────── 2026-06-14 ────────────────
+• Compartir: rediseño del menú (cabecera con carátula difuminada, iconos de
+  marca WhatsApp/Telegram/X, CTA de Instagram pulida); fixes de centrado de
+  iconos y del campo de enlace.
+• Notificaciones push SOCIALES: triggers en BD (likes, comentarios, seguidores,
+  reposts, fotos) → send-push; payload alineado con recipient_id.
+• Escritorio: paneles laterales (menú y chat) plegables; botones del header más
+  sutiles; el logo de UnderBro pliega/despliega el menú; pestañas alineadas
+  sobre la feed.
+• Móvil: navegación por deslizamiento REAL (drag que sigue al dedo, con
+  resistencia en extremos y entrada deslizante); header limpio (logo abre el
+  menú; sin buscar ni chat: buscar está en Bros y chats en la barra inferior;
+  solo notificaciones y perfil).
+• Fluidez: arreglo del tirón al deslizar (desactivar blur de topbar/bottom-nav/
+  player durante el gesto + capa GPU); caché stale-while-revalidate + prefetch
+  al deslizar = cambio de pestaña instantáneo; render del feed diferido al
+  final de la animación (se pinta justo en transitionend).
+• PANEL DE ADMIN dedicado:
+    - Estadísticas, gestión de usuarios (verificar/banear/admin/eliminar),
+      moderación de contenido, difusión a la comunidad, acceso a reportes.
+    - Extras: otorgar/quitar insignias, destacar/fijar pistas en Trending,
+      mensaje directo a un usuario desde el panel.
+    - Difusión global: tabla broadcasts + trigger notify_broadcast + rama
+      "broadcast" en la edge function send-push.
+
+
+================================================================================
+  BACKEND / INFRAESTRUCTURA (resumen técnico)
+================================================================================
+  • Frontend: SPA en JavaScript vanilla (js/app.js), CSS propio, PWA.
+  • Datos/Realtime/Auth/Storage: Supabase (con RLS en todas las tablas).
+  • Edge functions: send-push (notificaciones), admin-delete-user,
+    delete-account, get_turn_credentials.
+  • Serverless (Vercel): /api/share (Open Graph), /api/turn (TURN Cloudflare).
+  • Service worker (sw.js): push de chat/llamadas y avisos sociales/difusión.
+  • Migraciones SQL en /sql (seguridad, índices, trending, call_signals,
+    triggers de push social, broadcasts, extras de admin).
+  • Despliegue: Vercel + GitHub; versión en index.html/version.json para
+    cache-busting y auto-actualización.
+================================================================================
