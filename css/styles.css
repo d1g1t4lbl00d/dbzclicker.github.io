@@ -277,7 +277,7 @@ img { display: block; }
 .app.side-collapsed > .sidebar { opacity: 0; overflow: hidden; border: none; pointer-events: none; }
 .app.right-collapsed > .right { opacity: 0; overflow: hidden; border: none; pointer-events: none; }
 .app > .sidebar, .app > .right { transition: opacity .2s var(--ease); }
-.desk-only { display: none; }
+.topbar .desk-only { display: none; }
 #toggleChatBtn .chev { width: 18px; height: 18px; }
 /* mientras se desliza entre pantallas: desactiva el blur (backdrop-filter) de
    la topbar y la barra inferior — recalcularlo cada frame sobre el contenido
@@ -1559,7 +1559,7 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
 @media (max-width: 1024px) { .drawer-only { display: grid; } }
 @media (max-width: 720px) { .drawer-only { display: none; } }
 /* botones de plegado: solo en escritorio (3 columnas) */
-@media (min-width: 1025px) { .desk-only { display: grid; } }
+@media (min-width: 1025px) { .topbar .desk-only { display: grid; } }
 .app.right-collapsed #toggleChatBtn { background: var(--blue); color: #fff; }
 .app.right-collapsed #toggleChatBtn svg { stroke: #fff; }
 
