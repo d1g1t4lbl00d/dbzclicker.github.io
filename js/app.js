@@ -302,6 +302,7 @@ async function onAuthenticated() {
   initCalls();
   setupPush();
   loadNotifBadge();
+  if (state.profile && state.profile.is_admin) $('navAdmin')?.classList.remove('hidden');
   ubBack.init();
   switchView('feed');
   setTimeout(warmFeeds, 1500);   // precarga following/trending/new para que pasar de pestaña sea instantáneo
@@ -596,6 +597,7 @@ async function switchView(view) {
   else setActiveNav(view);
 
   if (view === 'settings') return renderSettings();
+  if (view === 'admin') return renderAdmin();
   if (view === 'notifications') return renderNotifications();
   if (view === 'people') return renderPeople();
   if (view === 'messages') return renderMessages();
@@ -6046,6 +6048,127 @@ async function adminDeleteUser(userId, username, onDone) {
     toast('Usuario @' + username + ' eliminado');
     if (onDone) onDone();
   } catch (err) { toast('No se pudo eliminar: ' + (err.message || err)); }
+}
+
+/* =======================================================================
+   PANEL DE ADMIN (estadísticas · usuarios · contenido · difusión)
+   ======================================================================= */
+async function renderAdmin() {
+  if (!state.profile || !state.profile.is_admin) { switchView('feed'); return; }
+  setActiveNav('admin');
+  const main = $('main');
+  main.innerHTML = `
+    <div class="main-head"><div><h2>Panel de Admin</h2><div class="sub">Moderación y gestión de UnderBro</div></div></div>
+    <div class="admin-grid">
+      <div class="admin-card span2"><h3>📊 Estadísticas</h3><div class="adm-kpis" id="admStats"><div class="loading" style="padding:18px"><div class="spinner"></div></div></div></div>
+      <div class="admin-card span2"><h3>👤 Gestión de usuarios</h3>
+        <div class="adm-search"><input id="admUserQ" type="text" placeholder="Buscar por nombre o @usuario…" /><button class="btn sm primary" id="admUserGo">Buscar</button></div>
+        <div id="admUserList" class="adm-list"><div class="sub">Busca un usuario o deja vacío para ver los últimos registrados.</div></div>
+      </div>
+      <div class="admin-card"><h3>🛡️ Moderar contenido</h3>
+        <div class="adm-tabs"><button class="active" data-ct="tracks">Pistas</button><button data-ct="posts">Fotos</button></div>
+        <div id="admContent" class="adm-list"><div class="loading" style="padding:18px"><div class="spinner"></div></div></div>
+      </div>
+      <div class="admin-card"><h3>📣 Difusión a la comunidad</h3>
+        <p class="sub" style="margin:0 0 10px">Envía un aviso (push + notificación) a todos los usuarios.</p>
+        <input id="admBcTitle" type="text" maxlength="60" placeholder="Título · ej. ¡Nueva función!" />
+        <textarea id="admBcBody" maxlength="180" placeholder="Mensaje…" rows="3"></textarea>
+        <button class="btn btn-ig" id="admBcSend" style="width:100%;justify-content:center">Enviar a todos</button>
+        <div class="sub" id="admBcMsg" style="margin-top:8px"></div>
+        <button class="btn" id="admReports" style="width:100%;margin-top:14px"><svg fill="none" stroke="currentColor"><use href="#i-bell"/></svg> Reportes de la comunidad</button>
+      </div>
+    </div>`;
+  loadAdminStats();
+  loadAdminContent('tracks');
+  const doSearch = () => adminUserSearch($('admUserQ').value);
+  $('admUserGo').onclick = doSearch;
+  $('admUserQ').addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
+  adminUserSearch('');   // últimos registrados
+  main.querySelectorAll('.adm-tabs button').forEach((b) => b.onclick = () => {
+    main.querySelectorAll('.adm-tabs button').forEach((x) => x.classList.toggle('active', x === b));
+    loadAdminContent(b.dataset.ct);
+  });
+  $('admBcSend').onclick = adminBroadcast;
+  $('admReports').onclick = openReportsAdmin;
+}
+async function loadAdminStats() {
+  const box = $('admStats'); if (!box) return;
+  const cnt = async (table, filter) => { try { let q = sb.from(table).select('id', { count: 'exact', head: true }); if (filter) q = filter(q); const { count } = await q; return count || 0; } catch (_) { return '—'; } };
+  const since = new Date(Date.now() - 7 * 864e5).toISOString();
+  const [users, tracks, posts, comments, verified, banned, newUsers, newTracks] = await Promise.all([
+    cnt('profiles'), cnt('tracks'), cnt('posts'), cnt('comments'),
+    cnt('profiles', (q) => q.eq('verified', true)), cnt('profiles', (q) => q.eq('banned', true)),
+    cnt('profiles', (q) => q.gte('created_at', since)), cnt('tracks', (q) => q.gte('created_at', since)),
+  ]);
+  const kpi = (k, v, hot) => `<div class="adm-kpi${hot ? ' hot' : ''}"><b>${typeof v === 'number' ? nfmt(v) : v}</b><span>${k}</span></div>`;
+  box.innerHTML = kpi('Usuarios', users) + kpi('Pistas', tracks) + kpi('Fotos', posts) + kpi('Comentarios', comments)
+    + kpi('Verificados', verified) + kpi('Baneados', banned) + kpi('Usuarios · 7d', newUsers, true) + kpi('Pistas · 7d', newTracks, true);
+}
+async function adminUserSearch(q) {
+  const list = $('admUserList'); if (!list) return;
+  list.innerHTML = '<div class="loading" style="padding:18px"><div class="spinner"></div></div>';
+  const term = (q || '').replace('@', '').trim();
+  let query = sb.from('profiles').select('id,username,display_name,avatar_url,verified,banned,is_admin').limit(30);
+  query = term ? query.or(`username.ilike.%${term}%,display_name.ilike.%${term}%`) : query.order('created_at', { ascending: false });
+  const { data, error } = await query;
+  if (error) { list.innerHTML = '<div class="sub">Error al buscar usuarios.</div>'; return; }
+  if (!data || !data.length) { list.innerHTML = '<div class="sub">Sin resultados.</div>'; return; }
+  list.innerHTML = ''; data.forEach((p) => list.appendChild(adminUserRow(p)));
+}
+function adminUserRow(p) {
+  const me = p.id === state.user.id;
+  const tag = `${p.is_admin ? ' <span class="adm-tag mod">ADMIN</span>' : ''}${p.verified ? ' <span class="adm-tag ok">✔</span>' : ''}${p.banned ? ' <span class="adm-tag ban">baneado</span>' : ''}`;
+  const row = el(`<div class="adm-row">
+    <span class="adm-av" data-open>${avatarHTML(p)}</span>
+    <div class="adm-row-main" data-open><b>${esc(p.display_name || p.username || '—')}${tag}</b><span>@${esc(p.username || '')}</span></div>
+    <div class="adm-row-acts">
+      <button class="btn sm" data-a="verify">${p.verified ? 'Quitar ✔' : 'Verificar'}</button>
+      ${me ? '' : `<button class="btn sm" data-a="ban">${p.banned ? 'Desbanear' : 'Banear'}</button>`}
+      ${me ? '' : `<button class="btn sm" data-a="admin">${p.is_admin ? 'Quitar admin' : 'Hacer admin'}</button>`}
+      ${me || p.is_admin ? '' : `<button class="btn sm danger" data-a="del">Eliminar</button>`}
+    </div>
+  </div>`);
+  const upd = async (patch) => { const { error } = await sb.from('profiles').update(patch).eq('id', p.id); if (error) { toast('No se pudo: ' + (error.message || '')); return false; } Object.assign(p, patch); return true; };
+  row.querySelector('[data-open]').onclick = () => openProfile(p.id);
+  row.querySelector('[data-a="verify"]').onclick = async (e) => { if (await upd({ verified: !p.verified })) { e.target.textContent = p.verified ? 'Quitar ✔' : 'Verificar'; toast(p.verified ? 'Verificado' : 'Verificación quitada'); } };
+  const banB = row.querySelector('[data-a="ban"]'); if (banB) banB.onclick = async (e) => { if (await upd({ banned: !p.banned })) { e.target.textContent = p.banned ? 'Desbanear' : 'Banear'; toast(p.banned ? 'Usuario baneado' : 'Usuario desbaneado'); } };
+  const admB = row.querySelector('[data-a="admin"]'); if (admB) admB.onclick = async (e) => { if (!confirm(`¿${p.is_admin ? 'QUITAR admin a' : 'HACER admin a'} @${p.username}?`)) return; if (await upd({ is_admin: !p.is_admin })) { e.target.textContent = p.is_admin ? 'Quitar admin' : 'Hacer admin'; toast('Permisos actualizados'); } };
+  const delB = row.querySelector('[data-a="del"]'); if (delB) delB.onclick = () => adminDeleteUser(p.id, p.username, () => row.remove());
+  return row;
+}
+async function loadAdminContent(kind) {
+  const box = $('admContent'); if (!box) return;
+  box.innerHTML = '<div class="loading" style="padding:18px"><div class="spinner"></div></div>';
+  try {
+    if (kind === 'posts') {
+      const { data } = await sb.from('posts').select('id,caption,image_url,created_at,profiles!posts_user_id_fkey(username,display_name)').order('created_at', { ascending: false }).limit(20);
+      box.innerHTML = ''; if (!data || !data.length) { box.innerHTML = '<div class="sub">Sin fotos.</div>'; return; }
+      data.forEach((p) => {
+        const r = el(`<div class="adm-row"><span class="adm-av"><img src="${esc(czUrl(p.image_url))}" alt=""></span><div class="adm-row-main"><b>${esc((p.caption || '(sin texto)').slice(0, 42))}</b><span>${esc(p.profiles?.display_name || p.profiles?.username || '')} · ${timeAgo(p.created_at)}</span></div><div class="adm-row-acts"><button class="btn sm danger" data-del>Borrar</button></div></div>`);
+        r.querySelector('[data-del]').onclick = async () => { if (!confirm('¿Borrar esta foto?')) return; const { error } = await sb.from('posts').delete().eq('id', p.id); if (error) { toast('No se pudo'); return; } invalidatePosts(); r.remove(); toast('Foto borrada'); };
+        box.appendChild(r);
+      });
+    } else {
+      const { data } = await sb.from('tracks').select('id,title,created_at,profiles!tracks_user_id_fkey(username,display_name)').order('created_at', { ascending: false }).limit(20);
+      box.innerHTML = ''; if (!data || !data.length) { box.innerHTML = '<div class="sub">Sin pistas.</div>'; return; }
+      data.forEach((t) => {
+        const r = el(`<div class="adm-row"><div class="adm-row-main"><b>${esc(t.title || '—')}</b><span>${esc(t.profiles?.display_name || t.profiles?.username || '')} · ${timeAgo(t.created_at)}</span></div><div class="adm-row-acts"><button class="btn sm danger" data-del>Borrar</button></div></div>`);
+        r.querySelector('[data-del]').onclick = async () => { if (!confirm('¿Borrar esta pista?')) return; const { error } = await sb.from('tracks').delete().eq('id', t.id); if (error) { toast('No se pudo'); return; } r.remove(); toast('Pista borrada'); };
+        box.appendChild(r);
+      });
+    }
+  } catch (_) { box.innerHTML = '<div class="sub">Error al cargar el contenido.</div>'; }
+}
+async function adminBroadcast() {
+  const title = $('admBcTitle').value.trim(), body = $('admBcBody').value.trim();
+  const msg = $('admBcMsg');
+  if (!title && !body) { msg.textContent = 'Escribe un título o un mensaje.'; return; }
+  if (!confirm('¿Enviar este aviso a TODA la comunidad?')) return;
+  const btn = $('admBcSend'); btn.disabled = true; msg.textContent = 'Enviando…';
+  const { error } = await sb.from('broadcasts').insert({ title: title || 'UnderBro', body, sender_id: state.user.id });
+  btn.disabled = false;
+  if (error) { msg.textContent = 'Falta activar el backend de difusión (tabla broadcasts). Aplica el SQL que te pasé.'; return; }
+  $('admBcTitle').value = ''; $('admBcBody').value = ''; msg.textContent = 'Aviso enviado a la comunidad ✅'; toast('Difusión enviada 📣');
 }
 
 async function deleteAccount() {

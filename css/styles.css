@@ -2286,3 +2286,38 @@ body.q-dragging .npq-list { overflow: hidden; }
 .gm-kick { flex-shrink: 0; width: 30px; height: 30px; border-radius: 50%; border: none; background: transparent; color: var(--ink-soft); display: grid; place-items: center; cursor: pointer; }
 .gm-kick:active { background: var(--panel-2); }
 .gm-kick svg { width: 16px; height: 16px; }
+
+/* ===================== PANEL DE ADMIN ===================== */
+.admin-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.admin-card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 18px; box-shadow: var(--sh-1); }
+.admin-card.span2 { grid-column: 1 / -1; }
+.admin-card h3 { font-size: 15px; font-weight: 800; margin-bottom: 14px; color: var(--ink); }
+.adm-kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; }
+.adm-kpi { background: var(--panel-2); border: 1px solid var(--line-soft); border-radius: 14px; padding: 14px; text-align: center; }
+.adm-kpi b { display: block; font-size: 26px; font-weight: 820; letter-spacing: -.5px; color: var(--ink); }
+.adm-kpi span { font-size: 11.5px; color: var(--ink-soft); font-weight: 600; }
+.adm-kpi.hot b { color: var(--blue-deep); }
+.adm-search { display: flex; gap: 8px; margin-bottom: 12px; }
+.adm-search input { flex: 1; min-width: 0; padding: 10px 14px; border: 1.5px solid var(--line); border-radius: 12px; background: var(--panel-2); color: var(--ink); }
+.adm-search input:focus { outline: none; border-color: var(--blue); }
+.adm-list { display: flex; flex-direction: column; gap: 8px; max-height: 420px; overflow-y: auto; }
+.adm-row { display: flex; align-items: center; gap: 11px; padding: 9px 11px; border: 1px solid var(--line-soft); border-radius: 13px; background: var(--panel-2); }
+.adm-av { flex: none; width: 38px; height: 38px; border-radius: 10px; overflow: hidden; display: grid; place-items: center; }
+.adm-av img { width: 38px; height: 38px; object-fit: cover; border-radius: 10px; }
+.adm-av .avatar { width: 38px; height: 38px; }
+.adm-row-main { flex: 1; min-width: 0; cursor: pointer; }
+.adm-row-main b { display: block; font-size: 14px; font-weight: 700; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.adm-row-main span { font-size: 12px; color: var(--ink-soft); }
+.adm-row-acts { display: flex; flex-wrap: wrap; gap: 6px; flex-shrink: 0; justify-content: flex-end; }
+.adm-row-acts .btn.sm { padding: 6px 10px; font-size: 12px; }
+.adm-row-acts .btn.danger { border-color: #e3b7b0; color: #c0533f; }
+.adm-tag { font-size: 10px; font-weight: 800; padding: 1px 6px; border-radius: 6px; vertical-align: middle; }
+.adm-tag.mod { background: #fdeede; color: #b07a2c; }
+.adm-tag.ok { background: #e3f3ea; color: #2c8a52; }
+.adm-tag.ban { background: #fae3e0; color: #c0533f; }
+.adm-tabs { display: flex; gap: 4px; padding: 4px; background: var(--panel-2); border: 1px solid var(--line-soft); border-radius: 12px; margin-bottom: 12px; }
+.adm-tabs button { flex: 1; border: none; background: transparent; padding: 8px; border-radius: 9px; font-weight: 650; font-size: 13px; color: var(--ink-soft); cursor: pointer; }
+.adm-tabs button.active { background: var(--panel); color: var(--blue-deep); box-shadow: var(--sh-1); }
+.admin-card textarea, .admin-card #admBcTitle { width: 100%; padding: 10px 14px; border: 1.5px solid var(--line); border-radius: 12px; background: var(--panel-2); color: var(--ink); margin-bottom: 10px; resize: vertical; }
+.admin-card textarea:focus, .admin-card #admBcTitle:focus { outline: none; border-color: var(--blue); }
+@media (max-width: 720px) { .admin-grid { grid-template-columns: 1fr; } .admin-card.span2 { grid-column: auto; } .adm-row-acts { width: 100%; justify-content: flex-start; margin-top: 4px; } .adm-row { flex-wrap: wrap; } }
