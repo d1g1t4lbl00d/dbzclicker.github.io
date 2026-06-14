@@ -1444,6 +1444,27 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
 
 .btn-ig { background: linear-gradient(95deg, #feda75, #fa7e1e 25%, #d62976 55%, #962fbf 80%, #4f5bd5); color: #fff !important; border: none; }
 .btn-ig svg { stroke: #fff; }
+/* cabecera de pista (compartir / historia) */
+.st-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.st-cover { width: 60px; height: 60px; border-radius: 12px; flex: none; overflow: hidden; background: var(--panel-2); display: grid; place-items: center; box-shadow: var(--sh-1); }
+.st-cover img { width: 100%; height: 100%; object-fit: cover; }
+.st-cover svg { width: 24px; height: 24px; stroke: var(--ink-soft); fill: none; }
+.st-meta { min-width: 0; }
+.st-meta b { display: block; font-size: 16px; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.st-meta span { font-size: 13px; color: var(--ink-soft); }
+.share-big { width: 100%; justify-content: center; font-size: 15px; padding: 13px; margin-bottom: 14px; }
+/* acciones rápidas */
+.share-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 14px; }
+.share-q { display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 12px 4px; border-radius: 14px; border: 1px solid var(--line); background: var(--panel-2); font-size: 12px; font-weight: 600; color: var(--ink-2); cursor: pointer; }
+.share-q:hover { border-color: var(--blue); }
+.share-q .sqi { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; color: #fff; font-size: 20px; font-weight: 800; }
+.share-q .sqi.neutral { background: var(--panel); border: 1px solid var(--line); color: var(--ink-2); }
+.share-q .sqi svg { width: 20px; height: 20px; fill: none; }
+/* selector de 10s con waveform */
+.st-wave { width: 100%; height: 96px; display: block; border-radius: 12px; background: var(--panel-2); border: 1px solid var(--line); touch-action: none; cursor: pointer; }
+.st-times { display: flex; justify-content: space-between; font-size: 12.5px; font-weight: 600; color: var(--blue); margin: 8px 2px 0; font-variant-numeric: tabular-nums; }
+.st-actions { display: flex; gap: 10px; margin-top: 12px; }
+.st-actions .btn { flex: 1; justify-content: center; }
 
 /* Onboarding */
 .onb-h { font-size: 14.5px; font-weight: 800; margin: 16px 0 10px; }

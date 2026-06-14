@@ -1169,31 +1169,46 @@ async function handleTrackClick(e, t, card) {
 
 /* ---- COMPARTIR ---- */
 function trackShareUrl(t) { return `${location.origin}/t/${t.id}`; }
+function shareQuickRow(url, title) {
+  const txt = encodeURIComponent(title + ' 🎵 en UnderBro'), u = encodeURIComponent(url);
+  return `<div class="share-grid">
+    <button class="share-q" data-q="copy"><span class="sqi neutral"><svg fill="none" stroke="currentColor"><use href="#i-copy"/></svg></span>Copiar</button>
+    <button class="share-q" data-q="wa"><span class="sqi" style="background:#25d366">W</span>WhatsApp</button>
+    <button class="share-q" data-q="tg"><span class="sqi" style="background:#2aabee">✈</span>Telegram</button>
+    <button class="share-q" data-q="x"><span class="sqi" style="background:#000">𝕏</span>X</button>
+    ${navigator.share ? `<button class="share-q" data-q="more"><span class="sqi neutral"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg></span>Más</button>` : ''}
+    <button class="share-q" data-q="chat"><span class="sqi" style="background:var(--blue)"><svg fill="none" stroke="#fff"><use href="#i-mail"/></svg></span>Chat</button>
+  </div>`;
+}
+function wireQuickRow(m, url, title, onChat) {
+  const txt = encodeURIComponent(title + ' 🎵 en UnderBro'), u = encodeURIComponent(url);
+  const open = (href) => window.open(href, '_blank', 'noopener');
+  m.querySelectorAll('.share-q').forEach((b) => b.onclick = async () => {
+    const q = b.dataset.q;
+    if (q === 'copy') { try { await navigator.clipboard.writeText(url); } catch (_) {} toast('Enlace copiado'); }
+    else if (q === 'wa') open(`https://wa.me/?text=${txt}%20${u}`);
+    else if (q === 'tg') open(`https://t.me/share/url?url=${u}&text=${txt}`);
+    else if (q === 'x') open(`https://twitter.com/intent/tweet?text=${txt}&url=${u}`);
+    else if (q === 'more') { navigator.share({ title, text: title, url }).catch(() => {}); }
+    else if (q === 'chat') onChat();
+  });
+}
 function shareTrack(t) {
   const url = trackShareUrl(t);
   const who = t.profiles?.display_name || t.profiles?.username || t.artist || 'UnderBro';
   const title = `${t.title} — ${who}`;
   const m = openModal(`
-    <div class="modal-head"><h3>Compartir pista</h3><button class="close">&times;</button></div>
+    <div class="modal-head"><h3>Compartir</h3><button class="close">&times;</button></div>
     <div class="modal-body">
-      <div class="share-meta"><b>${esc(t.title)}</b><span> · ${esc(who)}</span></div>
+      <div class="st-head"><div class="st-cover">${t.cover_url ? `<img src="${esc(czUrl(t.cover_url))}" alt="">` : '<svg fill="none" stroke="#fff"><use href="#i-music"/></svg>'}</div><div class="st-meta"><b>${esc(t.title)}</b><span>${esc(who)}</span></div></div>
+      <button class="btn btn-ig share-big" id="shareStory"><svg fill="none" stroke="#fff"><use href="#i-camera"/></svg> Crear historia para Instagram</button>
+      ${shareQuickRow(url, title)}
       <div class="share-link"><input type="text" id="shareUrl" readonly value="${esc(url)}" /><button class="btn sm primary" id="copyLink">Copiar</button></div>
-      <div class="share-actions">
-        <button class="btn btn-ig" id="shareStory"><svg fill="none" stroke="#fff"><use href="#i-camera"/></svg> Historia (Instagram)</button>
-        ${navigator.share ? `<button class="btn" id="nativeShare"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg> Compartir…</button>` : ''}
-        <button class="btn" id="shareToChat"><svg fill="none" stroke="currentColor"><use href="#i-mail"/></svg> Enviar por chat</button>
-      </div>
     </div>`);
+  m.querySelector('#shareStory').onclick = () => { m.remove(); shareStory(t); };
   const copyBtn = m.querySelector('#copyLink');
-  copyBtn.onclick = async () => {
-    try { await navigator.clipboard.writeText(url); }
-    catch { const i = m.querySelector('#shareUrl'); i.select(); try { document.execCommand('copy'); } catch {} }
-    copyBtn.textContent = 'Copiado ✓'; toast('Enlace copiado');
-  };
-  const ns = m.querySelector('#nativeShare');
-  if (ns) ns.onclick = () => { navigator.share({ title, text: title, url }).catch(() => {}); };
-  m.querySelector('#shareStory').onclick = () => shareStory(t);
-  m.querySelector('#shareToChat').onclick = () => { m.remove(); shareToChatPicker(t); };
+  copyBtn.onclick = async () => { try { await navigator.clipboard.writeText(url); } catch { const i = m.querySelector('#shareUrl'); i.select(); try { document.execCommand('copy'); } catch {} } copyBtn.textContent = 'Copiado ✓'; toast('Enlace copiado'); };
+  wireQuickRow(m, url, title, () => { m.remove(); shareToChatPicker(t); });
 }
 
 /* ---- HISTORIA / STORY: genera una tarjeta 1080x1920 muy vistosa ---- */
@@ -1216,33 +1231,71 @@ function fmtClock(s) { s = Math.max(0, Math.floor(s || 0)); return Math.floor(s 
 // Dibuja la tarjeta de historia 1080x1920. shape: 'square' (pista) | 'circle' (perfil) | 'photo' (foto)
 function drawStoryCard(ctx, o) {
   const W = 1080, H = 1920;
-  const { shape = 'square', coverImg = null, title = '', subtitle = '', cta = 'Escúchalo en UnderBro', footer = 'underbro.app', freq = null, progress = null } = o;
-  if (coverImg) { const sc = Math.max(W / coverImg.width, H / coverImg.height) * 1.15, cw = coverImg.width * sc, ch = coverImg.height * sc; ctx.filter = 'blur(60px)'; ctx.drawImage(coverImg, (W - cw) / 2, (H - ch) / 2, cw, ch); ctx.filter = 'none'; }
-  else { const g = ctx.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#0a0e23'); g.addColorStop(1, '#1a1040'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
-  ctx.fillStyle = 'rgba(8,10,20,.55)'; ctx.fillRect(0, 0, W, H);
-  const gv = ctx.createLinearGradient(0, H * 0.4, 0, H); gv.addColorStop(0, 'rgba(8,10,20,0)'); gv.addColorStop(1, 'rgba(8,10,20,.88)'); ctx.fillStyle = gv; ctx.fillRect(0, 0, W, H);
+  const { shape = 'square', coverImg = null, avatarImg = null, title = '', subtitle = '', cta = 'Escúchalo en UnderBro', footer = 'underbro.app', freq = null, progress = null, clip = 10, label = '♫  Sonando en UnderBro' } = o;
+  // fondo difuminado + velos
+  if (coverImg) { const sc = Math.max(W / coverImg.width, H / coverImg.height) * 1.25, cw = coverImg.width * sc, ch = coverImg.height * sc; ctx.filter = 'blur(70px)'; ctx.drawImage(coverImg, (W - cw) / 2, (H - ch) / 2, cw, ch); ctx.filter = 'none'; }
+  else { const g = ctx.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#101733'); g.addColorStop(1, '#1c0f3a'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H); }
+  ctx.fillStyle = 'rgba(8,10,20,.5)'; ctx.fillRect(0, 0, W, H);
+  // viñeta radial
+  const vr = ctx.createRadialGradient(W / 2, H * 0.42, 200, W / 2, H * 0.5, 1100); vr.addColorStop(0, 'rgba(0,0,0,0)'); vr.addColorStop(1, 'rgba(0,0,0,.55)'); ctx.fillStyle = vr; ctx.fillRect(0, 0, W, H);
+  const gv = ctx.createLinearGradient(0, H * 0.35, 0, H); gv.addColorStop(0, 'rgba(8,10,20,0)'); gv.addColorStop(1, 'rgba(8,10,20,.9)'); ctx.fillStyle = gv; ctx.fillRect(0, 0, W, H);
   ctx.textAlign = 'center';
-  ctx.fillStyle = '#fff'; ctx.font = '800 50px Poppins, system-ui, sans-serif'; ctx.shadowColor = 'rgba(0,0,0,.4)'; ctx.shadowBlur = 18; ctx.fillText('UnderBro', W / 2, 170); ctx.shadowBlur = 0;
-  const S = 700, cx = (W - S) / 2, cy = 460, ccy = cy + S / 2;
-  const pathMedia = () => { if (shape === 'circle') { ctx.beginPath(); ctx.arc(W / 2, ccy, S / 2, 0, Math.PI * 2); } else { _roundRect(ctx, cx, cy, S, S, 44); } };
-  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 60; ctx.shadowOffsetY = 24; pathMedia(); ctx.fillStyle = '#11162a'; ctx.fill(); ctx.restore();
+  // pill superior
+  ctx.font = '700 36px Poppins, system-ui, sans-serif';
+  const lw = ctx.measureText(label).width, plw = lw + 64;
+  ctx.fillStyle = 'rgba(255,255,255,.14)'; _roundRect(ctx, (W - plw) / 2, 116, plw, 70, 35); ctx.fill();
+  ctx.fillStyle = '#fff'; ctx.fillText(label, W / 2, 162);
+  // media (carátula / avatar / foto)
+  const S = 700, cx = (W - S) / 2, cy = 408, ccy = cy + S / 2;
+  const pathMedia = () => { if (shape === 'circle') { ctx.beginPath(); ctx.arc(W / 2, ccy, S / 2, 0, Math.PI * 2); } else { _roundRect(ctx, cx, cy, S, S, 56); } };
+  // glow de acento detrás
+  ctx.save(); ctx.filter = 'blur(70px)'; const gg = ctx.createLinearGradient(cx, cy, cx + S, cy + S); gg.addColorStop(0, '#3e57fc'); gg.addColorStop(1, '#9b6bff'); ctx.fillStyle = gg; ctx.globalAlpha = 0.55; _roundRect(ctx, cx + 30, cy + 40, S - 60, S - 60, 80); ctx.fill(); ctx.restore();
+  ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 70; ctx.shadowOffsetY = 28; pathMedia(); ctx.fillStyle = '#11162a'; ctx.fill(); ctx.restore();
   ctx.save(); pathMedia(); ctx.clip();
   if (coverImg) {
     if (shape === 'photo') { const r = Math.min(S / coverImg.width, S / coverImg.height), iw = coverImg.width * r, ih = coverImg.height * r; ctx.fillStyle = '#0b0f1c'; ctx.fillRect(cx, cy, S, S); ctx.drawImage(coverImg, cx + (S - iw) / 2, cy + (S - ih) / 2, iw, ih); }
     else { const r = Math.max(S / coverImg.width, S / coverImg.height), iw = coverImg.width * r, ih = coverImg.height * r; ctx.drawImage(coverImg, W / 2 - iw / 2, ccy - ih / 2, iw, ih); }
-  } else { const g2 = ctx.createLinearGradient(cx, cy, cx + S, cy + S); g2.addColorStop(0, '#3e57fc'); g2.addColorStop(1, '#27a9ff'); ctx.fillStyle = g2; ctx.fillRect(cx, cy, S, S); ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.font = '800 200px system-ui'; ctx.fillText(shape === 'circle' ? '👤' : '♪', W / 2, ccy + 70); }
+  } else { const g2 = ctx.createLinearGradient(cx, cy, cx + S, cy + S); g2.addColorStop(0, '#3e57fc'); g2.addColorStop(1, '#27a9ff'); ctx.fillStyle = g2; ctx.fillRect(cx, cy, S, S); ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.font = '800 220px system-ui'; ctx.fillText(shape === 'circle' ? '👤' : '♪', W / 2, ccy + 78); }
+  // brillo superior sutil dentro de la media
+  const sh = ctx.createLinearGradient(0, cy, 0, cy + S * 0.5); sh.addColorStop(0, 'rgba(255,255,255,.12)'); sh.addColorStop(1, 'rgba(255,255,255,0)'); ctx.fillStyle = sh; ctx.fillRect(cx, cy, S, S);
   ctx.restore();
-  ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,.18)'; pathMedia(); ctx.stroke();
-  const wy = cy + S + 70, nb = 42, bw = 10, gap = 7, tot = nb * (bw + gap) - gap, sx = (W - tot) / 2;
-  const gb = ctx.createLinearGradient(sx, 0, sx + tot, 0); gb.addColorStop(0, '#3e57fc'); gb.addColorStop(1, '#27a9ff'); ctx.fillStyle = gb;
-  for (let i = 0; i < nb; i++) { let h; if (freq) { const v = freq[Math.floor(i / nb * freq.length)] / 255; h = 14 + v * 130; } else { h = 14 + Math.abs(Math.sin(i * 0.9)) * 60 + (i % 3) * 8; } _roundRect(ctx, sx + i * (bw + gap), wy - h / 2, bw, h, 5); ctx.fill(); }
-  ctx.fillStyle = '#fff'; const tt = _fitText(ctx, title || '', W - 140, 80, '800'); ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = 14; ctx.fillText(tt, W / 2, wy + 130); ctx.shadowBlur = 0;
-  if (subtitle) { ctx.fillStyle = 'rgba(255,255,255,.78)'; const st = _fitText(ctx, subtitle, W - 200, 46, '600'); ctx.fillText(st, W / 2, wy + 192); }
-  if (progress != null) { const lw = 560, lx = (W - lw) / 2, ly = wy + 240; ctx.fillStyle = 'rgba(255,255,255,.2)'; _roundRect(ctx, lx, ly, lw, 8, 4); ctx.fill(); ctx.fillStyle = gb; _roundRect(ctx, lx, ly, lw * Math.max(0, Math.min(1, progress)), 8, 4); ctx.fill(); }
-  const pw = 560, ph = 96, px = (W - pw) / 2, py = H - 230;
-  const gp = ctx.createLinearGradient(px, 0, px + pw, 0); gp.addColorStop(0, '#3e57fc'); gp.addColorStop(1, '#27a9ff'); ctx.fillStyle = gp; _roundRect(ctx, px, py, pw, ph, 48); ctx.fill();
-  ctx.fillStyle = '#fff'; ctx.font = '700 38px Poppins, system-ui, sans-serif'; ctx.fillText(cta, W / 2, py + ph / 2 + 13);
-  ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.font = '500 32px Poppins, system-ui, sans-serif'; ctx.fillText(footer, W / 2, H - 90);
+  ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(255,255,255,.22)'; pathMedia(); ctx.stroke();
+  // botón play (solo pista) sobre el borde inferior de la carátula
+  if (shape === 'square') {
+    const by = cy + S, br = 70;
+    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.45)'; ctx.shadowBlur = 28; ctx.beginPath(); ctx.arc(W / 2, by, br, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill(); ctx.restore();
+    ctx.fillStyle = '#3e57fc'; ctx.beginPath(); ctx.moveTo(W / 2 - 22, by - 30); ctx.lineTo(W / 2 - 22, by + 30); ctx.lineTo(W / 2 + 34, by); ctx.closePath(); ctx.fill();
+  }
+  // título
+  ctx.fillStyle = '#fff'; const tt = _fitText(ctx, title || '', W - 150, 82, '800'); ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 16; ctx.fillText(tt, W / 2, cy + S + 168); ctx.shadowBlur = 0;
+  // fila de artista (avatar + nombre)
+  if (subtitle) {
+    ctx.font = '600 44px Poppins, system-ui, sans-serif';
+    const sub = _fitText(ctx, subtitle, W - 280, 44, '600');
+    const tw = ctx.measureText(sub).width, av = avatarImg ? 62 : 0, gp = av ? 18 : 0, blockW = av + gp + tw, startX = (W - blockW) / 2, ry = cy + S + 232;
+    if (avatarImg) { ctx.save(); ctx.beginPath(); ctx.arc(startX + av / 2, ry - 16, av / 2, 0, Math.PI * 2); ctx.clip(); const r = Math.max(av / avatarImg.width, av / avatarImg.height); ctx.drawImage(avatarImg, startX + av / 2 - avatarImg.width * r / 2, ry - 16 - avatarImg.height * r / 2, avatarImg.width * r, avatarImg.height * r); ctx.restore(); ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(255,255,255,.4)'; ctx.beginPath(); ctx.arc(startX + av / 2, ry - 16, av / 2, 0, Math.PI * 2); ctx.stroke(); }
+    ctx.textAlign = 'left'; ctx.fillStyle = 'rgba(255,255,255,.82)'; ctx.fillText(sub, startX + av + gp, ry); ctx.textAlign = 'center';
+  }
+  // onda (reactiva o decorativa), reflejada desde el centro
+  const wy = cy + S + 340, nb = 48, bw = 9, gap = 8, tot = nb * (bw + gap) - gap, sx = (W - tot) / 2;
+  const gb = ctx.createLinearGradient(sx, 0, sx + tot, 0); gb.addColorStop(0, '#3e57fc'); gb.addColorStop(.5, '#7b8cff'); gb.addColorStop(1, '#27c0ff'); ctx.fillStyle = gb;
+  for (let i = 0; i < nb; i++) { let h; if (freq) { const v = freq[Math.floor(i / nb * freq.length)] / 255; h = 12 + v * 110; } else { h = 12 + Math.abs(Math.sin(i * 0.55) * Math.cos(i * 0.2)) * 70; } const x = sx + i * (bw + gap); _roundRect(ctx, x, wy - h / 2, bw, h, 5); ctx.fill(); }
+  // línea de tiempo (solo vídeo)
+  if (progress != null) {
+    const tlw = 620, tlx = (W - tlw) / 2, tly = wy + 90; const pp = Math.max(0, Math.min(1, progress));
+    ctx.fillStyle = 'rgba(255,255,255,.22)'; _roundRect(ctx, tlx, tly, tlw, 8, 4); ctx.fill();
+    ctx.fillStyle = gb; _roundRect(ctx, tlx, tly, tlw * pp, 8, 4); ctx.fill();
+    ctx.beginPath(); ctx.arc(tlx + tlw * pp, tly + 4, 11, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,.7)'; ctx.font = '500 28px Poppins, system-ui, sans-serif';
+    ctx.textAlign = 'left'; ctx.fillText(fmtClock(pp * clip), tlx, tly + 48);
+    ctx.textAlign = 'right'; ctx.fillText(fmtClock(clip), tlx + tlw, tly + 48); ctx.textAlign = 'center';
+  }
+  // CTA + footer
+  const pw = 600, ph = 100, px = (W - pw) / 2, py = H - 235;
+  const gp2 = ctx.createLinearGradient(px, 0, px + pw, 0); gp2.addColorStop(0, '#3e57fc'); gp2.addColorStop(1, '#27a9ff');
+  ctx.save(); ctx.shadowColor = 'rgba(62,87,252,.5)'; ctx.shadowBlur = 30; ctx.shadowOffsetY = 10; ctx.fillStyle = gp2; _roundRect(ctx, px, py, pw, ph, 50); ctx.fill(); ctx.restore();
+  ctx.fillStyle = '#fff'; ctx.font = '700 40px Poppins, system-ui, sans-serif'; ctx.fillText(cta, W / 2, py + ph / 2 + 14);
+  ctx.fillStyle = 'rgba(255,255,255,.62)'; ctx.font = '500 32px Poppins, system-ui, sans-serif'; ctx.fillText(footer, W / 2, H - 86);
 }
 async function generateStoryImage(o) {
   await ensurePoppins();
@@ -1265,7 +1318,7 @@ function pickVideoMime() {
   return '';
 }
 // graba un vídeo 1080x1920 (tarjeta animada + el clip de audio elegido) en tiempo real
-async function renderTrackStoryVideo(t, coverImg, buffer, start, clip, onProgress) {
+async function renderTrackStoryVideo(t, coverImg, avatarImg, buffer, start, clip, onProgress) {
   await ensurePoppins();
   const cv = document.createElement('canvas'); cv.width = 1080; cv.height = 1920; const ctx = cv.getContext('2d');
   const ac = new (window.AudioContext || window.webkitAudioContext)();
@@ -1286,7 +1339,7 @@ async function renderTrackStoryVideo(t, coverImg, buffer, start, clip, onProgres
     const frame = () => {
       const el = (performance.now() - t0) / 1000, pr = Math.min(1, el / clip);
       analyser.getByteFrequencyData(freq);
-      drawStoryCard(ctx, { shape: 'square', coverImg, title: t.title, subtitle: who, cta: '▶  Escúchala en UnderBro', footer: 'underbro.app', freq, progress: pr });
+      drawStoryCard(ctx, { shape: 'square', coverImg, avatarImg, title: t.title, subtitle: who, cta: '▶  Escúchala en UnderBro', footer: 'underbro.app', freq, progress: pr, clip, label: '♫  Sonando en UnderBro' });
       if (onProgress) onProgress(pr);
       if (el < clip) requestAnimationFrame(frame); else resolve();
     };
@@ -1298,29 +1351,37 @@ async function renderTrackStoryVideo(t, coverImg, buffer, start, clip, onProgres
 }
 // selector de los 10s + creación de la historia (vídeo con sonido) para una pista
 function shareStory(t) { openTrackStoryPicker(t); }
+function peaksFromBuffer(buffer, n) {
+  const ch = buffer.getChannelData(0), block = Math.max(1, Math.floor(ch.length / n)), out = [];
+  for (let i = 0; i < n; i++) { let mx = 0; const s = i * block; for (let j = 0; j < block; j += 64) { const v = Math.abs(ch[s + j] || 0); if (v > mx) mx = v; } out.push(mx); }
+  const peak = Math.max(...out, 0.001); return out.map((p) => p / peak);
+}
 async function openTrackStoryPicker(t) {
   const canVideo = !!(window.MediaRecorder && HTMLCanvasElement.prototype.captureStream && t.audio_url);
+  const who = trackWho(t);
   const m = openModal(`<div class="modal-head"><h3>Historia para Instagram</h3><button class="close">&times;</button></div>
     <div class="modal-body">
-      <p class="eco-hint">${canVideo ? 'Elige los 10 segundos de la canción que sonarán en tu historia 🔊' : 'Tu navegador no permite vídeo con sonido; comparte la tarjeta como imagen.'}</p>
+      <div class="st-head"><div class="st-cover">${t.cover_url ? `<img src="${esc(czUrl(t.cover_url))}" alt="">` : '<svg fill="none" stroke="#fff"><use href="#i-music"/></svg>'}</div><div class="st-meta"><b>${esc(t.title)}</b><span>${esc(who)}</span></div></div>
+      <p class="eco-hint">${canVideo ? 'Arrastra sobre la onda para elegir los 10 s que sonarán 🔊' : 'Tu navegador no permite vídeo con sonido; comparte como imagen.'}</p>
       <div id="stStatus" class="eco-hint">${canVideo ? 'Cargando audio…' : ''}</div>
       <div id="stCtrls" style="display:none">
-        <input type="range" id="stStart" min="0" max="100" value="0" step="0.5" style="width:100%" />
-        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--ink-soft);margin-top:4px"><span id="stFrom">0:00</span><span id="stTo">0:10</span></div>
-        <div class="skin-actions">
-          <button class="btn" id="stPrev">▶ Escuchar selección</button>
-          <button class="btn btn-ig" id="stMake">🎬 Crear historia con sonido</button>
+        <canvas id="stWave" class="st-wave"></canvas>
+        <div class="st-times"><span id="stFrom">0:00</span><span id="stTo">0:10</span></div>
+        <div class="st-actions">
+          <button class="btn" id="stPrev"><svg fill="none" stroke="currentColor"><use href="#i-play"/></svg> Escuchar</button>
+          <button class="btn btn-ig" id="stMake">🎬 Crear historia</button>
         </div>
         <div class="progress-bar hidden" id="stBar"><div></div></div>
       </div>
       <button class="btn" id="stImg" style="width:100%;margin-top:10px">Compartir solo imagen</button>
     </div>`);
-  let cover = null, buffer = null, clip = 10, prevSrc = null, prevCtx = null;
-  if (t.cover_url) { _loadImg(czUrl(t.cover_url)).then((im) => { cover = im; }).catch(() => {}); }
+  let cover = null, avatar = null, buffer = null, clip = 10, peaks = [], start = 0, playhead = null;
+  if (t.cover_url) _loadImg(czUrl(t.cover_url)).then((im) => { cover = im; }).catch(() => {});
+  if (t.profiles?.avatar_url) _loadImg(czUrl(t.profiles.avatar_url)).then((im) => { avatar = im; }).catch(() => {});
   m.querySelector('#stImg').onclick = async () => {
     m.remove(); toast('Generando historia…');
     let cov = cover; if (!cov && t.cover_url) { try { cov = await _loadImg(czUrl(t.cover_url)); } catch (_) {} }
-    const blob = await generateStoryImage({ shape: 'square', coverImg: cov, title: t.title, subtitle: trackWho(t), cta: '▶  Escúchala en UnderBro', footer: 'underbro.app' });
+    const blob = await generateStoryImage({ shape: 'square', coverImg: cov, avatarImg: avatar, title: t.title, subtitle: who, cta: '▶  Escúchala en UnderBro', footer: 'underbro.app', label: '♫  Sonando en UnderBro' });
     shareBlob(blob, 'underbro-story.png', `${t.title} en UnderBro`);
   };
   if (!canVideo) { m.querySelector('#stStatus').textContent = ''; return; }
@@ -1328,36 +1389,63 @@ async function openTrackStoryPicker(t) {
     const r = await fetch(czUrl(t.audio_url)); const ab = await r.arrayBuffer();
     const dc = new (window.AudioContext || window.webkitAudioContext)(); buffer = await dc.decodeAudioData(ab); try { dc.close(); } catch (_) {}
   } catch (e) { console.error('[story audio]', e); m.querySelector('#stStatus').textContent = 'No se pudo cargar el audio. Comparte como imagen.'; return; }
-  const dur = buffer.duration; clip = Math.min(10, dur);
-  const slider = m.querySelector('#stStart'); slider.max = Math.max(0, dur - clip);
-  const upd = () => { const s = +slider.value; m.querySelector('#stFrom').textContent = fmtClock(s); m.querySelector('#stTo').textContent = fmtClock(s + clip); };
-  slider.oninput = upd; upd();
+  const dur = buffer.duration; clip = Math.min(10, dur); peaks = peaksFromBuffer(buffer, 170);
   m.querySelector('#stStatus').style.display = 'none'; m.querySelector('#stCtrls').style.display = '';
-  const stopPrev = () => { try { prevSrc && prevSrc.stop(); } catch (_) {} try { prevCtx && prevCtx.close(); } catch (_) {} prevSrc = null; prevCtx = null; };
-  m.querySelector('#stPrev').onclick = () => { stopPrev(); prevCtx = new (window.AudioContext || window.webkitAudioContext)(); prevSrc = prevCtx.createBufferSource(); prevSrc.buffer = buffer; prevSrc.connect(prevCtx.destination); prevSrc.start(0, +slider.value, clip); toast('🔊 Reproduciendo selección'); };
+  const cv = m.querySelector('#stWave'), wctx = cv.getContext('2d'), dpr = Math.min(2, window.devicePixelRatio || 1);
+  let cw = 0; const CH = 96;
+  const sizeCv = () => { cw = cv.clientWidth || 520; cv.width = cw * dpr; cv.height = CH * dpr; wctx.setTransform(dpr, 0, 0, dpr, 0, 0); };
+  const drawWave = () => {
+    if (!cw) sizeCv();
+    wctx.clearRect(0, 0, cw, CH);
+    const n = peaks.length, bw = cw / n, x0 = (start / dur) * cw, x1 = ((start + clip) / dur) * cw;
+    for (let i = 0; i < n; i++) { const h = Math.max(3, peaks[i] * (CH * 0.84)), x = i * bw, cxb = x + bw / 2, inW = cxb >= x0 && cxb <= x1; wctx.fillStyle = inW ? '#3e57fc' : 'rgba(255,255,255,.16)'; _roundRect(wctx, x + 1, (CH - h) / 2, Math.max(1, bw - 2), h, 2); wctx.fill(); }
+    wctx.fillStyle = 'rgba(62,87,252,.12)'; wctx.fillRect(x0, 0, x1 - x0, CH);
+    wctx.strokeStyle = 'rgba(62,87,252,.95)'; wctx.lineWidth = 2; wctx.strokeRect(x0 + 1, 2, Math.max(2, x1 - x0 - 2), CH - 4);
+    if (playhead != null) { const px = ((start + playhead) / dur) * cw; wctx.strokeStyle = '#fff'; wctx.lineWidth = 2; wctx.beginPath(); wctx.moveTo(px, 0); wctx.lineTo(px, CH); wctx.stroke(); }
+  };
+  const updTimes = () => { m.querySelector('#stFrom').textContent = fmtClock(start); m.querySelector('#stTo').textContent = fmtClock(start + clip); };
+  const setFromX = (clientX) => { const r = cv.getBoundingClientRect(); const frac = Math.max(0, Math.min(1, (clientX - r.left) / r.width)); start = Math.max(0, Math.min(dur - clip, frac * dur - clip / 2)); updTimes(); drawWave(); };
+  let drag = false;
+  cv.addEventListener('pointerdown', (e) => { drag = true; try { cv.setPointerCapture(e.pointerId); } catch (_) {} setFromX(e.clientX); });
+  cv.addEventListener('pointermove', (e) => { if (drag) setFromX(e.clientX); });
+  cv.addEventListener('pointerup', () => { drag = false; });
+  cv.addEventListener('pointercancel', () => { drag = false; });
+  const onResize = () => drawWave();
+  window.addEventListener('resize', onResize);
+  setTimeout(() => { sizeCv(); updTimes(); drawWave(); }, 40);
+  let prevCtx = null, prevSrc = null, prevRAF = 0;
+  const setPrevIcon = (playing) => { const b = m.querySelector('#stPrev'); b.innerHTML = `<svg fill="none" stroke="currentColor"><use href="#i-${playing ? 'pause' : 'play'}"/></svg> ${playing ? 'Parar' : 'Escuchar'}`; };
+  const stopPrev = () => { try { prevSrc && prevSrc.stop(); } catch (_) {} try { prevCtx && prevCtx.close(); } catch (_) {} prevSrc = null; prevCtx = null; cancelAnimationFrame(prevRAF); playhead = null; drawWave(); setPrevIcon(false); };
+  m.querySelector('#stPrev').onclick = () => {
+    if (prevSrc) { stopPrev(); return; }
+    prevCtx = new (window.AudioContext || window.webkitAudioContext)(); prevSrc = prevCtx.createBufferSource(); prevSrc.buffer = buffer; prevSrc.connect(prevCtx.destination);
+    const t0 = prevCtx.currentTime; prevSrc.start(0, start, clip); setPrevIcon(true);
+    const tick = () => { if (!prevCtx) return; playhead = Math.min(clip, prevCtx.currentTime - t0); drawWave(); if (playhead < clip) prevRAF = requestAnimationFrame(tick); else stopPrev(); }; tick();
+  };
   m.querySelector('#stMake').onclick = async () => {
     stopPrev();
     const mk = m.querySelector('#stMake'); mk.disabled = true; mk.textContent = 'Generando vídeo… (10s)';
     const bar = m.querySelector('#stBar'); bar.classList.remove('hidden'); const fill = bar.querySelector('div');
     let cov = cover; if (!cov && t.cover_url) { try { cov = await _loadImg(czUrl(t.cover_url)); } catch (_) {} }
     try {
-      const blob = await renderTrackStoryVideo(t, cov, buffer, +slider.value, clip, (p) => { fill.style.width = (p * 100) + '%'; });
-      m.remove();
+      const blob = await renderTrackStoryVideo(t, cov, avatar, buffer, start, clip, (p) => { fill.style.width = (p * 100) + '%'; });
+      window.removeEventListener('resize', onResize); m.remove();
       const ext = (blob.type.indexOf('mp4') >= 0) ? 'mp4' : 'webm';
       await shareBlob(blob, 'underbro-story.' + ext, `${t.title} — escúchala en UnderBro`);
-    } catch (e) { console.error('[story video]', e); toast('No se pudo generar el vídeo'); mk.disabled = false; mk.textContent = '🎬 Crear historia con sonido'; }
+    } catch (e) { console.error('[story video]', e); toast('No se pudo generar el vídeo'); mk.disabled = false; mk.textContent = '🎬 Crear historia'; }
   };
 }
 async function shareProfileStory(prof) {
   toast('Generando historia…');
   let av = null; if (prof.avatar_url) { try { av = await _loadImg(czUrl(prof.avatar_url)); } catch (_) {} }
-  const blob = await generateStoryImage({ shape: 'circle', coverImg: av, title: prof.display_name || prof.username, subtitle: '@' + prof.username, cta: 'Sígueme en UnderBro', footer: 'underbro.app' });
+  const blob = await generateStoryImage({ shape: 'circle', coverImg: av, title: prof.display_name || prof.username, subtitle: '@' + prof.username, cta: 'Sígueme en UnderBro', footer: 'underbro.app', label: '👤  Perfil en UnderBro' });
   shareBlob(blob, 'underbro-perfil.png', `Sígueme en UnderBro: @${prof.username}`);
 }
 async function sharePhotoStory(p) {
   toast('Generando historia…');
   let im = null; if (p.image_url) { try { im = await _loadImg(czUrl(p.image_url)); } catch (_) {} }
-  const blob = await generateStoryImage({ shape: 'photo', coverImg: im, title: (p.profiles?.display_name || p.profiles?.username || 'UnderBro'), subtitle: p.caption || '', cta: 'Míralo en UnderBro', footer: 'underbro.app' });
+  let av = null; if (p.profiles?.avatar_url) { try { av = await _loadImg(czUrl(p.profiles.avatar_url)); } catch (_) {} }
+  const blob = await generateStoryImage({ shape: 'photo', coverImg: im, avatarImg: av, title: (p.profiles?.display_name || p.profiles?.username || 'UnderBro'), subtitle: '@' + (p.profiles?.username || ''), cta: 'Míralo en UnderBro', footer: 'underbro.app', label: '📸  Foto en UnderBro' });
   shareBlob(blob, 'underbro-foto.png', 'Mira esto en UnderBro');
 }
 /* ---- COMPARTIR FOTO ---- */
