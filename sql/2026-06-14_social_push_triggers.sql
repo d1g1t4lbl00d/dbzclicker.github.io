@@ -26,7 +26,7 @@ begin
       'x-hook-secret', '__X_HOOK_SECRET__'
     ),
     body := jsonb_build_object('notify', jsonb_build_object(
-      'user_id', target, 'title', ntitle, 'body', nbody, 'url', nurl, 'tag', ntag
+      'recipient_id', target, 'title', ntitle, 'body', nbody, 'url', nurl, 'tag', ntag
     ))
   );
 end;
