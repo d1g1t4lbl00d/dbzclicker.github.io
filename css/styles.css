@@ -1002,6 +1002,7 @@ body.has-player .right { padding-bottom: var(--player-h); }
 .follow-row .fr-actions { display: flex; gap: 6px; flex-shrink: 0; }
 /* evitar que la regla .modal-body .btn.primary estire los botones de las filas */
 .modal-body .follow-row .btn, .modal-body .follow-row .btn.primary { width: auto; margin-top: 0; padding: 8px 14px; }
+.modal-body .share-link .btn, .modal-body .share-link .btn.primary { width: auto; margin-top: 0; }
 /* ---- Menciones @usuario ---- */
 .mention { color: var(--accent); font-weight: 600; cursor: pointer; text-decoration: none; }
 .mention:hover { text-decoration: underline; }
