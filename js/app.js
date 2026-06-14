@@ -1048,7 +1048,9 @@ function renderFeed(head, tracks, view) {
     return;
   }
   state.queue = tracks.map(t => t.id);
-  tracks.forEach(t => list.appendChild(trackCard(t)));
+  const frag = document.createDocumentFragment();
+  tracks.forEach(t => frag.appendChild(trackCard(t)));
+  list.appendChild(frag);   // un solo reflow en vez de uno por tarjeta
   if (state.current && audio && !audio.paused) markPlayingCard();
 }
 
@@ -1963,14 +1965,19 @@ function initPlayer() {
 
   // seek preciso (pointer events: ratón + táctil unificados) con vista previa
   const seek = $('pSeek'), fill = $('pFill'), knob = $('pKnob'), ghost = $('pGhost'), tip = $('pTip');
-  const pctFromX = (clientX) => { const r = seek.getBoundingClientRect(); return Math.min(1, Math.max(0, (clientX - r.left) / r.width)); };
+  // cacheamos el rect al empezar a interactuar (no se mueve durante el gesto):
+  // evita leer getBoundingClientRect en cada pointermove (layout thrash)
+  let seekRect = null;
+  const refreshSeekRect = () => { seekRect = seek.getBoundingClientRect(); };
+  const pctFromX = (clientX) => { const r = seekRect || seek.getBoundingClientRect(); return Math.min(1, Math.max(0, (clientX - r.left) / r.width)); };
+  seek.addEventListener('pointerenter', refreshSeekRect);
   const paint = (pct) => { fill.style.width = (pct*100)+'%'; knob.style.left = (pct*100)+'%'; };
   const preview = (pct) => { ghost.style.width = (pct*100)+'%'; tip.style.left = (pct*100)+'%'; if (audio.duration) tip.textContent = fmtTime(pct*audio.duration); };
   let rafSeek = 0, pendingPct = null;
   const commitLive = () => { rafSeek = 0; if (audio.duration && pendingPct != null) audio.currentTime = pendingPct * audio.duration; };
   const queueLive = (p) => { pendingPct = p; if (!rafSeek) rafSeek = requestAnimationFrame(commitLive); };
   seek.addEventListener('pointerdown', (e) => {
-    seeking = true; seek.classList.add('scrub');
+    seeking = true; seek.classList.add('scrub'); refreshSeekRect();
     try { seek.setPointerCapture(e.pointerId); } catch {}
     const p = pctFromX(e.clientX); paint(p); preview(p); $('pCur').textContent = fmtTime(p*(audio.duration||0)); queueLive(p);
   });
