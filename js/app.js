@@ -1169,15 +1169,21 @@ async function handleTrackClick(e, t, card) {
 
 /* ---- COMPARTIR ---- */
 function trackShareUrl(t) { return `${location.origin}/t/${t.id}`; }
+const SHARE_ICONS = {
+  wa: '<svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884"/></svg>',
+  tg: '<svg viewBox="0 0 24 24"><path d="M9.78 18.65l.28-4.23 7.68-6.92c.34-.31-.07-.46-.52-.19L7.74 13.3 3.64 12c-.88-.25-.89-.86.2-1.3l15.97-6.16c.73-.33 1.43.18 1.15 1.3l-2.72 12.81c-.19.91-.74 1.13-1.5.71L12.6 16.3l-1.99 1.93c-.23.23-.42.42-.83.42z"/></svg>',
+  x: '<svg viewBox="0 0 24 24"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/></svg>',
+  chat: '<svg viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>'
+};
 function shareQuickRow(url, title) {
-  const txt = encodeURIComponent(title + ' 🎵 en UnderBro'), u = encodeURIComponent(url);
-  return `<div class="share-grid">
-    <button class="share-q" data-q="copy"><span class="sqi neutral"><svg fill="none" stroke="currentColor"><use href="#i-copy"/></svg></span>Copiar</button>
-    <button class="share-q" data-q="wa"><span class="sqi" style="background:#25d366">W</span>WhatsApp</button>
-    <button class="share-q" data-q="tg"><span class="sqi" style="background:#2aabee">✈</span>Telegram</button>
-    <button class="share-q" data-q="x"><span class="sqi" style="background:#000">𝕏</span>X</button>
-    ${navigator.share ? `<button class="share-q" data-q="more"><span class="sqi neutral"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg></span>Más</button>` : ''}
-    <button class="share-q" data-q="chat"><span class="sqi" style="background:var(--blue)"><svg fill="none" stroke="#fff"><use href="#i-mail"/></svg></span>Chat</button>
+  return `<div class="share-label">Compartir con</div>
+  <div class="share-row">
+    <button class="share-q" data-q="wa"><span class="sqi brand" style="--c:#25d366">${SHARE_ICONS.wa}</span><span>WhatsApp</span></button>
+    <button class="share-q" data-q="tg"><span class="sqi brand" style="--c:#29a9ea">${SHARE_ICONS.tg}</span><span>Telegram</span></button>
+    <button class="share-q" data-q="x"><span class="sqi brand" style="--c:#15181c">${SHARE_ICONS.x}</span><span>X</span></button>
+    <button class="share-q" data-q="chat"><span class="sqi brand" style="--c:var(--blue)">${SHARE_ICONS.chat}</span><span>Chat</span></button>
+    <button class="share-q" data-q="copy"><span class="sqi soft"><svg fill="none" stroke="currentColor"><use href="#i-copy"/></svg></span><span>Copiar</span></button>
+    ${navigator.share ? `<button class="share-q" data-q="more"><span class="sqi soft"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg></span><span>Más</span></button>` : ''}
   </div>`;
 }
 function wireQuickRow(m, url, title, onChat) {
@@ -1200,8 +1206,16 @@ function shareTrack(t) {
   const m = openModal(`
     <div class="modal-head"><h3>Compartir</h3><button class="close">&times;</button></div>
     <div class="modal-body">
-      <div class="st-head"><div class="st-cover">${t.cover_url ? `<img src="${esc(czUrl(t.cover_url))}" alt="">` : '<svg fill="none" stroke="#fff"><use href="#i-music"/></svg>'}</div><div class="st-meta"><b>${esc(t.title)}</b><span>${esc(who)}</span></div></div>
-      <button class="btn btn-ig share-big" id="shareStory"><svg fill="none" stroke="#fff"><use href="#i-camera"/></svg> Crear historia para Instagram</button>
+      <div class="share-hero">
+        ${t.cover_url ? `<div class="share-hero-bg" style="background-image:url('${esc(czUrl(t.cover_url))}')"></div>` : ''}
+        <div class="share-hero-cover">${t.cover_url ? `<img src="${esc(czUrl(t.cover_url))}" alt="">` : '<svg fill="none" stroke="#fff"><use href="#i-music"/></svg>'}</div>
+        <div class="share-hero-meta"><b>${esc(t.title)}</b><span><svg viewBox="0 0 24 24" width="13" height="13" style="fill:currentColor"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg> ${esc(who)}</span></div>
+      </div>
+      <button class="btn btn-ig share-big" id="shareStory">
+        <span class="ig-ic"><svg fill="none" stroke="#fff"><use href="#i-camera"/></svg></span>
+        <span class="ig-tx"><b>Crear historia</b><i>Compártela en tu historia de Instagram</i></span>
+        <svg class="ig-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
       ${shareQuickRow(url, title)}
       <div class="share-link"><input type="text" id="shareUrl" readonly value="${esc(url)}" /><button class="btn sm primary" id="copyLink">Copiar</button></div>
     </div>`);
@@ -1484,13 +1498,18 @@ function sharePost(p) {
   const m = openModal(`
     <div class="modal-head"><h3>Compartir foto</h3><button class="close">&times;</button></div>
     <div class="modal-body">
-      <div class="share-photo-prev"><img src="${esc(p.image_url)}" alt="" /></div>
-      <div class="share-link"><input type="text" id="shareUrl" readonly value="${esc(url)}" /><button class="btn sm primary" id="copyLink">Copiar</button></div>
-      <div class="share-actions">
-        <button class="btn btn-ig" id="sharePhotoStory"><svg fill="none" stroke="#fff"><use href="#i-camera"/></svg> Historia (Instagram)</button>
-        ${navigator.share ? `<button class="btn" id="nativeShare"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg> Compartir…</button>` : ''}
-        <button class="btn" id="shareToChat"><svg fill="none" stroke="currentColor"><use href="#i-mail"/></svg> Enviar por chat</button>
+      <div class="share-hero share-hero-photo">
+        <div class="share-hero-bg" style="background-image:url('${esc(p.image_url)}')"></div>
+        <div class="share-hero-cover"><img src="${esc(p.image_url)}" alt=""></div>
+        <div class="share-hero-meta"><b>Foto</b><span>${esc(who)}</span></div>
       </div>
+      <button class="btn btn-ig share-big" id="sharePhotoStory">
+        <span class="ig-ic"><svg fill="none" stroke="#fff"><use href="#i-camera"/></svg></span>
+        <span class="ig-tx"><b>Crear historia</b><i>Compártela en tu historia de Instagram</i></span>
+        <svg class="ig-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6" stroke="#fff" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      ${shareQuickRow(url, title)}
+      <div class="share-link"><input type="text" id="shareUrl" readonly value="${esc(url)}" /><button class="btn sm primary" id="copyLink">Copiar</button></div>
     </div>`);
   const copyBtn = m.querySelector('#copyLink');
   copyBtn.onclick = async () => {
@@ -1498,13 +1517,11 @@ function sharePost(p) {
     catch { const i = m.querySelector('#shareUrl'); i.select(); try { document.execCommand('copy'); } catch {} }
     copyBtn.textContent = 'Copiado ✓'; toast('Enlace copiado');
   };
-  const ns = m.querySelector('#nativeShare');
-  if (ns) ns.onclick = () => { navigator.share({ title, text: title, url }).catch(() => {}); };
   m.querySelector('#sharePhotoStory').onclick = () => sharePhotoStory(p);
-  m.querySelector('#shareToChat').onclick = () => {
+  wireQuickRow(m, url, title, () => {
     m.remove();
     openSharePicker(() => ({ body: p.caption ? p.caption.slice(0, 80) : '', attachment_type: 'image', attachment_url: p.image_url, attachment_name: 'foto' }), 'Foto enviada');
-  };
+  });
 }
 // Selector de chat genérico para compartir: makeMessage() devuelve los campos del DM
 async function openSharePicker(makeMessage, sentLabel) {
