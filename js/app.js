@@ -686,7 +686,7 @@ function initSwipeNav() {
     (typeof npIsOpen === 'function' && npIsOpen()) ||
     $('dmScreen')?.classList.contains('open') ||
     $('sidebar')?.classList.contains('open');
-  const clearStyle = () => { main.style.transition = ''; main.style.transform = ''; main.style.opacity = ''; main.style.willChange = ''; };
+  const clearStyle = () => { main.style.transition = ''; main.style.transform = ''; main.style.opacity = ''; main.style.willChange = ''; document.body.classList.remove('ub-swiping'); };
   document.addEventListener('touchstart', (e) => {
     if (W() > 720 || e.touches.length !== 1 || overlayOpen() || ubSwiping) { ignore = true; return; }
     const t = e.target;
@@ -702,7 +702,7 @@ function initSwipeNav() {
       if (Math.abs(dx) < 8 && Math.abs(dy) < 8) return;
       decided = true;
       horizontal = Math.abs(dx) > Math.abs(dy) * 1.25;
-      if (horizontal && cur >= 0) { dragging = true; main.style.willChange = 'transform'; main.style.transition = ''; }
+      if (horizontal && cur >= 0) { dragging = true; main.style.willChange = 'transform'; main.style.transition = ''; document.body.classList.add('ub-swiping'); }
       else { ignore = true; return; }   // intención vertical → dejar pasar el scroll
     }
     if (!dragging) return;
