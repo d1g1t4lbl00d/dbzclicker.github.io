@@ -285,7 +285,11 @@ img { display: block; }
 .topbar .icon-btn:active { transform: scale(.92); }
 .topbar-logo { cursor: pointer; transition: opacity .15s var(--ease); }
 .topbar-logo:hover { opacity: .78; }
-@media (min-width: 721px) { .topbar-logo { display: block; font-size: 24px; } }
+/* en escritorio el logo ocupa el ancho del menú lateral, así las pestañas
+   (Following/Trending/New) quedan alineadas sobre la feed, como antes */
+@media (min-width: 721px) {
+  .topbar-logo { display: block; font-size: 24px; flex: none; box-sizing: border-box; width: max(calc(var(--col-side) - 34px), 110px); transition: width .3s var(--ease), opacity .15s var(--ease); }
+}
 .brand {
   grid-area: brand; display: flex; align-items: center; padding: 0 20px;
   border-bottom: 1px solid var(--line-soft); border-right: 1px solid var(--line-soft);
