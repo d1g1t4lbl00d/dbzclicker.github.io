@@ -581,7 +581,11 @@ async function updateCounts() {
 /* =======================================================================
    VISTAS
    ======================================================================= */
-let ubSwiping = false;
+let ubSwiping = false, _afterSwipeQ = [];
+// ejecuta fn cuando termine el deslizamiento (o ya mismo si no hay ninguno),
+// para no bloquear la animación con renders pesados
+function afterSwipe(fn) { if (ubSwiping) _afterSwipeQ.push(fn); else fn(); }
+function flushAfterSwipe() { const q = _afterSwipeQ; _afterSwipeQ = []; q.forEach((f) => { try { f(); } catch (_) {} }); }
 async function switchView(view) {
   ubRecord({ kind: 'view', view });
   state.view = view;
@@ -649,17 +653,20 @@ async function loadFeedView(view) {
   const spec = feedSpec(view, state.tab);
   if (!spec) return;
   const cached = feedCache.get(spec.key);
-  if (cached) { state.tracks = cached.tracks; renderFeed(spec.head, cached.tracks, view); }
-  else { $('main').innerHTML = skeletonFeed(); }
+  // Si venimos de un deslizamiento, pintar 50 tarjetas de golpe bloquea la
+  // animación. Mostramos skeleton ligero durante el slide y pintamos las
+  // tarjetas al terminar (igual que Fotos/Chat, que van fluidos).
+  const deferred = ubSwiping;
+  const stillHere = () => { const h = feedSpec(state.view, state.tab); return h && h.key === spec.key; };
+  const paint = (tracks) => { if (stillHere()) { state.tracks = tracks; renderFeed(spec.head, tracks, view); } };
+  if (cached && !deferred) { paint(cached.tracks); }                 // clic: instantáneo
+  else { $('main').innerHTML = skeletonFeed(); if (cached) afterSwipe(() => paint(cached.tracks)); }
   try {
     const tracks = await feedFetch(spec);
-    const here = feedSpec(state.view, state.tab);
-    if (here && here.key === spec.key && !sameTracks(cached && cached.tracks, tracks)) {
-      state.tracks = tracks; renderFeed(spec.head, tracks, view);
-    }
+    if (stillHere() && !sameTracks(cached && cached.tracks, tracks)) afterSwipe(() => paint(tracks));
   } catch (err) {
     console.error(err);
-    if (!cached) { toast('Error al cargar pistas'); state.tracks = []; renderFeed(spec.head, [], view); }
+    if (!cached) afterSwipe(() => { if (stillHere()) { toast('Error al cargar pistas'); state.tracks = []; renderFeed(spec.head, [], view); } });
   }
 }
 // precarga los datos de una pantalla del carrusel (al detectar el deslizamiento)
@@ -769,7 +776,7 @@ function initSwipeNav() {
         main.style.transition = 'transform .34s cubic-bezier(.22,.61,.36,1), opacity .34s ease-out';
         main.style.transform = 'translateX(0)';
         main.style.opacity = '1';
-        setTimeout(() => { clearStyle(); ubSwiping = false; }, 360);
+        setTimeout(() => { clearStyle(); ubSwiping = false; flushAfterSwipe(); }, 360);
       });
     } else {
       // no llega al umbral → vuelve a su sitio con un rebote suave
