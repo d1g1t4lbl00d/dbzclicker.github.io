@@ -511,7 +511,11 @@ function bindUI() {
   const appEl = $('app');
   if (localStorage.getItem('ub_side_collapsed') === '1') appEl.classList.add('side-collapsed');
   if (localStorage.getItem('ub_right_collapsed') === '1') appEl.classList.add('right-collapsed');
-  $('toggleSideBtn').onclick = () => { const on = appEl.classList.toggle('side-collapsed'); localStorage.setItem('ub_side_collapsed', on ? '1' : '0'); };
+  // el logo de UnderBro pliega/despliega el menú (en escritorio) o abre el cajón (en móvil)
+  $('brandToggle').onclick = () => {
+    if (window.innerWidth > 720) { const on = appEl.classList.toggle('side-collapsed'); localStorage.setItem('ub_side_collapsed', on ? '1' : '0'); }
+    else { const open = $('sidebar').classList.toggle('open'); $('drawerBackdrop').classList.toggle('show', open); }
+  };
   $('toggleChatBtn').onclick = () => { const on = appEl.classList.toggle('right-collapsed'); localStorage.setItem('ub_right_collapsed', on ? '1' : '0'); };
   $('drawerBackdrop').onclick = hideDrawers;
   $('btnSearchToggle').onclick = () => {
