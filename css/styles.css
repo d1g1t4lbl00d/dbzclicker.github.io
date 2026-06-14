@@ -279,6 +279,12 @@ img { display: block; }
 .app > .sidebar, .app > .right { transition: opacity .2s var(--ease); }
 .desk-only { display: none; }
 #toggleChatBtn .chev { width: 18px; height: 18px; }
+/* mientras se desliza entre pantallas: desactiva el blur (backdrop-filter) de
+   la topbar y la barra inferior — recalcularlo cada frame sobre el contenido
+   en movimiento es lo que provocaba los tirones */
+.ub-swiping .topbar, .ub-swiping .bottom-nav, .ub-swiping .player { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+.ub-swiping .topbar, .ub-swiping .bottom-nav { background: var(--panel) !important; }
+.ub-swiping .main { will-change: transform; }
 /* botones del header: aspecto sutil (sin relleno ni sombra, solo hover suave) */
 .topbar .icon-btn { background: transparent; border: 1px solid transparent; box-shadow: none; color: var(--ink-soft); }
 .topbar .icon-btn:hover { transform: none; box-shadow: none; background: var(--panel-2); color: var(--ink-2); }
@@ -1579,10 +1585,10 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
   .app { grid-template-columns: 1fr; grid-template-rows: auto 1fr; grid-template-areas: "topbar" "main"; overflow: hidden; }
   .main { overflow-x: hidden; }
   .brand { display: none; }
-  .menu-toggle { display: grid; }
-  /* en móvil no hace falta buscar ni chat en el header: buscar está en Bros y
-     los chats en la barra inferior */
-  .search-toggle, .mail-btn, .drawer-only { display: none !important; }
+  /* en móvil el logo de UnderBro abre/cierra el menú, así que no hace falta el
+     botón hamburguesa; tampoco buscar ni chat (buscar está en Bros y los chats
+     en la barra inferior). Solo quedan notificaciones y perfil. */
+  .menu-toggle, .search-toggle, .mail-btn, .drawer-only { display: none !important; }
 
   /* TOPBAR: [☰ · UnderBro · 🔔 avatar] / [tabs] */
   .topbar { flex-wrap: wrap; align-items: center; gap: 8px 8px; padding: 9px 12px; }
