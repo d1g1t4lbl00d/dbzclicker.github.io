@@ -123,6 +123,12 @@
       <div class="ed-head"><div class="logo">Under<span class="u">Bro</span></div><h1>Editor premium</h1></div>
 
       <div class="ed-sec">
+        <h3>⚡ Presets de tema</h3>
+        <div id="themePresets" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+        <p class="hint">Aplican fondo + colores + tipografía + redondez de golpe. Luego puedes retocar.</p>
+      </div>
+
+      <div class="ed-sec">
         <h3>🖼️ Fondo de la app</h3>
         <div class="seg" id="bgMode">
           <button data-m="default" class="on">Por defecto</button>
@@ -216,6 +222,8 @@
         <button class="tb" id="addImg" title="Añadir imagen">➕ Imagen</button>
         <button class="tb" id="addBox" title="Añadir caja">➕ Caja</button>
         <button class="tb" id="addBtn" title="Añadir botón">➕ Botón</button>
+        <button class="tb" id="addCircle" title="Añadir círculo">➕ ●</button>
+        <button class="tb" id="addLine" title="Añadir línea">➕ ▬</button>
         <button class="tb" id="tUndo" title="Deshacer">↶</button>
         <button class="tb" id="tRedo" title="Rehacer">↷</button>
         <select id="tViewport" class="tb-sel"><option value="full">🖥️ Escritorio</option><option value="mobile">📱 Móvil</option></select>
@@ -235,8 +243,13 @@
       <div class="prop-head" id="pHead"><strong id="pTag">Elemento</strong><span style="flex:1"></span><button class="x" id="pDock" title="Acoplar / flotar">⤢</button><button class="x" id="pClose">✕</button></div>
       <div class="bread" id="pBread"></div>
       <label class="row" id="pScopeRow" style="cursor:pointer;font-size:12px;gap:7px;margin:0 0 10px;padding:8px;border:1px solid var(--line);border-radius:9px;background:var(--panel-2)"><input type="checkbox" id="pScope"> 🔗 Aplicar a todas las iguales <span id="pScopeSel" class="mini" style="font-weight:600"></span></label>
+      <label class="fl">✨ Presets de estilo</label>
+      <div id="elPresets" style="display:flex;flex-wrap:wrap;gap:6px"></div>
       <label class="fl">Texto</label><textarea id="pText" rows="2" placeholder="(sin cambiar)"></textarea>
       <div id="propStyles"></div>
+      <label class="fl">🎬 Animación</label>
+      <div class="row" style="gap:6px"><select id="pAnim" style="flex:1"></select></div>
+      <div class="prop-row"><label>Duración <span id="pAnimDurL" class="mini">1s</span></label><input type="range" id="pAnimDur" min="0.2" max="8" step="0.1" value="1"></div>
       <div id="pHrefRow" style="display:none"><label class="fl">🔗 Enlace del botón (URL)</label><input type="text" id="pHref" placeholder="https://…"></div>
       <label class="fl">✨ Efectos</label>
       <div class="prop-row"><label>Rotación</label><input type="range" id="pRot" min="-180" max="180" value="0"><button class="clr" id="clrRot">↺</button></div>
@@ -273,7 +286,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <script src="js/config.js?v=20260615j"></script>
-  <script src="js/editor.js?v=20260615j"></script>
+  <script src="js/config.js?v=20260615k"></script>
+  <script src="js/editor.js?v=20260615k"></script>
 </body>
 </html>

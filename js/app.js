@@ -341,7 +341,11 @@ function renderSiteConfig(cfg) {
   applyElementOverrides(cfg.el);
   // ELEMENTOS CREADOS en el editor (texto/imagen/caja/botón)
   applyAddedElements(cfg.add);
+  if (document.body) ensureAnimCss(document);
 }
+const UB_ANIMS = { fade:{kf:'ubFade',ease:'ease',count:'1',both:true,def:.6}, slide:{kf:'ubSlideUp',ease:'cubic-bezier(.22,.61,.36,1)',count:'1',both:true,def:.6}, zoom:{kf:'ubZoom',ease:'ease',count:'1',both:true,def:.5}, float:{kf:'ubFloat',ease:'ease-in-out',count:'infinite',def:3}, pulse:{kf:'ubPulse',ease:'ease-in-out',count:'infinite',def:2}, spin:{kf:'ubSpin',ease:'linear',count:'infinite',def:6}, shake:{kf:'ubShake',ease:'ease',count:'infinite',def:1} };
+const UB_ANIM_KF = '@keyframes ubFade{from{opacity:0}to{opacity:1}}@keyframes ubSlideUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:none}}@keyframes ubZoom{from{opacity:0;transform:scale(.8)}to{opacity:1;transform:none}}@keyframes ubFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}@keyframes ubPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}@keyframes ubSpin{to{transform:rotate(360deg)}}@keyframes ubShake{0%,100%{transform:translateX(0)}25%{transform:translateX(-5px)}75%{transform:translateX(5px)}}';
+function ensureAnimCss(doc) { if (doc.getElementById('ub-anim-kf')) return; const s = doc.createElement('style'); s.id = 'ub-anim-kf'; s.textContent = UB_ANIM_KF; doc.head.appendChild(s); }
 function ubComposeDecls(o, important) {
   const bang = important ? ' !important' : '';
   const d = [];
@@ -355,6 +359,7 @@ function ubComposeDecls(o, important) {
   if (o.blur) fl.push(`blur(${+o.blur}px)`);
   if (o.bright != null && +o.bright !== 100) fl.push(`brightness(${+o.bright}%)`);
   if (fl.length) d.push(`filter:${fl.join(' ')}${bang}`);
+  if (o.anim && o.anim.name && UB_ANIMS[o.anim.name]) { const a = UB_ANIMS[o.anim.name]; const dur = +o.anim.dur || a.def; d.push(`animation:${a.kf} ${dur}s ${a.ease} ${a.count}${a.both ? ' both' : ''}${bang}`); }
   if (o.style) for (const p in o.style) { if (o.style[p] !== '' && o.style[p] != null) d.push(`${p}:${o.style[p]}${bang}`); }
   return d;
 }
