@@ -264,6 +264,7 @@ function wire() {
   // panel propiedades
   buildPropRows();
   $('pClose').onclick = closePanel;
+  $('pScope').onchange = (e) => { scopeAll = !!(e.target.checked && genericSel); selector = scopeAll ? genericSel : specificSel; fillPanel(); };
   $('pText').oninput = () => { if (!selector) return; ensureEl(); cfg.el[selector].text = $('pText').value; applyEl(frameDoc()); }; $('pText').onfocus = snap;
   $('pMoveX').oninput = $('pMoveY').oninput = () => { if (!selector) return; ensureEl(); cfg.el[selector].move = { x:+$('pMoveX').value||0, y:+$('pMoveY').value||0 }; applyEl(frameDoc()); repositionSel(); }; $('pMoveX').onfocus = $('pMoveY').onfocus = snap;
   $('pHide').onclick = () => { if (!selector) return; snap(); ensureEl(); cfg.el[selector].hide = !cfg.el[selector].hide; applyEl(frameDoc()); $('pHide').textContent = cfg.el[selector].hide ? 'Mostrar' : 'Ocultar'; };
@@ -344,7 +345,7 @@ function ensureEl() { if (!cfg.el) cfg.el = {}; if (!cfg.el[selector]) cfg.el[se
 function closePanel() { $('propPanel').hidden = true; selector = null; selectedEl = null; if (selBox) selBox.style.display = 'none'; }
 
 /* ===== inspector del visor ===== */
-let inspectOn = false, selectedEl = null, selector = null, hlBox = null, selBox = null;
+let inspectOn = false, selectedEl = null, selector = null, specificSel = null, genericSel = null, scopeAll = false, hlBox = null, selBox = null;
 function cssPath(el, win) {
   if (!el || el.nodeType !== 1) return '';
   const esc = (win.CSS && win.CSS.escape) ? win.CSS.escape.bind(win.CSS) : ((s) => s);
@@ -359,11 +360,24 @@ function cssPath(el, win) {
   }
   return parts.join('>');
 }
+// selector "de grupo": clases comunes para afectar a todas las iguales (p. ej. todas las tarjetas)
+function genericPath(el, win) {
+  const esc = (win.CSS && win.CSS.escape) ? win.CSS.escape.bind(win.CSS) : ((s) => s);
+  const cls = ((el.getAttribute && el.getAttribute('class')) || '').trim().split(/\s+/).filter(Boolean);
+  if (cls.length) return cls.map((c) => '.' + esc(c)).join('');
+  return null;
+}
 function boxOver(box, el) { if (!box) return; if (!el) { box.style.display = 'none'; return; } const r = el.getBoundingClientRect(); box.style.display = 'block'; box.style.left = r.left + 'px'; box.style.top = r.top + 'px'; box.style.width = r.width + 'px'; box.style.height = r.height + 'px'; }
 function repositionSel() { if (selBox && selectedEl) boxOver(selBox, selectedEl); }
 function toggleInspect() { inspectOn = !inspectOn; $('tInspect').classList.toggle('on', inspectOn); $('pvStage').classList.toggle('inspect', inspectOn); const doc = frameDoc(); if (doc) doc.documentElement.classList.toggle('__ubinspect', inspectOn); if (!inspectOn && hlBox) hlBox.style.display = 'none'; }
 function selectEl(el) {
-  selectedEl = el; selector = cssPath(el, frameWin());
+  selectedEl = el;
+  specificSel = cssPath(el, frameWin());
+  genericSel = genericPath(el, frameWin());
+  scopeAll = false; selector = specificSel;
+  const sc = $('pScope'); sc.checked = false; sc.disabled = !genericSel;
+  $('pScopeSel').textContent = genericSel ? `(${genericSel})` : '(sin clase común)';
+  $('pScopeRow').style.opacity = genericSel ? 1 : .5;
   boxOver(selBox, el); if (hlBox) hlBox.style.display = 'none';
   $('propPanel').hidden = false; $('pTag').textContent = el.tagName.toLowerCase() + (el.className && typeof el.className === 'string' ? '.' + el.className.split(' ')[0] : '');
   buildBread(el); fillPanel();
