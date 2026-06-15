@@ -967,7 +967,7 @@ function gotoScreenIdx(i) {
 function haptic(ms) {
   try {
     if (localStorage.getItem('ub_haptics') === '0') return;
-    if (navigator.vibrate && matchMedia('(pointer: coarse)').matches) navigator.vibrate(ms || 8);
+    if (navigator.vibrate && matchMedia('(pointer: coarse)').matches) navigator.vibrate(ms || 18);
   } catch (_) {}
 }
 // Cubre prácticamente cualquier control interactivo (sin incluir contenedores
@@ -986,7 +986,7 @@ const HAPTIC_SEL = [
 ].join(',');
 document.addEventListener('pointerdown', (e) => {
   if (e.pointerType !== 'touch') return;
-  if (e.target.closest && e.target.closest(HAPTIC_SEL)) haptic(9);
+  if (e.target.closest && e.target.closest(HAPTIC_SEL)) haptic(22);
 }, { passive: true });
 
 // Sin zoom en móvil: iOS ignora user-scalable=no, así que bloqueamos el pellizco.
