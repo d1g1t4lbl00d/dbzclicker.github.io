@@ -98,17 +98,20 @@ function applyGlobal(doc) {
   applyOrderHide(doc, '#sidebar', '.nav-item[data-view]', 'view', cfg.nav);
 }
 function applyEl(doc) {
-  let css = ''; const texts = [], el = cfg.el || {};
+  let css = ''; const dyn = [], el = cfg.el || {};
   for (const sel in el) { const o = el[sel]; if (!o) continue; const d = [];
     if (o.hide) d.push('display:none !important');
     if (o.move && (o.move.x || o.move.y)) d.push(`transform:translate(${+o.move.x||0}px,${+o.move.y||0}px) !important`);
     if (o.style) for (const p in o.style) { if (o.style[p] !== '' && o.style[p] != null) d.push(`${p}:${o.style[p]} !important`); }
     if (d.length) css += `${sel}{${d.join(';')}}\n`;
-    if (o.text != null) texts.push([sel, o.text]);
+    if (o.text != null || o.img != null) dyn.push([sel, o]);
   }
   let tag = doc.getElementById('ub-el-css'); if (!tag) { tag = doc.createElement('style'); tag.id = 'ub-el-css'; doc.head.appendChild(tag); }
   tag.textContent = css;
-  texts.forEach(([sel, t]) => { try { doc.querySelectorAll(sel).forEach((n) => { if (n.textContent !== t) n.textContent = t; }); } catch (_) {} });
+  dyn.forEach(([sel, o]) => { try { doc.querySelectorAll(sel).forEach((n) => {
+    if (o.text != null && n.textContent !== o.text) n.textContent = o.text;
+    if (o.img != null && n.tagName === 'IMG' && n.getAttribute('src') !== o.img) n.setAttribute('src', o.img);
+  }); } catch (_) {} });
 }
 const frameDoc = () => { try { return $('appFrame').contentDocument; } catch (_) { return null; } };
 const frameWin = () => { try { return $('appFrame').contentWindow; } catch (_) { return null; } };
@@ -185,6 +188,35 @@ async function loadLibrary() {
   });
 }
 
+/* ===== selector de imágenes (picker) ===== */
+let pickerResolve = null, imgTarget = 'bg';
+function openPicker() { return new Promise((resolve) => { pickerResolve = resolve; $('picker').hidden = false; loadPickGrid(); }); }
+function closePicker(v) { $('picker').hidden = true; const r = pickerResolve; pickerResolve = null; if (r) r(v || null); }
+async function loadPickGrid() {
+  const grid = $('pickGrid'); grid.innerHTML = '<p class="hint">Cargando…</p>';
+  const { data, error } = await sb.storage.from(BUCKET).list('', { limit: 100, sortBy: { column: 'created_at', order: 'desc' } });
+  if (error) { grid.innerHTML = `<p class="hint">${/bucket|not found/i.test(error.message||'') ? 'Crea el bucket site-assets (ejecuta el SQL).' : 'Error al listar.'}</p>`; return; }
+  const imgs = (data || []).filter((o) => o.name && !o.name.startsWith('.'));
+  if (!imgs.length) { grid.innerHTML = '<p class="hint">Sube una imagen primero (botón de arriba).</p>'; return; }
+  grid.innerHTML = '';
+  imgs.forEach((o) => {
+    const url = sb.storage.from(BUCKET).getPublicUrl(o.name).data.publicUrl;
+    const d = document.createElement('div'); d.className = 'lib-it'; d.style.cursor = 'pointer';
+    d.innerHTML = `<img src="${url}" loading="lazy">`;
+    d.onclick = () => closePicker(url);
+    grid.appendChild(d);
+  });
+}
+function setElBg(url) {
+  if (!selector) return; snap(); ensureEl();
+  const s = cfg.el[selector].style = cfg.el[selector].style || {};
+  s['background-image'] = `url("${url}")`;
+  if (!s['background-size']) s['background-size'] = 'cover';
+  s['background-position'] = 'center'; s['background-repeat'] = 'no-repeat';
+  applyEl(frameDoc()); repositionSel(); fillPanel();
+}
+function setElImg(url) { if (!selector) return; snap(); ensureEl(); cfg.el[selector].img = url; applyEl(frameDoc()); libMsg('Imagen reemplazada (Publica para guardar).'); }
+
 /* ===== controles globales ===== */
 function showBgPanels() { $('bgColor').style.display = cfg.bg.mode==='color'?'':'none'; $('bgGrad').style.display = cfg.bg.mode==='gradient'?'':'none'; $('bgImage').style.display = cfg.bg.mode==='image'?'':'none'; }
 function hydrateControls() {
@@ -235,6 +267,17 @@ function wire() {
   $('pMoveX').oninput = $('pMoveY').oninput = () => { if (!selector) return; ensureEl(); cfg.el[selector].move = { x:+$('pMoveX').value||0, y:+$('pMoveY').value||0 }; applyEl(frameDoc()); repositionSel(); }; $('pMoveX').onfocus = $('pMoveY').onfocus = snap;
   $('pHide').onclick = () => { if (!selector) return; snap(); ensureEl(); cfg.el[selector].hide = !cfg.el[selector].hide; applyEl(frameDoc()); $('pHide').textContent = cfg.el[selector].hide ? 'Mostrar' : 'Ocultar'; };
   $('pResetEl').onclick = () => { if (!selector) return; snap(); delete cfg.el[selector]; applyEl(frameDoc()); fillPanel(); };
+  // imágenes por elemento
+  $('pBgUp').onclick = () => { imgTarget = 'bg'; $('pImgFile').click(); };
+  $('pImgUp').onclick = () => { imgTarget = 'img'; $('pImgFile').click(); };
+  $('pBgLib').onclick = async () => { const u = await openPicker(); if (u) setElBg(u); };
+  $('pImgLib').onclick = async () => { const u = await openPicker(); if (u) setElImg(u); };
+  $('pBgClear').onclick = () => { if (!selector) return; snap(); const s = cfg.el[selector] && cfg.el[selector].style; if (s) { ['background-image','background-size','background-position','background-repeat'].forEach((k) => delete s[k]); } applyEl(frameDoc()); fillPanel(); };
+  $('pBgSize').onchange = () => { if (!selector) return; snap(); ensureEl(); const s = cfg.el[selector].style = cfg.el[selector].style || {}; if ($('pBgSize').value) s['background-size'] = $('pBgSize').value; else delete s['background-size']; applyEl(frameDoc()); };
+  $('pImgFile').onchange = async (e) => { const u = await uploadImage(e.target.files[0], libMsg); if (u) { (imgTarget === 'img') ? setElImg(u) : setElBg(u); loadLibrary(); } e.target.value = ''; };
+  $('pickClose').onclick = () => closePicker(null);
+  $('picker').onclick = (e) => { if (e.target === $('picker')) closePicker(null); };
+  $('pickUpload').onchange = async (e) => { const u = await uploadImage(e.target.files[0], libMsg); if (u) { loadLibrary(); closePicker(u); } e.target.value = ''; };
   // teclas: nudge del elemento seleccionado
   document.addEventListener('keydown', (e) => {
     if (!selector || !selectedEl) return;
@@ -278,6 +321,8 @@ function fillPanel() {
       else input.value = '';
     }
   });
+  $('pBgSize').value = st['background-size'] || '';
+  $('pImgRow').style.display = (selectedEl && selectedEl.tagName === 'IMG') ? '' : 'none';
   const m = o.move || { x:0, y:0 }; $('pMoveX').value = m.x || 0; $('pMoveY').value = m.y || 0;
   $('pHide').textContent = o.hide ? 'Mostrar' : 'Ocultar';
 }
@@ -307,7 +352,7 @@ function cssPath(el, win) {
 }
 function boxOver(box, el) { if (!box) return; if (!el) { box.style.display = 'none'; return; } const r = el.getBoundingClientRect(); box.style.display = 'block'; box.style.left = r.left + 'px'; box.style.top = r.top + 'px'; box.style.width = r.width + 'px'; box.style.height = r.height + 'px'; }
 function repositionSel() { if (selBox && selectedEl) boxOver(selBox, selectedEl); }
-function toggleInspect() { inspectOn = !inspectOn; $('tInspect').classList.toggle('on', inspectOn); $('pvStage').classList.toggle('inspect', inspectOn); if (!inspectOn && hlBox) hlBox.style.display = 'none'; }
+function toggleInspect() { inspectOn = !inspectOn; $('tInspect').classList.toggle('on', inspectOn); $('pvStage').classList.toggle('inspect', inspectOn); const doc = frameDoc(); if (doc) doc.documentElement.classList.toggle('__ubinspect', inspectOn); if (!inspectOn && hlBox) hlBox.style.display = 'none'; }
 function selectEl(el) {
   selectedEl = el; selector = cssPath(el, frameWin());
   boxOver(selBox, el); if (hlBox) hlBox.style.display = 'none';
@@ -323,7 +368,7 @@ function onFrameLoad() {
   const doc = frameDoc(), win = frameWin(); if (!doc || !doc.body) return;
   if (!doc.getElementById('ub-inspect-style')) {
     const s = doc.createElement('style'); s.id = 'ub-inspect-style';
-    s.textContent = '.__ubov{position:fixed;pointer-events:none;z-index:2147483646;border:2px solid #5f9bff;border-radius:3px}.__ubhl{background:rgba(95,155,255,.14)}.__ubsel{border-color:#ff5db0}';
+    s.textContent = '.__ubov{position:fixed;pointer-events:none;z-index:2147483646;border:2px solid #5f9bff;border-radius:3px}.__ubhl{background:rgba(95,155,255,.14)}.__ubsel{border-color:#ff5db0}html.__ubinspect,html.__ubinspect *{cursor:grab !important}html.__ubinspect *:active{cursor:grabbing !important}';
     doc.head.appendChild(s);
   }
   hlBox = doc.getElementById('__ubhl') || mkBox(doc, '__ubhl');
@@ -334,6 +379,7 @@ function onFrameLoad() {
   doc.addEventListener('click', onFrameClick, true);
   win.addEventListener('scroll', repositionSel, true);
   win.addEventListener('resize', repositionSel, true);
+  if (inspectOn) doc.documentElement.classList.add('__ubinspect');
   setTimeout(render, 60); setTimeout(render, 400);
 }
 function mkBox(doc, cls) { const d = doc.createElement('div'); d.id = cls; d.className = '__ubov ' + cls; d.style.display = 'none'; doc.body.appendChild(d); return d; }
@@ -375,7 +421,7 @@ function buildOut() {
   if (cfg.logo && cfg.logo.trim()) o.logo = cfg.logo.trim();
   const t = trimOrderHide(TABS, cfg.tabs); if (t) o.tabs = t;
   const n = trimOrderHide(NAV, cfg.nav); if (n) o.nav = n;
-  const el = {}; for (const s in (cfg.el || {})) { const v = cfg.el[s]; if (v && (v.text != null || v.hide || (v.move && (v.move.x || v.move.y)) || (v.style && Object.keys(v.style).length))) el[s] = v; }
+  const el = {}; for (const s in (cfg.el || {})) { const v = cfg.el[s]; if (v && (v.text != null || v.img != null || v.hide || (v.move && (v.move.x || v.move.y)) || (v.style && Object.keys(v.style).length))) el[s] = v; }
   if (Object.keys(el).length) o.el = el;
   return o;
 }

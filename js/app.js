@@ -342,7 +342,7 @@ function renderSiteConfig(cfg) {
 }
 function applyElementOverrides(el) {
   if (!el || typeof el !== 'object') return;
-  let css = ''; const texts = [];
+  let css = ''; const dyn = [];
   for (const sel in el) {
     const o = el[sel]; if (!o) continue;
     const decls = [];
@@ -350,15 +350,19 @@ function applyElementOverrides(el) {
     if (o.move && (o.move.x || o.move.y)) decls.push(`transform:translate(${+o.move.x || 0}px, ${+o.move.y || 0}px) !important`);
     if (o.style) for (const p in o.style) { if (o.style[p] !== '' && o.style[p] != null) decls.push(`${p}:${o.style[p]} !important`); }
     if (decls.length) css += `${sel}{${decls.join(';')}}\n`;
-    if (o.text != null) texts.push([sel, o.text]);
+    if (o.text != null || o.img != null) dyn.push([sel, o]);
   }
   let tag = document.getElementById('ub-el-css');
   if (!tag) { tag = document.createElement('style'); tag.id = 'ub-el-css'; document.head.appendChild(tag); }
   tag.textContent = css;
-  if (texts.length) {
-    const applyTexts = () => texts.forEach(([sel, t]) => { try { document.querySelectorAll(sel).forEach((n) => { if (n.textContent !== t) n.textContent = t; }); } catch (_) {} });
-    applyTexts();
-    if (!window.__ubTextObs) { window.__ubTextObs = new MutationObserver(() => { clearTimeout(window.__ubTextT); window.__ubTextT = setTimeout(applyTexts, 200); }); try { window.__ubTextObs.observe(document.body, { childList: true, subtree: true }); } catch (_) {} }
+  if (dyn.length) {
+    const applyDyn = () => dyn.forEach(([sel, o]) => { try { document.querySelectorAll(sel).forEach((n) => {
+      if (o.text != null && n.textContent !== o.text) n.textContent = o.text;
+      if (o.img != null && n.tagName === 'IMG' && n.getAttribute('src') !== o.img) n.setAttribute('src', o.img);
+    }); } catch (_) {} });
+    applyDyn();
+    if (!window.__ubTextObs) { window.__ubTextObs = new MutationObserver(() => { clearTimeout(window.__ubTextT); window.__ubTextT = setTimeout(applyDyn, 200); }); try { window.__ubTextObs.observe(document.body, { childList: true, subtree: true }); } catch (_) {} }
+    else { window.__ubApplyDyn = applyDyn; }
   }
 }
 function applyOrderHide(containerSel, itemSel, dataKey, conf) {
