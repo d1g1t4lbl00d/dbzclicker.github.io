@@ -167,9 +167,9 @@ function render() { const doc = frameDoc(); if (!doc || !doc.body) return; try {
 /* ===== historial (deshacer / rehacer) ===== */
 let history = [], future = [], _snapT = 0, dirty = false;
 function setDirty(v) { dirty = v; const b = $('publish'); if (b) b.textContent = v ? 'Publicar cambios •' : 'Publicar cambios'; }
-function snap() { setDirty(true); const now = Date.now(); if (now - _snapT < 350 && history.length) { _snapT = now; future = []; updateUndo(); return; } history.push(JSON.stringify(cfg)); if (history.length > 80) history.shift(); future = []; _snapT = now; updateUndo(); }
+function snap() { setDirty(true); scheduleSave(); const now = Date.now(); if (now - _snapT < 350 && history.length) { _snapT = now; future = []; updateUndo(); return; } history.push(JSON.stringify(cfg)); if (history.length > 80) history.shift(); future = []; _snapT = now; updateUndo(); }
 function updateUndo() { $('tUndo').disabled = !history.length; $('tRedo').disabled = !future.length; $('tUndo').style.opacity = history.length ? 1 : .4; $('tRedo').style.opacity = future.length ? 1 : .4; }
-function restoreFrom(stack, other) { if (!stack.length) return; other.push(JSON.stringify(cfg)); cfg = JSON.parse(stack.pop()); hydrateControls(); buildColorList(); buildLists(); render(); if (selector && cfg.el) fillPanel(); updateUndo(); }
+function restoreFrom(stack, other) { if (!stack.length) return; other.push(JSON.stringify(cfg)); cfg = JSON.parse(stack.pop()); hydrateControls(); buildColorList(); buildLists(); buildLayers(); render(); if (selector && cfg.el) fillPanel(); updateUndo(); scheduleSave(); }
 
 /* ===== listas reordenables ===== */
 function renderOrderList(containerId, catalog, conf) {
@@ -307,6 +307,8 @@ function wire() {
   $('tViewport').onchange = (e) => { $('pvStage').classList.toggle('mobile', e.target.value === 'mobile'); };
   $('tExport').onclick = exportTheme;
   $('tImport').onchange = importTheme;
+  $('projSel').onchange = (e) => switchProject(e.target.value);
+  $('projNew').onclick = projNew; $('projRename').onclick = projRename; $('projDup').onclick = projDup; $('projDel').onclick = projDel;
   // panel propiedades
   buildPropRows();
   $('pClose').onclick = closePanel;
@@ -411,10 +413,10 @@ function rgb2hex(rgb) {
   return '#' + m.slice(0, 3).map((n) => (+n).toString(16).padStart(2, '0')).join('');
 }
 function ensureEl() { if (!cfg.el) cfg.el = {}; if (!cfg.el[selector]) cfg.el[selector] = {}; }
-function closePanel() { $('propPanel').hidden = true; selector = null; selectedEl = null; selMode = 'el'; addIndex = -1; if (selBox) selBox.style.display = 'none'; }
+function closePanel() { $('propPanel').hidden = true; selector = null; selectedEl = null; selMode = 'el'; addIndex = -1; if (selBox) selBox.style.display = 'none'; if (handles) for (const d in handles) handles[d].style.display = 'none'; if ($('layersList')) buildLayers(); }
 
 /* ===== inspector del visor ===== */
-let inspectOn = false, selectedEl = null, selector = null, specificSel = null, genericSel = null, scopeAll = false, hlBox = null, selBox = null, selMode = 'el', addIndex = -1;
+let inspectOn = false, selectedEl = null, selector = null, specificSel = null, genericSel = null, scopeAll = false, hlBox = null, selBox = null, selMode = 'el', addIndex = -1, handles = null;
 function curObj() { if (selMode === 'add') return cfg.add[addIndex]; if (!selector) return null; ensureEl(); return cfg.el[selector]; }
 function cssPath(el, win) {
   if (!el || el.nodeType !== 1) return '';
@@ -438,8 +440,8 @@ function genericPath(el, win) {
   return null;
 }
 function boxOver(box, el) { if (!box) return; if (!el) { box.style.display = 'none'; return; } const r = el.getBoundingClientRect(); box.style.display = 'block'; box.style.left = r.left + 'px'; box.style.top = r.top + 'px'; box.style.width = r.width + 'px'; box.style.height = r.height + 'px'; }
-function repositionSel() { if (selBox && selectedEl) boxOver(selBox, selectedEl); }
-function toggleInspect() { inspectOn = !inspectOn; $('tInspect').classList.toggle('on', inspectOn); $('pvStage').classList.toggle('inspect', inspectOn); const doc = frameDoc(); if (doc) doc.documentElement.classList.toggle('__ubinspect', inspectOn); if (!inspectOn && hlBox) hlBox.style.display = 'none'; }
+function repositionSel() { if (selBox && selectedEl) { boxOver(selBox, selectedEl); placeHandles(selectedEl.getBoundingClientRect()); } else if (handles) { for (const d in handles) handles[d].style.display = 'none'; } }
+function toggleInspect() { inspectOn = !inspectOn; $('tInspect').classList.toggle('on', inspectOn); $('pvStage').classList.toggle('inspect', inspectOn); const doc = frameDoc(); if (doc) doc.documentElement.classList.toggle('__ubinspect', inspectOn); if (!inspectOn && hlBox) hlBox.style.display = 'none'; repositionSel(); }
 function selectEl(el) {
   selMode = 'el'; addIndex = -1; selectedEl = el;
   specificSel = cssPath(el, frameWin());
@@ -451,7 +453,7 @@ function selectEl(el) {
   $('pHrefRow').style.display = 'none'; $('pDup').style.display = 'none';
   boxOver(selBox, el); if (hlBox) hlBox.style.display = 'none';
   $('propPanel').hidden = false; $('pTag').textContent = el.tagName.toLowerCase() + (el.className && typeof el.className === 'string' ? '.' + el.className.split(' ')[0] : '');
-  buildBread(el); fillPanel();
+  buildBread(el); fillPanel(); buildLayers();
 }
 function selectAdd(idx) {
   if (idx < 0 || !cfg.add[idx]) return;
@@ -462,7 +464,7 @@ function selectAdd(idx) {
   $('pDup').style.display = '';
   boxOver(selBox, selectedEl); if (hlBox) hlBox.style.display = 'none';
   $('propPanel').hidden = false; $('pTag').textContent = '➕ ' + cfg.add[idx].type;
-  $('pBread').innerHTML = ''; fillPanel();
+  $('pBread').innerHTML = ''; fillPanel(); buildLayers();
 }
 function addElement(type) {
   snap(); cfg.add = cfg.add || [];
@@ -475,7 +477,7 @@ function addElement(type) {
   else if (type === 'button') { it.text = 'Botón'; it.href = ''; }
   else if (type === 'image') { it.src = ''; it.style = { width: '200px' }; }
   else { it.type = 'box'; it.style = { width: '160px', height: '90px', 'background-color': '#5f9bff', 'border-radius': '12px' }; }
-  cfg.add.push(it); applyAll(); selectAdd(cfg.add.length - 1);
+  cfg.add.push(it); applyAll(); buildLayers(); selectAdd(cfg.add.length - 1);
   if (!inspectOn) toggleInspect();
   if (type === 'image') openPicker().then((u) => { if (u && cfg.add[addIndex]) { cfg.add[addIndex].src = u; applyAll(); } });
 }
@@ -488,11 +490,12 @@ function onFrameLoad() {
   const doc = frameDoc(), win = frameWin(); if (!doc || !doc.body) return;
   if (!doc.getElementById('ub-inspect-style')) {
     const s = doc.createElement('style'); s.id = 'ub-inspect-style';
-    s.textContent = '.__ubov{position:fixed;pointer-events:none;z-index:2147483646;border:2px solid #5f9bff;border-radius:3px}.__ubhl{background:rgba(95,155,255,.14)}.__ubsel{border-color:#ff5db0}html.__ubinspect,html.__ubinspect *{cursor:grab !important}html.__ubinspect *:active{cursor:grabbing !important}';
+    s.textContent = '.__ubov{position:fixed;pointer-events:none;z-index:2147483646;border:2px solid #5f9bff;border-radius:3px}.__ubhl{background:rgba(95,155,255,.14)}.__ubsel{border-color:#ff5db0}html.__ubinspect,html.__ubinspect *{cursor:grab !important}html.__ubinspect *:active{cursor:grabbing !important}.__ubh{position:fixed;width:11px;height:11px;margin:-6px 0 0 -6px;background:#fff;border:1.5px solid #ff5db0;border-radius:2px;z-index:2147483647;pointer-events:auto}.__ubh[data-dir=nw],.__ubh[data-dir=se]{cursor:nwse-resize!important}.__ubh[data-dir=ne],.__ubh[data-dir=sw]{cursor:nesw-resize!important}.__ubh[data-dir=n],.__ubh[data-dir=s]{cursor:ns-resize!important}.__ubh[data-dir=e],.__ubh[data-dir=w]{cursor:ew-resize!important}';
     doc.head.appendChild(s);
   }
   hlBox = doc.getElementById('__ubhl') || mkBox(doc, '__ubhl');
   selBox = doc.getElementById('__ubsel') || mkBox(doc, '__ubsel');
+  makeHandles(doc);
   selectedEl = null; selector = null; $('propPanel').hidden = true;
   doc.addEventListener('mousemove', onFrameMove, true);
   doc.addEventListener('mousedown', onFrameDown, true);
@@ -503,11 +506,50 @@ function onFrameLoad() {
   setTimeout(render, 60); setTimeout(render, 400);
 }
 function mkBox(doc, cls) { const d = doc.createElement('div'); d.id = cls; d.className = '__ubov ' + cls; d.style.display = 'none'; doc.body.appendChild(d); return d; }
-function selectable(t) { return t && t.nodeType === 1 && t !== hlBox && t !== selBox && t.id !== '__ubhl' && t.id !== '__ubsel'; }
+function selectable(t) { return t && t.nodeType === 1 && t !== hlBox && t !== selBox && !(t.classList && t.classList.contains('__ubh')); }
+function placeHandles(r) {
+  if (!handles) return;
+  const show = !!selectedEl && inspectOn;
+  for (const d in handles) { const h = handles[d]; if (!show) { h.style.display = 'none'; continue; } h.style.display = 'block';
+    h.style.left = (d.includes('w') ? r.left : d.includes('e') ? r.right : r.left + r.width / 2) + 'px';
+    h.style.top = (d.includes('n') ? r.top : d.includes('s') ? r.bottom : r.top + r.height / 2) + 'px';
+  }
+}
+function makeHandles(doc) {
+  handles = {};
+  ['nw','n','ne','e','se','s','sw','w'].forEach((d) => {
+    let h = doc.getElementById('__ubh_' + d);
+    if (!h) { h = doc.createElement('div'); h.id = '__ubh_' + d; h.className = '__ubh'; h.dataset.dir = d; h.style.display = 'none'; h.addEventListener('mousedown', onHandleDown, true); doc.body.appendChild(h); }
+    handles[d] = h;
+  });
+}
+function onHandleDown(e) {
+  if (!selectedEl) return; e.preventDefault(); e.stopPropagation();
+  const dir = e.currentTarget.dataset.dir, doc = frameDoc();
+  const r = selectedEl.getBoundingClientRect(), startX = e.clientX, startY = e.clientY, sw = r.width, sh = r.height;
+  const o = curObj(); if (!o) return; snap(); o.style = o.style || {};
+  const base = selMode === 'add' ? { x:+o.x||0, y:+o.y||0 } : (o.move ? { ...o.move } : { x:0, y:0 });
+  const mm = (ev) => {
+    const dx = ev.clientX - startX, dy = ev.clientY - startY;
+    let nw = sw, nh = sh, px = base.x, py = base.y;
+    if (dir.includes('e')) nw = Math.max(12, sw + dx);
+    if (dir.includes('w')) { nw = Math.max(12, sw - dx); px = base.x + dx; }
+    if (dir.includes('s')) nh = Math.max(12, sh + dy);
+    if (dir.includes('n')) { nh = Math.max(12, sh - dy); py = base.y + dy; }
+    if (dir !== 'n' && dir !== 's') o.style.width = Math.round(nw) + 'px';
+    if (dir !== 'e' && dir !== 'w') o.style.height = Math.round(nh) + 'px';
+    if (selMode === 'add') { o.x = Math.round(px); o.y = Math.round(py); }
+    else if (dir.includes('w') || dir.includes('n')) o.move = { x: Math.round(px), y: Math.round(py) };
+    applyAll();
+  };
+  const mu = () => { doc.removeEventListener('mousemove', mm, true); doc.removeEventListener('mouseup', mu, true); fillPanel(); };
+  doc.addEventListener('mousemove', mm, true); doc.addEventListener('mouseup', mu, true);
+}
 function onFrameMove(e) { if (!inspectOn) { if (hlBox) hlBox.style.display = 'none'; return; } if (selectable(e.target)) boxOver(hlBox, e.target); }
 function onFrameClick(e) { if (!inspectOn) return; e.preventDefault(); e.stopPropagation(); }
 function onFrameDown(e) {
   if (!inspectOn) return;
+  if (e.target.classList && e.target.classList.contains('__ubh')) return;
   const addNode = e.target.closest && e.target.closest('[data-ubid]');
   if (!addNode && !selectable(e.target)) return;
   e.preventDefault(); e.stopPropagation();
@@ -572,13 +614,54 @@ async function publish() {
   const { error } = await sb.from('site_config').upsert({ id: 1, config: buildOut(), updated_at: new Date().toISOString() });
   $('publish').disabled = false;
   if (error) { msg(/site_config|relation|exist/i.test(error.message||'') ? 'Falta crear la tabla site_config (ejecuta el SQL).' : 'Error: ' + (error.message||'')); return; }
-  setDirty(false); msg('¡Publicado! Los usuarios lo verán al recargar. ✅');
+  setDirty(false); persistActive(); msg('¡Publicado! Los usuarios lo verán al recargar. ✅');
 }
 async function resetAll() {
   if (!confirm('¿Restablecer TODA la apariencia por defecto para todos?')) return;
   snap(); cfg = defaults();
   try { await sb.from('site_config').upsert({ id: 1, config: {}, updated_at: new Date().toISOString() }); } catch (_) {}
   setDirty(false); closePanel(); hydrateControls(); buildColorList(); buildLists(); render(); msg('Restablecido. ✅');
+}
+
+/* ===== proyectos (guardados en este navegador) ===== */
+const LSK = 'ub_editor_projects_v1';
+let projects = { active: null, list: [] }, _saveT = 0;
+function loadProjectsLS() { try { const p = JSON.parse(localStorage.getItem(LSK)); if (p && Array.isArray(p.list)) return p; } catch (_) {} return null; }
+function saveProjectsLS() { try { localStorage.setItem(LSK, JSON.stringify(projects)); } catch (_) {} }
+function newId() { return 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); }
+function activeProj() { return projects.list.find((p) => p.id === projects.active); }
+function initProjects(liveCfg) {
+  const saved = loadProjectsLS();
+  if (saved && saved.list.length) { projects = saved; if (!activeProj()) projects.active = projects.list[0].id; cfg = mergeCfg(activeProj().cfg || {}); }
+  else { const p = { id: newId(), name: 'En vivo', cfg: liveCfg, updated: Date.now() }; projects = { active: p.id, list: [p] }; cfg = mergeCfg(liveCfg); saveProjectsLS(); }
+}
+function persistActive() { const p = activeProj(); if (!p) return; p.cfg = JSON.parse(JSON.stringify(cfg)); p.updated = Date.now(); saveProjectsLS(); }
+function scheduleSave() { const s = $('saveState'); if (s) s.textContent = 'Guardando…'; clearTimeout(_saveT); _saveT = setTimeout(() => { persistActive(); if (s) s.textContent = 'Guardado ✓'; }, 600); }
+function refreshProjSel() { const sel = $('projSel'); if (!sel) return; sel.innerHTML = projects.list.map((p) => `<option value="${p.id}">${(p.name || 'Proyecto').replace(/[<>]/g, '')}</option>`).join(''); sel.value = projects.active; }
+function loadActiveIntoEditor() { cfg = mergeCfg(activeProj().cfg || {}); history = []; future = []; setDirty(false); closePanel(); hydrateControls(); buildColorList(); buildLists(); buildLayers(); render(); updateUndo(); }
+function switchProject(id) { persistActive(); projects.active = id; saveProjectsLS(); refreshProjSel(); loadActiveIntoEditor(); }
+function projNew() { persistActive(); const p = { id: newId(), name: 'Proyecto ' + (projects.list.length + 1), cfg: defaults(), updated: Date.now() }; projects.list.push(p); projects.active = p.id; saveProjectsLS(); refreshProjSel(); loadActiveIntoEditor(); }
+function projRename() { const p = activeProj(); if (!p) return; const n = prompt('Nombre del proyecto:', p.name); if (n != null) { p.name = n.trim() || p.name; saveProjectsLS(); refreshProjSel(); } }
+function projDup() { persistActive(); const a = activeProj(); const p = { id: newId(), name: (a.name || 'Proyecto') + ' copia', cfg: JSON.parse(JSON.stringify(a.cfg)), updated: Date.now() }; projects.list.push(p); projects.active = p.id; saveProjectsLS(); refreshProjSel(); loadActiveIntoEditor(); }
+function projDel() { if (projects.list.length <= 1) { alert('Debe quedar al menos un proyecto.'); return; } const a = activeProj(); if (!confirm(`¿Borrar el proyecto "${a.name}"? (no afecta a lo ya publicado)`)) return; projects.list = projects.list.filter((p) => p.id !== a.id); projects.active = projects.list[0].id; saveProjectsLS(); refreshProjSel(); loadActiveIntoEditor(); }
+
+/* ===== panel de capas (elementos creados) ===== */
+const LICON = { text: '🅣', image: '🖼️', button: '🔘', box: '▭' };
+function buildLayers() {
+  const c = $('layersList'); if (!c) return; const list = cfg.add || [];
+  if (!list.length) { c.innerHTML = '<p class="hint" style="margin:0">Sin elementos creados. Usa ➕ en la barra del visor.</p>'; return; }
+  c.innerHTML = '';
+  list.forEach((it, i) => {
+    const row = document.createElement('div'); row.className = 'layer-row' + (selMode === 'add' && addIndex === i ? ' sel' : '');
+    const name = (it.type === 'text' || it.type === 'button') ? (it.text || it.type) : it.type;
+    row.innerHTML = `<span class="ln">${LICON[it.type] || '▭'} ${String(name).slice(0, 18)}</span><button data-a="up" title="Subir">↑</button><button data-a="dn" title="Bajar">↓</button><button data-a="hide" title="Ocultar/Mostrar">${it.hide ? '🙈' : '👁'}</button><button data-a="del" title="Borrar">🗑</button>`;
+    row.onclick = (e) => { if (e.target.tagName === 'BUTTON') return; if (!inspectOn) toggleInspect(); selectAdd(i); };
+    row.querySelector('[data-a="up"]').onclick = () => { if (i < list.length - 1) { snap(); [list[i + 1], list[i]] = [list[i], list[i + 1]]; if (selMode === 'add' && addIndex === i) addIndex = i + 1; applyAll(); buildLayers(); } };
+    row.querySelector('[data-a="dn"]').onclick = () => { if (i > 0) { snap(); [list[i - 1], list[i]] = [list[i], list[i - 1]]; if (selMode === 'add' && addIndex === i) addIndex = i - 1; applyAll(); buildLayers(); } };
+    row.querySelector('[data-a="hide"]').onclick = () => { snap(); it.hide = !it.hide; applyAll(); buildLayers(); };
+    row.querySelector('[data-a="del"]').onclick = () => { snap(); list.splice(i, 1); if (selMode === 'add' && addIndex === i) closePanel(); applyAll(); buildLayers(); };
+    c.appendChild(row);
+  });
 }
 
 /* ===== arranque ===== */
@@ -588,9 +671,11 @@ async function boot() {
   if (!session) return gate('Inicia sesión en la app primero (con tu cuenta de administrador).', true);
   const { data: prof } = await sb.from('profiles').select('is_admin').eq('id', session.user.id).maybeSingle();
   if (!prof || !prof.is_admin) return gate('Acceso solo para administradores.', true);
-  try { const { data } = await sb.from('site_config').select('config').eq('id', 1).maybeSingle(); if (data && data.config) cfg = mergeCfg(data.config); } catch (_) {}
-  $('gate').style.display = 'none'; $('editor').style.display = 'grid';
-  hydrateControls(); buildColorList(); buildLists(); wire(); updateUndo(); loadLibrary();
+  let liveCfg = defaults();
+  try { const { data } = await sb.from('site_config').select('config').eq('id', 1).maybeSingle(); if (data && data.config) liveCfg = mergeCfg(data.config); } catch (_) {}
+  initProjects(liveCfg);
+  $('gate').style.display = 'none'; $('editor').style.display = 'flex';
+  hydrateControls(); buildColorList(); buildLists(); buildLayers(); wire(); updateUndo(); refreshProjSel(); loadLibrary();
   $('appFrame').addEventListener('load', onFrameLoad);
   if (frameDoc() && frameDoc().readyState === 'complete') onFrameLoad();
 }
