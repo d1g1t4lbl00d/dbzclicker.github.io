@@ -12,13 +12,18 @@
   }
   *{box-sizing:border-box}
   [hidden]{display:none !important}
-  :root{--bar:50px}
+  :root{--bar:50px; --sideW:400px}
   body{margin:0;font-family:'Poppins',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--ink)}
   #editor{flex-direction:column}
   .appbar{height:var(--bar);display:flex;align-items:center;gap:7px;padding:0 14px;border-bottom:1px solid var(--line);background:var(--panel);position:sticky;top:0;z-index:60}
   .ab-div{width:1px;height:22px;background:var(--line);margin:0 4px}
-  .ed-body{display:grid;grid-template-columns:400px 1fr;height:calc(100dvh - var(--bar))}
+  .ed-body{display:grid;grid-template-columns:var(--sideW) 6px 1fr;height:calc(100dvh - var(--bar))}
+  .ed-body.side-collapsed{grid-template-columns:0 0 1fr}
+  .ed-body.side-collapsed .ed-side,.ed-body.side-collapsed .divider{display:none}
   .ed-side{border-right:1px solid var(--line-soft);padding:18px;overflow-y:auto;max-height:calc(100dvh - var(--bar))}
+  .divider{cursor:col-resize;position:relative}
+  .divider::after{content:"";position:absolute;inset:0 2px;background:var(--line-soft)}
+  .divider:hover::after{background:var(--blue)}
   .layer-row{display:flex;align-items:center;gap:6px;padding:6px 7px;border:1px solid var(--line-soft);border-radius:9px;background:var(--panel-2);margin-bottom:5px;cursor:pointer}
   .layer-row.sel{border-color:var(--pink)}
   .layer-row .ln{flex:1;font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -78,7 +83,10 @@
   .pv-stage.inspect .pv-hintbar{display:block}
   /* ---- panel de propiedades ---- */
   .prop-panel{position:fixed;top:var(--bar);right:0;width:300px;height:calc(100dvh - var(--bar));background:var(--panel);border-left:1px solid var(--line);padding:16px;overflow-y:auto;z-index:50;box-shadow:-16px 0 40px rgba(0,0,0,.45)}
-  .prop-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .prop-panel.float{right:auto;border:1px solid var(--line);border-radius:14px;box-shadow:0 30px 90px rgba(0,0,0,.65)}
+  .prop-panel.float .prop-head{cursor:move}
+  .prop-grip{display:none;position:fixed;width:18px;height:18px;z-index:55;cursor:nwse-resize;border-right:3px solid var(--ink-soft);border-bottom:3px solid var(--ink-soft);border-bottom-right-radius:6px;opacity:.7}
+  .prop-head{display:flex;align-items:center;gap:6px;margin-bottom:10px}
   .prop-head .x{border:none;background:var(--panel-2);color:var(--ink-2);width:28px;height:28px;border-radius:8px;cursor:pointer;font-size:13px}
   .bread{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
   .bread .cr{font-size:10.5px;background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:3px 6px;color:var(--ink-soft);cursor:pointer}
@@ -106,9 +114,11 @@
       <button class="tb" id="projDup" title="Duplicar proyecto">⧉</button>
       <button class="tb" id="projDel" title="Borrar proyecto">🗑</button>
       <div style="flex:1"></div>
+      <button class="tb" id="btnSide" title="Ocultar/mostrar ajustes">⟨ ⟩</button>
+      <button class="tb" id="btnFull" title="Pantalla completa">⛶</button>
       <span id="saveState" class="mini">Guardado ✓</span>
     </div>
-    <div class="ed-body">
+    <div class="ed-body" id="edBody">
     <aside class="ed-side">
       <div class="ed-head"><div class="logo">Under<span class="u">Bro</span></div><h1>Editor premium</h1></div>
 
@@ -197,6 +207,8 @@
       </div>
     </aside>
 
+    <div class="divider" id="sideDivider"></div>
+
     <main class="ed-prev">
       <div class="pv-toolbar">
         <button class="tb" id="tInspect">🎯 Inspeccionar</button>
@@ -220,7 +232,7 @@
     </div>
 
     <aside class="prop-panel" id="propPanel" hidden>
-      <div class="prop-head"><strong id="pTag">Elemento</strong><button class="x" id="pClose">✕</button></div>
+      <div class="prop-head" id="pHead"><strong id="pTag">Elemento</strong><span style="flex:1"></span><button class="x" id="pDock" title="Acoplar / flotar">⤢</button><button class="x" id="pClose">✕</button></div>
       <div class="bread" id="pBread"></div>
       <label class="row" id="pScopeRow" style="cursor:pointer;font-size:12px;gap:7px;margin:0 0 10px;padding:8px;border:1px solid var(--line);border-radius:9px;background:var(--panel-2)"><input type="checkbox" id="pScope"> 🔗 Aplicar a todas las iguales <span id="pScopeSel" class="mini" style="font-weight:600"></span></label>
       <label class="fl">Texto</label><textarea id="pText" rows="2" placeholder="(sin cambiar)"></textarea>
@@ -249,6 +261,8 @@
       <p class="hint">Los cambios por elemento se aplican a todos al Publicar. Funciona mejor sobre la estructura (cabecera, menú, botones, títulos) que sobre listas dinámicas.</p>
     </aside>
 
+    <div class="prop-grip" id="pGrip"></div>
+
     <div class="picker" id="picker" hidden>
       <div class="picker-box">
         <div class="prop-head"><strong>Elige una imagen</strong><button class="x" id="pickClose">✕</button></div>
@@ -259,7 +273,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <script src="js/config.js?v=20260615i"></script>
-  <script src="js/editor.js?v=20260615i"></script>
+  <script src="js/config.js?v=20260615j"></script>
+  <script src="js/editor.js?v=20260615j"></script>
 </body>
 </html>
