@@ -1424,11 +1424,11 @@ function trackCard(t, opts = {}) {
   if (feat && !cov && prof.avatar_url) cov = czUrl(prof.avatar_url);
   const card = el(`
     <div class="track ${cov ? 'has-bg' : ''}${feat ? ' featured-top' : ''}" data-id="${t.id}" ${cov ? `style="background-image:url('${cov}')"` : ''}>
-      ${feat ? '<div class="top-ribbon">🔥 #1 Trending</div>' : ''}
+      ${feat ? '<div class="top-ribbon"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.5l2.6 5.3 5.9.86-4.27 4.16 1 5.88L12 16.9l-5.27 2.77 1-5.88L3.46 8.66l5.9-.86z"/></svg> Nº 1 Trending</div>' : ''}
       ${t._repostedBy ? `<div class="repost-badge"><svg fill="none" stroke="currentColor"><use href="#i-repeat"/></svg> Reposteado por <a data-act="repostby">${esc(t._repostedBy)}</a></div>` : ''}
       <div class="t-head">
         <div class="t-titles">
-          <div class="t-title">${feat ? `<span class="rainbow-title">${esc(t.title)}</span>` : esc(t.title)}</div>
+          <div class="t-title">${esc(t.title)}</div>
           <div class="t-artist">por <a data-act="profile">${esc(prof.display_name || prof.username || t.artist || 'anónimo')}</a>${verifiedBadge(prof)}${displayBadgeHtml(prof)}${ft}</div>
         </div>
         ${t.genre ? `<span class="t-genre">${esc(t.genre)}</span>` : ''}
