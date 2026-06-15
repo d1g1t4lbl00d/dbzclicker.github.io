@@ -8,70 +8,77 @@
 <style>
   :root{
     --bg:#0a0d18; --panel:#121726; --panel-2:#1a2033; --line:#232b40; --line-soft:#1a2030;
-    --ink:#e7ebf3; --ink-2:#cdd5e4; --ink-soft:#8a94aa; --blue:#5f9bff; --r:14px;
+    --ink:#e7ebf3; --ink-2:#cdd5e4; --ink-soft:#8a94aa; --blue:#5f9bff; --pink:#ff5db0; --r:14px;
   }
   *{box-sizing:border-box}
   body{margin:0;font-family:'Poppins',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--ink)}
-  .ed-wrap{display:grid;grid-template-columns:420px 1fr;min-height:100dvh}
-  .ed-side{border-right:1px solid var(--line-soft);padding:20px;overflow-y:auto;max-height:100dvh}
-  .ed-prev{padding:24px;display:flex;align-items:center;justify-content:center;background:#06080f;position:sticky;top:0;height:100dvh}
-  .ed-head{display:flex;align-items:center;gap:10px;margin-bottom:16px}
-  .ed-head h1{font-size:20px;font-weight:800;margin:0}
-  .logo{font-size:22px;font-weight:800}.logo .u{color:var(--blue)}
-  .ed-sec{border:1px solid var(--line);background:var(--panel);border-radius:14px;padding:14px 16px;margin-bottom:12px}
-  .ed-sec h3{font-size:12.5px;font-weight:800;margin:0 0 12px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);display:flex;align-items:center;gap:8px}
-  label.fl{display:block;font-size:12px;color:var(--ink-soft);margin:10px 0 5px;font-weight:600}
-  input[type=text],input[type=number],select{width:100%;padding:9px 12px;border:1.5px solid var(--line);border-radius:10px;background:var(--panel-2);color:var(--ink);font-size:14px;font-family:inherit}
-  input:focus,select:focus{outline:none;border-color:var(--blue)}
-  input[type=color]{width:42px;height:32px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2);padding:2px;cursor:pointer;flex:none}
+  .ed-wrap{display:grid;grid-template-columns:400px 1fr;min-height:100dvh}
+  .ed-side{border-right:1px solid var(--line-soft);padding:18px;overflow-y:auto;max-height:100dvh}
+  .ed-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+  .ed-head h1{font-size:19px;font-weight:800;margin:0}
+  .logo{font-size:21px;font-weight:800}.logo .u{color:var(--blue)}
+  .ed-sec{border:1px solid var(--line);background:var(--panel);border-radius:14px;padding:13px 15px;margin-bottom:11px}
+  .ed-sec h3{font-size:12px;font-weight:800;margin:0 0 11px;text-transform:uppercase;letter-spacing:.04em;color:var(--ink-soft);display:flex;align-items:center;gap:7px}
+  label.fl{display:block;font-size:12px;color:var(--ink-soft);margin:9px 0 5px;font-weight:600}
+  input[type=text],input[type=number],select,textarea{width:100%;padding:9px 11px;border:1.5px solid var(--line);border-radius:10px;background:var(--panel-2);color:var(--ink);font-size:13.5px;font-family:inherit}
+  textarea{resize:vertical}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:var(--blue)}
+  input[type=color]{width:40px;height:31px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2);padding:2px;cursor:pointer;flex:none}
   input[type=range]{width:100%;accent-color:var(--blue)}
-  .row{display:flex;align-items:center;gap:10px}
+  .row{display:flex;align-items:center;gap:9px}
+  .mini{font-size:12px;color:var(--ink-soft);font-weight:700}
   .seg{display:flex;gap:4px;background:var(--panel-2);border:1px solid var(--line);border-radius:11px;padding:4px;margin-bottom:6px;flex-wrap:wrap}
-  .seg button{flex:1;min-width:70px;border:none;background:transparent;color:var(--ink-soft);padding:8px;border-radius:8px;font-weight:650;font-size:12.5px;cursor:pointer;font-family:inherit}
+  .seg button{flex:1;min-width:66px;border:none;background:transparent;color:var(--ink-soft);padding:8px;border-radius:8px;font-weight:650;font-size:12px;cursor:pointer;font-family:inherit}
   .seg button.on{background:var(--blue);color:#fff}
-  .btn{border:1px solid var(--line);background:var(--panel-2);color:var(--ink-2);border-radius:11px;padding:11px 16px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit;text-align:center;text-decoration:none}
+  .btn{border:1px solid var(--line);background:var(--panel-2);color:var(--ink-2);border-radius:11px;padding:11px 14px;font-weight:700;font-size:14px;cursor:pointer;font-family:inherit;text-align:center;text-decoration:none;display:inline-block}
   .btn.primary{background:var(--blue);color:#fff;border:none}
   .btn.full{width:100%;display:block}
   .btn.sm{padding:7px 10px;font-size:12px;border-radius:9px}
-  .ed-actions{position:sticky;bottom:0;background:linear-gradient(180deg,transparent,var(--bg) 28%);padding-top:14px;display:flex;gap:8px;flex-direction:column}
+  .ed-actions{position:sticky;bottom:0;background:linear-gradient(180deg,transparent,var(--bg) 26%);padding-top:12px;display:flex;gap:8px;flex-direction:column}
   .ord-item{display:flex;align-items:center;gap:8px;padding:7px 8px;border:1px solid var(--line-soft);border-radius:10px;background:var(--panel-2);margin-bottom:6px}
   .ord-item .nm{flex:1;font-size:13px;font-weight:600}
   .ord-item.hidden-it .nm{opacity:.4;text-decoration:line-through}
-  .ord-item button{width:28px;height:28px;border:1px solid var(--line);background:var(--panel);color:var(--ink-2);border-radius:8px;cursor:pointer;font-size:13px;line-height:1}
-  .clr-row{display:flex;align-items:center;gap:10px;padding:6px 0;border-bottom:1px solid var(--line-soft)}
+  .ord-item button{width:27px;height:27px;border:1px solid var(--line);background:var(--panel);color:var(--ink-2);border-radius:8px;cursor:pointer;font-size:13px;line-height:1}
+  .clr-row{display:flex;align-items:center;gap:9px;padding:5px 0;border-bottom:1px solid var(--line-soft)}
   .clr-row:last-child{border-bottom:none}
-  .clr-row .nm{flex:1;font-size:13px;font-weight:600}
-  .clr-row input[type=checkbox]{width:16px;height:16px;accent-color:var(--blue)}
+  .clr-row .nm{flex:1;font-size:12.5px;font-weight:600}
+  .clr-row input[type=checkbox]{width:15px;height:15px;accent-color:var(--blue)}
   .clr-row input[type=color]:disabled{opacity:.3}
-  .hint{font-size:11.5px;color:var(--ink-soft);margin:6px 0 0}
+  .hint{font-size:11px;color:var(--ink-soft);margin:6px 0 0;line-height:1.4}
   .gate{min-height:100dvh;display:grid;place-items:center;text-align:center;padding:24px}
   .gate a{color:var(--blue)}
-  .lib{display:grid;grid-template-columns:repeat(auto-fill,minmax(86px,1fr));gap:8px;margin-top:10px}
+  .lib{display:grid;grid-template-columns:repeat(auto-fill,minmax(80px,1fr));gap:7px;margin-top:9px}
   .lib-it{position:relative;border:1px solid var(--line);border-radius:10px;overflow:hidden;aspect-ratio:1;background:var(--panel-2)}
   .lib-it img{width:100%;height:100%;object-fit:cover;display:block}
   .lib-it .ov{position:absolute;inset:0;background:rgba(0,0,0,.55);opacity:0;transition:.15s;display:flex;flex-direction:column;gap:3px;align-items:center;justify-content:center;padding:4px}
   .lib-it:hover .ov{opacity:1}
-  .lib-it .ov button{font-size:10px;padding:3px 6px;border:none;border-radius:6px;background:rgba(255,255,255,.92);color:#111;cursor:pointer;width:100%;font-weight:700}
+  .lib-it .ov button{font-size:9.5px;padding:3px 5px;border:none;border-radius:6px;background:rgba(255,255,255,.92);color:#111;cursor:pointer;width:100%;font-weight:700}
   .lib-it .ov button.del{background:#e25563;color:#fff}
-  .up-btn{display:inline-flex;align-items:center;gap:6px;cursor:pointer}
-  .up-btn input{display:none}
-  .spin{font-size:12px;color:var(--ink-soft)}
-  /* ---- vista previa ---- */
-  .pv{width:min(440px,100%);border:1px solid var(--line);border-radius:20px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.55);background:var(--bg);font-family:var(--pvfont,inherit)}
-  .pv-top{display:flex;align-items:center;gap:10px;padding:12px 14px;border-bottom:1px solid var(--line-soft);background:rgba(10,13,24,.5);backdrop-filter:blur(8px)}
-  .pv-top .nm{font-weight:800;font-size:16px;color:var(--ink);display:flex;align-items:center}.pv-top .nm img{height:20px}
-  .pv-tabs{display:flex;gap:4px;margin-left:auto;background:rgba(255,255,255,.08);border-radius:10px;padding:3px}
-  .pv-tabs span{font-size:11px;font-weight:650;color:var(--ink-soft);padding:5px 9px;border-radius:7px}
-  .pv-tabs span.on{background:var(--blue);color:#fff}
-  .pv-body{display:grid;grid-template-columns:124px 1fr;min-height:320px}
-  .pv-nav{border-right:1px solid var(--line-soft);padding:10px;display:flex;flex-direction:column;gap:3px;background:rgba(10,13,24,.3)}
-  .pv-nav span{font-size:11px;color:var(--ink-2);padding:6px 8px;border-radius:7px}
-  .pv-nav span.on{background:var(--blue);color:#fff}
-  .pv-main{padding:16px;position:relative}
-  .pv-card{background:var(--panel-2);border:1px solid var(--line);border-radius:var(--pvr,14px);height:58px;margin-bottom:10px;display:flex;align-items:center;padding:0 14px;gap:10px;color:var(--ink-soft);font-size:12px}
-  .pv-card::before{content:"";width:34px;height:34px;border-radius:8px;background:var(--blue);flex:none;opacity:.85}
-  .pv-btn{display:inline-block;background:var(--blue);color:#fff;padding:10px 18px;border-radius:30px;font-weight:700;font-size:13px}
-  .tagline{font-size:11px;color:var(--ink-soft);margin-top:10px}
+  .up-btn{cursor:pointer}.up-btn input{display:none}
+  .spin{font-size:11px;color:var(--ink-soft)}
+  /* ---- visor real ---- */
+  .ed-prev{display:flex;flex-direction:column;height:100dvh;background:#06080f}
+  .pv-toolbar{display:flex;align-items:center;gap:7px;padding:9px 12px;border-bottom:1px solid var(--line-soft);background:var(--panel);flex-wrap:wrap}
+  .tb{border:1px solid var(--line);background:var(--panel-2);color:var(--ink-2);border-radius:9px;padding:7px 11px;font-weight:700;font-size:12.5px;cursor:pointer;font-family:inherit}
+  .tb.on{background:var(--blue);color:#fff;border-color:transparent}
+  .tb-sel{border:1px solid var(--line);background:var(--panel-2);color:var(--ink-2);border-radius:9px;padding:7px 9px;font-size:12.5px;font-family:inherit}
+  .pv-stage{flex:1;position:relative;display:flex;align-items:stretch;justify-content:center;overflow:auto}
+  #appFrame{border:none;width:100%;height:100%;background:#06080f}
+  .pv-stage.mobile #appFrame{width:390px;height:100%;border-left:1px solid var(--line);border-right:1px solid var(--line);flex:none}
+  .pv-hintbar{position:absolute;left:12px;right:12px;bottom:12px;background:rgba(95,155,255,.92);color:#fff;padding:9px 13px;border-radius:11px;font-size:12.5px;font-weight:600;text-align:center;display:none}
+  .pv-stage.inspect .pv-hintbar{display:block}
+  /* ---- panel de propiedades ---- */
+  .prop-panel{position:fixed;top:0;right:0;width:300px;height:100dvh;background:var(--panel);border-left:1px solid var(--line);padding:16px;overflow-y:auto;z-index:50;box-shadow:-16px 0 40px rgba(0,0,0,.45)}
+  .prop-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .prop-head .x{border:none;background:var(--panel-2);color:var(--ink-2);width:28px;height:28px;border-radius:8px;cursor:pointer;font-size:13px}
+  .bread{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px}
+  .bread .cr{font-size:10.5px;background:var(--panel-2);border:1px solid var(--line);border-radius:6px;padding:3px 6px;color:var(--ink-soft);cursor:pointer}
+  .bread .cr.cur{background:var(--pink);color:#fff;border-color:transparent}
+  .prop-row{display:flex;align-items:center;gap:8px;margin:8px 0}
+  .prop-row label{flex:1;font-size:12px;color:var(--ink-soft);font-weight:600}
+  .prop-row .clr{border:none;background:transparent;color:var(--ink-faint);cursor:pointer;font-size:13px;opacity:.6}
+  .prop-row input,.prop-row select{width:auto;flex:none}
+  .prop-row input[type=number]{width:74px}.prop-row input[type=range]{width:96px;flex:none}
 </style>
 </head>
 <body>
@@ -79,7 +86,7 @@
 
   <div id="editor" class="ed-wrap" style="display:none">
     <aside class="ed-side">
-      <div class="ed-head"><div class="logo">Under<span class="u">Bro</span></div><h1>Editor</h1></div>
+      <div class="ed-head"><div class="logo">Under<span class="u">Bro</span></div><h1>Editor premium</h1></div>
 
       <div class="ed-sec">
         <h3>🖼️ Fondo de la app</h3>
@@ -97,14 +104,14 @@
           <label class="fl">Imagen</label>
           <div class="row"><label class="btn sm up-btn">⬆ Subir<input type="file" accept="image/*" id="bgUpload"></label><span id="bgUpMsg" class="spin"></span></div>
           <label class="fl">o pega una URL</label><input type="text" id="bgImageV" placeholder="https://…/fondo.jpg">
-          <label class="fl">Oscurecer fondo (legibilidad): <span id="bgDimL">0%</span></label><input type="range" id="bgDim" min="0" max="85" value="0">
+          <label class="fl">Oscurecer fondo: <span id="bgDimL">0%</span></label><input type="range" id="bgDim" min="0" max="85" value="0">
         </div>
       </div>
 
       <div class="ed-sec">
         <h3>🎨 Colores</h3>
         <div id="colorList"></div>
-        <p class="hint">Activa la casilla para personalizar cada color. El acento afecta a botones, enlaces y degradados.</p>
+        <p class="hint">Activa la casilla para personalizar cada color.</p>
       </div>
 
       <div class="ed-sec">
@@ -112,39 +119,32 @@
         <label class="fl">Fuente</label>
         <select id="fontV">
           <option value="system">Por defecto del sistema</option>
-          <option value="Poppins">Poppins</option>
-          <option value="Inter">Inter</option>
-          <option value="Montserrat">Montserrat</option>
-          <option value="Roboto">Roboto</option>
-          <option value="Nunito">Nunito</option>
-          <option value="Lato">Lato</option>
-          <option value="DM Sans">DM Sans</option>
-          <option value="Space Grotesk">Space Grotesk</option>
-          <option value="Oswald">Oswald</option>
-          <option value="Playfair Display">Playfair Display</option>
+          <option value="Poppins">Poppins</option><option value="Inter">Inter</option>
+          <option value="Montserrat">Montserrat</option><option value="Roboto">Roboto</option>
+          <option value="Nunito">Nunito</option><option value="Lato">Lato</option>
+          <option value="DM Sans">DM Sans</option><option value="Space Grotesk">Space Grotesk</option>
+          <option value="Oswald">Oswald</option><option value="Playfair Display">Playfair Display</option>
         </select>
       </div>
 
       <div class="ed-sec">
         <h3>⬜ Formas</h3>
-        <label class="row" style="cursor:pointer;font-size:13px;gap:8px"><input type="checkbox" id="radiusOn"> Personalizar redondez de esquinas</label>
+        <label class="row" style="cursor:pointer;font-size:13px;gap:8px"><input type="checkbox" id="radiusOn"> Personalizar redondez</label>
         <label class="fl">Redondez: <span id="radiusL">14px</span></label><input type="range" id="radiusV" min="0" max="28" value="14" disabled>
       </div>
 
       <div class="ed-sec">
         <h3>🏷️ Marca</h3>
-        <label class="fl">Nombre de la app</label><input type="text" id="nameV" placeholder="UnderBro" maxlength="24">
+        <label class="fl">Nombre</label><input type="text" id="nameV" placeholder="UnderBro" maxlength="24">
         <label class="fl">Eslogan</label><input type="text" id="taglineV" placeholder="upload. share. connect." maxlength="60">
-        <label class="fl">Logo (imagen, opcional)</label>
+        <label class="fl">Logo (imagen)</label>
         <div class="row"><label class="btn sm up-btn">⬆ Subir<input type="file" accept="image/*" id="logoUpload"></label><span id="logoUpMsg" class="spin"></span></div>
         <input type="text" id="logoV" placeholder="https://…/logo.png" style="margin-top:6px">
-        <p class="hint">Si pones logo, sustituye al texto del nombre en la cabecera.</p>
       </div>
 
       <div class="ed-sec">
         <h3>📑 Pestañas del feed</h3>
         <div id="tabsList"></div>
-        <p class="hint">Flechas para reordenar · casilla para mostrar/ocultar.</p>
       </div>
 
       <div class="ed-sec">
@@ -157,33 +157,50 @@
         <label class="btn sm up-btn">⬆ Subir imagen<input type="file" accept="image/*" id="libUpload"></label>
         <span id="libMsg" class="spin"></span>
         <div class="lib" id="libGrid"></div>
-        <p class="hint">Pasa el ratón por una imagen para copiar su URL, usarla de fondo/logo o borrarla.</p>
+        <p class="hint">Pasa el ratón para usar de fondo/logo, copiar URL o borrar.</p>
       </div>
 
       <div class="ed-actions">
         <div id="msg" class="hint" style="text-align:center"></div>
         <button class="btn primary full" id="publish">Publicar cambios</button>
-        <div class="row" style="gap:8px"><button class="btn full" id="reset" style="flex:1">Restablecer</button><a class="btn full" href="/" style="flex:1">Volver a la app</a></div>
+        <div class="row" style="gap:8px"><button class="btn full" id="reset" style="flex:1">Restablecer todo</button><a class="btn full" href="/" style="flex:1">Volver a la app</a></div>
       </div>
     </aside>
 
     <main class="ed-prev">
-      <div class="pv" id="pv">
-        <div class="pv-top"><span class="nm" id="pvName">UnderBro</span><div class="pv-tabs" id="pvTabs"></div></div>
-        <div class="pv-body">
-          <div class="pv-nav" id="pvNav"></div>
-          <div class="pv-main" id="pvMain">
-            <div class="pv-card">Pista de ejemplo</div><div class="pv-card">Otra pista</div>
-            <span class="pv-btn">▶ Reproducir</span>
-            <p class="tagline" id="pvTagline">upload. share. connect.</p>
-          </div>
-        </div>
+      <div class="pv-toolbar">
+        <button class="tb" id="tInspect">🎯 Inspeccionar</button>
+        <button class="tb" id="tUndo" title="Deshacer">↶</button>
+        <button class="tb" id="tRedo" title="Rehacer">↷</button>
+        <select id="tViewport" class="tb-sel"><option value="full">🖥️ Escritorio</option><option value="mobile">📱 Móvil</option></select>
+        <button class="tb" id="tReload" title="Recargar visor">⟳</button>
+        <div style="flex:1"></div>
+        <button class="tb" id="tExport">⬇ Exportar</button>
+        <label class="tb up-btn">⬆ Importar<input type="file" accept="application/json,.json" id="tImport"></label>
+      </div>
+      <div class="pv-stage" id="pvStage">
+        <iframe id="appFrame" title="Vista de la app" src="/"></iframe>
+        <div class="pv-hintbar">🎯 Modo inspección — clic en un elemento para seleccionarlo · arrástralo para moverlo · flechas para ajustar.</div>
       </div>
     </main>
+
+    <aside class="prop-panel" id="propPanel" hidden>
+      <div class="prop-head"><strong id="pTag">Elemento</strong><button class="x" id="pClose">✕</button></div>
+      <div class="bread" id="pBread"></div>
+      <label class="fl">Texto</label><textarea id="pText" rows="2" placeholder="(sin cambiar)"></textarea>
+      <div id="propStyles"></div>
+      <label class="fl">Posición (arrastre)</label>
+      <div class="row"><span class="mini">X</span><input type="number" id="pMoveX" value="0"><span class="mini">Y</span><input type="number" id="pMoveY" value="0"></div>
+      <div class="row" style="margin-top:11px;gap:6px">
+        <button class="btn sm" id="pHide" style="flex:1">Ocultar</button>
+        <button class="btn sm" id="pResetEl" style="flex:1">Restablecer</button>
+      </div>
+      <p class="hint">Los cambios por elemento se aplican a todos al Publicar. Funciona mejor sobre la estructura (cabecera, menú, botones, títulos) que sobre listas dinámicas.</p>
+    </aside>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <script src="js/config.js?v=20260615b"></script>
-  <script src="js/editor.js?v=20260615b"></script>
+  <script src="js/config.js?v=20260615c"></script>
+  <script src="js/editor.js?v=20260615c"></script>
 </body>
 </html>

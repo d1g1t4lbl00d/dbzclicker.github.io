@@ -337,6 +337,29 @@ function renderSiteConfig(cfg) {
   // ORDEN / VISIBILIDAD de pestañas del feed y secciones del menú
   applyOrderHide('#feedTabs', 'button[data-tab]', 'tab', cfg.tabs);
   applyOrderHide('#sidebar', '.nav-item[data-view]', 'view', cfg.nav);
+  // OVERRIDES POR ELEMENTO (editor visual: arrastrar/editar elementos)
+  applyElementOverrides(cfg.el);
+}
+function applyElementOverrides(el) {
+  if (!el || typeof el !== 'object') return;
+  let css = ''; const texts = [];
+  for (const sel in el) {
+    const o = el[sel]; if (!o) continue;
+    const decls = [];
+    if (o.hide) decls.push('display:none !important');
+    if (o.move && (o.move.x || o.move.y)) decls.push(`transform:translate(${+o.move.x || 0}px, ${+o.move.y || 0}px) !important`);
+    if (o.style) for (const p in o.style) { if (o.style[p] !== '' && o.style[p] != null) decls.push(`${p}:${o.style[p]} !important`); }
+    if (decls.length) css += `${sel}{${decls.join(';')}}\n`;
+    if (o.text != null) texts.push([sel, o.text]);
+  }
+  let tag = document.getElementById('ub-el-css');
+  if (!tag) { tag = document.createElement('style'); tag.id = 'ub-el-css'; document.head.appendChild(tag); }
+  tag.textContent = css;
+  if (texts.length) {
+    const applyTexts = () => texts.forEach(([sel, t]) => { try { document.querySelectorAll(sel).forEach((n) => { if (n.textContent !== t) n.textContent = t; }); } catch (_) {} });
+    applyTexts();
+    if (!window.__ubTextObs) { window.__ubTextObs = new MutationObserver(() => { clearTimeout(window.__ubTextT); window.__ubTextT = setTimeout(applyTexts, 200); }); try { window.__ubTextObs.observe(document.body, { childList: true, subtree: true }); } catch (_) {} }
+  }
 }
 function applyOrderHide(containerSel, itemSel, dataKey, conf) {
   if (!conf) return;
