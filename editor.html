@@ -173,6 +173,10 @@
     <main class="ed-prev">
       <div class="pv-toolbar">
         <button class="tb" id="tInspect">🎯 Inspeccionar</button>
+        <button class="tb" id="addText" title="Añadir texto">➕ Texto</button>
+        <button class="tb" id="addImg" title="Añadir imagen">➕ Imagen</button>
+        <button class="tb" id="addBox" title="Añadir caja">➕ Caja</button>
+        <button class="tb" id="addBtn" title="Añadir botón">➕ Botón</button>
         <button class="tb" id="tUndo" title="Deshacer">↶</button>
         <button class="tb" id="tRedo" title="Rehacer">↷</button>
         <select id="tViewport" class="tb-sel"><option value="full">🖥️ Escritorio</option><option value="mobile">📱 Móvil</option></select>
@@ -193,6 +197,12 @@
       <label class="row" id="pScopeRow" style="cursor:pointer;font-size:12px;gap:7px;margin:0 0 10px;padding:8px;border:1px solid var(--line);border-radius:9px;background:var(--panel-2)"><input type="checkbox" id="pScope"> 🔗 Aplicar a todas las iguales <span id="pScopeSel" class="mini" style="font-weight:600"></span></label>
       <label class="fl">Texto</label><textarea id="pText" rows="2" placeholder="(sin cambiar)"></textarea>
       <div id="propStyles"></div>
+      <div id="pHrefRow" style="display:none"><label class="fl">🔗 Enlace del botón (URL)</label><input type="text" id="pHref" placeholder="https://…"></div>
+      <label class="fl">✨ Efectos</label>
+      <div class="prop-row"><label>Rotación</label><input type="range" id="pRot" min="-180" max="180" value="0"><button class="clr" id="clrRot">↺</button></div>
+      <div class="prop-row"><label>Escala</label><input type="range" id="pScale" min="0.2" max="3" step="0.05" value="1"><button class="clr" id="clrScale">↺</button></div>
+      <div class="prop-row"><label>Desenfoque</label><input type="range" id="pBlur" min="0" max="20" value="0"><button class="clr" id="clrBlur">↺</button></div>
+      <div class="prop-row"><label>Brillo</label><input type="range" id="pBright" min="0" max="200" value="100"><button class="clr" id="clrBright">↺</button></div>
       <label class="fl">🖼️ Imagen de fondo del elemento</label>
       <div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn sm" id="pBgUp">⬆ Subir</button><button class="btn sm" id="pBgLib">📚 Biblioteca</button><button class="btn sm" id="pBgClear">Quitar</button></div>
       <div class="row" style="margin-top:6px"><span class="mini">Ajuste</span><select id="pBgSize"><option value="">—</option><option value="cover">Cubrir</option><option value="contain">Contener</option><option value="100% 100%">Estirar</option><option value="auto">Original</option></select></div>
@@ -205,6 +215,7 @@
       <div class="row"><span class="mini">X</span><input type="number" id="pMoveX" value="0"><span class="mini">Y</span><input type="number" id="pMoveY" value="0"></div>
       <div class="row" style="margin-top:11px;gap:6px">
         <button class="btn sm" id="pHide" style="flex:1">Ocultar</button>
+        <button class="btn sm" id="pDup" style="flex:1;display:none">Duplicar</button>
         <button class="btn sm" id="pResetEl" style="flex:1">Restablecer</button>
       </div>
       <p class="hint">Los cambios por elemento se aplican a todos al Publicar. Funciona mejor sobre la estructura (cabecera, menú, botones, títulos) que sobre listas dinámicas.</p>
@@ -220,7 +231,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <script src="js/config.js?v=20260615g"></script>
-  <script src="js/editor.js?v=20260615g"></script>
+  <script src="js/config.js?v=20260615h"></script>
+  <script src="js/editor.js?v=20260615h"></script>
 </body>
 </html>

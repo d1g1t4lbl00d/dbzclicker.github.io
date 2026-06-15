@@ -25,14 +25,23 @@ const PROPS = [
   { key:'font-size', label:'Tamaño (px)', type:'num', unit:'px' },
   { key:'font-weight', label:'Grosor', type:'select', opts:['300','400','500','600','700','800','900'] },
   { key:'text-align', label:'Alineación', type:'select', opts:['left','center','right','justify'] },
+  { key:'letter-spacing', label:'Espaciado letras', type:'num', unit:'px' },
+  { key:'line-height', label:'Interlineado', type:'num' },
+  { key:'width', label:'Ancho (px)', type:'num', unit:'px' },
+  { key:'height', label:'Alto (px)', type:'num', unit:'px' },
   { key:'padding', label:'Relleno (px)', type:'num', unit:'px' },
   { key:'margin', label:'Margen (px)', type:'num', unit:'px' },
   { key:'border-radius', label:'Radio (px)', type:'num', unit:'px' },
+  { key:'border-width', label:'Borde grosor', type:'num', unit:'px' },
+  { key:'border-style', label:'Borde estilo', type:'select', opts:['none','solid','dashed','dotted','double'] },
+  { key:'border-color', label:'Borde color', type:'color' },
+  { key:'box-shadow', label:'Sombra', type:'select', opts:[{label:'—',value:''},{label:'Suave',value:'0 2px 8px rgba(0,0,0,.25)'},{label:'Media',value:'0 6px 20px rgba(0,0,0,.35)'},{label:'Fuerte',value:'0 14px 40px rgba(0,0,0,.5)'},{label:'Glow azul',value:'0 0 24px rgba(95,155,255,.7)'}] },
   { key:'opacity', label:'Opacidad', type:'range', min:0, max:1, step:0.05 },
+  { key:'z-index', label:'Capa (z-index)', type:'num' },
 ];
 
 let cfg = defaults();
-function defaults() { return { bg:{ mode:'default', dim:0 }, colors:{}, font:{ family:'system' }, radius:null, name:'', tagline:'', logo:'', tabs:{ order:[], hidden:[] }, nav:{ order:[], hidden:[] }, el:{} }; }
+function defaults() { return { bg:{ mode:'default', dim:0 }, colors:{}, font:{ family:'system' }, radius:null, name:'', tagline:'', logo:'', tabs:{ order:[], hidden:[] }, nav:{ order:[], hidden:[] }, el:{}, add:[] }; }
 function mergeCfg(l) {
   const colors = (l.colors && typeof l.colors === 'object') ? { ...l.colors } : {};
   if (l.accent && !colors.accent) colors.accent = l.accent;
@@ -45,6 +54,7 @@ function mergeCfg(l) {
     tabs: { order:(l.tabs && l.tabs.order) || [], hidden:(l.tabs && l.tabs.hidden) || [] },
     nav: { order:(l.nav && l.nav.order) || [], hidden:(l.nav && l.nav.hidden) || [] },
     el: (l.el && typeof l.el === 'object') ? JSON.parse(JSON.stringify(l.el)) : {},
+    add: Array.isArray(l.add) ? JSON.parse(JSON.stringify(l.add)) : [],
   };
 }
 const msg = (t) => { $('msg').textContent = t || ''; };
@@ -97,12 +107,26 @@ function applyGlobal(doc) {
   applyOrderHide(doc, '#feedTabs', 'button[data-tab]', 'tab', cfg.tabs);
   applyOrderHide(doc, '#sidebar', '.nav-item[data-view]', 'view', cfg.nav);
 }
+function composeDecls(o, important) {
+  const bang = important ? ' !important' : '';
+  const d = [];
+  if (o.hide) d.push('display:none' + bang);
+  const tr = [];
+  if (o.move && (o.move.x || o.move.y)) tr.push(`translate(${+o.move.x||0}px,${+o.move.y||0}px)`);
+  if (o.rot) tr.push(`rotate(${+o.rot}deg)`);
+  if (o.scale != null && +o.scale !== 1) tr.push(`scale(${+o.scale})`);
+  if (tr.length) d.push(`transform:${tr.join(' ')}${bang}`);
+  const fl = [];
+  if (o.blur) fl.push(`blur(${+o.blur}px)`);
+  if (o.bright != null && +o.bright !== 100) fl.push(`brightness(${+o.bright}%)`);
+  if (fl.length) d.push(`filter:${fl.join(' ')}${bang}`);
+  if (o.style) for (const p in o.style) { if (o.style[p] !== '' && o.style[p] != null) d.push(`${p}:${o.style[p]}${bang}`); }
+  return d;
+}
 function applyEl(doc) {
   let css = ''; const dyn = [], el = cfg.el || {};
-  for (const sel in el) { const o = el[sel]; if (!o) continue; const d = [];
-    if (o.hide) d.push('display:none !important');
-    if (o.move && (o.move.x || o.move.y)) d.push(`transform:translate(${+o.move.x||0}px,${+o.move.y||0}px) !important`);
-    if (o.style) for (const p in o.style) { if (o.style[p] !== '' && o.style[p] != null) d.push(`${p}:${o.style[p]} !important`); }
+  for (const sel in el) { const o = el[sel]; if (!o) continue;
+    const d = composeDecls(o, true);
     if (d.length) css += `${sel}{${d.join(';')}}\n`;
     if (o.text != null || o.img != null) dyn.push([sel, o]);
   }
@@ -113,9 +137,32 @@ function applyEl(doc) {
     if (o.img != null && n.tagName === 'IMG' && n.getAttribute('src') !== o.img) n.setAttribute('src', o.img);
   }); } catch (_) {} });
 }
+function edMakeAdded(doc, it) {
+  if (!it || !it.id || it.hide) return null;
+  const tag = it.type === 'button' ? 'a' : (it.type === 'image' ? 'img' : 'div');
+  const e = doc.createElement(tag); const s = e.style;
+  e.setAttribute('data-ubid', it.id);
+  s.position = 'absolute'; s.left = (+it.x || 0) + 'px'; s.top = (+it.y || 0) + 'px'; s.pointerEvents = 'auto';
+  if (it.type === 'image') { e.src = it.src || ''; e.alt = ''; s.display = 'block'; s.objectFit = 'cover'; if (!(it.style && it.style.width)) s.width = '200px'; }
+  else if (it.type === 'button') { e.textContent = it.text || 'Botón'; if (it.href) e.href = it.href; e.addEventListener('click', (ev) => ev.preventDefault()); s.display = 'inline-block'; s.textDecoration = 'none'; s.padding = '10px 18px'; s.borderRadius = '30px'; s.background = 'var(--blue)'; s.color = '#fff'; s.fontWeight = '700'; s.fontSize = '14px'; }
+  else if (it.type === 'text') { e.textContent = it.text || 'Texto'; s.fontSize = '20px'; s.fontWeight = '700'; s.color = 'var(--ink)'; }
+  else { if (!(it.style && it.style.width)) s.width = '160px'; if (!(it.style && it.style.height)) s.height = '90px'; s.background = 'rgba(95,155,255,.22)'; s.borderRadius = '12px'; }
+  composeDecls(it, false).forEach((decl) => { const i = decl.indexOf(':'); try { s.setProperty(decl.slice(0, i), decl.slice(i + 1)); } catch (_) {} });
+  return e;
+}
+function applyAdded(doc) {
+  let layer = doc.getElementById('ub-custom');
+  const list = cfg.add || [];
+  if (!list.length) { if (layer) layer.remove(); return; }
+  if (!layer) { layer = doc.createElement('div'); layer.id = 'ub-custom'; doc.body.appendChild(layer); }
+  layer.style.cssText = 'position:fixed;inset:0;z-index:40;pointer-events:none';
+  layer.innerHTML = '';
+  list.forEach((it) => { const e = edMakeAdded(doc, it); if (e) layer.appendChild(e); });
+}
+function applyAll() { const d = frameDoc(); if (!d || !d.body) return; try { applyEl(d); applyAdded(d); if (selMode === 'add' && cfg.add[addIndex]) selectedEl = d.querySelector(`[data-ubid="${cfg.add[addIndex].id}"]`); repositionSel(); } catch (_) {} }
 const frameDoc = () => { try { return $('appFrame').contentDocument; } catch (_) { return null; } };
 const frameWin = () => { try { return $('appFrame').contentWindow; } catch (_) { return null; } };
-function render() { const doc = frameDoc(); if (!doc || !doc.body) return; try { applyGlobal(doc); applyEl(doc); repositionSel(); } catch (_) {} }
+function render() { const doc = frameDoc(); if (!doc || !doc.body) return; try { applyGlobal(doc); applyEl(doc); applyAdded(doc); repositionSel(); } catch (_) {} }
 
 /* ===== historial (deshacer / rehacer) ===== */
 let history = [], future = [], _snapT = 0, dirty = false;
@@ -209,14 +256,13 @@ async function loadPickGrid() {
   });
 }
 function setElBg(url) {
-  if (!selector) return; snap(); ensureEl();
-  const s = cfg.el[selector].style = cfg.el[selector].style || {};
-  s['background-image'] = `url("${url}")`;
-  if (!s['background-size']) s['background-size'] = 'cover';
-  s['background-position'] = 'center'; s['background-repeat'] = 'no-repeat';
-  applyEl(frameDoc()); repositionSel(); fillPanel();
+  const o = curObj(); if (!o) return; snap(); o.style = o.style || {};
+  o.style['background-image'] = `url("${url}")`;
+  if (!o.style['background-size']) o.style['background-size'] = 'cover';
+  o.style['background-position'] = 'center'; o.style['background-repeat'] = 'no-repeat';
+  applyAll(); fillPanel();
 }
-function setElImg(url) { if (!selector) return; snap(); ensureEl(); cfg.el[selector].img = url; applyEl(frameDoc()); libMsg('Imagen reemplazada (Publica para guardar).'); }
+function setElImg(url) { const o = curObj(); if (!o) return; snap(); if (selMode === 'add' && o.type === 'image') o.src = url; else o.img = url; applyAll(); libMsg('Imagen aplicada (Publica para guardar).'); }
 
 /* ===== controles globales ===== */
 function showBgPanels() { $('bgColor').style.display = cfg.bg.mode==='color'?'':'none'; $('bgGrad').style.display = cfg.bg.mode==='gradient'?'':'none'; $('bgImage').style.display = cfg.bg.mode==='image'?'':'none'; }
@@ -265,17 +311,32 @@ function wire() {
   buildPropRows();
   $('pClose').onclick = closePanel;
   $('pScope').onchange = (e) => { scopeAll = !!(e.target.checked && genericSel); selector = scopeAll ? genericSel : specificSel; fillPanel(); };
-  $('pText').oninput = () => { if (!selector) return; ensureEl(); cfg.el[selector].text = $('pText').value; applyEl(frameDoc()); }; $('pText').onfocus = snap;
-  $('pMoveX').oninput = $('pMoveY').oninput = () => { if (!selector) return; ensureEl(); cfg.el[selector].move = { x:+$('pMoveX').value||0, y:+$('pMoveY').value||0 }; applyEl(frameDoc()); repositionSel(); }; $('pMoveX').onfocus = $('pMoveY').onfocus = snap;
-  $('pHide').onclick = () => { if (!selector) return; snap(); ensureEl(); cfg.el[selector].hide = !cfg.el[selector].hide; applyEl(frameDoc()); $('pHide').textContent = cfg.el[selector].hide ? 'Mostrar' : 'Ocultar'; };
-  $('pResetEl').onclick = () => { if (!selector) return; snap(); delete cfg.el[selector]; applyEl(frameDoc()); fillPanel(); };
+  $('pText').oninput = () => { const o = curObj(); if (!o) return; o.text = $('pText').value; applyAll(); }; $('pText').onfocus = snap;
+  $('pHref').oninput = () => { const o = curObj(); if (o && selMode === 'add') { o.href = $('pHref').value.trim(); applyAll(); } }; $('pHref').onfocus = snap;
+  const moveUpd = () => { const o = curObj(); if (!o) return; if (selMode === 'add') { o.x = +$('pMoveX').value || 0; o.y = +$('pMoveY').value || 0; } else { o.move = { x:+$('pMoveX').value||0, y:+$('pMoveY').value||0 }; } applyAll(); };
+  $('pMoveX').oninput = moveUpd; $('pMoveY').oninput = moveUpd; $('pMoveX').onfocus = $('pMoveY').onfocus = snap;
+  $('pHide').onclick = () => { const o = curObj(); if (!o) return; snap(); o.hide = !o.hide; applyAll(); $('pHide').textContent = o.hide ? 'Mostrar' : 'Ocultar'; };
+  $('pResetEl').onclick = () => { snap(); if (selMode === 'add') { cfg.add.splice(addIndex, 1); closePanel(); } else if (selector) { delete cfg.el[selector]; fillPanel(); } applyAll(); };
+  $('pDup').onclick = () => { if (selMode !== 'add' || !cfg.add[addIndex]) return; snap(); const c = JSON.parse(JSON.stringify(cfg.add[addIndex])); c.id = 'ub_' + Math.random().toString(36).slice(2, 8); c.x = (+c.x||0) + 20; c.y = (+c.y||0) + 20; cfg.add.push(c); applyAll(); selectAdd(cfg.add.length - 1); };
+  // efectos (rotación/escala/desenfoque/brillo)
+  const fx = (key, el, def) => { $(el).oninput = () => { const o = curObj(); if (!o) return; o[key] = +$(el).value; applyAll(); }; $(el).onchange = snap; };
+  fx('rot', 'pRot'); fx('scale', 'pScale'); fx('blur', 'pBlur'); fx('bright', 'pBright');
+  $('clrRot').onclick = () => { snap(); const o = curObj(); if (o) delete o.rot; $('pRot').value = 0; applyAll(); };
+  $('clrScale').onclick = () => { snap(); const o = curObj(); if (o) delete o.scale; $('pScale').value = 1; applyAll(); };
+  $('clrBlur').onclick = () => { snap(); const o = curObj(); if (o) delete o.blur; $('pBlur').value = 0; applyAll(); };
+  $('clrBright').onclick = () => { snap(); const o = curObj(); if (o) delete o.bright; $('pBright').value = 100; applyAll(); };
+  // crear elementos
+  $('addText').onclick = () => addElement('text');
+  $('addImg').onclick = () => addElement('image');
+  $('addBox').onclick = () => addElement('box');
+  $('addBtn').onclick = () => addElement('button');
   // imágenes por elemento
   $('pBgUp').onclick = () => { imgTarget = 'bg'; $('pImgFile').click(); };
   $('pImgUp').onclick = () => { imgTarget = 'img'; $('pImgFile').click(); };
   $('pBgLib').onclick = async () => { const u = await openPicker(); if (u) setElBg(u); };
   $('pImgLib').onclick = async () => { const u = await openPicker(); if (u) setElImg(u); };
-  $('pBgClear').onclick = () => { if (!selector) return; snap(); const s = cfg.el[selector] && cfg.el[selector].style; if (s) { ['background-image','background-size','background-position','background-repeat'].forEach((k) => delete s[k]); } applyEl(frameDoc()); fillPanel(); };
-  $('pBgSize').onchange = () => { if (!selector) return; snap(); ensureEl(); const s = cfg.el[selector].style = cfg.el[selector].style || {}; if ($('pBgSize').value) s['background-size'] = $('pBgSize').value; else delete s['background-size']; applyEl(frameDoc()); };
+  $('pBgClear').onclick = () => { const o = curObj(); if (!o || !o.style) return; snap(); ['background-image','background-size','background-position','background-repeat'].forEach((k) => delete o.style[k]); applyAll(); fillPanel(); };
+  $('pBgSize').onchange = () => { const o = curObj(); if (!o) return; snap(); o.style = o.style || {}; if ($('pBgSize').value) o.style['background-size'] = $('pBgSize').value; else delete o.style['background-size']; applyAll(); };
   $('pImgFile').onchange = async (e) => { const u = await uploadImage(e.target.files[0], libMsg); if (u) { (imgTarget === 'img') ? setElImg(u) : setElBg(u); loadLibrary(); } e.target.value = ''; };
   $('pickClose').onclick = () => closePicker(null);
   $('picker').onclick = (e) => { if (e.target === $('picker')) closePicker(null); };
@@ -306,46 +367,55 @@ function buildPropRows() {
     if (p.type === 'color') ctrl = `<input type="color" id="prop_${p.key}">`;
     else if (p.type === 'num') ctrl = `<input type="number" id="prop_${p.key}">`;
     else if (p.type === 'range') ctrl = `<input type="range" id="prop_${p.key}" min="${p.min}" max="${p.max}" step="${p.step}">`;
-    else if (p.type === 'select') ctrl = `<select id="prop_${p.key}"><option value="">—</option>${p.opts.map((o) => `<option value="${o}">${o}</option>`).join('')}</select>`;
+    else if (p.type === 'select') ctrl = `<select id="prop_${p.key}">${(typeof p.opts[0] === 'object' ? '' : '<option value="">—</option>')}${p.opts.map((o) => { const v = (typeof o === 'object') ? o.value : o; const l = (typeof o === 'object') ? o.label : o; return `<option value="${v}">${l}</option>`; }).join('')}</select>`;
     row.innerHTML = `<label>${p.label}</label>${ctrl}<button class="clr" id="clr_${p.key}" title="Quitar">↺</button>`;
     c.appendChild(row);
     const input = row.querySelector(`#prop_${p.key}`);
-    const commit = (v) => { if (!selector) return; ensureEl(); cfg.el[selector].style = cfg.el[selector].style || {}; if (v === '' || v == null) delete cfg.el[selector].style[p.key]; else cfg.el[selector].style[p.key] = v + (p.unit || ''); applyEl(frameDoc()); repositionSel(); };
+    const commit = (v) => { const o = curObj(); if (!o) return; o.style = o.style || {}; if (v === '' || v == null) delete o.style[p.key]; else o.style[p.key] = v + (p.unit || ''); applyAll(); };
     input.oninput = () => commit(input.value); input.onchange = snap; input.onfocus = snap;
     row.querySelector(`#clr_${p.key}`).onclick = () => { snap(); input.value = p.type === 'color' ? '#000000' : ''; commit(''); };
   });
 }
 function fillPanel() {
-  const o = (cfg.el && cfg.el[selector]) || {}; const st = o.style || {};
+  const o = (selMode === 'add') ? (cfg.add[addIndex] || {}) : ((cfg.el && cfg.el[selector]) || {});
+  const st = o.style || {};
   $('pText').value = o.text != null ? o.text : '';
-  $('pText').placeholder = selectedEl ? (selectedEl.textContent || '').slice(0, 60) : '(sin cambiar)';
-  const cs = selectedEl ? frameWin().getComputedStyle(selectedEl) : null;
+  $('pText').placeholder = selectedEl ? (selectedEl.textContent || '').slice(0, 60) : '(texto)';
+  $('pHref').value = o.href || '';
+  const cs = (selectedEl && selMode === 'el') ? frameWin().getComputedStyle(selectedEl) : null;
   PROPS.forEach((p) => {
     const input = $('prop_' + p.key); if (!input) return;
-    let raw = st[p.key];
-    if (raw != null) input.value = (p.unit ? parseFloat(raw) : raw);
+    const raw = st[p.key];
+    if (raw != null) { input.value = (p.unit ? parseFloat(raw) : raw); }
     else if (cs) {
-      if (p.type === 'color') { try { input.value = rgb2hex(cs[p.key === 'background-color' ? 'backgroundColor' : 'color']); } catch (_) {} }
+      if (p.type === 'color') { try { input.value = rgb2hex(cs[p.key === 'background-color' ? 'backgroundColor' : (p.key === 'border-color' ? 'borderTopColor' : 'color')]); } catch (_) {} }
       else if (p.type === 'num') input.value = parseFloat(cs.getPropertyValue(p.key)) || 0;
       else if (p.type === 'range') input.value = parseFloat(cs.opacity) || 1;
       else input.value = '';
-    }
+    } else if (p.type === 'range') input.value = (p.key === 'opacity' ? 1 : 0);
+    else if (p.type !== 'color') input.value = '';
   });
+  $('pRot').value = o.rot || 0; $('pScale').value = (o.scale != null ? o.scale : 1); $('pBlur').value = o.blur || 0; $('pBright').value = (o.bright != null ? o.bright : 100);
   $('pBgSize').value = st['background-size'] || '';
-  $('pImgRow').style.display = (selectedEl && selectedEl.tagName === 'IMG') ? '' : 'none';
-  const m = o.move || { x:0, y:0 }; $('pMoveX').value = m.x || 0; $('pMoveY').value = m.y || 0;
+  $('pImgRow').style.display = ((selectedEl && selectedEl.tagName === 'IMG') || (selMode === 'add' && o.type === 'image')) ? '' : 'none';
+  if (selMode === 'add') { $('pMoveX').value = o.x || 0; $('pMoveY').value = o.y || 0; }
+  else { const m = o.move || { x:0, y:0 }; $('pMoveX').value = m.x || 0; $('pMoveY').value = m.y || 0; }
   $('pHide').textContent = o.hide ? 'Mostrar' : 'Ocultar';
 }
-function syncMoveInputs() { const m = (cfg.el[selector] && cfg.el[selector].move) || { x:0, y:0 }; $('pMoveX').value = m.x || 0; $('pMoveY').value = m.y || 0; }
+function syncMoveInputs() {
+  if (selMode === 'add' && cfg.add[addIndex]) { $('pMoveX').value = cfg.add[addIndex].x || 0; $('pMoveY').value = cfg.add[addIndex].y || 0; return; }
+  const m = (cfg.el[selector] && cfg.el[selector].move) || { x:0, y:0 }; $('pMoveX').value = m.x || 0; $('pMoveY').value = m.y || 0;
+}
 function rgb2hex(rgb) {
   const m = (rgb || '').match(/\d+/g); if (!m) return '#000000';
   return '#' + m.slice(0, 3).map((n) => (+n).toString(16).padStart(2, '0')).join('');
 }
 function ensureEl() { if (!cfg.el) cfg.el = {}; if (!cfg.el[selector]) cfg.el[selector] = {}; }
-function closePanel() { $('propPanel').hidden = true; selector = null; selectedEl = null; if (selBox) selBox.style.display = 'none'; }
+function closePanel() { $('propPanel').hidden = true; selector = null; selectedEl = null; selMode = 'el'; addIndex = -1; if (selBox) selBox.style.display = 'none'; }
 
 /* ===== inspector del visor ===== */
-let inspectOn = false, selectedEl = null, selector = null, specificSel = null, genericSel = null, scopeAll = false, hlBox = null, selBox = null;
+let inspectOn = false, selectedEl = null, selector = null, specificSel = null, genericSel = null, scopeAll = false, hlBox = null, selBox = null, selMode = 'el', addIndex = -1;
+function curObj() { if (selMode === 'add') return cfg.add[addIndex]; if (!selector) return null; ensureEl(); return cfg.el[selector]; }
 function cssPath(el, win) {
   if (!el || el.nodeType !== 1) return '';
   const esc = (win.CSS && win.CSS.escape) ? win.CSS.escape.bind(win.CSS) : ((s) => s);
@@ -371,16 +441,43 @@ function boxOver(box, el) { if (!box) return; if (!el) { box.style.display = 'no
 function repositionSel() { if (selBox && selectedEl) boxOver(selBox, selectedEl); }
 function toggleInspect() { inspectOn = !inspectOn; $('tInspect').classList.toggle('on', inspectOn); $('pvStage').classList.toggle('inspect', inspectOn); const doc = frameDoc(); if (doc) doc.documentElement.classList.toggle('__ubinspect', inspectOn); if (!inspectOn && hlBox) hlBox.style.display = 'none'; }
 function selectEl(el) {
-  selectedEl = el;
+  selMode = 'el'; addIndex = -1; selectedEl = el;
   specificSel = cssPath(el, frameWin());
   genericSel = genericPath(el, frameWin());
   scopeAll = false; selector = specificSel;
   const sc = $('pScope'); sc.checked = false; sc.disabled = !genericSel;
   $('pScopeSel').textContent = genericSel ? `(${genericSel})` : '(sin clase común)';
-  $('pScopeRow').style.opacity = genericSel ? 1 : .5;
+  $('pScopeRow').style.display = ''; $('pScopeRow').style.opacity = genericSel ? 1 : .5;
+  $('pHrefRow').style.display = 'none'; $('pDup').style.display = 'none';
   boxOver(selBox, el); if (hlBox) hlBox.style.display = 'none';
   $('propPanel').hidden = false; $('pTag').textContent = el.tagName.toLowerCase() + (el.className && typeof el.className === 'string' ? '.' + el.className.split(' ')[0] : '');
   buildBread(el); fillPanel();
+}
+function selectAdd(idx) {
+  if (idx < 0 || !cfg.add[idx]) return;
+  selMode = 'add'; addIndex = idx; selector = null; scopeAll = false;
+  selectedEl = frameDoc().querySelector(`[data-ubid="${cfg.add[idx].id}"]`);
+  $('pScopeRow').style.display = 'none';
+  $('pHrefRow').style.display = cfg.add[idx].type === 'button' ? '' : 'none';
+  $('pDup').style.display = '';
+  boxOver(selBox, selectedEl); if (hlBox) hlBox.style.display = 'none';
+  $('propPanel').hidden = false; $('pTag').textContent = '➕ ' + cfg.add[idx].type;
+  $('pBread').innerHTML = ''; fillPanel();
+}
+function addElement(type) {
+  snap(); cfg.add = cfg.add || [];
+  const win = frameWin();
+  const x = win ? Math.round(win.innerWidth / 2 - 90) : 120;
+  const y = win ? Math.round(win.innerHeight / 2 - 30) : 120;
+  const id = 'ub_' + Math.random().toString(36).slice(2, 8);
+  const it = { id, type, x, y, style: {} };
+  if (type === 'text') it.text = 'Texto nuevo';
+  else if (type === 'button') { it.text = 'Botón'; it.href = ''; }
+  else if (type === 'image') { it.src = ''; it.style = { width: '200px' }; }
+  else { it.type = 'box'; it.style = { width: '160px', height: '90px', 'background-color': '#5f9bff', 'border-radius': '12px' }; }
+  cfg.add.push(it); applyAll(); selectAdd(cfg.add.length - 1);
+  if (!inspectOn) toggleInspect();
+  if (type === 'image') openPicker().then((u) => { if (u && cfg.add[addIndex]) { cfg.add[addIndex].src = u; applyAll(); } });
 }
 function buildBread(el) {
   const b = $('pBread'); b.innerHTML = ''; const chain = []; let n = el;
@@ -410,18 +507,29 @@ function selectable(t) { return t && t.nodeType === 1 && t !== hlBox && t !== se
 function onFrameMove(e) { if (!inspectOn) { if (hlBox) hlBox.style.display = 'none'; return; } if (selectable(e.target)) boxOver(hlBox, e.target); }
 function onFrameClick(e) { if (!inspectOn) return; e.preventDefault(); e.stopPropagation(); }
 function onFrameDown(e) {
-  if (!inspectOn || !selectable(e.target)) return;
+  if (!inspectOn) return;
+  const addNode = e.target.closest && e.target.closest('[data-ubid]');
+  if (!addNode && !selectable(e.target)) return;
   e.preventDefault(); e.stopPropagation();
-  const target = e.target, doc = frameDoc();
-  const startX = e.clientX, startY = e.clientY; let moved = false, snapped = false;
-  const sel = cssPath(target, frameWin());
-  const base = (cfg.el[sel] && cfg.el[sel].move) ? { ...cfg.el[sel].move } : { x:0, y:0 };
-  function mm(ev) {
-    const dx = ev.clientX - startX, dy = ev.clientY - startY;
-    if (!moved && Math.abs(dx) + Math.abs(dy) > 3) { moved = true; if (!snapped) { snap(); snapped = true; } if (selectedEl !== target) selectEl(target); }
-    if (moved) { selector = sel; ensureEl(); cfg.el[sel].move = { x: Math.round(base.x + dx), y: Math.round(base.y + dy) }; applyEl(doc); boxOver(selBox, target); syncMoveInputs(); }
+  const doc = frameDoc(), startX = e.clientX, startY = e.clientY;
+  let moved = false, snapped = false;
+  if (addNode) {
+    const idx = cfg.add.findIndex((a) => a.id === addNode.getAttribute('data-ubid'));
+    if (idx < 0) return;
+    const base = { x: +cfg.add[idx].x || 0, y: +cfg.add[idx].y || 0 };
+    const mm = (ev) => { const dx = ev.clientX - startX, dy = ev.clientY - startY;
+      if (!moved && Math.abs(dx) + Math.abs(dy) > 3) { moved = true; if (!snapped) { snap(); snapped = true; } selectAdd(idx); }
+      if (moved) { cfg.add[idx].x = Math.round(base.x + dx); cfg.add[idx].y = Math.round(base.y + dy); applyAll(); syncMoveInputs(); } };
+    const mu = () => { doc.removeEventListener('mousemove', mm, true); doc.removeEventListener('mouseup', mu, true); if (!moved) selectAdd(idx); };
+    doc.addEventListener('mousemove', mm, true); doc.addEventListener('mouseup', mu, true);
+    return;
   }
-  function mu() { doc.removeEventListener('mousemove', mm, true); doc.removeEventListener('mouseup', mu, true); if (!moved) selectEl(target); }
+  const target = e.target, sel = cssPath(target, frameWin());
+  const base = (cfg.el[sel] && cfg.el[sel].move) ? { ...cfg.el[sel].move } : { x:0, y:0 };
+  const mm = (ev) => { const dx = ev.clientX - startX, dy = ev.clientY - startY;
+    if (!moved && Math.abs(dx) + Math.abs(dy) > 3) { moved = true; if (!snapped) { snap(); snapped = true; } if (selectedEl !== target || selMode !== 'el') selectEl(target); }
+    if (moved) { selMode = 'el'; selector = sel; ensureEl(); cfg.el[sel].move = { x: Math.round(base.x + dx), y: Math.round(base.y + dy) }; applyEl(doc); boxOver(selBox, target); syncMoveInputs(); } };
+  const mu = () => { doc.removeEventListener('mousemove', mm, true); doc.removeEventListener('mouseup', mu, true); if (!moved) selectEl(target); };
   doc.addEventListener('mousemove', mm, true); doc.addEventListener('mouseup', mu, true);
 }
 
@@ -444,8 +552,9 @@ function buildOut() {
   if (cfg.logo && cfg.logo.trim()) o.logo = cfg.logo.trim();
   const t = trimOrderHide(TABS, cfg.tabs); if (t) o.tabs = t;
   const n = trimOrderHide(NAV, cfg.nav); if (n) o.nav = n;
-  const el = {}; for (const s in (cfg.el || {})) { const v = cfg.el[s]; if (v && (v.text != null || v.img != null || v.hide || (v.move && (v.move.x || v.move.y)) || (v.style && Object.keys(v.style).length))) el[s] = v; }
+  const el = {}; for (const s in (cfg.el || {})) { const v = cfg.el[s]; if (v && (v.text != null || v.img != null || v.hide || v.rot || (v.scale != null && v.scale !== 1) || v.blur || (v.bright != null && v.bright !== 100) || (v.move && (v.move.x || v.move.y)) || (v.style && Object.keys(v.style).length))) el[s] = v; }
   if (Object.keys(el).length) o.el = el;
+  if (Array.isArray(cfg.add) && cfg.add.length) o.add = cfg.add;
   return o;
 }
 function exportTheme() {
