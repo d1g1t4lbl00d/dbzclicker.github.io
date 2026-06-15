@@ -272,24 +272,67 @@ async function applySiteConfig() {
     if (data && data.config) renderSiteConfig(data.config);
   } catch (_) {}
 }
+const SITE_FONTS = {
+  Poppins: 'Poppins', Inter: 'Inter', Montserrat: 'Montserrat', Roboto: 'Roboto',
+  Nunito: 'Nunito', Lato: 'Lato', 'Space Grotesk': 'Space Grotesk', Oswald: 'Oswald',
+  'Playfair Display': 'Playfair Display', 'DM Sans': 'DM Sans',
+};
+function loadSiteFont(name) {
+  if (!name || name === 'system' || !SITE_FONTS[name]) return null;
+  const id = 'site-font-link';
+  if (!document.getElementById(id)) {
+    const l = document.createElement('link'); l.id = id; l.rel = 'stylesheet';
+    l.href = `https://fonts.googleapis.com/css2?family=${name.replace(/ /g, '+')}:wght@400;500;600;700;800&display=swap`;
+    document.head.appendChild(l);
+  }
+  return `'${SITE_FONTS[name]}', var(--font)`;
+}
+const _hex = (v) => typeof v === 'string' && /^#[0-9a-fA-F]{3,8}$/.test(v);
 function renderSiteConfig(cfg) {
   if (!cfg || typeof cfg !== 'object') return;
-  const root = document.documentElement, body = document.body;
+  const root = document.documentElement, body = document.body, set = (k, v) => root.style.setProperty(k, v);
   // FONDO
   const bg = cfg.bg || {};
   let bgVal = '';
+  const safeImg = bg.image ? String(bg.image).replace(/["\\]/g, '') : '';
+  const dim = Math.max(0, Math.min(85, +bg.dim || 0)) / 100;
   if (bg.mode === 'color' && bg.color) bgVal = bg.color;
   else if (bg.mode === 'gradient' && bg.c1 && bg.c2) bgVal = `linear-gradient(${bg.angle != null ? bg.angle : 135}deg, ${bg.c1}, ${bg.c2})`;
-  else if (bg.mode === 'image' && bg.image) bgVal = `#0a0d18 url("${String(bg.image).replace(/["\\]/g, '')}") center/cover fixed no-repeat`;
+  else if (bg.mode === 'image' && safeImg) bgVal = `${dim ? `linear-gradient(rgba(0,0,0,${dim}),rgba(0,0,0,${dim})),` : ''}#0a0d18 url("${safeImg}") center/cover fixed no-repeat`;
   if (bgVal) { body.style.background = bgVal; document.querySelector('.app')?.style.setProperty('background', 'transparent'); }
-  // ACENTO
-  if (cfg.accent && /^#[0-9a-fA-F]{3,8}$/.test(cfg.accent)) {
-    root.style.setProperty('--blue', cfg.accent);
-    root.style.setProperty('--blue-deep', cfg.accent);
-    root.style.setProperty('--accent-grad', `linear-gradient(135deg, ${cfg.accent}, ${cfg.accent})`);
+  // COLORES
+  const c = cfg.colors || {};
+  const acc = c.accent || cfg.accent;
+  if (_hex(acc)) { set('--blue', acc); set('--blue-deep', acc); set('--blue-2', acc); set('--accent', acc); }
+  if (_hex(acc)) {
+    const acc2 = _hex(c.accent2) ? c.accent2 : acc;
+    const grad = `linear-gradient(120deg, ${acc} 0%, ${acc2} 100%)`;
+    set('--accent-grad', grad); set('--aqua-grad', grad); set('--cover-grad', grad);
   }
-  // NOMBRE / ESLOGAN
-  if (cfg.name) { document.querySelectorAll('.logo').forEach((l) => { l.textContent = cfg.name; }); document.title = cfg.name; }
+  if (_hex(c.ink)) set('--ink', c.ink);
+  if (_hex(c.ink2)) set('--ink-2', c.ink2);
+  if (_hex(c.inkSoft)) set('--ink-soft', c.inkSoft);
+  if (_hex(c.panel)) set('--panel', c.panel);
+  if (_hex(c.panel2)) set('--panel-2', c.panel2);
+  if (_hex(c.line)) { set('--line', c.line); set('--line-soft', c.line); }
+  if (_hex(c.appbg)) { set('--bg', c.appbg); set('--bg-2', c.appbg); }
+  // TIPOGRAFÍA
+  const fam = loadSiteFont(cfg.font && cfg.font.family);
+  if (fam) set('--font', fam);
+  // FORMAS (redondez)
+  if (cfg.radius != null && +cfg.radius >= 0) {
+    const r = +cfg.radius;
+    set('--r-sm', Math.round(r * 0.7) + 'px'); set('--r', r + 'px');
+    set('--r-lg', Math.round(r * 1.3) + 'px'); set('--r-xl', Math.round(r * 1.7) + 'px');
+  }
+  // MARCA: logo / nombre / eslogan
+  if (cfg.logo) {
+    const src = String(cfg.logo).replace(/["\\]/g, '');
+    document.querySelectorAll('.logo').forEach((l) => { l.innerHTML = `<img src="${src}" alt="${(cfg.name || 'logo')}" style="height:1.15em;width:auto;vertical-align:middle;display:inline-block">`; });
+  } else if (cfg.name) {
+    document.querySelectorAll('.logo').forEach((l) => { l.textContent = cfg.name; });
+  }
+  if (cfg.name) document.title = cfg.name;
   if (cfg.tagline) document.querySelectorAll('[data-tagline]').forEach((t) => { t.textContent = cfg.tagline; });
   // ORDEN / VISIBILIDAD de pestañas del feed y secciones del menú
   applyOrderHide('#feedTabs', 'button[data-tab]', 'tab', cfg.tabs);
