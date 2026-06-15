@@ -437,6 +437,37 @@ img { display: block; }
 .track.has-bg .act { color: rgba(255,255,255,.9); }
 .track.has-bg .act svg { stroke: rgba(255,255,255,.9); }
 .track.has-bg .act:hover { background: rgba(255,255,255,.16); color: #fff; }
+/* ---- pista destacada #1 trending: borde arcoíris animado + título arcoíris ---- */
+.featured-top { position: relative; border-color: transparent; box-shadow: 0 12px 40px rgba(122,92,255,.30), 0 4px 16px rgba(0,180,255,.18); }
+.featured-top::after {
+  content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 2.5px; pointer-events: none; z-index: 5;
+  background: linear-gradient(90deg,#ff004c,#ff8a00,#ffe600,#00d26a,#00b3ff,#7a5cff,#ff004c);
+  background-size: 300% 100%;
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  animation: ubRainbow 4s linear infinite;
+}
+.featured-top .t-title { font-size: 20px; font-weight: 900; line-height: 1.15; }
+.rainbow-title {
+  background: linear-gradient(90deg,#ff004c,#ff8a00,#ffe600,#00d26a,#00b3ff,#7a5cff,#ff004c);
+  background-size: 200% 100%;
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent; color: transparent;
+  animation: ubRainbowText 3s linear infinite;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,.35));
+}
+.top-ribbon {
+  align-self: flex-start; display: inline-flex; align-items: center; gap: 5px;
+  font-size: 10.5px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; color: #fff;
+  background: linear-gradient(90deg,#ff004c,#ff8a00,#ffe600,#00d26a,#00b3ff,#7a5cff,#ff004c); background-size: 300% 100%;
+  padding: 4px 11px; border-radius: 20px; box-shadow: 0 3px 12px rgba(0,0,0,.3); position: relative; z-index: 2;
+  animation: ubRainbow 4s linear infinite;
+}
+@keyframes ubRainbow { to { background-position: 300% 50%; } }
+@keyframes ubRainbowText { to { background-position: 200% 50%; } }
+@media (prefers-reduced-motion: reduce) { .featured-top::after, .rainbow-title, .top-ribbon { animation: none; } }
 .track.has-bg .act.like.on, .track.has-bg .act.like.on svg { color: #ff8aa0; stroke: #ff8aa0; fill: #ff8aa0; }
 .track.has-bg .t-genre { background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.35); color: #fff; }
 .track.has-bg .wave .bar::before { background: rgba(255,255,255,.5); }

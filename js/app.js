@@ -1321,8 +1321,9 @@ function renderFeed(head, tracks, view) {
     return;
   }
   state.queue = tracks.map(t => t.id);
+  const isTrending = (view === 'feed' && state.tab === 'trending') || view === 'feed-trending';
   const frag = document.createDocumentFragment();
-  tracks.forEach(t => frag.appendChild(trackCard(t)));
+  tracks.forEach((t, i) => frag.appendChild(trackCard(t, { featured: isTrending && i === 0 })));
   list.appendChild(frag);   // un solo reflow en vez de uno por tarjeta
   if (state.current && audio && !audio.paused) markPlayingCard();
 }
@@ -1410,20 +1411,24 @@ function commentMenu(box, c, canDel, onDelete) {
   ] };
 }
 
-function trackCard(t) {
+function trackCard(t, opts = {}) {
   const liked = state.likes.has(t.id);
   const reposted = state.reposts.has(t.id);
   const prof = t.profiles || {};
   const collabs = Array.isArray(t.collaborators) ? t.collaborators : [];
   const ft = collabs.length ? ` ft. ${collabs.map(c => `<a data-collab="${esc(c.id)}">${esc(c.display_name || c.username)}</a>`).join(', ')}` : '';
   const mine = t.user_id === state.user.id;
-  const cov = t.cover_url ? czUrl(t.cover_url) : '';
+  const feat = !!opts.featured;
+  let cov = t.cover_url ? czUrl(t.cover_url) : '';
+  // pista destacada sin portada → usa la foto del artista como respaldo
+  if (feat && !cov && prof.avatar_url) cov = czUrl(prof.avatar_url);
   const card = el(`
-    <div class="track ${cov ? 'has-bg' : ''}" data-id="${t.id}" ${cov ? `style="background-image:url('${cov}')"` : ''}>
+    <div class="track ${cov ? 'has-bg' : ''}${feat ? ' featured-top' : ''}" data-id="${t.id}" ${cov ? `style="background-image:url('${cov}')"` : ''}>
+      ${feat ? '<div class="top-ribbon">🔥 #1 Trending</div>' : ''}
       ${t._repostedBy ? `<div class="repost-badge"><svg fill="none" stroke="currentColor"><use href="#i-repeat"/></svg> Reposteado por <a data-act="repostby">${esc(t._repostedBy)}</a></div>` : ''}
       <div class="t-head">
         <div class="t-titles">
-          <div class="t-title">${esc(t.title)}</div>
+          <div class="t-title">${feat ? `<span class="rainbow-title">${esc(t.title)}</span>` : esc(t.title)}</div>
           <div class="t-artist">por <a data-act="profile">${esc(prof.display_name || prof.username || t.artist || 'anónimo')}</a>${verifiedBadge(prof)}${displayBadgeHtml(prof)}${ft}</div>
         </div>
         ${t.genre ? `<span class="t-genre">${esc(t.genre)}</span>` : ''}
