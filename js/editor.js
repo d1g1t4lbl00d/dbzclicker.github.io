@@ -403,6 +403,7 @@ function fillPanel() {
   if (selMode === 'add') { $('pMoveX').value = o.x || 0; $('pMoveY').value = o.y || 0; }
   else { const m = o.move || { x:0, y:0 }; $('pMoveX').value = m.x || 0; $('pMoveY').value = m.y || 0; }
   $('pHide').textContent = o.hide ? 'Mostrar' : 'Ocultar';
+  positionGrip();
 }
 function syncMoveInputs() {
   if (selMode === 'add' && cfg.add[addIndex]) { $('pMoveX').value = cfg.add[addIndex].x || 0; $('pMoveY').value = cfg.add[addIndex].y || 0; return; }
@@ -413,7 +414,7 @@ function rgb2hex(rgb) {
   return '#' + m.slice(0, 3).map((n) => (+n).toString(16).padStart(2, '0')).join('');
 }
 function ensureEl() { if (!cfg.el) cfg.el = {}; if (!cfg.el[selector]) cfg.el[selector] = {}; }
-function closePanel() { $('propPanel').hidden = true; selector = null; selectedEl = null; selMode = 'el'; addIndex = -1; if (selBox) selBox.style.display = 'none'; if (handles) for (const d in handles) handles[d].style.display = 'none'; if ($('layersList')) buildLayers(); }
+function closePanel() { $('propPanel').hidden = true; selector = null; selectedEl = null; selMode = 'el'; addIndex = -1; if (selBox) selBox.style.display = 'none'; if (handles) for (const d in handles) handles[d].style.display = 'none'; if ($('layersList')) buildLayers(); positionGrip(); }
 
 /* ===== inspector del visor ===== */
 let inspectOn = false, selectedEl = null, selector = null, specificSel = null, genericSel = null, scopeAll = false, hlBox = null, selBox = null, selMode = 'el', addIndex = -1, handles = null;
@@ -664,6 +665,50 @@ function buildLayers() {
   });
 }
 
+/* ===== disposición de ventanas del editor (layout) ===== */
+const LYK = 'ub_editor_layout_v1';
+let layout = { sideW: 400, sideCollapsed: false, propFloat: false, propX: 90, propY: 90, propW: 320, propH: 520 };
+function loadLayout() { try { const l = JSON.parse(localStorage.getItem(LYK)); if (l && typeof l === 'object') layout = Object.assign(layout, l); } catch (_) {} }
+function saveLayout() { try { localStorage.setItem(LYK, JSON.stringify(layout)); } catch (_) {} }
+function positionGrip() {
+  const g = $('pGrip'), p = $('propPanel'); if (!g || !p) return;
+  if (layout.propFloat && !p.hidden) { const r = p.getBoundingClientRect(); g.style.display = 'block'; g.style.left = (r.right - 18) + 'px'; g.style.top = (r.bottom - 18) + 'px'; }
+  else g.style.display = 'none';
+}
+function applyLayout() {
+  document.documentElement.style.setProperty('--sideW', layout.sideW + 'px');
+  $('edBody').classList.toggle('side-collapsed', layout.sideCollapsed);
+  const p = $('propPanel');
+  if (layout.propFloat) { p.classList.add('float'); p.style.left = layout.propX + 'px'; p.style.top = layout.propY + 'px'; p.style.width = layout.propW + 'px'; p.style.height = layout.propH + 'px'; }
+  else { p.classList.remove('float'); p.style.left = p.style.top = p.style.width = p.style.height = ''; }
+  positionGrip();
+}
+function wireLayout() {
+  // ancho del panel de ajustes (arrastrar el divisor)
+  $('sideDivider').onmousedown = (e) => { e.preventDefault(); const sx = e.clientX, w0 = layout.sideW;
+    const mm = (ev) => { layout.sideW = Math.max(280, Math.min(680, w0 + ev.clientX - sx)); document.documentElement.style.setProperty('--sideW', layout.sideW + 'px'); };
+    const mu = () => { document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu); saveLayout(); };
+    document.addEventListener('mousemove', mm); document.addEventListener('mouseup', mu); };
+  // plegar/desplegar ajustes
+  $('btnSide').onclick = () => { layout.sideCollapsed = !layout.sideCollapsed; $('edBody').classList.toggle('side-collapsed', layout.sideCollapsed); $('btnSide').classList.toggle('on', layout.sideCollapsed); saveLayout(); };
+  // pantalla completa
+  $('btnFull').onclick = () => { if (document.fullscreenElement) document.exitFullscreen(); else if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen(); };
+  document.addEventListener('fullscreenchange', () => { $('btnFull').classList.toggle('on', !!document.fullscreenElement); });
+  // acoplar / flotar panel de propiedades
+  $('pDock').onclick = () => { layout.propFloat = !layout.propFloat; if (layout.propFloat) { layout.propX = Math.max(20, window.innerWidth - 360); layout.propY = 80; } applyLayout(); saveLayout(); };
+  // mover el panel flotante por su cabecera
+  $('pHead').addEventListener('mousedown', (e) => { if (!layout.propFloat || e.target.tagName === 'BUTTON') return; e.preventDefault(); const sx = e.clientX, sy = e.clientY, x0 = layout.propX, y0 = layout.propY;
+    const mm = (ev) => { layout.propX = Math.max(0, Math.min(window.innerWidth - 80, x0 + ev.clientX - sx)); layout.propY = Math.max(0, Math.min(window.innerHeight - 40, y0 + ev.clientY - sy)); const p = $('propPanel'); p.style.left = layout.propX + 'px'; p.style.top = layout.propY + 'px'; positionGrip(); };
+    const mu = () => { document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu); saveLayout(); };
+    document.addEventListener('mousemove', mm); document.addEventListener('mouseup', mu); });
+  // redimensionar el panel flotante
+  $('pGrip').onmousedown = (e) => { e.preventDefault(); const sx = e.clientX, sy = e.clientY, w0 = layout.propW, h0 = layout.propH;
+    const mm = (ev) => { layout.propW = Math.max(240, w0 + ev.clientX - sx); layout.propH = Math.max(200, h0 + ev.clientY - sy); const p = $('propPanel'); p.style.width = layout.propW + 'px'; p.style.height = layout.propH + 'px'; positionGrip(); };
+    const mu = () => { document.removeEventListener('mousemove', mm); document.removeEventListener('mouseup', mu); saveLayout(); };
+    document.addEventListener('mousemove', mm); document.addEventListener('mouseup', mu); };
+  window.addEventListener('resize', positionGrip);
+}
+
 /* ===== arranque ===== */
 async function boot() {
   let session;
@@ -675,7 +720,8 @@ async function boot() {
   try { const { data } = await sb.from('site_config').select('config').eq('id', 1).maybeSingle(); if (data && data.config) liveCfg = mergeCfg(data.config); } catch (_) {}
   initProjects(liveCfg);
   $('gate').style.display = 'none'; $('editor').style.display = 'flex';
-  hydrateControls(); buildColorList(); buildLists(); buildLayers(); wire(); updateUndo(); refreshProjSel(); loadLibrary();
+  loadLayout();
+  hydrateControls(); buildColorList(); buildLists(); buildLayers(); wire(); wireLayout(); applyLayout(); updateUndo(); refreshProjSel(); loadLibrary();
   $('appFrame').addEventListener('load', onFrameLoad);
   if (frameDoc() && frameDoc().readyState === 'complete') onFrameLoad();
 }
