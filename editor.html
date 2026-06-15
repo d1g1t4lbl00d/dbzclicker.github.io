@@ -79,6 +79,8 @@
   .prop-row .clr{border:none;background:transparent;color:var(--ink-faint);cursor:pointer;font-size:13px;opacity:.6}
   .prop-row input,.prop-row select{width:auto;flex:none}
   .prop-row input[type=number]{width:74px}.prop-row input[type=range]{width:96px;flex:none}
+  .picker{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px}
+  .picker-box{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;width:min(560px,100%);max-height:80dvh;overflow-y:auto}
 </style>
 </head>
 <body>
@@ -189,6 +191,14 @@
       <div class="bread" id="pBread"></div>
       <label class="fl">Texto</label><textarea id="pText" rows="2" placeholder="(sin cambiar)"></textarea>
       <div id="propStyles"></div>
+      <label class="fl">🖼️ Imagen de fondo del elemento</label>
+      <div class="row" style="gap:6px;flex-wrap:wrap"><button class="btn sm" id="pBgUp">⬆ Subir</button><button class="btn sm" id="pBgLib">📚 Biblioteca</button><button class="btn sm" id="pBgClear">Quitar</button></div>
+      <div class="row" style="margin-top:6px"><span class="mini">Ajuste</span><select id="pBgSize"><option value="">—</option><option value="cover">Cubrir</option><option value="contain">Contener</option><option value="100% 100%">Estirar</option><option value="auto">Original</option></select></div>
+      <div id="pImgRow" style="display:none">
+        <label class="fl">🔁 Reemplazar esta imagen</label>
+        <div class="row" style="gap:6px"><button class="btn sm" id="pImgUp">⬆ Subir</button><button class="btn sm" id="pImgLib">📚 Biblioteca</button></div>
+      </div>
+      <input type="file" accept="image/*" id="pImgFile" style="display:none">
       <label class="fl">Posición (arrastre)</label>
       <div class="row"><span class="mini">X</span><input type="number" id="pMoveX" value="0"><span class="mini">Y</span><input type="number" id="pMoveY" value="0"></div>
       <div class="row" style="margin-top:11px;gap:6px">
@@ -197,10 +207,18 @@
       </div>
       <p class="hint">Los cambios por elemento se aplican a todos al Publicar. Funciona mejor sobre la estructura (cabecera, menú, botones, títulos) que sobre listas dinámicas.</p>
     </aside>
+
+    <div class="picker" id="picker" hidden>
+      <div class="picker-box">
+        <div class="prop-head"><strong>Elige una imagen</strong><button class="x" id="pickClose">✕</button></div>
+        <label class="btn sm up-btn">⬆ Subir nueva<input type="file" accept="image/*" id="pickUpload"></label>
+        <div class="lib" id="pickGrid" style="margin-top:10px"></div>
+      </div>
+    </div>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <script src="js/config.js?v=20260615c"></script>
-  <script src="js/editor.js?v=20260615c"></script>
+  <script src="js/config.js?v=20260615d"></script>
+  <script src="js/editor.js?v=20260615d"></script>
 </body>
 </html>
