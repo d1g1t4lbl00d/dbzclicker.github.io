@@ -1157,8 +1157,8 @@ body.has-player .right { padding-bottom: var(--player-h); }
 #profEvents .ev-list { margin-bottom: 4px; }
 
 /* ---- Insignia verificado ---- */
-.vbadge { width: 15px; height: 15px; color: var(--blue-2); vertical-align: -2px; display: inline-block; }
-.person-name .vbadge, .fr-name .vbadge { width: 14px; height: 14px; }
+.vbadge { width: 16px; height: 16px; color: var(--blue); vertical-align: -3px; display: inline-block; margin-left: 1px; filter: drop-shadow(0 1px 1px rgba(0,0,0,.18)); }
+.person-name .vbadge, .fr-name .vbadge { width: 14px; height: 14px; vertical-align: -2px; }
 
 /* ---- Insignias (badges): solo el símbolo, sin fondo (base inspirada en Alpha) ---- */
 .bdg { display: inline-block; font-weight: 800; line-height: 1; font-size: 9px; letter-spacing: .2px; vertical-align: super; margin-left: -2px; }
