@@ -443,6 +443,96 @@ function initHaptics() {
   }, { passive: true });
 }
 
+// ------------------------------------------------------- onboarding / guía
+let ubInstallPrompt = null;
+window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); ubInstallPrompt = e; });
+
+const TOUR_STEPS = [
+  { t: ['#feedTabs'], title: 'Tu feed 🎧', text: 'Cambia entre <b>Following</b>, <b>Trending</b> y <b>New</b> para descubrir música de la comunidad.' },
+  { t: ['#btnSearchToggle', '#searchInput'], title: 'Buscar 🔎', text: 'Encuentra artistas, pistas y gente al instante.' },
+  { t: ['#menuToggle', '#btnUpload'], title: 'Menú y Subir ⬆️', text: 'Aquí abres el menú para <b>Subir</b> tu música y entrar en Radio, Beats, Eventos, Fotos y tu biblioteca.' },
+  { t: ['#btnMessages'], title: 'Chats 💬', text: 'Habla por privado con otros bros.' },
+  { t: ['#btnNotif'], title: 'Notificaciones 🔔', text: 'Mira quién te sigue, comenta o da like a tu música.' },
+  { t: ['#meChip'], title: 'Tu perfil 👤', text: 'Edita tu perfil y entra en <b>Ajustes</b> desde aquí.' },
+];
+function firstVisible(sels) { for (const s of sels) { const el = document.querySelector(s); if (el && el.offsetParent !== null) return el; } return null; }
+function ensureOnbCss() {
+  if (document.getElementById('ub-onb-css')) return;
+  const s = document.createElement('style'); s.id = 'ub-onb-css';
+  s.textContent = '.ub-tour{position:fixed;inset:0;z-index:100000;pointer-events:none}.ub-tour .ub-spot{position:fixed;border-radius:12px;box-shadow:0 0 0 9999px rgba(2,5,12,.74);transition:left .25s,top .25s,width .25s,height .25s;pointer-events:none}.ub-tour .ub-pop{position:fixed;left:50%;transform:translateX(-50%);width:min(92vw,420px);background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:0 20px 60px rgba(0,0,0,.5);pointer-events:auto}.ub-tour .ub-pop.bottom{bottom:22px}.ub-tour .ub-pop.top{top:22px}.ub-tour .ub-pop-t{font-weight:800;font-size:16px;margin-bottom:5px}.ub-tour .ub-pop-x{font-size:13.5px;color:var(--ink-2);line-height:1.5}.ub-tour .ub-dots{display:flex;gap:5px;justify-content:center;margin-top:12px}.ub-tour .ub-dots i{width:6px;height:6px;border-radius:50%;background:var(--line)}.ub-tour .ub-dots i.on{background:var(--blue)}.ub-tour .ub-pop-b{display:flex;align-items:center;justify-content:space-between;margin-top:12px;gap:10px}.ub-tour .ub-skip{background:none;border:none;color:var(--ink-soft);font-size:13px;font-weight:600;cursor:pointer}.ub-tour .ub-nav{display:flex;gap:8px}.ub-tour .nv{border:1px solid var(--line);background:var(--panel-2);color:var(--ink);border-radius:10px;padding:8px 14px;font-weight:700;font-size:13px;cursor:pointer}.ub-tour .nv.primary{background:var(--blue);color:#fff;border:none}.setup-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 0;border-bottom:1px solid var(--line-soft)}.setup-row:last-of-type{border-bottom:none}.setup-row .sub{font-size:12px;color:var(--ink-soft);margin-top:2px}';
+  document.head.appendChild(s);
+}
+function runTour(steps) {
+  ensureOnbCss();
+  steps = steps.filter((s) => firstVisible(s.t));
+  if (!steps.length) { toast('La guía no encontró elementos que mostrar aquí.'); return; }
+  let i = 0;
+  const ov = document.createElement('div'); ov.className = 'ub-tour';
+  ov.innerHTML = `<div class="ub-spot"></div><div class="ub-pop"><div class="ub-pop-t"></div><div class="ub-pop-x"></div><div class="ub-dots"></div><div class="ub-pop-b"><button class="ub-skip">Saltar</button><div class="ub-nav"><button class="nv ub-prev">Atrás</button><button class="nv primary ub-next">Siguiente</button></div></div></div>`;
+  document.body.appendChild(ov);
+  const spot = ov.querySelector('.ub-spot'), pop = ov.querySelector('.ub-pop');
+  const place = () => {
+    const el = firstVisible(steps[i].t); if (!el) return;
+    const r = el.getBoundingClientRect();
+    spot.style.left = (r.left - 6) + 'px'; spot.style.top = (r.top - 6) + 'px'; spot.style.width = (r.width + 12) + 'px'; spot.style.height = (r.height + 12) + 'px';
+    pop.classList.toggle('top', (r.top + r.height / 2) > innerHeight / 2);
+    pop.classList.toggle('bottom', (r.top + r.height / 2) <= innerHeight / 2);
+  };
+  const show = () => {
+    const el = firstVisible(steps[i].t); if (!el) { return next(); }
+    el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    ov.querySelector('.ub-pop-t').textContent = steps[i].title;
+    ov.querySelector('.ub-pop-x').innerHTML = steps[i].text;
+    ov.querySelector('.ub-dots').innerHTML = steps.map((_, k) => `<i class="${k === i ? 'on' : ''}"></i>`).join('');
+    ov.querySelector('.ub-prev').style.visibility = i ? 'visible' : 'hidden';
+    ov.querySelector('.ub-next').textContent = i === steps.length - 1 ? 'Listo ✓' : 'Siguiente';
+    setTimeout(place, 220);
+  };
+  const next = () => { if (i < steps.length - 1) { i++; show(); } else close(); };
+  const prev = () => { if (i > 0) { i--; show(); } };
+  function close() { ov.remove(); window.removeEventListener('resize', place); window.removeEventListener('scroll', place, true); try { localStorage.setItem('ub_tour_done', '1'); } catch (_) {} }
+  ov.querySelector('.ub-next').onclick = next; ov.querySelector('.ub-prev').onclick = prev; ov.querySelector('.ub-skip').onclick = close;
+  window.addEventListener('resize', place); window.addEventListener('scroll', place, true);
+  show();
+}
+async function promptInstall() {
+  if (ubInstallPrompt) { ubInstallPrompt.prompt(); try { await ubInstallPrompt.userChoice; } catch (_) {} ubInstallPrompt = null; return true; }
+  showAddToHome(); return false;
+}
+function showAddToHome() {
+  const ua = navigator.userAgent || '';
+  const isIOS = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  const isAndroid = /Android/i.test(ua);
+  let pasos;
+  if (isIOS) pasos = ['Pulsa el botón <b>Compartir</b> (el cuadrado con la flecha ↑) abajo en Safari.', 'Desliza y toca <b>“Añadir a pantalla de inicio”</b>.', 'Pulsa <b>“Añadir”</b> arriba a la derecha.', '¡Listo! UnderBro queda como una app. 🎉'];
+  else if (isAndroid) pasos = ['Toca el menú <b>⋮</b> (arriba a la derecha de Chrome).', 'Pulsa <b>“Añadir a pantalla de inicio”</b> o <b>“Instalar app”</b>.', 'Confirma <b>“Añadir / Instalar”</b>.', '¡Listo! Ya tienes UnderBro en tu pantalla. 🎉'];
+  else pasos = ['En la barra de dirección, pulsa el icono de <b>instalar</b> (un monitor con ↓) o el menú ⋮.', 'Elige <b>“Instalar UnderBro”</b> y confirma.', '¡Listo! 🎉'];
+  const lista = pasos.map((p, i) => `<li><span class="ph-n">${i + 1}</span><span>${p}</span></li>`).join('');
+  openModal(`<div class="modal-head"><h3>📲 Añadir a la pantalla de inicio</h3><button class="close">&times;</button></div><div class="modal-body"><ol class="perm-steps">${lista}</ol></div>`);
+}
+function openSetupWizard() {
+  ensureOnbCss();
+  try { localStorage.setItem('ub_onboarded', '1'); } catch (_) {}
+  const standalone = matchMedia('(display-mode: standalone)').matches || navigator.standalone === true;
+  const notifGranted = (typeof Notification !== 'undefined' && Notification.permission === 'granted');
+  let hapticsOn = true; try { hapticsOn = localStorage.getItem('ub_haptics') !== '0'; } catch (_) {}
+  const m = openModal(`
+    <div class="modal-head"><h3>🚀 Empezar con UnderBro</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <p class="sub" style="margin:0 0 14px">Déjalo todo listo en unos toques.</p>
+      <div class="setup-row"><div><b>🔔 Notificaciones</b><div class="sub">Avisos de chat, likes y seguidores.</div></div><button class="btn sm" id="swNotif">${notifGranted ? 'Activadas ✓' : 'Activar'}</button></div>
+      <div class="setup-row"><div><b>📳 Vibración</b><div class="sub">Vibración al tocar (móvil Android).</div></div><button class="btn sm" id="swHap">${hapticsOn ? 'Activada ✓' : 'Activar'}</button></div>
+      <div class="setup-row"><div><b>📲 Pantalla de inicio</b><div class="sub">Instala UnderBro como una app.</div></div><button class="btn sm" id="swInstall">${standalone ? 'Instalada ✓' : 'Instalar'}</button></div>
+      <button class="btn primary" id="swTour" style="width:100%;margin-top:16px">▶️ Empezar el tour guiado</button>
+    </div>`);
+  const nb = m.querySelector('#swNotif');
+  nb.onclick = async () => { try { await enablePush(); } catch (_) {} if (typeof Notification !== 'undefined' && Notification.permission === 'granted') nb.textContent = 'Activadas ✓'; };
+  const hb = m.querySelector('#swHap');
+  hb.onclick = () => { let on = true; try { on = localStorage.getItem('ub_haptics') !== '0'; } catch (_) {} on = !on; try { localStorage.setItem('ub_haptics', on ? '1' : '0'); } catch (_) {} hb.textContent = on ? 'Activada ✓' : 'Activar'; if (on && navigator.vibrate) navigator.vibrate(10); };
+  m.querySelector('#swInstall').onclick = () => promptInstall();
+  m.querySelector('#swTour').onclick = () => { m.remove(); setTimeout(() => runTour(TOUR_STEPS), 250); };
+}
+
 async function init() {
   loadSavedSkin();   // aplica el tema/CSS personalizado del usuario antes de pintar
   applySiteConfig(); // aplica la personalización global publicada desde /editor (admin)
@@ -6416,6 +6506,7 @@ function renderSettings() {
   const p = state.profile;
   $('main').innerHTML = `
     <div class="main-head"><div><h2>Settings</h2><div class="sub">Edita tu perfil de UnderBro</div></div></div>
+    <button class="btn primary" id="quickStart" style="display:block;width:100%;max-width:520px;margin-bottom:14px">🚀 Guía rápida · activar todo y tour</button>
     <div class="track" style="display:block;max-width:520px">
       <div style="display:flex;align-items:center;gap:16px;margin-bottom:18px">
         <div id="setAvatar">${avatarHTML(p,'').replace('class="avatar ','class="avatar " style="width:72px;height:72px;font-size:24px" data-x="')}</div>
@@ -6460,6 +6551,7 @@ function renderSettings() {
       <div style="text-align:center;margin-top:16px"><a id="policyLink" style="font-size:12px;color:var(--ink-soft);cursor:pointer">Política de privacidad y cookies</a></div>
       <div style="text-align:center;margin-top:10px;font-size:12px;color:var(--ink-soft)">UnderBro · versión ${APP_VERSION} · <a id="checkUpdate" style="cursor:pointer;text-decoration:underline">Buscar actualizaciones</a></div>
     </div>`;
+  $('quickStart').onclick = openSetupWizard;
   $('policyLink').onclick = showPrivacyPolicy;
   $('manageBlocks').onclick = openBlockedList;
   if ($('modReports')) $('modReports').onclick = openReportsAdmin;
@@ -6600,7 +6692,7 @@ async function openOnboarding() {
   const m = openModal(`<div class="modal-head"><h3>Bienvenido a UnderBro 🎵</h3></div><div class="modal-body" id="onbBody"></div>`);
   let step = 1, suggested = [];
   const body = m.querySelector('#onbBody');
-  const finish = () => { try { localStorage.setItem('ub_onboarded', '1'); } catch (_) {} m.remove(); switchView('feed'); };
+  const finish = () => { try { localStorage.setItem('ub_onboarded', '1'); } catch (_) {} m.remove(); switchView('feed'); setTimeout(() => { try { openSetupWizard(); } catch (_) {} }, 350); };
   const render = async () => {
     if (step === 1) {
       body.innerHTML = `
