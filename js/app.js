@@ -428,20 +428,6 @@ function applyOrderHide(containerSel, itemSel, dataKey, conf) {
   (conf.order || []).forEach((k) => { const el = byKey[k]; if (el && el.parentNode) el.parentNode.appendChild(el); });
 }
 
-// ---------------------------------------------------------------- háptica
-// Vibración sutil al pulsar botones en móvil (como el teclado).
-// Solo Android/Chrome soportan navigator.vibrate; iOS la ignora.
-function initHaptics() {
-  if (!('vibrate' in navigator)) return;
-  const SEL = 'button, a, .btn, .icon-btn, .nav-item, [role="button"], .tab, .chip, .pill, .seg button, input[type="checkbox"], input[type="radio"], label.switch, .fab';
-  document.addEventListener('pointerdown', (e) => {
-    if (e.pointerType !== 'touch') return;                 // solo toque (no ratón)
-    try { if (localStorage.getItem('ub_haptics') === '0') return; } catch (_) {}
-    const t = e.target.closest && e.target.closest(SEL);
-    if (!t || t.disabled || t.getAttribute('aria-disabled') === 'true') return;
-    try { navigator.vibrate(8); } catch (_) {}
-  }, { passive: true });
-}
 
 // ------------------------------------------------------- onboarding / guía
 let ubInstallPrompt = null;
@@ -536,7 +522,6 @@ function openSetupWizard() {
 async function init() {
   loadSavedSkin();   // aplica el tema/CSS personalizado del usuario antes de pintar
   applySiteConfig(); // aplica la personalización global publicada desde /editor (admin)
-  initHaptics();     // vibración sutil al tocar botones (móvil)
   // rutas públicas (sin sesión): ?kit=usuario (press kit) · ?l=slug (smart link)
   const _q = new URLSearchParams(location.search);
   const kitSlug = _q.get('kit');
@@ -979,8 +964,26 @@ function gotoScreenIdx(i) {
   else if (key === 'chat') { setBnavActive('chat'); switchView('messages'); }
 }
 /* ---- háptica: vibración breve al tocar controles (solo móvil) ---- */
-function haptic(ms) { try { if (navigator.vibrate && matchMedia('(pointer: coarse)').matches) navigator.vibrate(ms || 8); } catch (_) {} }
-const HAPTIC_SEL = '.btn, .icon-btn, .act, .play-lg, .nav-item, .bottom-nav button, .tabs button, .profile-tabs button, .pstat, .badge-item:not(.locked), .dm-track-play, .story-circle, .pl-card, .ev-card, .social-card, .dt-row, [data-ev-save], [data-send], [data-add], [data-bnav], [data-tab], [data-ptab], .mention';
+function haptic(ms) {
+  try {
+    if (localStorage.getItem('ub_haptics') === '0') return;
+    if (navigator.vibrate && matchMedia('(pointer: coarse)').matches) navigator.vibrate(ms || 8);
+  } catch (_) {}
+}
+// Cubre prácticamente cualquier control interactivo (sin incluir contenedores
+// que se desplazan, como la tarjeta de pista entera, para no vibrar al hacer scroll).
+const HAPTIC_SEL = [
+  'button', 'a[href]', '[role="button"]', 'label', 'select', 'summary',
+  'input[type="checkbox"]', 'input[type="radio"]', 'input[type="range"]', 'input[type="file"]',
+  '[data-act]', '[data-view]', '[data-tab]', '[data-ptab]', '[data-bnav]', '[data-collab]',
+  '[data-i]', '[data-send]', '[data-add]', '[data-ev-save]', '[data-cancel]', '[data-g]', '[data-f]',
+  '.btn', '.icon-btn', '.act', '.play-lg', '.nav-item', '.bottom-nav button', '.tabs button',
+  '.profile-tabs button', '.pstat', '.badge-item:not(.locked)', '.dm-track-play', '.story-circle',
+  '.pl-card', '.ev-card', '.social-card', '.dt-row', '.mention', '.avatar-chip', '.chip', '.pill',
+  '.seg button', '.onb-chip', '.as-item', '.grp-pick', '.follow-row', '.person-row', '.dm-row',
+  '.notif-row', '.story', '.lib-it', '.mk-card', '.layer-row', '.ord-item button', '.t-genre',
+  '.cover-pick', '.upload-cta', '.fab', '.close', '.modal-backdrop .btn', '.action-sheet button',
+].join(',');
 document.addEventListener('pointerdown', (e) => {
   if (e.pointerType !== 'touch') return;
   if (e.target.closest && e.target.closest(HAPTIC_SEL)) haptic(9);
