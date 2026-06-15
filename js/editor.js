@@ -10,6 +10,10 @@ const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.UNDERBRO_CONFIG;
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
 const $ = (id) => document.getElementById(id);
 const BUCKET = 'site-assets';
+let mode = 'global', myId = null; // 'global' (admin) | 'personal' (usuario con permiso)
+const isAdminMode = () => mode === 'global';
+const libPrefix = () => (mode === 'personal' ? myId : '');
+const fullName = (name) => { const p = libPrefix(); return p ? `${p}/${name}` : name; };
 
 const NAV = [['feed','Stream'],['feed-trending','Trending'],['radio','Radio'],['beats','Beats'],['events','Eventos'],['posts','Fotos'],['people',"Bro's"],['all','All Tracks'],['favorites','Favorites'],['playlists','Playlists'],['ecosystems','Ecosystems'],['downloads','Downloads'],['messages','Chats'],['notifications','Notifications'],['settings','Settings']];
 const TABS = [['following','Following'],['trending','Trending'],['new','New']];
@@ -188,7 +192,7 @@ function render() { const doc = frameDoc(); if (!doc || !doc.body) return; try {
 
 /* ===== historial (deshacer / rehacer) ===== */
 let history = [], future = [], _snapT = 0, dirty = false;
-function setDirty(v) { dirty = v; const b = $('publish'); if (b) b.textContent = v ? 'Publicar cambios •' : 'Publicar cambios'; }
+function setDirty(v) { dirty = v; const b = $('publish'); if (b) b.textContent = (mode === 'personal' ? 'Guardar mi web' : 'Publicar cambios') + (v ? ' •' : ''); }
 function snap() { setDirty(true); scheduleSave(); const now = Date.now(); if (now - _snapT < 350 && history.length) { _snapT = now; future = []; updateUndo(); return; } history.push(JSON.stringify(cfg)); if (history.length > 80) history.shift(); future = []; _snapT = now; updateUndo(); }
 function updateUndo() { $('tUndo').disabled = !history.length; $('tRedo').disabled = !future.length; $('tUndo').style.opacity = history.length ? 1 : .4; $('tRedo').style.opacity = future.length ? 1 : .4; }
 function restoreFrom(stack, other) { if (!stack.length) return; other.push(JSON.stringify(cfg)); cfg = JSON.parse(stack.pop()); hydrateControls(); buildColorList(); buildLists(); buildLayers(); render(); if (selector && cfg.el) fillPanel(); updateUndo(); scheduleSave(); }
@@ -250,7 +254,8 @@ async function uploadImage(file, setMsg) {
   if (!file) return null;
   setMsg && setMsg('Subiendo…');
   const ext = (file.name.split('.').pop() || 'png').toLowerCase().replace(/[^a-z0-9]/g, '') || 'png';
-  const path = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+  const folder = (mode === 'personal') ? `${myId}/` : '';
+  const path = `${folder}${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
   const { error } = await sb.storage.from(BUCKET).upload(path, file, { cacheControl: '31536000', upsert: false });
   if (error) { setMsg && setMsg(/bucket|not found|exist|policy|row-level/i.test(error.message||'') ? 'Falta el bucket site-assets (ejecuta el SQL).' : 'Error: ' + error.message); return null; }
   setMsg && setMsg('Subida ✓');
@@ -259,19 +264,19 @@ async function uploadImage(file, setMsg) {
 function setBgImage(url) { snap(); cfg.bg.mode='image'; cfg.bg.image=url; document.querySelectorAll('#bgMode button').forEach((x)=>x.classList.toggle('on',x.dataset.m==='image')); showBgPanels(); $('bgImageV').value=url; render(); }
 async function loadLibrary() {
   const grid = $('libGrid');
-  const { data, error } = await sb.storage.from(BUCKET).list('', { limit: 100, sortBy: { column: 'created_at', order: 'desc' } });
+  const { data, error } = await sb.storage.from(BUCKET).list(libPrefix(), { limit: 100, sortBy: { column: 'created_at', order: 'desc' } });
   if (error) { grid.innerHTML = `<p class="hint">${/bucket|not found/i.test(error.message||'') ? 'Crea el bucket site-assets (ejecuta el SQL).' : error.message}</p>`; return; }
-  const imgs = (data || []).filter((o) => o.name && !o.name.startsWith('.'));
+  const imgs = (data || []).filter((o) => o.id && o.name && !o.name.startsWith('.'));
   if (!imgs.length) { grid.innerHTML = '<p class="hint">Aún no has subido imágenes.</p>'; return; }
   grid.innerHTML = '';
   imgs.forEach((o) => {
-    const url = sb.storage.from(BUCKET).getPublicUrl(o.name).data.publicUrl;
+    const url = sb.storage.from(BUCKET).getPublicUrl(fullName(o.name)).data.publicUrl;
     const el = document.createElement('div'); el.className = 'lib-it';
     el.innerHTML = `<img src="${url}" loading="lazy"><div class="ov"><button data-a="bg">Fondo</button><button data-a="logo">Logo</button><button data-a="copy">Copiar URL</button><button class="del" data-a="del">Borrar</button></div>`;
     el.querySelector('[data-a="bg"]').onclick = () => { setBgImage(url); libMsg('Fondo aplicado (Publica para guardar).'); };
     el.querySelector('[data-a="logo"]').onclick = () => { snap(); cfg.logo=url; $('logoV').value=url; render(); libMsg('Logo aplicado (Publica para guardar).'); };
     el.querySelector('[data-a="copy"]').onclick = () => { (navigator.clipboard && navigator.clipboard.writeText(url)); libMsg('URL copiada ✓'); };
-    el.querySelector('[data-a="del"]').onclick = async () => { if (!confirm('¿Borrar esta imagen del almacenamiento?')) return; await sb.storage.from(BUCKET).remove([o.name]); loadLibrary(); };
+    el.querySelector('[data-a="del"]').onclick = async () => { if (!confirm('¿Borrar esta imagen del almacenamiento?')) return; await sb.storage.from(BUCKET).remove([fullName(o.name)]); loadLibrary(); };
     grid.appendChild(el);
   });
 }
@@ -282,13 +287,13 @@ function openPicker() { return new Promise((resolve) => { pickerResolve = resolv
 function closePicker(v) { $('picker').hidden = true; const r = pickerResolve; pickerResolve = null; if (r) r(v || null); }
 async function loadPickGrid() {
   const grid = $('pickGrid'); grid.innerHTML = '<p class="hint">Cargando…</p>';
-  const { data, error } = await sb.storage.from(BUCKET).list('', { limit: 100, sortBy: { column: 'created_at', order: 'desc' } });
+  const { data, error } = await sb.storage.from(BUCKET).list(libPrefix(), { limit: 100, sortBy: { column: 'created_at', order: 'desc' } });
   if (error) { grid.innerHTML = `<p class="hint">${/bucket|not found/i.test(error.message||'') ? 'Crea el bucket site-assets (ejecuta el SQL).' : 'Error al listar.'}</p>`; return; }
-  const imgs = (data || []).filter((o) => o.name && !o.name.startsWith('.'));
+  const imgs = (data || []).filter((o) => o.id && o.name && !o.name.startsWith('.'));
   if (!imgs.length) { grid.innerHTML = '<p class="hint">Sube una imagen primero (botón de arriba).</p>'; return; }
   grid.innerHTML = '';
   imgs.forEach((o) => {
-    const url = sb.storage.from(BUCKET).getPublicUrl(o.name).data.publicUrl;
+    const url = sb.storage.from(BUCKET).getPublicUrl(fullName(o.name)).data.publicUrl;
     const d = document.createElement('div'); d.className = 'lib-it'; d.style.cursor = 'pointer';
     d.innerHTML = `<img src="${url}" loading="lazy">`;
     d.onclick = () => closePicker(url);
@@ -673,17 +678,46 @@ function importTheme(e) {
   r.readAsText(file); e.target.value = '';
 }
 async function publish() {
-  $('publish').disabled = true; msg('Publicando…');
-  const { error } = await sb.from('site_config').upsert({ id: 1, config: buildOut(), updated_at: new Date().toISOString() });
+  $('publish').disabled = true; msg(mode === 'personal' ? 'Guardando…' : 'Publicando…');
+  let error;
+  if (mode === 'personal') ({ error } = await sb.from('user_site_config').upsert({ user_id: myId, config: buildOut(), updated_at: new Date().toISOString() }));
+  else ({ error } = await sb.from('site_config').upsert({ id: 1, config: buildOut(), updated_at: new Date().toISOString() }));
   $('publish').disabled = false;
-  if (error) { msg(/site_config|relation|exist/i.test(error.message||'') ? 'Falta crear la tabla site_config (ejecuta el SQL).' : 'Error: ' + (error.message||'')); return; }
-  setDirty(false); persistActive(); msg('¡Publicado! Los usuarios lo verán al recargar. ✅');
+  if (error) { msg(/relation|exist|user_site_config|site_config|policy|row-level/i.test(error.message||'') ? (mode === 'personal' ? 'Falta user_site_config o no tienes permiso (ejecuta el SQL).' : 'Falta crear la tabla site_config (ejecuta el SQL).') : 'Error: ' + (error.message||'')); return; }
+  setDirty(false); persistActive(); msg(mode === 'personal' ? '¡Guardado en TU web! Recárgala para verlo. ✅' : '¡Publicado! Los usuarios lo verán al recargar. ✅');
 }
 async function resetAll() {
-  if (!confirm('¿Restablecer TODA la apariencia por defecto para todos?')) return;
+  if (!confirm(mode === 'personal' ? '¿Restablecer TU web por defecto?' : '¿Restablecer TODA la apariencia para todos?')) return;
   snap(); cfg = defaults();
-  try { await sb.from('site_config').upsert({ id: 1, config: {}, updated_at: new Date().toISOString() }); } catch (_) {}
-  setDirty(false); closePanel(); hydrateControls(); buildColorList(); buildLists(); render(); msg('Restablecido. ✅');
+  try { if (mode === 'personal') await sb.from('user_site_config').upsert({ user_id: myId, config: {}, updated_at: new Date().toISOString() }); else await sb.from('site_config').upsert({ id: 1, config: {}, updated_at: new Date().toISOString() }); } catch (_) {}
+  setDirty(false); closePanel(); hydrateControls(); buildColorList(); buildLists(); buildLayers(); render(); msg('Restablecido. ✅');
+}
+/* ===== admin: conceder/quitar permiso de personalización ===== */
+async function initEditorsAdmin() {
+  const sec = $('editorsSec'); if (!sec) return; sec.style.display = '';
+  $('grantBtn').onclick = async () => {
+    const u = $('grantUser').value.trim(); if (!u) return;
+    $('editorsMsg').textContent = 'Buscando…';
+    const { data, error } = await sb.from('profiles').select('id,username').ilike('username', u).limit(1);
+    if (error || !data || !data.length) { $('editorsMsg').textContent = 'Usuario no encontrado.'; return; }
+    const { error: e2 } = await sb.from('profiles').update({ can_customize: true }).eq('id', data[0].id);
+    if (e2) { $('editorsMsg').textContent = 'No se pudo conceder (revisa el SQL/policy).'; return; }
+    $('editorsMsg').textContent = 'Concedido a @' + (data[0].username || '') + ' ✓'; $('grantUser').value = ''; loadEditors();
+  };
+  loadEditors();
+}
+async function loadEditors() {
+  const list = $('editorsList'); if (!list) return; list.innerHTML = '<p class="hint" style="margin:0">Cargando…</p>';
+  const { data, error } = await sb.from('profiles').select('id,username').eq('can_customize', true).limit(100);
+  if (error) { list.innerHTML = '<p class="hint" style="margin:0">No se pudo listar (ejecuta el SQL).</p>'; return; }
+  if (!data || !data.length) { list.innerHTML = '<p class="hint" style="margin:0">Nadie tiene permiso aún.</p>'; return; }
+  list.innerHTML = '';
+  data.forEach((p) => {
+    const row = document.createElement('div'); row.className = 'layer-row';
+    row.innerHTML = `<span class="ln">@${(p.username || p.id.slice(0, 8))}</span><button data-a="rev" title="Quitar permiso">🗑</button>`;
+    row.querySelector('[data-a="rev"]').onclick = async () => { await sb.from('profiles').update({ can_customize: false }).eq('id', p.id); loadEditors(); };
+    list.appendChild(row);
+  });
 }
 
 /* ===== proyectos (guardados en este navegador) ===== */
@@ -776,14 +810,22 @@ async function boot() {
   let session;
   try { session = (await sb.auth.getSession()).data.session; } catch (_) {}
   if (!session) return gate('Inicia sesión en la app primero (con tu cuenta de administrador).', true);
-  const { data: prof } = await sb.from('profiles').select('is_admin').eq('id', session.user.id).maybeSingle();
-  if (!prof || !prof.is_admin) return gate('Acceso solo para administradores.', true);
+  const { data: prof } = await sb.from('profiles').select('is_admin,can_customize').eq('id', session.user.id).maybeSingle();
+  const isAdmin = !!(prof && prof.is_admin);
+  const canCustom = !!(prof && (prof.can_customize || prof.is_admin));
+  if (!canCustom) return gate('No tienes permiso para personalizar tu web. Pídeselo al administrador.', true);
+  mode = isAdmin ? 'global' : 'personal'; myId = session.user.id;
   let liveCfg = defaults();
-  try { const { data } = await sb.from('site_config').select('config').eq('id', 1).maybeSingle(); if (data && data.config) liveCfg = mergeCfg(data.config); } catch (_) {}
+  try {
+    if (isAdmin) { const { data } = await sb.from('site_config').select('config').eq('id', 1).maybeSingle(); if (data && data.config) liveCfg = mergeCfg(data.config); }
+    else { const { data } = await sb.from('user_site_config').select('config').eq('user_id', myId).maybeSingle(); if (data && data.config) liveCfg = mergeCfg(data.config); }
+  } catch (_) {}
   initProjects(liveCfg);
+  const ml = $('modeLabel'); if (ml) ml.textContent = isAdmin ? '· Web global (admin)' : '· Tu web personal';
   $('gate').style.display = 'none'; $('editor').style.display = 'flex';
   loadLayout();
-  hydrateControls(); buildColorList(); buildLists(); buildLayers(); wire(); wireLayout(); applyLayout(); updateUndo(); refreshProjSel(); loadLibrary();
+  hydrateControls(); buildColorList(); buildLists(); buildLayers(); wire(); wireLayout(); applyLayout(); updateUndo(); refreshProjSel(); setDirty(false); loadLibrary();
+  if (isAdmin) initEditorsAdmin();
   $('appFrame').addEventListener('load', onFrameLoad);
   if (frameDoc() && frameDoc().readyState === 'complete') onFrameLoad();
 }
