@@ -118,8 +118,9 @@ const frameWin = () => { try { return $('appFrame').contentWindow; } catch (_) {
 function render() { const doc = frameDoc(); if (!doc || !doc.body) return; try { applyGlobal(doc); applyEl(doc); repositionSel(); } catch (_) {} }
 
 /* ===== historial (deshacer / rehacer) ===== */
-let history = [], future = [], _snapT = 0;
-function snap() { const now = Date.now(); if (now - _snapT < 350 && history.length) { _snapT = now; future = []; updateUndo(); return; } history.push(JSON.stringify(cfg)); if (history.length > 80) history.shift(); future = []; _snapT = now; updateUndo(); }
+let history = [], future = [], _snapT = 0, dirty = false;
+function setDirty(v) { dirty = v; const b = $('publish'); if (b) b.textContent = v ? 'Publicar cambios •' : 'Publicar cambios'; }
+function snap() { setDirty(true); const now = Date.now(); if (now - _snapT < 350 && history.length) { _snapT = now; future = []; updateUndo(); return; } history.push(JSON.stringify(cfg)); if (history.length > 80) history.shift(); future = []; _snapT = now; updateUndo(); }
 function updateUndo() { $('tUndo').disabled = !history.length; $('tRedo').disabled = !future.length; $('tUndo').style.opacity = history.length ? 1 : .4; $('tRedo').style.opacity = future.length ? 1 : .4; }
 function restoreFrom(stack, other) { if (!stack.length) return; other.push(JSON.stringify(cfg)); cfg = JSON.parse(stack.pop()); hydrateControls(); buildColorList(); buildLists(); render(); if (selector && cfg.el) fillPanel(); updateUndo(); }
 
@@ -278,13 +279,21 @@ function wire() {
   $('pickClose').onclick = () => closePicker(null);
   $('picker').onclick = (e) => { if (e.target === $('picker')) closePicker(null); };
   $('pickUpload').onchange = async (e) => { const u = await uploadImage(e.target.files[0], libMsg); if (u) { loadLibrary(); closePicker(u); } e.target.value = ''; };
-  // teclas: nudge del elemento seleccionado
+  // teclas: atajos globales + nudge del elemento seleccionado
   document.addEventListener('keydown', (e) => {
-    if (!selector || !selectedEl) return;
-    if (/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) return;
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName);
+    const mod = e.ctrlKey || e.metaKey;
+    if (mod && (e.key === 'z' || e.key === 'Z')) { if (typing) return; e.preventDefault(); if (e.shiftKey) restoreFrom(future, history); else restoreFrom(history, future); return; }
+    if (mod && (e.key === 'y' || e.key === 'Y')) { if (typing) return; e.preventDefault(); restoreFrom(future, history); return; }
+    if (mod && (e.key === 's' || e.key === 'S')) { e.preventDefault(); publish(); return; }
+    if (e.key === 'Escape') { if (!$('picker').hidden) return closePicker(null); if (!$('propPanel').hidden) return closePanel(); if (inspectOn) toggleInspect(); return; }
+    if (typing || !selector || !selectedEl) return;
+    if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); snap(); ensureEl(); cfg.el[selector].hide = true; applyEl(frameDoc()); fillPanel(); return; }
     const arrows = { ArrowLeft:[-1,0], ArrowRight:[1,0], ArrowUp:[0,-1], ArrowDown:[0,1] };
     if (arrows[e.key]) { e.preventDefault(); const s = e.shiftKey ? 10 : 1; ensureEl(); const m = cfg.el[selector].move || { x:0, y:0 }; cfg.el[selector].move = { x:m.x+arrows[e.key][0]*s, y:m.y+arrows[e.key][1]*s }; applyEl(frameDoc()); repositionSel(); syncMoveInputs(); }
   });
+  $('tUndo').title = 'Deshacer (Ctrl/Cmd+Z)'; $('tRedo').title = 'Rehacer (Ctrl/Cmd+Shift+Z)';
+  window.addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
 }
 
 /* ===== panel de propiedades ===== */
@@ -440,13 +449,13 @@ async function publish() {
   const { error } = await sb.from('site_config').upsert({ id: 1, config: buildOut(), updated_at: new Date().toISOString() });
   $('publish').disabled = false;
   if (error) { msg(/site_config|relation|exist/i.test(error.message||'') ? 'Falta crear la tabla site_config (ejecuta el SQL).' : 'Error: ' + (error.message||'')); return; }
-  msg('¡Publicado! Los usuarios lo verán al recargar. ✅');
+  setDirty(false); msg('¡Publicado! Los usuarios lo verán al recargar. ✅');
 }
 async function resetAll() {
   if (!confirm('¿Restablecer TODA la apariencia por defecto para todos?')) return;
   snap(); cfg = defaults();
   try { await sb.from('site_config').upsert({ id: 1, config: {}, updated_at: new Date().toISOString() }); } catch (_) {}
-  closePanel(); hydrateControls(); buildColorList(); buildLists(); render(); msg('Restablecido. ✅');
+  setDirty(false); closePanel(); hydrateControls(); buildColorList(); buildLists(); render(); msg('Restablecido. ✅');
 }
 
 /* ===== arranque ===== */
