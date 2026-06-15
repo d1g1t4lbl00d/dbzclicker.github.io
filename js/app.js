@@ -263,8 +263,50 @@ $('btnLogout').onclick = logout;
    ARRANQUE / SESIÓN
    ======================================================================= */
 let bootDone = false;
+/* =======================================================================
+   PERSONALIZACIÓN GLOBAL (publicada desde /editor por el admin)
+   ======================================================================= */
+async function applySiteConfig() {
+  try {
+    const { data } = await sb.from('site_config').select('config').eq('id', 1).maybeSingle();
+    if (data && data.config) renderSiteConfig(data.config);
+  } catch (_) {}
+}
+function renderSiteConfig(cfg) {
+  if (!cfg || typeof cfg !== 'object') return;
+  const root = document.documentElement, body = document.body;
+  // FONDO
+  const bg = cfg.bg || {};
+  let bgVal = '';
+  if (bg.mode === 'color' && bg.color) bgVal = bg.color;
+  else if (bg.mode === 'gradient' && bg.c1 && bg.c2) bgVal = `linear-gradient(${bg.angle != null ? bg.angle : 135}deg, ${bg.c1}, ${bg.c2})`;
+  else if (bg.mode === 'image' && bg.image) bgVal = `#0a0d18 url("${String(bg.image).replace(/["\\]/g, '')}") center/cover fixed no-repeat`;
+  if (bgVal) { body.style.background = bgVal; document.querySelector('.app')?.style.setProperty('background', 'transparent'); }
+  // ACENTO
+  if (cfg.accent && /^#[0-9a-fA-F]{3,8}$/.test(cfg.accent)) {
+    root.style.setProperty('--blue', cfg.accent);
+    root.style.setProperty('--blue-deep', cfg.accent);
+    root.style.setProperty('--accent-grad', `linear-gradient(135deg, ${cfg.accent}, ${cfg.accent})`);
+  }
+  // NOMBRE / ESLOGAN
+  if (cfg.name) { document.querySelectorAll('.logo').forEach((l) => { l.textContent = cfg.name; }); document.title = cfg.name; }
+  if (cfg.tagline) document.querySelectorAll('[data-tagline]').forEach((t) => { t.textContent = cfg.tagline; });
+  // ORDEN / VISIBILIDAD de pestañas del feed y secciones del menú
+  applyOrderHide('#feedTabs', 'button[data-tab]', 'tab', cfg.tabs);
+  applyOrderHide('#sidebar', '.nav-item[data-view]', 'view', cfg.nav);
+}
+function applyOrderHide(containerSel, itemSel, dataKey, conf) {
+  if (!conf) return;
+  const cont = document.querySelector(containerSel); if (!cont) return;
+  const items = [...cont.querySelectorAll(itemSel)];
+  const byKey = {}; items.forEach((el) => { byKey[el.dataset[dataKey]] = el; });
+  (conf.hidden || []).forEach((k) => { if (byKey[k]) byKey[k].style.display = 'none'; });
+  (conf.order || []).forEach((k) => { const el = byKey[k]; if (el && el.parentNode) el.parentNode.appendChild(el); });
+}
+
 async function init() {
   loadSavedSkin();   // aplica el tema/CSS personalizado del usuario antes de pintar
+  applySiteConfig(); // aplica la personalización global publicada desde /editor (admin)
   // rutas públicas (sin sesión): ?kit=usuario (press kit) · ?l=slug (smart link)
   const _q = new URLSearchParams(location.search);
   const kitSlug = _q.get('kit');
