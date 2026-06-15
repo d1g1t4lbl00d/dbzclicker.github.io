@@ -450,12 +450,11 @@ img { display: block; }
 }
 .featured-top .t-title { font-weight: 800; }
 .top-ribbon {
-  align-self: flex-start; display: inline-flex; align-items: center; gap: 5px;
-  font-size: 10px; font-weight: 800; letter-spacing: .07em; text-transform: uppercase; color: #fff;
-  background: var(--accent-grad); padding: 3px 10px 3px 8px; border-radius: 20px;
-  box-shadow: 0 2px 8px rgba(62,87,252,.32); position: relative; z-index: 2;
+  align-self: flex-start; position: relative; z-index: 2;
+  font-size: 10px; font-weight: 800; letter-spacing: .18em; text-transform: uppercase;
+  color: var(--blue); margin-bottom: -2px;
 }
-.top-ribbon svg { width: 12px; height: 12px; }
+.track.has-bg .top-ribbon { color: #fff; opacity: .88; text-shadow: 0 1px 4px rgba(0,0,0,.5); }
 .track.has-bg.featured-top .t-genre { backdrop-filter: blur(2px); }
 @keyframes ubFeatSheen { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
 @media (prefers-reduced-motion: reduce) { .featured-top::after { animation: none; } }
