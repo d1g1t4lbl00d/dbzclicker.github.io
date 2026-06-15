@@ -267,10 +267,23 @@ let bootDone = false;
    PERSONALIZACIÓN GLOBAL (publicada desde /editor por el admin)
    ======================================================================= */
 async function applySiteConfig() {
-  try {
-    const { data } = await sb.from('site_config').select('config').eq('id', 1).maybeSingle();
-    if (data && data.config) renderSiteConfig(data.config);
-  } catch (_) {}
+  let g = null, u = null;
+  try { const { data } = await sb.from('site_config').select('config').eq('id', 1).maybeSingle(); g = data && data.config; } catch (_) {}
+  if (state.user) { try { const { data } = await sb.from('user_site_config').select('config').eq('user_id', state.user.id).maybeSingle(); u = data && data.config; } catch (_) {} }
+  const eff = mergeSiteConfigs(g || {}, u || {});
+  if (eff && Object.keys(eff).length) { try { renderSiteConfig(eff); } catch (_) {} }
+}
+// fusiona la config global con la personal del usuario (la personal manda)
+function mergeSiteConfigs(g, u) {
+  const e = (g && typeof g === 'object') ? JSON.parse(JSON.stringify(g)) : {};
+  if (!u || typeof u !== 'object') return e;
+  for (const k in u) {
+    if (k === 'colors' || k === 'tabs' || k === 'nav' || k === 'font' || k === 'bg') e[k] = Object.assign({}, e[k] || {}, u[k]);
+    else if (k === 'el') e.el = Object.assign({}, e.el || {}, u.el);
+    else if (k === 'add') e.add = [...(e.add || []), ...(u.add || [])];
+    else e[k] = u[k];
+  }
+  return e;
 }
 const SITE_FONTS = {
   Poppins: 'Poppins', Inter: 'Inter', Montserrat: 'Montserrat', Roboto: 'Roboto',
@@ -438,6 +451,7 @@ async function onAuthenticated() {
   bootDone = true;
   const { data: { session } } = await sb.auth.getSession();
   state.user = session.user;
+  applySiteConfig(); // re-aplica con la capa personal del usuario (si la tiene)
   // cargar / asegurar perfil
   await ensureProfile();
   applyReferral();
