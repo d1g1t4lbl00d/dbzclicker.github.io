@@ -428,9 +428,25 @@ function applyOrderHide(containerSel, itemSel, dataKey, conf) {
   (conf.order || []).forEach((k) => { const el = byKey[k]; if (el && el.parentNode) el.parentNode.appendChild(el); });
 }
 
+// ---------------------------------------------------------------- háptica
+// Vibración sutil al pulsar botones en móvil (como el teclado).
+// Solo Android/Chrome soportan navigator.vibrate; iOS la ignora.
+function initHaptics() {
+  if (!('vibrate' in navigator)) return;
+  const SEL = 'button, a, .btn, .icon-btn, .nav-item, [role="button"], .tab, .chip, .pill, .seg button, input[type="checkbox"], input[type="radio"], label.switch, .fab';
+  document.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'touch') return;                 // solo toque (no ratón)
+    try { if (localStorage.getItem('ub_haptics') === '0') return; } catch (_) {}
+    const t = e.target.closest && e.target.closest(SEL);
+    if (!t || t.disabled || t.getAttribute('aria-disabled') === 'true') return;
+    try { navigator.vibrate(8); } catch (_) {}
+  }, { passive: true });
+}
+
 async function init() {
   loadSavedSkin();   // aplica el tema/CSS personalizado del usuario antes de pintar
   applySiteConfig(); // aplica la personalización global publicada desde /editor (admin)
+  initHaptics();     // vibración sutil al tocar botones (móvil)
   // rutas públicas (sin sesión): ?kit=usuario (press kit) · ?l=slug (smart link)
   const _q = new URLSearchParams(location.search);
   const kitSlug = _q.get('kit');
