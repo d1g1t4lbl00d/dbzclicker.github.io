@@ -98,6 +98,11 @@
   .prop-row input[type=number]{width:74px}.prop-row input[type=range]{width:96px;flex:none}
   .picker{position:fixed;inset:0;z-index:80;background:rgba(0,0,0,.6);display:flex;align-items:center;justify-content:center;padding:20px}
   .picker-box{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:18px;width:min(560px,100%);max-height:80dvh;overflow-y:auto}
+  .mk-card{border:1px solid var(--line);border-radius:12px;padding:8px;background:var(--panel-2)}
+  .mk-prev{height:74px;border-radius:9px;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;gap:6px}
+  .mk-dot{width:18px;height:18px;border-radius:50%;box-shadow:0 1px 4px rgba(0,0,0,.4)}
+  .mk-name{font-size:12.5px;font-weight:700;margin-top:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .mk-author{font-size:11px;color:var(--ink-soft)}
 </style>
 </head>
 <body>
@@ -114,6 +119,8 @@
       <button class="tb" id="projRename" title="Renombrar">✎</button>
       <button class="tb" id="projDup" title="Duplicar proyecto">⧉</button>
       <button class="tb" id="projDel" title="Borrar proyecto">🗑</button>
+      <span class="ab-div"></span>
+      <button class="tb" id="marketBtn" title="Mercado de webs">🛍️ Mercado</button>
       <div style="flex:1"></div>
       <button class="tb" id="btnSide" title="Ocultar/mostrar ajustes">⟨ ⟩</button>
       <button class="tb" id="btnFull" title="Pantalla completa">⛶</button>
@@ -284,6 +291,15 @@
 
     <div class="prop-grip" id="pGrip"></div>
 
+    <div class="picker" id="market" hidden>
+      <div class="picker-box" style="width:min(760px,100%)">
+        <div class="prop-head"><strong>🛍️ Mercado de webs</strong><button class="x" id="marketClose">✕</button></div>
+        <div class="row" style="gap:6px;margin:6px 0 10px"><input type="text" id="marketName" placeholder="Nombre de tu diseño"><button class="btn sm" id="marketShare">⬆ Compartir mi diseño</button></div>
+        <div id="marketMsg" class="hint"></div>
+        <div id="marketGrid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:10px"></div>
+      </div>
+    </div>
+
     <div class="picker" id="picker" hidden>
       <div class="picker-box">
         <div class="prop-head"><strong>Elige una imagen</strong><button class="x" id="pickClose">✕</button></div>
@@ -294,7 +310,7 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
-  <script src="js/config.js?v=20260615m"></script>
-  <script src="js/editor.js?v=20260615m"></script>
+  <script src="js/config.js?v=20260615n"></script>
+  <script src="js/editor.js?v=20260615n"></script>
 </body>
 </html>

@@ -10,7 +10,7 @@ const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.UNDERBRO_CONFIG;
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } });
 const $ = (id) => document.getElementById(id);
 const BUCKET = 'site-assets';
-let mode = 'global', myId = null; // 'global' (admin) | 'personal' (usuario con permiso)
+let mode = 'global', myId = null, myName = ''; // 'global' (admin) | 'personal' (usuario con permiso)
 const isAdminMode = () => mode === 'global';
 const libPrefix = () => (mode === 'personal' ? myId : '');
 const fullName = (name) => { const p = libPrefix(); return p ? `${p}/${name}` : name; };
@@ -354,6 +354,8 @@ function wire() {
   $('tImport').onchange = importTheme;
   $('projSel').onchange = (e) => switchProject(e.target.value);
   $('projNew').onclick = projNew; $('projRename').onclick = projRename; $('projDup').onclick = projDup; $('projDel').onclick = projDel;
+  $('marketBtn').onclick = openMarket; $('marketClose').onclick = closeMarket; $('marketShare').onclick = shareTheme;
+  $('market').onclick = (e) => { if (e.target === $('market')) closeMarket(); };
   // panel propiedades
   buildPropRows();
   $('pClose').onclick = closePanel;
@@ -403,7 +405,7 @@ function wire() {
     if (mod && (e.key === 'y' || e.key === 'Y')) { if (typing) return; e.preventDefault(); restoreFrom(future, history); return; }
     if (mod && (e.key === 's' || e.key === 'S')) { e.preventDefault(); publish(); return; }
     if (mod && (e.key === 'd' || e.key === 'D')) { if (selMode === 'add' && cfg.add[addIndex]) { e.preventDefault(); $('pDup').click(); } return; }
-    if (e.key === 'Escape') { if (!$('picker').hidden) return closePicker(null); if (!$('propPanel').hidden) return closePanel(); if (inspectOn) toggleInspect(); return; }
+    if (e.key === 'Escape') { if (!$('market').hidden) return closeMarket(); if (!$('picker').hidden) return closePicker(null); if (!$('propPanel').hidden) return closePanel(); if (inspectOn) toggleInspect(); return; }
     if (typing || !selectedEl) return;
     const o = curObj();
     if (e.key === 'Delete' || e.key === 'Backspace') { e.preventDefault(); snap(); if (selMode === 'add') { cfg.add.splice(addIndex, 1); closePanel(); } else if (o) { o.hide = true; fillPanel(); } applyAll(); return; }
@@ -805,16 +807,53 @@ function wireLayout() {
   window.addEventListener('resize', positionGrip);
 }
 
+/* ===== mercado de webs (galería pública) ===== */
+function openMarket() { $('market').hidden = false; $('marketMsg').textContent = ''; $('marketName').value = (activeProj() && activeProj().name) || 'Mi web'; loadMarket(); }
+function closeMarket() { $('market').hidden = true; }
+async function shareTheme() {
+  const name = ($('marketName').value || '').trim() || 'Mi web';
+  $('marketMsg').textContent = 'Compartiendo…';
+  const { error } = await sb.from('theme_market').insert({ author: myId, author_name: myName || null, name, config: buildOut() });
+  if (error) { $('marketMsg').textContent = /relation|exist|theme_market/i.test(error.message||'') ? 'Falta crear theme_market (ejecuta el SQL).' : (/policy|row-level/i.test(error.message||'') ? 'No tienes permiso para compartir.' : 'Error: ' + error.message); return; }
+  $('marketMsg').textContent = '¡Compartido en el mercado! ✅'; loadMarket();
+}
+async function loadMarket() {
+  const grid = $('marketGrid'); grid.innerHTML = '<p class="hint">Cargando…</p>';
+  const { data, error } = await sb.from('theme_market').select('id,author,author_name,name,config,created_at').order('created_at', { ascending: false }).limit(120);
+  if (error) { grid.innerHTML = '<p class="hint">' + (/relation|exist|theme_market/i.test(error.message||'') ? 'Falta crear theme_market (ejecuta el SQL).' : 'No se pudo cargar.') + '</p>'; return; }
+  if (!data || !data.length) { grid.innerHTML = '<p class="hint">Aún no hay webs en el mercado. ¡Comparte la tuya con el botón de arriba!</p>'; return; }
+  grid.innerHTML = '';
+  data.forEach((t) => {
+    const c = t.config || {}, cols = c.colors || {}, acc = cols.accent || '#5f9bff';
+    const bg = bgValue(c.bg) || cols.appbg || '#0a0d18';
+    const canDel = (t.author === myId) || isAdminMode();
+    const card = document.createElement('div'); card.className = 'mk-card';
+    card.innerHTML = `<div class="mk-prev" style="background:${bg}"><span class="mk-dot" style="background:${acc}"></span><span class="mk-dot" style="background:${cols.accent2 || acc}"></span></div><div class="mk-name">${(t.name || 'Web').replace(/[<>]/g, '')}</div><div class="mk-author">@${(t.author_name || 'anónimo').replace(/[<>]/g, '')}</div><div class="row" style="gap:6px;margin-top:7px"><button class="btn sm" data-a="apply" style="flex:1">Aplicar</button>${canDel ? '<button class="btn sm" data-a="del">🗑</button>' : ''}</div>`;
+    card.querySelector('[data-a="apply"]').onclick = () => applyMarketTheme(t);
+    if (canDel) card.querySelector('[data-a="del"]').onclick = async () => { if (!confirm('¿Quitar esta web del mercado?')) return; await sb.from('theme_market').delete().eq('id', t.id); loadMarket(); };
+    grid.appendChild(card);
+  });
+}
+function applyMarketTheme(t) {
+  persistActive();
+  const p = { id: newId(), name: (t.name || 'Web') + ' (mercado)', cfg: mergeCfg(t.config || {}), updated: Date.now() };
+  projects.list.push(p); projects.active = p.id; saveProjectsLS(); refreshProjSel(); loadActiveIntoEditor();
+  closeMarket();
+  msg('Tema cargado como proyecto nuevo. Personalízalo y pulsa "' + (mode === 'personal' ? 'Guardar mi web' : 'Publicar cambios') + '".');
+}
+
 /* ===== arranque ===== */
 async function boot() {
   let session;
   try { session = (await sb.auth.getSession()).data.session; } catch (_) {}
   if (!session) return gate('Inicia sesión en la app primero (con tu cuenta de administrador).', true);
-  const { data: prof } = await sb.from('profiles').select('is_admin,can_customize').eq('id', session.user.id).maybeSingle();
+  let prof = null;
+  try { ({ data: prof } = await sb.from('profiles').select('is_admin,can_customize,username').eq('id', session.user.id).maybeSingle()); }
+  catch (_) { ({ data: prof } = await sb.from('profiles').select('is_admin,can_customize').eq('id', session.user.id).maybeSingle()); }
   const isAdmin = !!(prof && prof.is_admin);
   const canCustom = !!(prof && (prof.can_customize || prof.is_admin));
   if (!canCustom) return gate('No tienes permiso para personalizar tu web. Pídeselo al administrador.', true);
-  mode = isAdmin ? 'global' : 'personal'; myId = session.user.id;
+  mode = isAdmin ? 'global' : 'personal'; myId = session.user.id; myName = (prof && prof.username) || '';
   let liveCfg = defaults();
   try {
     if (isAdmin) { const { data } = await sb.from('site_config').select('config').eq('id', 1).maybeSingle(); if (data && data.config) liveCfg = mergeCfg(data.config); }
