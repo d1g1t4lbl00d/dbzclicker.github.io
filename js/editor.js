@@ -352,6 +352,8 @@ function wire() {
   $('tViewport').onchange = (e) => { $('pvStage').classList.toggle('mobile', e.target.value === 'mobile'); };
   $('tExport').onclick = exportTheme;
   $('tImport').onchange = importTheme;
+  $('tplExport').onclick = exportComponents;
+  $('tplImport').onchange = importComponents;
   $('projSel').onchange = (e) => switchProject(e.target.value);
   $('projNew').onclick = projNew; $('projRename').onclick = projRename; $('projDup').onclick = projDup; $('projDel').onclick = projDel;
   $('marketBtn').onclick = openMarket; $('marketClose').onclick = closeMarket; $('marketShare').onclick = shareTheme;
@@ -643,6 +645,65 @@ function onFrameDown(e) {
     if (moved) { selMode = 'el'; selector = sel; ensureEl(); cfg.el[sel].move = { x: Math.round(base.x + dx), y: Math.round(base.y + dy) }; applyEl(doc); boxOver(selBox, target); syncMoveInputs(); } };
   const mu = () => { doc.removeEventListener('mousemove', mm, true); doc.removeEventListener('mouseup', mu, true); if (!moved) selectEl(target); };
   doc.addEventListener('mousemove', mm, true); doc.addEventListener('mouseup', mu, true);
+}
+
+/* ===== plantilla de componentes (exportar/editar/reimportar todo) ===== */
+const COMPONENT_TPL = [
+  { sel:'.track', label:'Tarjeta de pista', props:['background-color','border-color','border-radius','box-shadow','padding'] },
+  { sel:'.t-title', label:'Título de pista', props:['color','font-size','font-weight'] },
+  { sel:'.t-artist', label:'Nombre de artista', props:['color','font-size'] },
+  { sel:'.t-genre', label:'Pill de género/etiqueta', props:['background-color','color','border-radius','font-size','padding'] },
+  { sel:'.btn', label:'Botón', props:['background-color','color','border-radius','font-weight','padding'] },
+  { sel:'.btn.primary', label:'Botón primario', props:['color','border-radius'] },
+  { sel:'.icon-btn', label:'Botón de icono', props:['background-color','color','border-radius'] },
+  { sel:'.play-lg', label:'Botón reproducir', props:['border-radius','border-color'] },
+  { sel:'.act', label:'Acciones (me gusta, etc.)', props:['color','font-size'] },
+  { sel:'.nav-item', label:'Ítem del menú lateral', props:['color','font-size','border-radius'] },
+  { sel:'.tabs button', label:'Pestañas del feed', props:['color','font-size'] },
+  { sel:'.count', label:'Contador del menú', props:['background-color','color','border-radius'] },
+  { sel:'.icon-btn .badge', label:'Globo de avisos', props:['background-color','color'] },
+  { sel:'.avatar', label:'Avatar', props:['border-radius'] },
+  { sel:'.vbadge', label:'Icono verificado', props:['color','width'] },
+  { sel:'.topbar', label:'Barra superior', props:['background-color','border-bottom-color'] },
+  { sel:'.sidebar', label:'Menú lateral', props:['background-color','border-right-color'] },
+  { sel:'.pl-card', label:'Tarjeta de playlist', props:['background-color','border-radius'] },
+  { sel:'.ev-card', label:'Tarjeta de evento', props:['background-color','border-radius'] },
+  { sel:'.eco-node', label:'Nodo de Ecosystems', props:['background-color','border-radius'] },
+  { sel:'.mkt-card', label:'Tarjeta del mercado', props:['background-color','border-radius'] },
+  { sel:'.comments', label:'Caja de comentarios', props:['background-color','border-radius'] },
+];
+function cssVal(cs, p) { let v = (cs.getPropertyValue(p) || '').trim(); if (/color/.test(p) && /^rgb/.test(v)) v = rgb2hex(v); return v; }
+function exportComponents() {
+  const doc = frameDoc(), win = frameWin();
+  const out = { _info: 'Plantilla de componentes UnderBro · edita los valores y reimpórtala (deja en blanco lo que no quieras cambiar).', components: {} };
+  COMPONENT_TPL.forEach((c) => {
+    const o = { label: c.label, style: {} };
+    let cs = null; try { const elx = doc && doc.querySelector(c.sel); if (elx) cs = win.getComputedStyle(elx); } catch (_) {}
+    const cur = (cfg.el && cfg.el[c.sel] && cfg.el[c.sel].style) || {};
+    c.props.forEach((p) => { o.style[p] = (cur[p] != null) ? cur[p] : (cs ? cssVal(cs, p) : ''); });
+    out.components[c.sel] = o;
+  });
+  const blob = new Blob([JSON.stringify(out, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'underbro-componentes.json'; a.click(); URL.revokeObjectURL(a.href);
+  $('tplMsg').textContent = 'Plantilla exportada ✓';
+}
+function importComponents(e) {
+  const file = e.target.files[0]; if (!file) { return; }
+  const r = new FileReader();
+  r.onload = () => {
+    let comps; try { const data = JSON.parse(r.result); comps = data.components || data; } catch (_) { $('tplMsg').textContent = 'Archivo no válido.'; return; }
+    if (!comps || typeof comps !== 'object') { $('tplMsg').textContent = 'Archivo no válido.'; return; }
+    snap(); let n = 0;
+    for (const sel in comps) {
+      const st = (comps[sel] && comps[sel].style) ? comps[sel].style : comps[sel];
+      if (!st || typeof st !== 'object') continue;
+      cfg.el[sel] = cfg.el[sel] || {}; cfg.el[sel].style = cfg.el[sel].style || {};
+      for (const p in st) { const v = st[p]; if (v === '' || v == null) delete cfg.el[sel].style[p]; else { cfg.el[sel].style[p] = v; n++; } }
+      if (cfg.el[sel].style && !Object.keys(cfg.el[sel].style).length && !cfg.el[sel].text && !cfg.el[sel].hide) delete cfg.el[sel];
+    }
+    applyAll(); buildLayers(); $('tplMsg').textContent = `Plantilla aplicada (${n} estilos). Pulsa Publicar/Guardar.`;
+  };
+  r.readAsText(file); e.target.value = '';
 }
 
 /* ===== exportar / importar / publicar ===== */
