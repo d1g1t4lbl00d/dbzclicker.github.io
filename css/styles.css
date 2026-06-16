@@ -468,22 +468,29 @@ img { display: block; }
 .mkt-author { font-size: 12px; color: var(--ink-soft); margin-bottom: 8px; }
 .mkt-card .btn.sm { width: 100%; }
 .c-snippet.muted { color: var(--ink-faint); font-style: italic; }
+/* ---- buscador de bros en Chats ---- */
+.convo-search { display: flex; align-items: center; gap: 8px; margin: 4px 0 10px; padding: 0 12px; height: 40px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; }
+.convo-search svg { width: 16px; height: 16px; color: var(--ink-soft); flex: none; }
+.convo-search input { flex: 1; border: none; background: transparent; color: var(--ink); font-size: 14px; outline: none; font-family: inherit; }
 /* ---- perfil: Destacadas (top de canciones) ---- */
-.prof-top-wrap { margin: 4px 0 14px; }
+.prof-top-wrap { margin: 6px 0 16px; }
 .prof-top-wrap.hidden { display: none; }
-.prof-top-h { font-size: 13px; font-weight: 800; margin: 0 0 8px; color: var(--ink-2); }
-.ptop-row { display: flex; align-items: center; gap: 11px; width: 100%; text-align: left; cursor: pointer;
-  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; margin-bottom: 7px;
-  color: inherit; transition: transform .14s var(--ease), border-color .18s, box-shadow .18s; }
-.ptop-row:hover { transform: translateY(-1px); border-color: var(--blue); box-shadow: var(--sh-1); }
-.ptop-rank { font-size: 15px; font-weight: 900; color: var(--blue); width: 16px; flex: none; text-align: center; }
-.ptop-cover { width: 42px; height: 42px; border-radius: 9px; overflow: hidden; flex: none; background: var(--panel-2); display: grid; place-items: center; }
+.prof-top-h { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-soft); margin: 0 0 10px; }
+.ptop-row { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; cursor: pointer;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 9px 12px; margin-bottom: 8px;
+  color: inherit; box-shadow: var(--sh-1); transition: transform .16s var(--ease), box-shadow .2s, border-color .2s; }
+.ptop-row:hover { transform: translateY(-2px); box-shadow: var(--sh-2); border-color: transparent; }
+.ptop-rank { font-size: 12px; font-weight: 900; color: #fff; width: 22px; height: 22px; flex: none; display: grid; place-items: center; border-radius: 7px; background: var(--accent-grad); box-shadow: var(--sh-blue); }
+.ptop-cover { width: 48px; height: 48px; border-radius: 10px; overflow: hidden; flex: none; background: var(--panel-2); display: grid; place-items: center; }
 .ptop-cover img { width: 100%; height: 100%; object-fit: cover; }
-.ptop-cover svg { width: 18px; height: 18px; color: var(--ink-soft); }
-.ptop-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.ptop-title { font-weight: 700; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ptop-sub { font-size: 11.5px; color: var(--ink-soft); }
-.ptop-play { width: 18px; height: 18px; color: var(--blue); flex: none; }
+.ptop-cover svg { width: 20px; height: 20px; color: var(--ink-soft); }
+.ptop-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.ptop-title { font-weight: 700; font-size: 14.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ptop-sub { font-size: 12px; color: var(--ink-soft); display: flex; align-items: center; gap: 5px; }
+.ptop-sub svg { width: 12px; height: 12px; vertical-align: -1px; }
+.ptop-dot { opacity: .5; }
+.ptop-play { width: 34px; height: 34px; flex: none; border-radius: 50%; background: var(--accent-grad); display: grid; place-items: center; box-shadow: var(--sh-blue); }
+.ptop-play svg { width: 15px; height: 15px; margin-left: 1px; }
 .track.has-bg .act.like.on, .track.has-bg .act.like.on svg { color: #ff8aa0; stroke: #ff8aa0; fill: #ff8aa0; }
 .track.has-bg .t-genre { background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.35); color: #fff; }
 .track.has-bg .wave .bar::before { background: rgba(255,255,255,.5); }

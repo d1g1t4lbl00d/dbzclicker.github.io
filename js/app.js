@@ -777,6 +777,7 @@ function bindUI() {
     else { const open = $('sidebar').classList.toggle('open'); $('drawerBackdrop').classList.toggle('show', open); }
   };
   $('toggleChatBtn').onclick = () => { const on = appEl.classList.toggle('right-collapsed'); localStorage.setItem('ub_right_collapsed', on ? '1' : '0'); };
+  $('chatClose').onclick = closeRightPanel;
   $('drawerBackdrop').onclick = hideDrawers;
   $('btnSearchToggle').onclick = () => {
     const tb = document.querySelector('.topbar');
@@ -3774,12 +3775,15 @@ async function openProfile(userId) {
   const topEl = $('profTop');
   if (topEl && myTracks.length >= 2) {
     const topTracks = myTracks.slice().sort((a, b) => (b.plays || 0) - (a.plays || 0)).slice(0, 3);
-    topEl.innerHTML = `<h3 class="prof-top-h">🔥 Destacadas</h3>` + topTracks.map((t, i) => `
+    topEl.innerHTML = `<div class="prof-top-h">Destacadas</div>` + topTracks.map((t, i) => `
       <button class="ptop-row" data-tid="${esc(t.id)}">
         <span class="ptop-rank">${i + 1}</span>
         <span class="ptop-cover">${t.cover_url ? `<img src="${esc(czUrl(t.cover_url))}" alt="">` : (prof.avatar_url ? `<img src="${esc(czUrl(prof.avatar_url))}" alt="">` : `<svg fill="none" stroke="currentColor"><use href="#i-music"/></svg>`)}</span>
-        <span class="ptop-main"><span class="ptop-title">${esc(t.title)}</span><span class="ptop-sub">${t.plays || 0} reprod. · ${t.likes_count || 0} ♥</span></span>
-        <svg class="ptop-play" fill="none" stroke="currentColor"><use href="#i-play"/></svg>
+        <span class="ptop-main">
+          <span class="ptop-title">${esc(t.title)}</span>
+          <span class="ptop-sub"><svg fill="none" stroke="currentColor"><use href="#i-headphones"/></svg>${t.plays || 0}<span class="ptop-dot">·</span><svg fill="currentColor" stroke="none"><use href="#i-heart"/></svg>${t.likes_count || 0}${t.genre ? `<span class="ptop-dot">·</span>${esc(t.genre)}` : ''}</span>
+        </span>
+        <span class="ptop-play"><svg fill="none" stroke="#fff"><use href="#i-play"/></svg></span>
       </button>`).join('');
     topEl.querySelectorAll('.ptop-row').forEach(r => r.onclick = () => { const t = myTracks.find(x => x.id === r.dataset.tid); if (t) { state.tracks = myTracks; state.queue = myTracks.map(x => x.id); playTrack(t); } });
   }
@@ -8218,10 +8222,17 @@ function dmMarkAllMineRead() {
     const tick = r.querySelector('.dm-tick'); if (tick) { tick.classList.add('read'); tick.querySelector('use')?.setAttribute('href', '#i-check-double'); }
   });
 }
-function openCommunityChat() {
-  const r = rightEl();
-  if (!r.classList.contains('open')) toggleRight();
+function isDesktopChat() { return matchMedia('(min-width: 1025px)').matches; }
+function openRightPanel() {
+  if (isDesktopChat()) { $('app').classList.remove('right-collapsed'); try { localStorage.setItem('ub_right_collapsed', '0'); } catch (_) {} }
+  else { const r = rightEl(); if (!r.classList.contains('open')) toggleRight(); }
+  setTimeout(scrollChat, 60);
 }
+function closeRightPanel() {
+  if (isDesktopChat()) { $('app').classList.add('right-collapsed'); try { localStorage.setItem('ub_right_collapsed', '1'); } catch (_) {} }
+  else { const r = rightEl(); r.classList.remove('open'); $('drawerBackdrop')?.classList.remove('show'); }
+}
+function openCommunityChat() { openRightPanel(); }
 function convoRow(c, p) {
   const last = c.last;
   const mine = last && last.sender_id === state.user.id;
@@ -8279,12 +8290,6 @@ async function renderMessages() {
     if (!convos.has(other)) convos.set(other, { other, last: mm, unread: 0 });
     if (mm.recipient_id === state.user.id && !mm.read) convos.get(other).unread++;
   });
-  // añadir TODOS los bros (a quien sigues) aunque no haya conversación todavía
-  (state.follows ? [...state.follows] : []).forEach(id => {
-    if (!id || id === state.user.id) return;
-    if (isHidden(id) || state.hiddenConvos.has(id)) return;
-    if (!convos.has(id)) convos.set(id, { other: id, last: null, unread: 0 });
-  });
   const list = $('convoList'); list.className = '';
   list.innerHTML = '';
 
@@ -8319,27 +8324,28 @@ async function renderMessages() {
     }
   } catch (err) { console.error('grupos', err); }
 
-  if (convos.size === 0) {
-    list.appendChild(el(`<div class="empty"><svg fill="none"><use href="#i-mail"/></svg><p>Aún no tienes conversaciones privadas.<br>Pulsa <b>Mensaje</b> en alguien de <b>Bro's</b> o en su perfil para empezar.</p></div>`));
-    return;
-  }
-  const ids = [...convos.keys()];
-  const { data: profs } = await sb.from('profiles').select('*').in('id', ids);
-  const byId = Object.fromEntries((profs || []).map(p => [p.id, p]));
-  const onlineIds = new Set(state.online.map(u => u.id));
-  const all = [...convos.values()];
-  const byRecent = (a, b) => new Date((b.last && b.last.created_at) || 0) - new Date((a.last && a.last.created_at) || 0);
-  const online = all.filter(c => onlineIds.has(c.other)).sort(byRecent);
-  const offline = all.filter(c => !onlineIds.has(c.other)).sort(byRecent);
-
-  if (online.length) {
-    list.appendChild(el(`<div class="convo-section"><span class="dot-online"></span> En línea (${online.length})</div>`));
-    online.forEach(c => list.appendChild(convoRow(c, byId[c.other] || {})));
-  }
-  if (offline.length) {
-    list.appendChild(el(`<div class="convo-section">Desconectados (${offline.length})</div>`));
-    offline.forEach(c => list.appendChild(convoRow(c, byId[c.other] || {})));
-  }
+  // buscador + lista de TODOS los bros (todos los usuarios de UnderBro)
+  list.appendChild(el(`<div class="convo-search"><svg fill="none" stroke="currentColor"><use href="#i-search"/></svg><input type="text" id="broSearch" placeholder="Buscar bros…" autocomplete="off"></div>`));
+  const broList = el('<div id="broList"></div>'); list.appendChild(broList);
+  const { data: allProfs } = await sb.from('profiles').select('id,username,display_name,avatar_url,verified,is_admin,theme')
+    .neq('id', state.user.id).order('display_name', { ascending: true }).limit(600);
+  const profsArr = (allProfs || []).filter(p => !state.blocked.has(p.id) && !isHidden(p.id));
+  const renderBros = (term) => {
+    const q = (term || '').trim().toLowerCase();
+    broList.innerHTML = '';
+    const onlineIds = new Set(state.online.map(u => u.id));
+    let rows = profsArr;
+    if (q) rows = rows.filter(p => ((p.display_name || '') + ' ' + (p.username || '')).toLowerCase().includes(q));
+    const meta = rows.map(p => ({ p, c: convos.get(p.id) || { other: p.id, last: null, unread: 0 } }));
+    const byRecent = (a, b) => (new Date((b.c.last && b.c.last.created_at) || 0) - new Date((a.c.last && a.c.last.created_at) || 0)) || (a.p.display_name || a.p.username || '').localeCompare(b.p.display_name || b.p.username || '');
+    const on = meta.filter(x => onlineIds.has(x.p.id)).sort(byRecent);
+    const off = meta.filter(x => !onlineIds.has(x.p.id)).sort(byRecent);
+    if (!on.length && !off.length) { broList.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-people"/></svg><p>${q ? 'Ningún bro encontrado.' : 'Aún no hay otros usuarios.'}</p></div>`; return; }
+    if (on.length) { broList.appendChild(el(`<div class="convo-section"><span class="dot-online"></span> En línea (${on.length})</div>`)); on.forEach(x => broList.appendChild(convoRow(x.c, x.p))); }
+    if (off.length) { broList.appendChild(el(`<div class="convo-section">Bros (${off.length})</div>`)); off.forEach(x => broList.appendChild(convoRow(x.c, x.p))); }
+  };
+  $('broSearch').oninput = (e) => renderBros(e.target.value);
+  renderBros('');
 }
 
 async function openDM(other) {
