@@ -458,6 +458,15 @@ img { display: block; }
 .track.has-bg.featured-top .t-genre { backdrop-filter: blur(2px); }
 @keyframes ubFeatSheen { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
 @media (prefers-reduced-motion: reduce) { .featured-top::after { animation: none; } }
+/* ---- mercado de webs (Ecosystems) ---- */
+.mkt-top { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
+.mkt-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 14px; }
+.mkt-card { border: 1px solid var(--line); border-radius: 14px; padding: 10px; background: var(--panel-2); }
+.mkt-prev { height: 84px; border-radius: 10px; border: 1px solid var(--line); display: flex; align-items: center; justify-content: center; gap: 7px; }
+.mkt-dot { width: 20px; height: 20px; border-radius: 50%; box-shadow: 0 1px 4px rgba(0,0,0,.4); }
+.mkt-name { font-weight: 700; font-size: 13.5px; margin-top: 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mkt-author { font-size: 12px; color: var(--ink-soft); margin-bottom: 8px; }
+.mkt-card .btn.sm { width: 100%; }
 .track.has-bg .act.like.on, .track.has-bg .act.like.on svg { color: #ff8aa0; stroke: #ff8aa0; fill: #ff8aa0; }
 .track.has-bg .t-genre { background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.35); color: #fff; }
 .track.has-bg .wave .bar::before { background: rgba(255,255,255,.5); }
