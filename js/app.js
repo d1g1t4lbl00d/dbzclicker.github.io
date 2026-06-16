@@ -4968,7 +4968,7 @@ const ECOSYSTEMS = [
   { key: 'workflow',  n: 2, name: 'Workflow',  icon: 'i-tools',   accent: '#7c5cff', desc: 'Todas tus herramientas de artista' },
   { key: 'contracts', n: 3, name: 'Contratos', icon: 'i-doc',     accent: '#e0a83e', desc: 'Acuerdos con artistas, salas, productores…' },
   { key: 'stats',     n: 4, name: 'Stats',     icon: 'i-chart',   accent: '#2fb344', desc: 'Tus estadísticas y crecimiento' },
-  { key: 'skins',     n: 5, name: 'Skins',     icon: 'i-palette', accent: '#ff5b8d', desc: 'Personaliza UnderBro y crea tu skin' },
+  { key: 'skins',     n: 5, name: 'Mercado',   icon: 'i-palette', accent: '#ff5b8d', desc: 'Webs de la comunidad · personaliza la tuya' },
   { key: 'uploads',   n: 6, name: 'Subidas',   icon: 'i-files',   accent: '#27a9ff', desc: 'Pistas, beats, fotos y playlists' },
 ];
 function renderEcosystems() {
@@ -5102,27 +5102,51 @@ function loadSavedSkin() {
 function renderSkins() {
   setActiveNav('ecosystems');
   const main = $('main'); main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
-  const cur = localStorage.getItem('ub_app_skin') || 'default';
-  const css = localStorage.getItem('ub_custom_css') || '';
-  main.innerHTML = ecoHead('Skins', 'Personaliza el aspecto de UnderBro') + `
+  const isCreator = !!(state.profile && (state.profile.can_customize || state.profile.is_admin));
+  main.innerHTML = ecoHead('Mercado de webs', 'Aplica un diseño de la comunidad a tu UnderBro') + `
     <div class="skins-wrap">
-      <h3 class="eco-sec">Temas de la app</h3>
-      <div class="skin-grid">${Object.entries(APP_SKINS).map(([k, s]) => `<button class="skin-card ${k === cur ? 'on' : ''}" data-skin="${k}"><span class="skin-sw" style="background:${s.grad}"></span>${esc(s.name)}</button>`).join('')}</div>
-      <h3 class="eco-sec">CSS personalizado</h3>
-      <p class="eco-hint">Pega CSS para modificar la web a tu gusto. Se aplica solo en tu dispositivo.</p>
-      <textarea id="skinCss" class="skin-css" placeholder=":root{ --blue:#ff0066; }">${esc(css)}</textarea>
-      <div class="skin-actions">
-        <button class="btn primary" id="skinApply">Aplicar CSS</button>
-        <button class="btn" id="skinTemplate"><svg fill="none" stroke="currentColor"><use href="#i-download"/></svg> Descargar plantilla</button>
-        <button class="btn" id="skinReset">Restablecer</button>
+      <div class="mkt-top">
+        <button class="btn primary" id="becomeCreator">${isCreator ? '🎨 Abrir editor' : '✨ Ser creador'}</button>
+        <button class="btn" id="mktReset">Volver a mi diseño normal</button>
       </div>
-      <div class="eco-hint" style="margin-top:14px">🌐 <b>Skins públicas</b> de la comunidad (subir y descargar): próximamente.</div>
+      <p class="eco-hint">Toca <b>Aplicar</b> para usar un diseño en tu cuenta (solo lo ves tú). ${isCreator ? 'Como creador puedes diseñar el tuyo en el editor y publicarlo aquí.' : 'Hazte creador para diseñar el tuyo y publicarlo.'}</p>
+      <div id="mktGrid" class="mkt-grid"><div class="loading"><div class="spinner"></div></div></div>
     </div>`;
   wireEcoBack();
-  main.querySelectorAll('[data-skin]').forEach(b => b.onclick = () => { const k = b.dataset.skin; localStorage.setItem('ub_app_skin', k); applyAppSkin(k); main.querySelectorAll('[data-skin]').forEach(x => x.classList.toggle('on', x === b)); toast('Tema aplicado'); });
-  $('skinApply').onclick = () => { const v = $('skinCss').value; localStorage.setItem('ub_custom_css', v); applyCustomCss(v); toast('CSS aplicado'); };
-  $('skinReset').onclick = () => { localStorage.removeItem('ub_custom_css'); $('skinCss').value = ''; applyCustomCss(''); toast('CSS restablecido'); };
-  $('skinTemplate').onclick = downloadSkinTemplate;
+  $('becomeCreator').onclick = isCreator ? () => { location.href = '/editor'; } : openBecomeCreator;
+  $('mktReset').onclick = async () => {
+    if (!confirm('¿Quitar el diseño aplicado y volver al normal?')) return;
+    try { await sb.from('user_site_config').upsert({ user_id: state.user.id, config: {}, updated_at: new Date().toISOString() }); } catch (_) {}
+    toast('Diseño restablecido'); setTimeout(() => location.reload(), 500);
+  };
+  loadMarketGrid();
+}
+async function loadMarketGrid() {
+  const grid = $('mktGrid'); if (!grid) return;
+  const { data, error } = await sb.from('theme_market').select('id,author_name,name,config,created_at').order('created_at', { ascending: false }).limit(120);
+  if (error) { grid.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-palette"/></svg><p>${/relation|exist|theme_market/i.test(error.message||'') ? 'El mercado aún no está activo.' : 'No se pudo cargar el mercado.'}</p></div>`; return; }
+  if (!data || !data.length) { grid.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-palette"/></svg><p>Aún no hay webs en el mercado. ¡Sé el primero en crear una!</p></div>`; return; }
+  grid.innerHTML = '';
+  data.forEach((t) => {
+    const c = t.config || {}, cols = c.colors || {}, acc = cols.accent || '#5f9bff';
+    const bg = (c.bg && c.bg.mode === 'color' && c.bg.color) ? c.bg.color
+      : (c.bg && c.bg.mode === 'gradient' && c.bg.c1) ? `linear-gradient(135deg, ${c.bg.c1}, ${c.bg.c2 || c.bg.c1})`
+      : (cols.appbg || '#0a0d18');
+    const card = el(`<div class="mkt-card"><div class="mkt-prev" style="background:${bg}"><span class="mkt-dot" style="background:${acc}"></span><span class="mkt-dot" style="background:${cols.accent2 || acc}"></span></div><div class="mkt-name">${esc(t.name || 'Web')}</div><div class="mkt-author">@${esc(t.author_name || 'anónimo')}</div><button class="btn sm primary" data-apply>Aplicar</button></div>`);
+    card.querySelector('[data-apply]').onclick = async () => {
+      const { error: e2 } = await sb.from('user_site_config').upsert({ user_id: state.user.id, config: c, updated_at: new Date().toISOString() });
+      if (e2) { toast('No se pudo aplicar.'); return; }
+      toast('¡Diseño aplicado!'); setTimeout(() => location.reload(), 500);
+    };
+    grid.appendChild(card);
+  });
+}
+function openBecomeCreator() {
+  const m = openModal(`<div class="modal-head"><h3>✨ Hazte creador</h3><button class="close">&times;</button></div><div class="modal-body"><p style="margin:0 0 14px;color:var(--ink-soft);font-size:14px">Como creador podrás diseñar tu propia web de UnderBro en el editor visual y publicarla en el mercado para que otros la usen.</p><button class="btn primary" id="reqCreator" style="width:100%">Solicitar acceso de creador</button><div class="auth-msg" id="reqMsg" style="margin-top:10px"></div></div>`);
+  m.querySelector('#reqCreator').onclick = async () => {
+    const { error } = await sb.from('creator_requests').upsert({ user_id: state.user.id, username: (state.profile && state.profile.username) || null, created_at: new Date().toISOString() });
+    m.querySelector('#reqMsg').textContent = error ? (/relation|exist/i.test(error.message||'') ? 'Función no disponible aún (falta el SQL).' : 'No se pudo enviar la solicitud.') : '¡Solicitud enviada! El administrador la revisará. ✅';
+  };
 }
 function downloadSkinTemplate() {
   const tpl = `/* Plantilla de skin para UnderBro\n   Edita las variables y pega el resultado en Ecosystems > Skins > CSS personalizado. */\n:root{\n  --blue: #3e57fc;       /* color principal */\n  --blue-2: #27a9ff;     /* color secundario */\n  --accent-grad: linear-gradient(135deg,#3e57fc,#27a9ff);\n  --bg: #f3f6fb;         /* fondo */\n  --panel: #ffffff;      /* tarjetas */\n  --ink: #10142a;        /* texto */\n}\n/* Ejemplos libres: */\n/* .track{ border-radius: 20px; } */\n/* .topbar{ backdrop-filter: blur(20px); } */\n`;

@@ -706,7 +706,20 @@ async function initEditorsAdmin() {
     if (e2) { $('editorsMsg').textContent = 'No se pudo conceder (revisa el SQL/policy).'; return; }
     $('editorsMsg').textContent = 'Concedido a @' + (data[0].username || '') + ' ✓'; $('grantUser').value = ''; loadEditors();
   };
-  loadEditors();
+  loadEditors(); loadRequests();
+}
+async function loadRequests() {
+  const list = $('reqList'); if (!list) return;
+  const { data, error } = await sb.from('creator_requests').select('user_id,username,created_at').order('created_at', { ascending: true }).limit(100);
+  if (error || !data || !data.length) { list.innerHTML = ''; return; }
+  list.innerHTML = '<div class="hint" style="margin:0 0 5px;font-weight:700;color:var(--ink-2)">Solicitudes de creador</div>';
+  data.forEach((r) => {
+    const row = document.createElement('div'); row.className = 'layer-row';
+    row.innerHTML = `<span class="ln">✨ @${(r.username || r.user_id.slice(0, 8))}</span><button data-a="ok" title="Conceder">✓</button><button data-a="no" title="Descartar">🗑</button>`;
+    row.querySelector('[data-a="ok"]').onclick = async () => { await sb.from('profiles').update({ can_customize: true }).eq('id', r.user_id); await sb.from('creator_requests').delete().eq('user_id', r.user_id); loadRequests(); loadEditors(); };
+    row.querySelector('[data-a="no"]').onclick = async () => { await sb.from('creator_requests').delete().eq('user_id', r.user_id); loadRequests(); };
+    list.appendChild(row);
+  });
 }
 async function loadEditors() {
   const list = $('editorsList'); if (!list) return; list.innerHTML = '<p class="hint" style="margin:0">Cargando…</p>';
