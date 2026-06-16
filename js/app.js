@@ -3752,6 +3752,7 @@ async function openProfile(userId) {
         <button data-ptab="reposts"><svg fill="none" stroke="currentColor"><use href="#i-repeat"/></svg> Reposts</button>
         <button data-ptab="events"><svg fill="none" stroke="currentColor"><use href="#i-calendar"/></svg> Eventos</button>
       </div>
+      <div id="profTop" class="prof-top-wrap"></div>
       <div id="feedList" class="feed-list"></div>
       <div id="postGrid" class="post-grid hidden"></div>
       <div id="featList" class="feed-list hidden"></div>
@@ -3769,6 +3770,20 @@ async function openProfile(userId) {
   if (!myTracks.length) list.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-music"/></svg><p>Sin pistas todavía.</p></div>`;
   else myTracks.forEach(t => list.appendChild(trackCard(t)));
 
+  // Destacadas: top de canciones por reproducciones
+  const topEl = $('profTop');
+  if (topEl && myTracks.length >= 2) {
+    const topTracks = myTracks.slice().sort((a, b) => (b.plays || 0) - (a.plays || 0)).slice(0, 3);
+    topEl.innerHTML = `<h3 class="prof-top-h">🔥 Destacadas</h3>` + topTracks.map((t, i) => `
+      <button class="ptop-row" data-tid="${esc(t.id)}">
+        <span class="ptop-rank">${i + 1}</span>
+        <span class="ptop-cover">${t.cover_url ? `<img src="${esc(czUrl(t.cover_url))}" alt="">` : (prof.avatar_url ? `<img src="${esc(czUrl(prof.avatar_url))}" alt="">` : `<svg fill="none" stroke="currentColor"><use href="#i-music"/></svg>`)}</span>
+        <span class="ptop-main"><span class="ptop-title">${esc(t.title)}</span><span class="ptop-sub">${t.plays || 0} reprod. · ${t.likes_count || 0} ♥</span></span>
+        <svg class="ptop-play" fill="none" stroke="currentColor"><use href="#i-play"/></svg>
+      </button>`).join('');
+    topEl.querySelectorAll('.ptop-row').forEach(r => r.onclick = () => { const t = myTracks.find(x => x.id === r.dataset.tid); if (t) { state.tracks = myTracks; state.queue = myTracks.map(x => x.id); playTrack(t); } });
+  }
+
   const featEl = $('featList');
   if (!featTracks.length) featEl.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-people"/></svg><p>Sin colaboraciones todavía. Aquí aparecen las canciones en colaboración: las tuyas con invitados (<b>ft.</b>) y las de otros donde te añaden.</p></div>`;
   else featTracks.forEach(t => featEl.appendChild(trackCard(t)));
@@ -3783,6 +3798,7 @@ async function openProfile(userId) {
     tabsEl.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
     const tab = b.dataset.ptab;
     list.classList.toggle('hidden', tab !== 'tracks');
+    $('profTop')?.classList.toggle('hidden', tab !== 'tracks');
     gridEl.classList.toggle('hidden', tab !== 'posts');
     featEl.classList.toggle('hidden', tab !== 'feats');
     repEl.classList.toggle('hidden', tab !== 'reposts');
@@ -8207,20 +8223,22 @@ function openCommunityChat() {
   if (!r.classList.contains('open')) toggleRight();
 }
 function convoRow(c, p) {
-  const mine = c.last.sender_id === state.user.id;
+  const last = c.last;
+  const mine = last && last.sender_id === state.user.id;
   const online = state.online.some(u => u.id === c.other);
-  let snip = c.last.body;
-  if (c.last.deleted) snip = '🚫 Mensaje eliminado';
-  else if (c.last.attachment_url) {
-    if (c.last.attachment_type === 'track') snip = c.last.body || '🎵 Pista';
-    else { const lbl = c.last.attachment_type === 'image' ? '📷 Foto' : c.last.attachment_type === 'video' ? '🎬 Vídeo' : c.last.attachment_type === 'audio' ? '🎙️ Nota de voz' : '📎 Archivo'; snip = lbl + (c.last.body ? ' · ' + c.last.body : ''); }
-  }
+  let snip;
+  if (!last) snip = 'Toca para escribir…';
+  else if (last.deleted) snip = '🚫 Mensaje eliminado';
+  else if (last.attachment_url) {
+    if (last.attachment_type === 'track') snip = last.body || '🎵 Pista';
+    else { const lbl = last.attachment_type === 'image' ? '📷 Foto' : last.attachment_type === 'video' ? '🎬 Vídeo' : last.attachment_type === 'audio' ? '🎙️ Nota de voz' : '📎 Archivo'; snip = lbl + (last.body ? ' · ' + last.body : ''); }
+  } else snip = last.body;
   const row = el(`
     <div class="convo" data-uid="${c.other}">
       ${avatarHTML(p)}
       <div class="c-main">
-        <div class="c-top"><span class="c-name">${esc(p.display_name || p.username || 'usuario')}</span><span class="c-when">${timeAgo(c.last.created_at)}</span></div>
-        <div class="c-snippet ${c.unread ? 'unread' : ''}">${mine ? 'Tú: ' : ''}${esc(snip || '')}</div>
+        <div class="c-top"><span class="c-name">${esc(p.display_name || p.username || 'usuario')}</span><span class="c-when">${last ? timeAgo(last.created_at) : ''}</span></div>
+        <div class="c-snippet ${c.unread ? 'unread' : ''}${last ? '' : ' muted'}">${mine ? 'Tú: ' : ''}${esc(snip || '')}</div>
       </div>
       ${c.unread ? '<span class="c-unread"></span>' : (online ? '<span class="conv-dot" title="En línea"></span>' : '')}
     </div>`);
@@ -8260,6 +8278,12 @@ async function renderMessages() {
     if (state.hiddenConvos.has(other)) return; // chats eliminados localmente
     if (!convos.has(other)) convos.set(other, { other, last: mm, unread: 0 });
     if (mm.recipient_id === state.user.id && !mm.read) convos.get(other).unread++;
+  });
+  // añadir TODOS los bros (a quien sigues) aunque no haya conversación todavía
+  (state.follows ? [...state.follows] : []).forEach(id => {
+    if (!id || id === state.user.id) return;
+    if (isHidden(id) || state.hiddenConvos.has(id)) return;
+    if (!convos.has(id)) convos.set(id, { other: id, last: null, unread: 0 });
   });
   const list = $('convoList'); list.className = '';
   list.innerHTML = '';
@@ -8304,8 +8328,9 @@ async function renderMessages() {
   const byId = Object.fromEntries((profs || []).map(p => [p.id, p]));
   const onlineIds = new Set(state.online.map(u => u.id));
   const all = [...convos.values()];
-  const online = all.filter(c => onlineIds.has(c.other));
-  const offline = all.filter(c => !onlineIds.has(c.other));
+  const byRecent = (a, b) => new Date((b.last && b.last.created_at) || 0) - new Date((a.last && a.last.created_at) || 0);
+  const online = all.filter(c => onlineIds.has(c.other)).sort(byRecent);
+  const offline = all.filter(c => !onlineIds.has(c.other)).sort(byRecent);
 
   if (online.length) {
     list.appendChild(el(`<div class="convo-section"><span class="dot-online"></span> En línea (${online.length})</div>`));
