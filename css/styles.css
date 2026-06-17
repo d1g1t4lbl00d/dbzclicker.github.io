@@ -2439,3 +2439,7 @@ body.q-dragging .npq-list { overflow: hidden; }
 .profile-cover::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 62%; background: linear-gradient(180deg, transparent, var(--bg)); pointer-events: none; }
 :root[data-theme="dark"] .profile-head .avatar { box-shadow: 0 0 0 5px var(--panel), 0 16px 36px rgba(0,0,0,.6); }
 @media (hover: hover) { .pstat:hover { color: var(--blue); } .profile-links a:hover { border-color: var(--blue); } }
+
+/* ===================== descripción de pista ===================== */
+.t-desc { font-size: 13.5px; color: var(--ink-2); line-height: 1.5; margin: 1px 0 3px; white-space: pre-wrap; word-break: break-word; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
+.track.has-bg .t-desc { color: rgba(255,255,255,.9); }
