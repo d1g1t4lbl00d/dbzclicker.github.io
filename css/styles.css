@@ -2517,3 +2517,33 @@ body.q-dragging .npq-list { overflow: hidden; }
 .ts-row b, .ts-card b, .pstat b, .ptop-sub { font-variant-numeric: tabular-nums; }
 /* pills/tags consistentes: misma altura y peso */
 .t-genre { line-height: 1.4; }
+
+/* ===================== sidebar "rail" en escritorio (iconos; menú al pasar el ratón) ===================== */
+@media (min-width: 1025px) {
+  .app { position: relative; }
+  .app.side-collapsed { --col-side: 66px; }
+  .app.side-collapsed > .sidebar {
+    opacity: 1; pointer-events: auto; overflow: visible;
+    padding: 16px 9px; border-right: 1px solid var(--line-soft);
+    background: var(--glass); backdrop-filter: blur(10px);
+    transition: width .18s var(--ease), box-shadow .18s var(--ease), padding .18s var(--ease);
+  }
+  /* rail: ocultar textos, centrar iconos */
+  .app.side-collapsed > .sidebar .side-group h4 { display: none; }
+  .app.side-collapsed > .sidebar .nav-item { justify-content: center; gap: 0; padding: 11px 0; font-size: 0; border-radius: 12px; }
+  .app.side-collapsed > .sidebar .nav-item svg { width: 20px; height: 20px; }
+  .app.side-collapsed > .sidebar .nav-item .count { display: none; }
+  .app.side-collapsed > .sidebar .nav-item.active::before { top: 7px; bottom: 7px; }
+  .app.side-collapsed > .sidebar .upload-cta { font-size: 0; padding: 13px 0; justify-content: center; }
+  .app.side-collapsed > .sidebar .upload-cta svg { width: 20px; height: 20px; margin: 0; }
+  /* al acercar el ratón: se despliega como panel flotante (no empuja el contenido) */
+  .app.side-collapsed > .sidebar:hover {
+    position: absolute; top: var(--topbar-h); left: 0; bottom: 0; width: 248px; z-index: 45;
+    overflow-y: auto; padding: 18px 14px; box-shadow: var(--sh-3); border-radius: 0 18px 18px 0;
+  }
+  .app.side-collapsed > .sidebar:hover .side-group h4 { display: block; }
+  .app.side-collapsed > .sidebar:hover .nav-item { justify-content: flex-start; gap: 12px; padding: 10px 12px; font-size: 13.5px; border-radius: 11px; }
+  .app.side-collapsed > .sidebar:hover .nav-item svg { width: 18px; height: 18px; }
+  .app.side-collapsed > .sidebar:hover .nav-item .count { display: inline-block; }
+  .app.side-collapsed > .sidebar:hover .upload-cta { font-size: 13.5px; padding: 12px; }
+}
