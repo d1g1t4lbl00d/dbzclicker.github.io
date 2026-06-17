@@ -788,6 +788,7 @@ function bindUI() {
   };
   $('toggleChatBtn').onclick = () => { const on = appEl.classList.toggle('right-collapsed'); localStorage.setItem('ub_right_collapsed', on ? '1' : '0'); };
   $('chatClose').onclick = closeRightPanel;
+  { const tu = $('topUpload'); if (tu) tu.onclick = openCreateChooser; }
   $('drawerBackdrop').onclick = hideDrawers;
   $('btnSearchToggle').onclick = () => {
     const tb = document.querySelector('.topbar');

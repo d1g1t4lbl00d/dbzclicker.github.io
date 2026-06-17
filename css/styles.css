@@ -2580,3 +2580,8 @@ body.q-dragging .npq-list { overflow: hidden; }
   .app.right-collapsed > .right, .app.right-collapsed > .right * { scrollbar-width: none; }
   .app.right-collapsed > .right::-webkit-scrollbar, .app.right-collapsed > .right *::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none; }
 }
+
+/* botón Subir en la barra superior (escritorio) — siempre visible */
+.topbar-upload { background: var(--accent-grad) !important; border: none !important; }
+.topbar-upload svg { stroke: #fff !important; width: 20px; height: 20px; }
+.topbar-upload:hover { box-shadow: var(--sh-blue); transform: translateY(-1px); }
