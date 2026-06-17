@@ -491,6 +491,33 @@ img { display: block; }
 .ptop-dot { opacity: .5; }
 .ptop-play { width: 34px; height: 34px; flex: none; border-radius: 50%; background: var(--accent-grad); display: grid; place-items: center; box-shadow: var(--sh-blue); }
 .ptop-play svg { width: 15px; height: 15px; margin-left: 1px; }
+/* =====================================================================
+   PULIDO VISUAL v2 — profundidad y micro-interacciones (sutil, on-brand)
+   ===================================================================== */
+/* scrollbars finos en modo oscuro (los claros desentonaban) */
+:root[data-theme="dark"] * { scrollbar-color: #2b3650 transparent; }
+:root[data-theme="dark"] *::-webkit-scrollbar-thumb { background: #2b3650; background-clip: content-box; }
+:root[data-theme="dark"] *::-webkit-scrollbar-thumb:hover { background: #3a4a6e; background-clip: content-box; }
+/* foco accesible y limpio con el acento */
+button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, [tabindex]:focus-visible {
+  outline: 2px solid var(--blue); outline-offset: 2px;
+}
+/* más profundidad en glass del modo oscuro */
+:root[data-theme="dark"] .topbar { box-shadow: 0 1px 0 rgba(255,255,255,.04), 0 8px 24px rgba(0,0,0,.32); }
+.avatar, .avatar-chip .avatar, .play-lg { transition: transform .16s var(--ease), box-shadow .2s var(--ease); }
+/* micro-interacciones solo donde hay puntero real (no “hover pegado” en táctil) */
+@media (hover: hover) {
+  .track:hover { transform: translateY(-2px); box-shadow: var(--sh-2); }
+  .track.has-bg:hover { box-shadow: var(--sh-3); }
+  .play-lg:hover { transform: scale(1.08); }
+  .btn.primary:hover { box-shadow: var(--sh-blue); }
+  .avatar-chip:hover .avatar { transform: scale(1.05); }
+  .convo:hover, .online-item:hover, .person-row:hover { background: rgba(95,155,255,.06); }
+  .pl-card:hover, .ev-card:hover, .social-card:hover, .mkt-card:hover, .eco-node:hover { transform: translateY(-2px); box-shadow: var(--sh-2); }
+  .t-genre, .pill, .chip { transition: transform .14s var(--ease); }
+}
+/* transición suave de tema claro/oscuro (solo superficies que no animan transform) */
+body, .topbar, .sidebar, .right, .main-head, .right-section { transition: background-color .25s var(--ease), border-color .25s var(--ease), color .2s var(--ease); }
 .track.has-bg .act.like.on, .track.has-bg .act.like.on svg { color: #ff8aa0; stroke: #ff8aa0; fill: #ff8aa0; }
 .track.has-bg .t-genre { background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.35); color: #fff; }
 .track.has-bg .wave .bar::before { background: rgba(255,255,255,.5); }
