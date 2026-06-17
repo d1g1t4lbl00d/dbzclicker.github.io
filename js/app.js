@@ -1448,6 +1448,7 @@ function trackCard(t, opts = {}) {
         ${t.genre ? `<span class="t-genre">${esc(t.genre)}</span>` : ''}
         ${t.is_beat ? `<span class="t-genre beat-tag">BEAT${t.bpm ? ' · ' + t.bpm + ' BPM' : ''}${t.song_key ? ' · ' + esc(t.song_key) : ''}</span>` : ''}
       </div>
+      ${t.description ? `<div class="t-desc">${esc(t.description)}</div>` : ''}
       <div class="wave-row">
         <button class="play-lg" data-act="play" title="Reproducir"><svg class="ci-play"><use href="#i-play"/></svg><svg class="ci-pause"><use href="#i-pause"/></svg></button>
         ${waveHTML(t)}
@@ -1487,6 +1488,7 @@ function openEditTrack(t, card) {
       </div>
       <div class="field"><label>Título</label><input type="text" id="eTitle" value="${esc(t.title)}" /></div>
       <div class="field"><label>Género</label><input type="text" id="eGenre" value="${esc(t.genre || '')}" /></div>
+      <div class="field"><label>Descripción</label><textarea id="eDesc" maxlength="600" placeholder="Cuéntale a la gente sobre esta pista…">${esc(t.description || '')}</textarea></div>
       <div class="field"><label class="pk-tg" style="font-weight:600"><input type="checkbox" id="eIsBeat" style="width:auto" ${t.is_beat ? 'checked' : ''} /> <span>Es un <b>beat</b> · permitir descarga gratis</span></label></div>
       <div class="pk-row2 ${t.is_beat ? '' : 'hidden'}" id="eBeatRow">
         <div><label class="pk-l">BPM</label><input type="number" id="eBpm" min="40" max="300" value="${t.bpm || ''}" placeholder="140" /></div>
@@ -1510,6 +1512,7 @@ function openEditTrack(t, card) {
   m.querySelector('#eSave').onclick = async () => {
     const title = m.querySelector('#eTitle').value.trim();
     const genre = m.querySelector('#eGenre').value.trim();
+    const description = m.querySelector('#eDesc').value.trim();
     const eMsg = m.querySelector('#eMsg'); eMsg.className = 'auth-msg';
     if (!title) { eMsg.className = 'auth-msg error'; eMsg.textContent = 'El título no puede estar vacío.'; return; }
     const btn = m.querySelector('#eSave'); btn.disabled = true;
@@ -1523,7 +1526,7 @@ function openEditTrack(t, card) {
         cover_url = sb.storage.from('covers').getPublicUrl(path).data.publicUrl;
       }
       // regenerar la onda real si la pista no la tiene (pistas antiguas)
-      const patch = { title, genre: genre || null, cover_url, collaborators: collab.get(),
+      const patch = { title, genre: genre || null, description: description || null, cover_url, collaborators: collab.get(),
         is_beat: m.querySelector('#eIsBeat').checked,
         bpm: parseInt(m.querySelector('#eBpm').value, 10) || null,
         song_key: m.querySelector('#eKey').value.trim() || null };
@@ -1531,8 +1534,9 @@ function openEditTrack(t, card) {
         eMsg.textContent = 'Generando la onda real…';
         try { const r = await fetch(t.audio_url); const wf = await computeWaveformPeaks(await r.blob()); if (wf) patch.waveform = wf; } catch {}
       }
-      const { data, error } = await sb.from('tracks').update(patch)
+      let { data, error } = await sb.from('tracks').update(patch)
         .eq('id', t.id).select('*, profiles!tracks_user_id_fkey(*)').single();
+      if (error && /description/i.test(error.message || '')) { delete patch.description; ({ data, error } = await sb.from('tracks').update(patch).eq('id', t.id).select('*, profiles!tracks_user_id_fkey(*)').single()); }
       if (error) throw error;
       Object.assign(t, data);
       if (card) card.replaceWith(trackCard(t));
@@ -2832,6 +2836,7 @@ function openUploadModal(prefill) {
       </div>
       <div class="field"><label>Título</label><input type="text" id="uTitle" placeholder="Nombre de la pista" /></div>
       <div class="field"><label>Género</label><input type="text" id="uGenre" placeholder="Hip-Hop, House, Lo-Fi…" /></div>
+      <div class="field"><label>Descripción <span style="color:var(--ink-faint);font-weight:400">(opcional)</span></label><textarea id="uDesc" maxlength="600" placeholder="Cuéntale a la gente sobre esta pista…"></textarea></div>
       <div class="pk-row2" id="uBeatRow">
         <div><label class="pk-l">BPM <span class="auto-tag" id="uAutoTag"></span></label><input type="number" id="uBpm" min="40" max="300" placeholder="140" /></div>
         <div><label class="pk-l">Tonalidad</label><input type="text" id="uKey" maxlength="16" placeholder="C min, F#…" /></div>
@@ -2924,6 +2929,7 @@ function openUploadModal(prefill) {
   m.querySelector('#uSubmit').onclick = async () => {
     const title = m.querySelector('#uTitle').value.trim();
     const genre = m.querySelector('#uGenre').value.trim();
+    const description = m.querySelector('#uDesc').value.trim();
     const isBeat = m.querySelector('#uIsBeat').checked;
     const bpm = parseInt(m.querySelector('#uBpm').value, 10) || null;
     const songKey = m.querySelector('#uKey').value.trim() || null;
@@ -2978,13 +2984,15 @@ function openUploadModal(prefill) {
       const waveform = await computeWaveformPeaks(uploadFile);
       fill.style.width = '90%';
 
-      const { error } = await sb.from('tracks').insert({
-        user_id: uid, title, genre: genre || null,
+      const payload = {
+        user_id: uid, title, genre: genre || null, description: description || null,
         artist: state.profile.display_name || state.profile.username,
         audio_url: audioUrl, cover_url: coverUrl, duration: Math.round(duration),
         waveform, collaborators: collab.get(),
         is_beat: isBeat, bpm, song_key: songKey,
-      });
+      };
+      let { error } = await sb.from('tracks').insert(payload);
+      if (error && /description/i.test(error.message || '')) { delete payload.description; ({ error } = await sb.from('tracks').insert(payload)); }
       if (error) throw error;
       fill.style.width = '100%';
       toast('¡Pista publicada! 🎵');
