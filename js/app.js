@@ -1398,6 +1398,7 @@ function trackMenu(t, card) {
     { label: 'Añadir a la cola', icon: 'list', onClick: () => enqueue(t) },
     { label: 'Añadir a playlist', icon: 'listadd', onClick: () => openPlaylistPicker(t) },
     { label: 'Compartir', icon: 'share', onClick: () => shareTrack(t) },
+    { label: 'Estadísticas', icon: 'chart', onClick: () => openTrackStats(t) },
     { label: 'Descargar', icon: 'download', onClick: () => downloadTrack(t) },
     mine ? { label: 'Editar', icon: 'settings', onClick: () => openEditTrack(t, card) } : null,
     mine ? null : { label: 'Reportar', icon: 'bell', onClick: () => openReportModal('track', t.id, t.user_id, '“' + (t.title || 'pista') + '”') },
@@ -4569,6 +4570,27 @@ async function markStoryViewed(id) {
    ESTUDIO — panel del artista (stats internas + redes/enlaces del perfil)
    ======================================================================= */
 function nfmt(n) { n = Number(n) || 0; if (n >= 1e6) return (n / 1e6).toFixed(1).replace('.0', '') + 'M'; if (n >= 1e3) return (n / 1e3).toFixed(1).replace('.0', '') + 'K'; return String(n); }
+// Estadísticas por pista (gratis · en SoundCloud esto es de pago)
+async function openTrackStats(t) {
+  const plays = t.plays || 0, likes = t.likes_count || 0, reposts = t.reposts_count || 0;
+  let comments = 0;
+  try { const { count } = await sb.from('comments').select('id', { count: 'exact', head: true }).eq('track_id', t.id); comments = count || 0; } catch (_) {}
+  const days = Math.max(1, Math.round((Date.now() - new Date(t.created_at)) / 864e5));
+  const perDay = Math.round(plays / days);
+  const eng = plays ? Math.round(((likes + reposts + comments) / plays) * 100) : 0;
+  const card = (n, l, icon) => `<div class="ts-card"><svg fill="none" stroke="currentColor"><use href="#i-${icon}"/></svg><b>${nfmt(n)}</b><span>${l}</span></div>`;
+  openModal(`<div class="modal-head"><h3>Estadísticas</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <div class="ts-track">${t.cover_url ? `<img src="${esc(czUrl(t.cover_url))}" alt="">` : `<div class="ts-ph"><svg fill="none" stroke="currentColor"><use href="#i-music"/></svg></div>`}<div><b>${esc(t.title)}</b><span>${esc(t.profiles?.display_name || t.profiles?.username || t.artist || '')}</span></div></div>
+      <div class="ts-grid">${card(plays, 'Reproducciones', 'headphones')}${card(likes, 'Me gusta', 'heart')}${card(reposts, 'Resubidas', 'repeat')}${card(comments, 'Comentarios', 'comment')}</div>
+      <div class="ts-rows">
+        <div class="ts-row"><span>Tasa de interacción</span><b>${eng}%</b></div>
+        <div class="ts-row"><span>Días publicada</span><b>${days}</b></div>
+        <div class="ts-row"><span>Media por día</span><b>${nfmt(perDay)}</b></div>
+      </div>
+      <p class="hint" style="text-align:center;margin-top:14px">Analíticas gratis en UnderBro — en otras apps esto es de pago.</p>
+    </div>`);
+}
 function platformOf(url) {
   const u = (url || '').toLowerCase();
   if (u.includes('spotify')) return { name: 'Spotify', color: '#1db954' };
