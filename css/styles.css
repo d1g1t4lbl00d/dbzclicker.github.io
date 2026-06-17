@@ -2436,7 +2436,6 @@ body.q-dragging .npq-list { overflow: hidden; }
 .bdgbtn:active { transform: scale(.92); }
 
 /* ===================== PULIDO v5: cabecera de perfil ===================== */
-.profile-cover::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 62%; background: linear-gradient(180deg, transparent, var(--bg)); pointer-events: none; }
 :root[data-theme="dark"] .profile-head .avatar { box-shadow: 0 0 0 5px var(--panel), 0 16px 36px rgba(0,0,0,.6); }
 @media (hover: hover) { .pstat:hover { color: var(--blue); } .profile-links a:hover { border-color: var(--blue); } }
 
@@ -2460,3 +2459,11 @@ body.q-dragging .npq-list { overflow: hidden; }
 .main-head h2 { font-size: 22px; }
 /* botones de acción de pista: forma de píldora más definida al pasar/activar */
 .act:active { transform: scale(.94); }
+
+/* ===================== PULIDO v7: pestañas + barra inferior ===================== */
+:root[data-theme="dark"] .tabs button.active { background: var(--panel); color: var(--blue); }
+@media (max-width: 1024px) {
+  .bottom-nav button svg { transition: transform .2s var(--ease-spring), stroke .15s; }
+  .bottom-nav button.active svg { transform: translateY(-2px) scale(1.06); }
+  .bottom-nav button.active::before { content: ""; position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); width: 16px; height: 3px; border-radius: 3px; background: var(--accent-grad); }
+}
