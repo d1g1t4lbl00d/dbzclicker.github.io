@@ -671,6 +671,17 @@ const COMPONENT_TPL = [
   { sel:'.eco-node', label:'Nodo de Ecosystems', props:['background-color','border-radius'] },
   { sel:'.mkt-card', label:'Tarjeta del mercado', props:['background-color','border-radius'] },
   { sel:'.comments', label:'Caja de comentarios', props:['background-color','border-radius'] },
+  { sel:'.player', label:'Barra del reproductor', props:['background-color','border-color'] },
+  { sel:'.player .now .cover', label:'Portada del reproductor', props:['border-radius','box-shadow'] },
+  { sel:'.modal', label:'Ventana / modal', props:['background-color','border-radius','border-color'] },
+  { sel:'.profile-cover-grad', label:'Portada de perfil (sin imagen)', props:['border-radius'] },
+  { sel:'.profile-head .avatar', label:'Avatar de perfil', props:['border-radius'] },
+  { sel:'.pstats', label:'Estadísticas de perfil', props:['background-color','border-radius','border-color'] },
+  { sel:'.bottom-nav', label:'Barra inferior (móvil)', props:['background-color','border-color'] },
+  { sel:'.convo', label:'Fila de chat', props:['border-radius'] },
+  { sel:'.dm-bubble', label:'Burbuja de mensaje', props:['background-color','color','border-radius'] },
+  { sel:'.ptop-row', label:'Fila “Destacadas”', props:['background-color','border-radius'] },
+  { sel:'.tool-card', label:'Tarjeta de herramienta', props:['background-color','border-radius'] },
 ];
 function cssVal(cs, p) { let v = (cs.getPropertyValue(p) || '').trim(); if (/color/.test(p) && /^rgb/.test(v)) v = rgb2hex(v); return v; }
 function exportComponents() {
