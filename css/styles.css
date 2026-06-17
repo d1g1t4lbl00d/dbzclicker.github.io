@@ -422,9 +422,9 @@ img { display: block; }
 .t-genre { margin-left: auto; font-size: 10.5px; font-weight: 650; color: var(--blue-deep); background: linear-gradient(180deg,#f1f6fd,#e7eefb); border: 1px solid #dbe5f5; padding: 4px 11px; border-radius: 30px; white-space: nowrap; }
 
 /* waveform real, simétrico y centrado */
-.wave { position: relative; display: flex; align-items: center; justify-content: center; gap: 2px; height: 50px; cursor: pointer; overflow: hidden; }
+.wave { position: relative; display: flex; align-items: center; justify-content: center; gap: 1.5px; height: 50px; cursor: pointer; overflow: hidden; }
 .wave .bar { position: relative; z-index: 1; flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: center; }
-.wave .bar::before { content: ""; width: 100%; max-width: 4px; margin: 0 auto; border-radius: 3px; background: #c7d2e6; transition: background .12s, transform .12s; height: var(--h,40%); }
+.wave .bar::before { content: ""; width: 100%; max-width: 2.5px; margin: 0 auto; border-radius: 2px; background: #c7d2e6; transition: background .12s, transform .12s; height: max(3px, var(--h,40%)); }
 .wave .bar.played::before { background: linear-gradient(180deg, var(--aqua), var(--blue-deep)); }
 .wave:hover .bar::before { transform: scaleY(1.06); }
 .track.playing .wave .bar::before { animation: wavebreath 1.2s var(--ease) infinite; animation-delay: var(--d); }

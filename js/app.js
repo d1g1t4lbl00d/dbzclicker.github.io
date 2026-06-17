@@ -1547,7 +1547,7 @@ function openEditTrack(t, card) {
 
 // dibuja el waveform real (si existe) o uno de respaldo
 function waveHTML(t) {
-  const peaks = Array.isArray(t.waveform) && t.waveform.length ? t.waveform : waveBars(t.id, 80);
+  const peaks = Array.isArray(t.waveform) && t.waveform.length ? t.waveform : waveBars(t.id, 120);
   const bars = peaks.map((h, i) => `<div class="bar" data-i="${i}" style="--h:${czNum(h)}%;--d:${((i * 37) % 23) * 0.045}s"></div>`).join('');
   return `<div class="wave" data-act="seekwave">${bars}</div>`;
 }
@@ -2393,7 +2393,7 @@ function syncNowPlaying() {
   $('npArtist').textContent = t.profiles?.display_name || t.profiles?.username || t.artist || '';
   $('npCover').innerHTML = t.cover_url ? `<img src="${esc(t.cover_url)}" alt="" />` : `<svg fill="none" stroke="#fff"><use href="#i-music"/></svg>`;
   $('npBg').style.backgroundImage = t.cover_url ? `url('${czUrl(t.cover_url)}')` : 'none';
-  const npPeaks = Array.isArray(t.waveform) && t.waveform.length ? t.waveform : waveBars(t.id, 80);
+  const npPeaks = Array.isArray(t.waveform) && t.waveform.length ? t.waveform : waveBars(t.id, 120);
   $('npWave').innerHTML = npPeaks.map(h => `<div class="bar" style="--h:${czNum(h)}%"></div>`).join('');
   setNpPlayIcon(!audio.paused);
   updateNpProgress(audio.duration ? audio.currentTime / audio.duration : 0);
@@ -2720,7 +2720,7 @@ async function compressAudioToMp3(file, kbps = 192, onProgress) {
 }
 
 // Calcula el waveform REAL de la canción (picos RMS) para dibujarlo fielmente
-async function computeWaveformPeaks(file, n = 80) {
+async function computeWaveformPeaks(file, n = 140) {
   try {
     const buf = await file.arrayBuffer();
     const AudioCtx = window.AudioContext || window.webkitAudioContext;
