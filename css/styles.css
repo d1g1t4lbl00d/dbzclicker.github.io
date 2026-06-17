@@ -2544,3 +2544,10 @@ body.q-dragging .npq-list { overflow: hidden; }
   /* el botón Subir siempre centra su contenido */
   .app.side-collapsed > .sidebar .upload-cta { display: flex; align-items: center; justify-content: center; }
 }
+
+/* rail: ocultar la barra de scroll (manteniendo el scroll) para que no descuadre los iconos */
+@media (min-width: 1025px) {
+  .app.side-collapsed > .sidebar { scrollbar-width: none; }
+  .app.side-collapsed > .sidebar::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none; }
+  .app.side-collapsed > .sidebar:not(:hover) { padding-right: 10px; padding-left: 10px; }
+}
