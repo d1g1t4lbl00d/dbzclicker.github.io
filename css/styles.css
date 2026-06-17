@@ -2443,3 +2443,20 @@ body.q-dragging .npq-list { overflow: hidden; }
 /* ===================== descripción de pista ===================== */
 .t-desc { font-size: 13.5px; color: var(--ink-2); line-height: 1.5; margin: 1px 0 3px; white-space: pre-wrap; word-break: break-word; display: -webkit-box; -webkit-line-clamp: 5; -webkit-box-orient: vertical; overflow: hidden; }
 .track.has-bg .t-desc { color: rgba(255,255,255,.9); }
+
+/* ===================== PULIDO v6: embellecido general ===================== */
+/* pill de género: en oscuro quedaba casi blanca → tinte de acento, más fina */
+:root[data-theme="dark"] .t-genre { background: rgba(95,155,255,.14); border-color: rgba(95,155,255,.30); color: #cfe0ff; }
+.track.has-bg .t-genre { background: rgba(255,255,255,.16); border-color: rgba(255,255,255,.30); color: #fff; backdrop-filter: blur(4px); }
+.beat-tag { letter-spacing: .03em; }
+/* estados vacíos: icono dentro de un círculo de acento, más cuidado */
+.empty { display: flex; flex-direction: column; align-items: center; gap: 13px; }
+.empty svg { width: 26px; height: 26px; padding: 16px; box-sizing: content-box; border-radius: 50%; background: rgba(95,155,255,.12); stroke: var(--blue); opacity: 1; margin: 0; animation: none; }
+.empty p { margin: 0; max-width: 360px; line-height: 1.5; }
+/* avatares con un anillo interior sutil para definirlos en oscuro */
+:root[data-theme="dark"] .avatar { box-shadow: inset 0 0 0 1px rgba(255,255,255,.06); }
+:root[data-theme="dark"] .profile-head .avatar { box-shadow: 0 0 0 5px var(--panel), 0 16px 36px rgba(0,0,0,.6), inset 0 0 0 1px rgba(255,255,255,.08); }
+/* títulos de sección un pelín más presentes */
+.main-head h2 { font-size: 22px; }
+/* botones de acción de pista: forma de píldora más definida al pasar/activar */
+.act:active { transform: scale(.94); }
