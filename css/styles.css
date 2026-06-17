@@ -2486,3 +2486,10 @@ body.q-dragging .npq-list { overflow: hidden; }
 .ts-row span { color: var(--ink-soft); }
 .ts-row b { font-weight: 800; }
 @media (max-width: 560px) { .ts-grid { grid-template-columns: repeat(2, 1fr); } }
+
+/* ===================== insights de audiencia + programar ===================== */
+.ts-aud-title { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); margin: 18px 0 8px; }
+.ts-chart { display: flex; align-items: flex-end; gap: 2px; height: 80px; padding: 8px; background: var(--panel-2); border: 1px solid var(--line-soft); border-radius: 12px; }
+.ts-chart .ts-bar { flex: 1 1 0; min-width: 0; border-radius: 3px 3px 1px 1px; background: var(--blue); opacity: .85; transition: height .25s var(--ease); }
+.sched-tag { background: rgba(126,92,255,.16) !important; border-color: rgba(126,92,255,.4) !important; color: #b9a6ff !important; }
+:root:not([data-theme="dark"]) .sched-tag { background: #efe9ff !important; border-color: #d9caff !important; color: #6e2df5 !important; }
