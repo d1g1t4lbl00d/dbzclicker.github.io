@@ -540,6 +540,12 @@ input:focus, textarea:focus, select:focus { box-shadow: 0 0 0 3px rgba(95,155,25
 /* hairline superior sutil en menús (modo oscuro) para separar del fondo */
 :root[data-theme="dark"] .sidebar { border-right-color: rgba(255,255,255,.05); }
 :root[data-theme="dark"] .right { border-left-color: rgba(255,255,255,.05); }
+/* Now Playing a pantalla completa: era claro arriba en modo oscuro */
+:root[data-theme="dark"] .now-playing { background: linear-gradient(180deg, #0b0f1c 0%, var(--bg) 55%, var(--bg-2) 100%); }
+:root[data-theme="dark"] .np-bg { opacity: .6; }
+:root[data-theme="dark"] .np-bg::after { background: linear-gradient(180deg, rgba(10,13,24,.45), rgba(5,6,15,.92)); }
+:root[data-theme="dark"] .np-close { background: rgba(255,255,255,.12); }
+:root[data-theme="dark"] .np-close svg { stroke: #fff; }
 .track.has-bg .act.like.on, .track.has-bg .act.like.on svg { color: #ff8aa0; stroke: #ff8aa0; fill: #ff8aa0; }
 .track.has-bg .t-genre { background: rgba(255,255,255,.2); border-color: rgba(255,255,255,.35); color: #fff; }
 .track.has-bg .wave .bar::before { background: rgba(255,255,255,.5); }
