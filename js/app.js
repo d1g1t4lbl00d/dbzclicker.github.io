@@ -134,6 +134,16 @@ function skeletonFeed(n=5) {
   for (let i=0;i<n;i++) s += `<div class="skeleton"><div class="sk sk-cover"></div><div style="flex:1"><div class="sk sk-line" style="width:42%"></div><div class="sk sk-line" style="width:28%"></div><div class="sk sk-line" style="width:100%;height:40px;margin-top:14px"></div></div></div>`;
   return s;
 }
+function skeletonGrid(n=8) { let s = ''; for (let i=0;i<n;i++) s += `<div class="sk" style="aspect-ratio:1;border-radius:var(--r)"></div>`; return s; }
+function skeletonProfile() {
+  return `<div class="profile-view"><div class="sk" style="height:200px;border-radius:var(--r-lg)"></div>
+    <div style="display:flex;flex-direction:column;align-items:center;margin-top:-60px">
+      <div class="sk" style="width:120px;height:120px;border-radius:50%;border:5px solid var(--panel)"></div>
+      <div class="sk sk-line" style="width:160px;height:20px;margin-top:14px"></div>
+      <div class="sk sk-line" style="width:100px"></div>
+      <div class="sk" style="width:240px;height:46px;border-radius:16px;margin-top:14px"></div>
+    </div>${skeletonFeed(3)}</div>`;
+}
 function toast(msg) {
   const t = el(`<div class="toast">${esc(msg)}</div>`);
   $('toastWrap').appendChild(t);
@@ -3268,7 +3278,7 @@ async function loadProfileEvents(userId, container) {
 }
 
 async function loadProfilePosts(userId, grid) {
-  grid.innerHTML = `<div class="loading" style="grid-column:1/-1"><div class="spinner"></div></div>`;
+  grid.innerHTML = skeletonGrid(6);
   let posts = [];
   try { posts = await fetchPosts({ userId }); } catch (e) { console.error(e); }
   if (!posts.length) {
@@ -3289,7 +3299,7 @@ async function loadProfilePosts(userId, grid) {
 
 // Pistas que un usuario ha reposteado (pestaña Reposts del perfil)
 async function loadProfileReposts(userId, container, isMe) {
-  container.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
+  container.innerHTML = skeletonFeed(3);
   let rows = [];
   try {
     const { data } = await sb.from('reposts')
@@ -3679,7 +3689,7 @@ async function openProfile(userId) {
   const main = $('main');
   setActiveNav('');
   $('feedTabs')?.classList.add('hidden');
-  main.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
+  main.innerHTML = skeletonProfile();
   const { data: prof } = await sb.from('profiles').select('*').eq('id', userId).single();
   if (!prof) { main.innerHTML = '<div class="empty">Perfil no encontrado.</div>'; return; }
   const [{ count: followers }, ownTracks, collabRes, badgesRes] = await Promise.all([
