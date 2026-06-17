@@ -1165,7 +1165,9 @@ async function fetchTracks({ order='created_at', userId=null, limit=50 } = {}) {
   q = q.order(order, { ascending: false }).limit(limit);
   const { data, error } = await q;
   if (error) throw error;
-  return data || [];
+  // ocultar pistas programadas (publish_at futuro) a todos menos a su autor
+  const now = Date.now();
+  return (data || []).filter(t => !t.publish_at || new Date(t.publish_at).getTime() <= now || t.user_id === state.user.id);
 }
 // Trending dinámico vía RPC (hot score con ventana reciente). Embebe el perfil;
 // si el embed no estuviera disponible, lo adjunta con una segunda consulta.
@@ -1448,6 +1450,7 @@ function trackCard(t, opts = {}) {
         </div>
         ${t.genre ? `<span class="t-genre">${esc(t.genre)}</span>` : ''}
         ${t.is_beat ? `<span class="t-genre beat-tag">BEAT${t.bpm ? ' · ' + t.bpm + ' BPM' : ''}${t.song_key ? ' · ' + esc(t.song_key) : ''}</span>` : ''}
+        ${(t.publish_at && new Date(t.publish_at).getTime() > Date.now()) ? `<span class="t-genre sched-tag">Programada · ${schedLabel(t.publish_at)}</span>` : ''}
       </div>
       ${t.description ? `<div class="t-desc">${esc(t.description)}</div>` : ''}
       <div class="wave-row">
@@ -2452,6 +2455,8 @@ function updateMediaPositionState() {
   } catch {}
 }
 
+const playLogged = new Set();
+function schedLabel(ts) { try { const d = new Date(ts); return d.toLocaleDateString('es', { day: 'numeric', month: 'short' }) + ' ' + d.toLocaleTimeString('es', { hour: '2-digit', minute: '2-digit' }); } catch (_) { return ''; } }
 async function playTrack(t) {
   if (state.current?.id === t.id) { togglePlay(); return; }
   state.current = t;
@@ -2467,6 +2472,8 @@ async function playTrack(t) {
   try { await audio.play(); } catch {}
   // contar reproducción
   sb.rpc('increment_plays', { track: t.id }).then(() => { t.plays = (t.plays||0)+1; }).catch(() => {});
+  // registrar evento para insights de audiencia (una vez por pista y sesión)
+  if (!playLogged.has(t.id)) { playLogged.add(t.id); sb.from('track_plays').insert({ track_id: t.id, user_id: state.user.id }).catch(() => {}); }
   // si no está en la cola actual, crear cola con la vista
   if (!state.queue.includes(t.id)) state.queue = [t.id];
   if ($('npQueuePanel')?.classList.contains('open')) renderQueuePanel();
@@ -2853,6 +2860,7 @@ function openUploadModal(prefill) {
       <div class="field"><label>Título</label><input type="text" id="uTitle" placeholder="Nombre de la pista" /></div>
       <div class="field"><label>Género</label><input type="text" id="uGenre" placeholder="Hip-Hop, House, Lo-Fi…" /></div>
       <div class="field"><label>Descripción <span style="color:var(--ink-faint);font-weight:400">(opcional)</span></label><textarea id="uDesc" maxlength="600" placeholder="Cuéntale a la gente sobre esta pista…"></textarea></div>
+      <div class="field"><label class="pk-tg" style="font-weight:600"><input type="checkbox" id="uSchedule" style="width:auto" /> <span>📅 Programar publicación</span></label><input type="datetime-local" id="uScheduleAt" style="display:none;margin-top:8px" /></div>
       <div class="pk-row2" id="uBeatRow">
         <div><label class="pk-l">BPM <span class="auto-tag" id="uAutoTag"></span></label><input type="number" id="uBpm" min="40" max="300" placeholder="140" /></div>
         <div><label class="pk-l">Tonalidad</label><input type="text" id="uKey" maxlength="16" placeholder="C min, F#…" /></div>
@@ -2869,6 +2877,7 @@ function openUploadModal(prefill) {
     </div>`);
 
   let audioFile = null, coverFile = null, duration = 0, audioPreviewUrl = null;
+  const schedChk = m.querySelector('#uSchedule'); if (schedChk) schedChk.onchange = (e) => { m.querySelector('#uScheduleAt').style.display = e.target.checked ? '' : 'none'; };
   const dzA = m.querySelector('#dzAudio'), fA = m.querySelector('#fAudio');
   const dzC = m.querySelector('#dzCover'), fC = m.querySelector('#fCover');
 
@@ -2946,6 +2955,9 @@ function openUploadModal(prefill) {
     const title = m.querySelector('#uTitle').value.trim();
     const genre = m.querySelector('#uGenre').value.trim();
     const description = m.querySelector('#uDesc').value.trim();
+    const schedOn = m.querySelector('#uSchedule').checked;
+    const schedVal = m.querySelector('#uScheduleAt').value;
+    const publish_at = (schedOn && schedVal) ? new Date(schedVal).toISOString() : null;
     const isBeat = m.querySelector('#uIsBeat').checked;
     const bpm = parseInt(m.querySelector('#uBpm').value, 10) || null;
     const songKey = m.querySelector('#uKey').value.trim() || null;
@@ -3001,17 +3013,17 @@ function openUploadModal(prefill) {
       fill.style.width = '90%';
 
       const payload = {
-        user_id: uid, title, genre: genre || null, description: description || null,
+        user_id: uid, title, genre: genre || null, description: description || null, publish_at,
         artist: state.profile.display_name || state.profile.username,
         audio_url: audioUrl, cover_url: coverUrl, duration: Math.round(duration),
         waveform, collaborators: collab.get(),
         is_beat: isBeat, bpm, song_key: songKey,
       };
       let { error } = await sb.from('tracks').insert(payload);
-      if (error && /description/i.test(error.message || '')) { delete payload.description; ({ error } = await sb.from('tracks').insert(payload)); }
+      if (error && /description|publish_at|column/i.test(error.message || '')) { delete payload.description; delete payload.publish_at; ({ error } = await sb.from('tracks').insert(payload)); }
       if (error) throw error;
       fill.style.width = '100%';
-      toast('¡Pista publicada! 🎵');
+      toast(publish_at ? '¡Programada! Se publicará en la fecha elegida. 🗓️' : '¡Pista publicada! 🎵');
       m.remove();
       updateCounts();
       switchView('mytracks');
@@ -4579,10 +4591,12 @@ async function openTrackStats(t) {
   const perDay = Math.round(plays / days);
   const eng = plays ? Math.round(((likes + reposts + comments) / plays) * 100) : 0;
   const card = (n, l, icon) => `<div class="ts-card"><svg fill="none" stroke="currentColor"><use href="#i-${icon}"/></svg><b>${nfmt(n)}</b><span>${l}</span></div>`;
-  openModal(`<div class="modal-head"><h3>Estadísticas</h3><button class="close">&times;</button></div>
+  const isMine = t.user_id === state.user.id;
+  const m = openModal(`<div class="modal-head"><h3>Estadísticas</h3><button class="close">&times;</button></div>
     <div class="modal-body">
       <div class="ts-track">${t.cover_url ? `<img src="${esc(czUrl(t.cover_url))}" alt="">` : `<div class="ts-ph"><svg fill="none" stroke="currentColor"><use href="#i-music"/></svg></div>`}<div><b>${esc(t.title)}</b><span>${esc(t.profiles?.display_name || t.profiles?.username || t.artist || '')}</span></div></div>
       <div class="ts-grid">${card(plays, 'Reproducciones', 'headphones')}${card(likes, 'Me gusta', 'heart')}${card(reposts, 'Resubidas', 'repeat')}${card(comments, 'Comentarios', 'comment')}</div>
+      ${isMine ? '<div id="tsAudience"></div>' : ''}
       <div class="ts-rows">
         <div class="ts-row"><span>Tasa de interacción</span><b>${eng}%</b></div>
         <div class="ts-row"><span>Días publicada</span><b>${days}</b></div>
@@ -4590,6 +4604,35 @@ async function openTrackStats(t) {
       </div>
       <p class="hint" style="text-align:center;margin-top:14px">Analíticas gratis en UnderBro — en otras apps esto es de pago.</p>
     </div>`);
+  if (isMine) renderAudienceInsights(t.id, m.querySelector('#tsAudience'));
+}
+// Insights de audiencia: reproducciones por día (30d) + oyentes únicos
+async function renderAudienceInsights(trackId, box) {
+  if (!box) return;
+  box.innerHTML = `<div class="ts-aud-title">Audiencia · últimos 30 días</div><div class="ts-chart loading" style="padding:18px"><div class="spinner"></div></div>`;
+  let rows = null;
+  try {
+    const since = new Date(Date.now() - 29 * 864e5).toISOString();
+    const { data, error } = await sb.from('track_plays').select('created_at,user_id').eq('track_id', trackId).gte('created_at', since).limit(8000);
+    if (error) throw error; rows = data || [];
+  } catch (_) { box.innerHTML = `<div class="ts-aud-title">Audiencia</div><p class="hint" style="margin:0">Aún no hay datos de audiencia (se registran desde ahora).</p>`; return; }
+  const days = 30, buckets = new Array(days).fill(0), today = new Date(); today.setHours(0,0,0,0);
+  const listeners = new Set();
+  rows.forEach(r => {
+    if (r.user_id) listeners.add(r.user_id);
+    const d = new Date(r.created_at); d.setHours(0,0,0,0);
+    const idx = days - 1 - Math.round((today - d) / 864e5);
+    if (idx >= 0 && idx < days) buckets[idx]++;
+  });
+  const max = Math.max(1, ...buckets);
+  const total = buckets.reduce((a, b) => a + b, 0);
+  const bars = buckets.map((c, i) => `<div class="ts-bar" title="${c} reprod." style="height:${Math.max(3, Math.round(c / max * 100))}%${i === days - 1 ? ';background:var(--accent-grad)' : ''}"></div>`).join('');
+  box.innerHTML = `<div class="ts-aud-title">Audiencia · últimos 30 días</div>
+    <div class="ts-chart">${bars}</div>
+    <div class="ts-rows">
+      <div class="ts-row"><span>Reproducciones (30d)</span><b>${nfmt(total)}</b></div>
+      <div class="ts-row"><span>Oyentes únicos (30d)</span><b>${nfmt(listeners.size)}</b></div>
+    </div>`;
 }
 function platformOf(url) {
   const u = (url || '').toLowerCase();
