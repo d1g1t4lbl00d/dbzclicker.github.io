@@ -1546,8 +1546,23 @@ function openEditTrack(t, card) {
 }
 
 // dibuja el waveform real (si existe) o uno de respaldo
+// remuestrea la onda a N barras (interpolación) para que en PC se vea igual de
+// densa que en móvil, independientemente de cuántos puntos tenga guardados
+function resamplePeaks(peaks, n) {
+  if (!Array.isArray(peaks) || !peaks.length) return [];
+  if (peaks.length < 2) return new Array(n).fill(peaks[0] || 40);
+  if (peaks.length === n) return peaks;
+  const out = new Array(n);
+  for (let i = 0; i < n; i++) {
+    const idx = i * (peaks.length - 1) / (n - 1);
+    const lo = Math.floor(idx), hi = Math.ceil(idx), f = idx - lo;
+    out[i] = peaks[lo] * (1 - f) + peaks[hi] * f;
+  }
+  return out;
+}
 function waveHTML(t) {
-  const peaks = Array.isArray(t.waveform) && t.waveform.length ? t.waveform : waveBars(t.id, 120);
+  let peaks = Array.isArray(t.waveform) && t.waveform.length ? t.waveform : waveBars(t.id, 140);
+  peaks = resamplePeaks(peaks, 140);
   const bars = peaks.map((h, i) => `<div class="bar" data-i="${i}" style="--h:${czNum(h)}%;--d:${((i * 37) % 23) * 0.045}s"></div>`).join('');
   return `<div class="wave" data-act="seekwave">${bars}</div>`;
 }
