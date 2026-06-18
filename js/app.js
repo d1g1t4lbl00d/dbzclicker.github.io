@@ -920,6 +920,7 @@ function feedSpec(view, tab) {
   return null;
 }
 const feedCache = new Map();   // key -> { tracks, ts }
+const feedDomCache = new Map(); // key -> { sig, node }  (DOM ya pintado por pestaña)
 const feedInflight = new Map(); // key -> Promise (evita peticiones duplicadas)
 function feedFetch(spec) {
   if (feedInflight.has(spec.key)) return feedInflight.get(spec.key);
@@ -1369,10 +1370,19 @@ function renderFeed(head, tracks, view) {
     return;
   }
   state.queue = tracks.map(t => t.id);
+  // caché de DOM por pestaña del feed → cambiar entre Following/Trending/New es
+  // instantáneo (reutiliza las tarjetas ya pintadas si no cambiaron)
+  const cacheKey = (view === 'feed') ? ('feed:' + state.tab) : null;
+  const sig = tracks.map(t => t.id + ':' + (t.likes_count || 0) + ':' + (t.reposts_count || 0)).join('|');
+  if (cacheKey) {
+    const c = feedDomCache.get(cacheKey);
+    if (c && c.sig === sig && c.node) { list.replaceWith(c.node); if (state.current && audio && !audio.paused) markPlayingCard(); return; }
+  }
   const isTrending = (view === 'feed' && state.tab === 'trending') || view === 'feed-trending';
   const frag = document.createDocumentFragment();
   tracks.forEach((t, i) => frag.appendChild(trackCard(t, { featured: isTrending && i === 0 })));
   list.appendChild(frag);   // un solo reflow en vez de uno por tarjeta
+  if (cacheKey) feedDomCache.set(cacheKey, { sig, node: list });
   if (state.current && audio && !audio.paused) markPlayingCard();
 }
 
