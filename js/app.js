@@ -1058,6 +1058,15 @@ function initSwipeNav() {
     const vel = Math.abs(dx) / Math.max(dt, 1);
     const pass = Math.abs(dx) > W() * 0.30 || (vel > 0.5 && Math.abs(dx) > 50);
     const dir = dx < 0 ? 1 : -1, target = cur + dir;
+    // borde izquierdo (estás en Following): un swipe extra hacia la pantalla
+    // anterior despliega el menú lateral izquierdo
+    if (pass && cur === 0 && dir === -1) {
+      $('sidebar').classList.add('open'); $('drawerBackdrop')?.classList.add('show');
+      main.style.transition = 'transform .26s cubic-bezier(.22,.61,.36,1)';
+      main.style.transform = 'translateX(0)';
+      setTimeout(clearStyle, 280);
+      return;
+    }
     if (pass && target >= 0 && target < SWIPE_SEQ.length) {
       ubSwiping = true;
       // Render del contenido nuevo PRIMERO (el trabajo pesado pasa aquí, antes de
@@ -1572,8 +1581,8 @@ function resamplePeaks(peaks, n) {
   return out;
 }
 function waveHTML(t) {
-  let peaks = Array.isArray(t.waveform) && t.waveform.length ? t.waveform : waveBars(t.id, 140);
-  peaks = resamplePeaks(peaks, 140);
+  let peaks = Array.isArray(t.waveform) && t.waveform.length ? t.waveform : waveBars(t.id, 100);
+  peaks = resamplePeaks(peaks, 100);
   const bars = peaks.map((h, i) => `<div class="bar" data-i="${i}" style="--h:${czNum(h)}%;--d:${((i * 37) % 23) * 0.045}s"></div>`).join('');
   return `<div class="wave" data-act="seekwave">${bars}</div>`;
 }
