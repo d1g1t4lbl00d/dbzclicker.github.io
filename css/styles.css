@@ -2603,3 +2603,74 @@ body.q-dragging .npq-list { overflow: hidden; }
   .app.side-collapsed > .sidebar { overflow-y: auto !important; }
   .app.right-collapsed > .right { overflow-y: auto !important; }
 }
+
+/* ============================================================================
+   AQUA / FRUTIGER AERO — Fase 1: fondo acuático, botones candy, glass, pills
+   (additivo, ambos temas; no toca estructura ni IDs)
+   ============================================================================ */
+/* fondo cielo/agua con bokeh suave */
+:root:not([data-theme="dark"]) body {
+  background:
+    radial-gradient(1100px 540px at 82% -12%, rgba(39,169,255,.20), transparent 60%),
+    radial-gradient(900px 520px at 4% -4%, rgba(110,45,245,.10), transparent 55%),
+    radial-gradient(700px 420px at 50% 108%, rgba(46,209,170,.10), transparent 60%),
+    linear-gradient(180deg, #eaf4ff 0%, #eaeef5 46%, #e4e9f3 100%);
+  background-attachment: fixed;
+}
+:root[data-theme="dark"] body {
+  background:
+    radial-gradient(1100px 540px at 82% -12%, rgba(39,169,255,.16), transparent 60%),
+    radial-gradient(900px 520px at 4% -4%, rgba(110,45,245,.16), transparent 55%),
+    radial-gradient(700px 420px at 50% 108%, rgba(46,209,170,.07), transparent 60%),
+    linear-gradient(180deg, #0b0f1c 0%, var(--bg) 44%, var(--bg-2) 100%);
+  background-attachment: fixed;
+}
+
+/* --- botón candy/aqua (capa de brillo + capa de color) --- */
+.btn { border-radius: 12px; }
+.btn.primary {
+  border: 1px solid rgba(22,70,150,.45); color: #fff; text-shadow: 0 1px 1px rgba(0,28,80,.4);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.55), rgba(255,255,255,.06) 46%, rgba(255,255,255,0) 47%),
+    linear-gradient(180deg, #44c8ff 0%, #2f86f0 50%, #2a5fe0 100%);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.8), inset 0 -10px 16px rgba(0,40,110,.18), 0 6px 16px rgba(46,99,230,.4);
+}
+.btn.primary:hover { filter: brightness(1.05); }
+.btn:not(.primary) {
+  border: 1px solid rgba(120,140,180,.35); color: var(--ink);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.95), rgba(255,255,255,.2) 50%, rgba(255,255,255,0) 51%),
+    linear-gradient(180deg, #ffffff, #e8eef8);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,1), 0 2px 6px rgba(40,60,110,.10);
+}
+:root[data-theme="dark"] .btn:not(.primary) {
+  border-color: rgba(255,255,255,.10); color: var(--ink-2);
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.02) 50%, rgba(255,255,255,0) 51%),
+    linear-gradient(180deg, #283042, #1b212e);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.07), var(--sh-1);
+}
+/* icon-btn como botón de cristal redondo */
+.icon-btn { background: linear-gradient(180deg, rgba(255,255,255,.9), #eef2f8); box-shadow: inset 0 1px 0 rgba(255,255,255,1), var(--sh-1); }
+:root[data-theme="dark"] .icon-btn { background: linear-gradient(180deg, #283042, #1b212e); box-shadow: inset 0 1px 0 rgba(255,255,255,.06), var(--sh-1); }
+
+/* --- glass más marcado en paneles --- */
+.topbar { backdrop-filter: blur(16px) saturate(1.5); }
+:root[data-theme="dark"] .topbar { background: rgba(12,16,28,.66); }
+.modal { backdrop-filter: blur(8px) saturate(1.3); box-shadow: 0 1px 0 rgba(255,255,255,.5) inset, var(--sh-3); }
+:root[data-theme="dark"] .modal { box-shadow: 0 1px 0 rgba(255,255,255,.06) inset, var(--sh-3); }
+
+/* --- pills/etiquetas glossy --- */
+.t-genre { box-shadow: inset 0 1px 0 rgba(255,255,255,.6); }
+:root[data-theme="dark"] .t-genre { box-shadow: inset 0 1px 0 rgba(255,255,255,.10); }
+/* pestaña activa glossy */
+.tabs button.active { background: linear-gradient(180deg, #ffffff, #eef3fb); box-shadow: inset 0 1px 0 #fff, var(--sh-1); }
+:root[data-theme="dark"] .tabs button.active { background: linear-gradient(180deg, #232b3c, #1a2130); box-shadow: inset 0 1px 0 rgba(255,255,255,.07), var(--sh-1); color: var(--blue); }
+
+/* --- inputs con cristal/inset --- */
+input[type=text], input[type=password], input[type=email], input[type=number], input[type=search], textarea, select {
+  box-shadow: inset 0 1px 2px rgba(30,50,90,.06);
+}
+:root[data-theme="dark"] input[type=text], :root[data-theme="dark"] textarea, :root[data-theme="dark"] select {
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.35);
+}
