@@ -2734,3 +2734,30 @@ input[type=text], input[type=password], input[type=email], input[type=number], i
 .bottom-nav { backdrop-filter: blur(16px) saturate(1.5); }
 :root:not([data-theme="dark"]) .bottom-nav { background: linear-gradient(180deg, rgba(255,255,255,.85), rgba(255,255,255,.7)); }
 :root[data-theme="dark"] .bottom-nav { background: rgba(12,16,28,.7); }
+
+/* ============================================================================
+   AQUA / FRUTIGER AERO — Fase 4: pulido, consistencia y micro-interacciones
+   ============================================================================ */
+/* radios consistentes en formularios */
+input[type=text], input[type=password], input[type=email], input[type=number], input[type=search], textarea, select { border-radius: 12px; }
+/* foco aqua coherente en todos los campos */
+input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shadow: 0 0 0 3px rgba(70,200,255,.20); }
+/* scrollbar fino acuático en tema claro */
+:root:not([data-theme="dark"]) *::-webkit-scrollbar-thumb { background: #bcd2e8; background-clip: content-box; }
+:root:not([data-theme="dark"]) *::-webkit-scrollbar-thumb:hover { background: #a6c0dc; background-clip: content-box; }
+/* nav-item con tinte acuático al pasar el ratón */
+@media (hover: hover) {
+  .nav-item:hover { background: rgba(70,200,255,.10); }
+  .icon-btn:hover { filter: brightness(1.04); }
+  .convo:hover, .online-item:hover, .person-row:hover, .ptop-row:hover { background: rgba(70,200,255,.07); }
+}
+.icon-btn { transition: transform .14s var(--ease), box-shadow .18s var(--ease), filter .15s, background .18s; }
+/* avatares: anillo interior más fino y limpio */
+:root[data-theme="dark"] .avatar { box-shadow: inset 0 0 0 1px rgba(255,255,255,.07); }
+/* logo del header más nítido (sin gradiente que se ve raro a tamaño pequeño en móvil) */
+@media (max-width: 720px) {
+  .topbar-logo.logo { -webkit-text-fill-color: initial; background: none; color: var(--ink); }
+  .topbar-logo.logo .u { -webkit-text-fill-color: initial; background: none; color: var(--blue); }
+}
+/* respeta reduce-motion para todo lo nuevo */
+@media (prefers-reduced-motion: reduce) { .main.swap, .btn::after, .ts-bar { animation: none !important; } }
