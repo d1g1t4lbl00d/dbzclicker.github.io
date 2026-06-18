@@ -766,9 +766,11 @@ function bindUI() {
   });
   document.querySelectorAll('#feedTabs button').forEach(b => {
     b.onclick = () => {
+      if (b.classList.contains('active') && state.view === 'feed') return; // ya está, no recargues
       state.tab = b.dataset.tab;
       document.querySelectorAll('#feedTabs button').forEach(x => x.classList.toggle('active', x===b));
-      switchView('feed');
+      // pinta YA el estado activo del botón; el render pesado va en el siguiente frame
+      requestAnimationFrame(() => switchView('feed'));
     };
   });
   $('btnUpload').onclick = openCreateChooser;
@@ -1094,6 +1096,20 @@ function initSwipeNav() {
       main.style.transition = 'transform .28s cubic-bezier(.22,.61,.36,1)';
       main.style.transform = 'translateX(0)';
       setTimeout(clearStyle, 300);
+    }
+  }, { passive: true });
+
+  // cerrar el cajón izquierdo deslizando (en móvil)
+  let dsx = 0, dsy = 0, drawerSwipe = false;
+  document.addEventListener('touchstart', (e) => {
+    drawerSwipe = e.touches.length === 1 && W() <= 720 && $('sidebar')?.classList.contains('open');
+    if (drawerSwipe) { dsx = e.touches[0].clientX; dsy = e.touches[0].clientY; }
+  }, { passive: true });
+  document.addEventListener('touchend', (e) => {
+    if (!drawerSwipe) return; drawerSwipe = false;
+    const dx = e.changedTouches[0].clientX - dsx, dy = e.changedTouches[0].clientY - dsy;
+    if (Math.abs(dx) > 45 && Math.abs(dx) > Math.abs(dy)) {   // swipe horizontal claro → cerrar
+      $('sidebar').classList.remove('open'); $('drawerBackdrop')?.classList.remove('show');
     }
   }, { passive: true });
 }
