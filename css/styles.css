@@ -2597,3 +2597,9 @@ body.q-dragging .npq-list { overflow: hidden; }
   .sidebar { background: var(--panel) !important; backdrop-filter: none; box-shadow: 8px 0 40px rgba(0,0,0,.4); }
   .logo { font-family: var(--font); }
 }
+
+/* FIX móvil: restaurar el scroll del cajón (el plegado de escritorio ponía overflow:hidden) */
+@media (max-width: 1024px) {
+  .app.side-collapsed > .sidebar { overflow-y: auto !important; }
+  .app.right-collapsed > .right { overflow-y: auto !important; }
+}
