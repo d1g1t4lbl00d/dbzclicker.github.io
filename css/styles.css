@@ -2674,3 +2674,38 @@ input[type=text], input[type=password], input[type=email], input[type=number], i
 :root[data-theme="dark"] input[type=text], :root[data-theme="dark"] textarea, :root[data-theme="dark"] select {
   box-shadow: inset 0 1px 2px rgba(0,0,0,.35);
 }
+
+/* ============================================================================
+   AQUA / FRUTIGER AERO — Fase 2: tarjetas, waveform, reproductor, modales
+   ============================================================================ */
+/* tarjetas de pista: cristal con brillo superior y esquinas Aqua */
+.track { border-radius: var(--r-xl); }
+:root:not([data-theme="dark"]) .track:not(.has-bg) { background: linear-gradient(180deg, #ffffff, #f4f8fd); box-shadow: inset 0 1px 0 rgba(255,255,255,1), 0 2px 8px rgba(40,60,110,.08); }
+:root[data-theme="dark"] .track:not(.has-bg) { background: linear-gradient(180deg, #151b29, var(--panel)); box-shadow: inset 0 1px 0 rgba(255,255,255,.05), var(--sh-1); }
+.track.has-bg { box-shadow: inset 0 1px 0 rgba(255,255,255,.18), var(--sh-2); }
+
+/* waveform tipo ecualizador acuático (sin sombras por barra, por rendimiento) */
+.wave .bar::before { background: linear-gradient(180deg, #c8def2, #aec6e2); border-radius: 3px; }
+:root[data-theme="dark"] .wave .bar::before { background: linear-gradient(180deg, #313b56, #283150); }
+.wave .bar.played::before { background: linear-gradient(180deg, #62d4ff, #2f86f0 70%, #2a5fe0); }
+:root[data-theme="dark"] .wave .bar.played::before { background: linear-gradient(180deg, #6fe0ff, #4d8df5); }
+.track.has-bg .wave .bar::before { background: rgba(255,255,255,.45); }
+.track.has-bg .wave .bar.played::before { background: linear-gradient(180deg, #fff, #d8ecff); }
+
+/* reproductor: botón play candy + barra de progreso/volumen con cristal */
+.player { backdrop-filter: blur(14px) saturate(1.4); }
+.player .controls .play-big, .np-play {
+  border: 1px solid rgba(22,70,150,.4);
+  background: linear-gradient(180deg, rgba(255,255,255,.5), rgba(255,255,255,0) 48%), var(--accent-grad);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.75), 0 7px 18px rgba(46,99,230,.5);
+}
+.seek .fill, .vol-slider .fill { background: linear-gradient(180deg, #62d4ff, #2f7ff0); box-shadow: inset 0 1px 0 rgba(255,255,255,.5); }
+.seek .knob, .vol-slider .knob { background: radial-gradient(circle at 50% 32%, #ffffff, #dbe6f5 75%); border-color: rgba(22,70,150,.5); box-shadow: 0 1px 3px rgba(0,30,80,.35), inset 0 1px 0 #fff; }
+.player .now .cover { box-shadow: inset 0 1px 0 rgba(255,255,255,.4), 0 6px 18px rgba(46,99,230,.30); }
+
+/* modales: cabecera con hairline y cuerpo aireado */
+.modal-head { padding-bottom: 12px; border-bottom: 1px solid var(--line-soft); margin-bottom: 4px; }
+:root:not([data-theme="dark"]) .modal { background: linear-gradient(180deg, #ffffff, #f6f9fe); }
+
+/* Now Playing: portada con glow del acento */
+.np-play { color: #fff; }
