@@ -2586,3 +2586,14 @@ body.q-dragging .npq-list { overflow: hidden; }
 .topbar-upload { background: var(--accent-grad) !important; border: none !important; }
 .topbar-upload svg { stroke: #fff !important; width: 20px; height: 20px; }
 .topbar-upload:hover { box-shadow: var(--sh-blue); transform: translateY(-1px); }
+
+/* FIX móvil/tablet: el "plegado" es solo de escritorio; no ocultar el cajón */
+@media (max-width: 1024px) {
+  .app.side-collapsed > .sidebar { opacity: 1 !important; pointer-events: auto !important; }
+  .app.right-collapsed > .right { opacity: 1 !important; pointer-events: auto !important; }
+}
+/* cajón móvil: fondo sólido (no translúcido) */
+@media (max-width: 720px) {
+  .sidebar { background: var(--panel) !important; backdrop-filter: none; box-shadow: 8px 0 40px rgba(0,0,0,.4); }
+  .logo { font-family: var(--font); }
+}
