@@ -2567,15 +2567,16 @@ body.q-dragging .npq-list { overflow: hidden; }
     border-left: 1px solid var(--line-soft);
     transition: width .2s var(--ease), box-shadow .2s var(--ease), background-color .2s var(--ease);
   }
-  .app.right-collapsed > .right:hover { width: 320px; z-index: 60; background: var(--panel); box-shadow: -14px 0 50px rgba(0,0,0,.28); border-radius: 18px 0 0 18px; }
-  .app.right-collapsed > .right:not(:hover) .right-section h4,
-  .app.right-collapsed > .right:not(:hover) .chat,
-  .app.right-collapsed > .right:not(:hover) .online-item .meta,
-  .app.right-collapsed > .right:not(:hover) .online-item .dot-online { display: none; }
-  .app.right-collapsed > .right:not(:hover) .right-section { padding: 8px 0; border: none; }
-  .app.right-collapsed > .right:not(:hover) .online-list { max-height: none; align-items: center; gap: 7px; overflow: visible; }
-  .app.right-collapsed > .right:not(:hover) .online-item { justify-content: center; padding: 4px 0; }
-  .app.right-collapsed > .right:not(:hover) .online-item .avatar { width: 42px; height: 42px; }
+  .app.right-collapsed > .right.peek { width: 320px; z-index: 60; background: var(--panel); box-shadow: -14px 0 50px rgba(0,0,0,.28); border-radius: 18px 0 0 18px; }
+  .app.right-collapsed > .right:not(.peek) { cursor: pointer; }
+  .app.right-collapsed > .right:not(.peek) .right-section h4,
+  .app.right-collapsed > .right:not(.peek) .chat,
+  .app.right-collapsed > .right:not(.peek) .online-item .meta,
+  .app.right-collapsed > .right:not(.peek) .online-item .dot-online { display: none; }
+  .app.right-collapsed > .right:not(.peek) .right-section { padding: 8px 0; border: none; }
+  .app.right-collapsed > .right:not(.peek) .online-list { max-height: none; align-items: center; gap: 7px; overflow: visible; }
+  .app.right-collapsed > .right:not(.peek) .online-item { justify-content: center; padding: 4px 0; }
+  .app.right-collapsed > .right:not(.peek) .online-item .avatar { width: 42px; height: 42px; }
   /* sin barras de scroll en el rail derecho */
   .app.right-collapsed > .right, .app.right-collapsed > .right * { scrollbar-width: none; }
   .app.right-collapsed > .right::-webkit-scrollbar, .app.right-collapsed > .right *::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none; }

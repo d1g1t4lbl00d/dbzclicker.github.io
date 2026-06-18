@@ -773,7 +773,7 @@ function bindUI() {
   });
   $('btnUpload').onclick = openCreateChooser;
   $('btnNotif').onclick = () => switchView('notifications');
-  $('btnMessages').onclick = () => { switchView('messages'); hideDrawers(); };
+  { const b = $('btnMessages'); if (b) b.onclick = () => { switchView('messages'); hideDrawers(); }; }
   $('meChip').onclick = () => openProfile(state.user.id);
   $('menuToggle').onclick = () => { const open = $('sidebar').classList.toggle('open'); $('drawerBackdrop').classList.toggle('show', open); };
   $('btnChatToggle').onclick = toggleRight;
@@ -786,9 +786,15 @@ function bindUI() {
     if (window.innerWidth > 720) { const on = appEl.classList.toggle('side-collapsed'); localStorage.setItem('ub_side_collapsed', on ? '1' : '0'); }
     else { const open = $('sidebar').classList.toggle('open'); $('drawerBackdrop').classList.toggle('show', open); }
   };
-  $('toggleChatBtn').onclick = () => { const on = appEl.classList.toggle('right-collapsed'); localStorage.setItem('ub_right_collapsed', on ? '1' : '0'); };
-  $('chatClose').onclick = closeRightPanel;
-  { const tu = $('topUpload'); if (tu) tu.onclick = openCreateChooser; }
+  { const b = $('toggleChatBtn'); if (b) b.onclick = () => { const on = appEl.classList.toggle('right-collapsed'); localStorage.setItem('ub_right_collapsed', on ? '1' : '0'); }; }
+  $('chatClose').onclick = () => { const r = rightEl(); if (appEl.classList.contains('right-collapsed')) r.classList.remove('peek'); else closeRightPanel(); };
+  // rail de chat (derecha): abrir/cerrar con CLIC (no hover) para no estorbar el scroll
+  document.addEventListener('click', (e) => {
+    const r = rightEl(); if (!r || !appEl.classList.contains('right-collapsed')) return;
+    if (!r.classList.contains('peek')) {
+      if (r.contains(e.target) && !e.target.closest('.online-item')) r.classList.add('peek');
+    } else if (!r.contains(e.target)) { r.classList.remove('peek'); }
+  });
   $('drawerBackdrop').onclick = hideDrawers;
   $('btnSearchToggle').onclick = () => {
     const tb = document.querySelector('.topbar');
@@ -8306,8 +8312,8 @@ async function refreshDmBadge() {
     .eq('recipient_id', state.user.id).eq('read', false);
   const n = count || 0;
   const badge = $('dmBadge'), side = $('dmCount');
-  if (n > 0) { badge.textContent = n; badge.classList.remove('hidden'); if (side) side.textContent = n; }
-  else { badge.classList.add('hidden'); if (side) side.textContent = ''; }
+  if (n > 0) { if (badge) { badge.textContent = n; badge.classList.remove('hidden'); } if (side) side.textContent = n; }
+  else { if (badge) badge.classList.add('hidden'); if (side) side.textContent = ''; }
 }
 function markDmRead(other) {
   sb.from('direct_messages').update({ read: true })
