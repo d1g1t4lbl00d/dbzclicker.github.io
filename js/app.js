@@ -5682,7 +5682,11 @@ async function pkLoadOrDefault() {
     avatar: p.avatar_url || '', banner: czUrl(theme.banner) || '',
     contactEmail: '', booking: '', management: '',
     highlights: [],
-    external: [],
+    external: [
+      { label: 'Spotify · oyentes mensuales', value: '' },
+      { label: 'Instagram · seguidores', value: '' },
+      { label: 'Reproducciones totales', value: '' },
+    ],
     links: profLinks,
     showStats: true, stats: { followers: foll.count || 0, plays: totalPlays, tracks: tr.length },
     tracks: allTracks.slice(0, 4),
@@ -5720,8 +5724,8 @@ ${toolBar('presskit', 'Press Kit / EPK', 'Edita a la izquierda, mira el resultad
         <div class="pk-fsec"><h4>Hitos / logros <span class="pk-hint2">una línea por hito</span></h4>
           <textarea class="pk-in" data-k="highlights" rows="4" placeholder="+50.000 reproducciones&#10;Telonero en Sala X&#10;Reseñado por...">${esc((k.highlights || []).join('\n'))}</textarea>
         </div>
-        <div class="pk-fsec"><h4>Cifras externas <span class="pk-hint2">seguidores / logros en otras plataformas</span></h4>
-          <p class="pk-hint2" style="margin:0 0 8px">Añade tus números de Spotify, Instagram, SoundCloud, YouTube… lo que quieras. Escribe la etiqueta y el valor.</p>
+        <div class="pk-fsec"><h4>Estadísticas globales <span class="pk-hint2">tu presencia en todas las apps e Internet</span></h4>
+          <p class="pk-hint2" style="margin:0 0 8px">Esto es lo principal de tu press kit: tus números reales como artista en cualquier plataforma — Spotify, Instagram, SoundCloud, YouTube, TikTok, oyentes mensuales, totales… Escribe la etiqueta y el valor.</p>
           <div id="pkExtRows" class="pk-ext-rows"></div>
           <button type="button" class="btn sm" id="pkExtAdd">+ Añadir cifra</button>
         </div>
@@ -5742,7 +5746,7 @@ ${toolBar('presskit', 'Press Kit / EPK', 'Edita a la izquierda, mira el resultad
           <div class="pk-tpls">${tpls.map(([v, n]) => `<button type="button" class="pk-tpl ${k.template === v ? 'on' : ''}" data-tpl="${v}">${n}</button>`).join('')}</div>
           <label class="pk-l">Secciones visibles</label>
           <div class="pk-toggles">
-            ${[['stats', 'Estadísticas'], ['external', 'Cifras externas'], ['bio', 'Biografía'], ['highlights', 'Hitos'], ['tracks', 'Pistas'], ['links', 'Enlaces'], ['contact', 'Contacto']].map(([s, n]) => `<label class="pk-tg"><input type="checkbox" data-sec="${s}" ${k.sections[s] !== false ? 'checked' : ''}/> ${n}</label>`).join('')}
+            ${[['external', 'Estadísticas globales'], ['stats', 'Cifras en UnderBro'], ['bio', 'Biografía'], ['highlights', 'Hitos'], ['tracks', 'Pistas'], ['links', 'Enlaces'], ['contact', 'Contacto']].map(([s, n]) => `<label class="pk-tg"><input type="checkbox" data-sec="${s}" ${k.sections[s] !== false ? 'checked' : ''}/> ${n}</label>`).join('')}
           </div>
         </div>
         <div class="pk-actions">
@@ -5906,10 +5910,13 @@ function pressKitHTML(k) {
     ? `<div class="pk-av" style="background-image:url('${czUrl(k.avatar)}')"></div>`
     : `<div class="pk-av pk-av-ph">${esc(initials)}</div>`;
   const stats = (sec.stats !== false && k.stats) ? `
-    <div class="pk-stats">
-      <div><b>${nfmt(k.stats.followers)}</b><span>seguidores</span></div>
-      <div><b>${nfmt(k.stats.plays)}</b><span>reproducciones</span></div>
-      <div><b>${nfmt(k.stats.tracks)}</b><span>pistas</span></div>
+    <div class="pk-stats pk-stats-sec">
+      <div class="pk-stats-cap">En UnderBro</div>
+      <div class="pk-stats-row">
+        <div><b>${nfmt(k.stats.followers)}</b><span>seguidores</span></div>
+        <div><b>${nfmt(k.stats.plays)}</b><span>reproducciones</span></div>
+        <div><b>${nfmt(k.stats.tracks)}</b><span>pistas</span></div>
+      </div>
     </div>` : '';
   const extRows = (k.external || []).filter(e => e && (e.value || '').trim());
   const external = (sec.external !== false && extRows.length) ? `
@@ -5945,7 +5952,7 @@ function pressKitHTML(k) {
         </div>
       </header>
       <div class="pk-body">
-        ${stats}${external}${bio}${hl}${tracks}${links}${contact}
+        ${external}${stats}${bio}${hl}${tracks}${links}${contact}
       </div>
       <footer class="pk-foot">Press kit creado con <b>UnderBro</b> · underbro.app</footer>
     </article>`;
