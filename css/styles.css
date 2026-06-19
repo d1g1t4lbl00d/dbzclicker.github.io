@@ -2007,10 +2007,34 @@ textarea.pk-in { resize: vertical; line-height: 1.5; }
 .pk-stats > div { flex: 1; background: var(--pk-bg2); border: 1px solid var(--pk-line); border-radius: 12px; padding: 12px; text-align: center; }
 .pk-stats b { display: block; font-size: 22px; font-weight: 850; color: var(--pk-text); }
 .pk-stats span { font-size: 11px; color: var(--pk-muted); }
-.pk-ext { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; margin: 16px 0 6px; }
-.pk-ext > div { background: var(--pk-bg2); border: 1px solid var(--pk-line); border-radius: 14px; padding: 16px 12px; text-align: center; }
-.pk-ext b { display: block; font-size: 28px; font-weight: 900; line-height: 1.05; color: var(--pk-accent); }
-.pk-ext span { font-size: 11px; color: var(--pk-muted); display: block; margin-top: 4px; line-height: 1.3; }
+/* ---- presencia global: hero de alcance + tarjetas con marca ---- */
+.pk-ext-sec { margin-top: 18px; }
+.pk-reach { position: relative; overflow: hidden; border-radius: 16px; padding: 18px 16px; margin-bottom: 12px; text-align: center;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--pk-accent) 22%, transparent), color-mix(in srgb, var(--pk-accent) 6%, transparent));
+  border: 1px solid color-mix(in srgb, var(--pk-accent) 30%, var(--pk-line)); }
+.pk-reach-n { font-size: 38px; font-weight: 900; line-height: 1; letter-spacing: -.02em; color: var(--pk-text); }
+.pk-reach-l { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .6px; color: var(--pk-muted); margin-top: 6px; }
+.pk-ext { display: grid; grid-template-columns: repeat(auto-fit, minmax(132px, 1fr)); gap: 10px; margin: 0 0 4px; }
+.pk-ext-card { position: relative; background: var(--pk-bg2); border: 1px solid var(--pk-line); border-radius: 14px; padding: 16px 12px 14px; text-align: center; overflow: hidden; }
+.pk-ext-card::before { content: ""; position: absolute; inset: 0 0 auto 0; height: 3px; background: var(--c); opacity: .9; }
+.pk-ext-ic { display: inline-flex; width: 38px; height: 38px; border-radius: 11px; background: var(--c); align-items: center; justify-content: center; margin-bottom: 8px; box-shadow: 0 4px 12px color-mix(in srgb, var(--c) 35%, transparent); }
+.pk-ext-ic svg { width: 20px; height: 20px; }
+.pk-ext-card b { display: block; font-size: 24px; font-weight: 900; line-height: 1.05; color: var(--pk-text); }
+.pk-ext-lb { font-size: 11px; color: var(--pk-muted); display: block; margin-top: 4px; line-height: 1.3; }
+.pk-ext-pl { display: inline-block; margin-top: 7px; font-size: 9.5px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; color: var(--c); }
+/* citas de prensa */
+.pk-quotes { display: flex; flex-direction: column; gap: 12px; }
+.pk-quote { margin: 0; padding: 14px 16px; border-left: 3px solid var(--pk-accent); border-radius: 0 12px 12px 0; background: var(--pk-bg2); }
+.pk-quote p { margin: 0; font-size: 14.5px; line-height: 1.55; font-style: italic; color: var(--pk-text); }
+.pk-quote cite { display: block; margin-top: 8px; font-size: 12px; font-style: normal; font-weight: 700; color: var(--pk-muted); }
+/* builder: punto de marca + filas de citas */
+.pk-ext-dotwrap { display: inline-flex; flex-shrink: 0; }
+.pk-ext-dot { width: 12px; height: 12px; border-radius: 50%; box-shadow: 0 0 0 2px var(--bg-soft); }
+.pk-q-rows { display: flex; flex-direction: column; gap: 10px; margin-bottom: 10px; }
+.pk-q-row { background: var(--bg-soft); border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+.pk-q-row textarea { width: 100%; box-sizing: border-box; border: none; background: transparent; color: var(--text); font-size: 13.5px; resize: vertical; font-family: inherit; }
+.pk-q-foot { display: flex; gap: 8px; align-items: center; margin-top: 6px; }
+.pk-q-foot .pk-q-src { flex: 1; min-width: 0; padding: 7px 10px; border: 1px solid var(--line); border-radius: 9px; background: var(--bg); color: var(--text); font-size: 12.5px; }
 /* tira secundaria de cifras propias de UnderBro */
 .pk-stats-sec { display: block; margin: 14px 0 4px; }
 .pk-stats-cap { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .8px; color: var(--pk-muted); margin-bottom: 6px; }

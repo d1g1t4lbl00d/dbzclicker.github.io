@@ -5671,7 +5671,8 @@ async function pkLoadOrDefault() {
     d.links = profLinks;                     // enlaces siempre desde el perfil
     d.stats = { followers: foll.count || 0, plays: totalPlays, tracks: tr.length };
     if (!Array.isArray(d.external)) d.external = [];
-    if (!d.sections) d.sections = { stats: true, bio: true, highlights: true, tracks: true, contact: true, links: true, external: true };
+    if (!Array.isArray(d.quotes)) d.quotes = [];
+    if (!d.sections) d.sections = { stats: true, bio: true, highlights: true, tracks: true, contact: true, links: true, external: true, quotes: true };
     d.published = !!saved.published;
     return d;
   }
@@ -5687,12 +5688,13 @@ async function pkLoadOrDefault() {
       { label: 'Instagram · seguidores', value: '' },
       { label: 'Reproducciones totales', value: '' },
     ],
+    quotes: [],
     links: profLinks,
     showStats: true, stats: { followers: foll.count || 0, plays: totalPlays, tracks: tr.length },
     tracks: allTracks.slice(0, 4),
     allTracks,
     accent: czColor(theme.accent) || '#3e57fc', template: 'dark',
-    sections: { stats: true, bio: true, highlights: true, tracks: true, contact: true, links: true, external: true },
+    sections: { stats: true, bio: true, highlights: true, tracks: true, contact: true, links: true, external: true, quotes: true },
     published: false,
   };
 }
@@ -5729,6 +5731,11 @@ ${toolBar('presskit', 'Press Kit / EPK', 'Edita a la izquierda, mira el resultad
           <div id="pkExtRows" class="pk-ext-rows"></div>
           <button type="button" class="btn sm" id="pkExtAdd">+ Añadir cifra</button>
         </div>
+        <div class="pk-fsec"><h4>Prensa / reseñas <span class="pk-hint2">citas de medios o personas</span></h4>
+          <p class="pk-hint2" style="margin:0 0 8px">Frases de medios, blogs, salas o profesionales que han hablado de ti.</p>
+          <div id="pkQuoteRows" class="pk-q-rows"></div>
+          <button type="button" class="btn sm" id="pkQuoteAdd">+ Añadir cita</button>
+        </div>
         <div class="pk-fsec"><h4>Pistas destacadas <span class="pk-hint2">elige cuáles mostrar</span></h4>
           <div class="pk-tracks-pick">
             ${(k.allTracks || []).length ? k.allTracks.map(t => `<label class="pk-tk"><input type="checkbox" data-tk="${esc(t.id)}" ${k.tracks.some(x => x.id === t.id) ? 'checked' : ''}/> <span>${esc(t.title)}</span></label>`).join('') : '<p class="pk-hint2">Sube pistas para destacarlas aquí.</p>'}
@@ -5746,7 +5753,7 @@ ${toolBar('presskit', 'Press Kit / EPK', 'Edita a la izquierda, mira el resultad
           <div class="pk-tpls">${tpls.map(([v, n]) => `<button type="button" class="pk-tpl ${k.template === v ? 'on' : ''}" data-tpl="${v}">${n}</button>`).join('')}</div>
           <label class="pk-l">Secciones visibles</label>
           <div class="pk-toggles">
-            ${[['external', 'Estadísticas globales'], ['stats', 'Cifras en UnderBro'], ['bio', 'Biografía'], ['highlights', 'Hitos'], ['tracks', 'Pistas'], ['links', 'Enlaces'], ['contact', 'Contacto']].map(([s, n]) => `<label class="pk-tg"><input type="checkbox" data-sec="${s}" ${k.sections[s] !== false ? 'checked' : ''}/> ${n}</label>`).join('')}
+            ${[['external', 'Estadísticas globales'], ['stats', 'Cifras en UnderBro'], ['bio', 'Biografía'], ['highlights', 'Hitos'], ['quotes', 'Prensa'], ['tracks', 'Pistas'], ['links', 'Enlaces'], ['contact', 'Contacto']].map(([s, n]) => `<label class="pk-tg"><input type="checkbox" data-sec="${s}" ${k.sections[s] !== false ? 'checked' : ''}/> ${n}</label>`).join('')}
           </div>
         </div>
         <div class="pk-actions">
@@ -5794,22 +5801,46 @@ ${toolBar('presskit', 'Press Kit / EPK', 'Edita a la izquierda, mira el resultad
   main.querySelectorAll('input[data-sec]').forEach(cb => cb.onchange = () => {
     pkState.sections[cb.dataset.sec] = cb.checked; pkRenderPreview();
   });
-  // cifras externas (Spotify, Instagram, SoundCloud… genérico)
+  // cifras externas (Spotify, Instagram, SoundCloud… genérico) con detección de plataforma
   if (!Array.isArray(pkState.external)) pkState.external = [];
   const extBox = $('pkExtRows');
+  const extDot = (label) => { const b = pkBrand(label); return `<span class="pk-ext-dot" style="background:${b ? b.color : 'var(--accent)'}" title="${b ? esc(b.name) : 'Otra plataforma'}"></span>`; };
   const renderExtRows = () => {
     extBox.innerHTML = pkState.external.map((row, i) => `
       <div class="pk-ext-row" data-i="${i}">
+        <span class="pk-ext-dotwrap" data-i="${i}">${extDot(row.label)}</span>
         <input class="pk-ext-lbl" data-i="${i}" value="${esc(row.label || '')}" maxlength="40" placeholder="Spotify · oyentes mensuales" />
         <input class="pk-ext-val" data-i="${i}" value="${esc(row.value || '')}" maxlength="20" placeholder="1.2M" />
         <button type="button" class="pk-ext-del" data-i="${i}" aria-label="Eliminar">×</button>
-      </div>`).join('') || '<p class="pk-hint2">Aún no has añadido cifras externas.</p>';
-    extBox.querySelectorAll('.pk-ext-lbl').forEach(inp => inp.oninput = () => { pkState.external[+inp.dataset.i].label = inp.value; pkRenderPreview(); });
+      </div>`).join('') || '<p class="pk-hint2">Aún no has añadido cifras.</p>';
+    extBox.querySelectorAll('.pk-ext-lbl').forEach(inp => inp.oninput = () => {
+      const i = +inp.dataset.i; pkState.external[i].label = inp.value;
+      const dw = extBox.querySelector(`.pk-ext-dotwrap[data-i="${i}"]`); if (dw) dw.innerHTML = extDot(inp.value);
+      pkRenderPreview();
+    });
     extBox.querySelectorAll('.pk-ext-val').forEach(inp => inp.oninput = () => { pkState.external[+inp.dataset.i].value = inp.value; pkRenderPreview(); });
     extBox.querySelectorAll('.pk-ext-del').forEach(b => b.onclick = () => { pkState.external.splice(+b.dataset.i, 1); renderExtRows(); pkRenderPreview(); });
   };
   renderExtRows();
   $('pkExtAdd').onclick = () => { pkState.external.push({ label: '', value: '' }); renderExtRows(); pkRenderPreview(); };
+  // prensa / reseñas
+  if (!Array.isArray(pkState.quotes)) pkState.quotes = [];
+  const qBox = $('pkQuoteRows');
+  const renderQRows = () => {
+    qBox.innerHTML = pkState.quotes.map((row, i) => `
+      <div class="pk-q-row" data-i="${i}">
+        <textarea class="pk-q-text" data-i="${i}" rows="2" maxlength="280" placeholder="“Una de las voces más prometedoras del año.”">${esc(row.text || '')}</textarea>
+        <div class="pk-q-foot">
+          <input class="pk-q-src" data-i="${i}" value="${esc(row.source || '')}" maxlength="80" placeholder="Medio o autor (ej: Rolling Stone)" />
+          <button type="button" class="pk-ext-del" data-i="${i}" aria-label="Eliminar">×</button>
+        </div>
+      </div>`).join('') || '<p class="pk-hint2">Aún no has añadido citas.</p>';
+    qBox.querySelectorAll('.pk-q-text').forEach(inp => inp.oninput = () => { pkState.quotes[+inp.dataset.i].text = inp.value; pkRenderPreview(); });
+    qBox.querySelectorAll('.pk-q-src').forEach(inp => inp.oninput = () => { pkState.quotes[+inp.dataset.i].source = inp.value; pkRenderPreview(); });
+    qBox.querySelectorAll('.pk-ext-del').forEach(b => b.onclick = () => { pkState.quotes.splice(+b.dataset.i, 1); renderQRows(); pkRenderPreview(); });
+  };
+  renderQRows();
+  $('pkQuoteAdd').onclick = () => { pkState.quotes.push({ text: '', source: '' }); renderQRows(); pkRenderPreview(); };
   const pkSyncPub = () => {
     $('pkPubRow').classList.toggle('hidden', !pkState.published);
     $('pkPubNote').innerHTML = pkState.published
@@ -5898,6 +5929,65 @@ async function pkSave(fromToggle) {
   if (!fromToggle) { btn.innerHTML = '✓ Publicado'; setTimeout(() => { btn.innerHTML = '<svg fill="none" stroke="#fff"><use href="#i-globe"/></svg> Guardar y publicar'; }, 2200); }
 }
 
+/* ---- estadísticas globales: detección de plataforma + utilidades ---- */
+const PK_BRANDS = [
+  { re: /spotify/i, name: 'Spotify', color: '#1DB954', svg: '<path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.36-.66.48-1.021.24-2.82-1.74-6.36-2.1-10.561-1.14-.418.12-.84-.18-.96-.6-.12-.42.18-.84.6-.96 4.56-1.02 8.52-.6 11.64 1.32.42.18.479.66.302 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.02.6-1.14C9.6 9.9 15 10.56 18.72 12.84c.36.18.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.3c-.6.18-1.2-.18-1.38-.72-.18-.6.18-1.2.72-1.38 4.26-1.26 11.28-1.02 15.721 1.62.539.3.719 1.02.42 1.56-.299.42-1.02.6-1.559.3z"/>' },
+  { re: /instagram|insta\b/i, name: 'Instagram', color: '#E4405F', svg: '<path d="M12 2.16c3.2 0 3.58.01 4.85.07 3.25.15 4.77 1.69 4.92 4.92.06 1.27.07 1.64.07 4.85 0 3.2-.01 3.58-.07 4.85-.15 3.23-1.66 4.77-4.92 4.92-1.27.06-1.64.07-4.85.07-3.2 0-3.58-.01-4.85-.07-3.26-.15-4.77-1.7-4.92-4.92C2.17 15.58 2.16 15.2 2.16 12c0-3.2.01-3.58.07-4.85.15-3.23 1.66-4.77 4.92-4.92C8.42 2.17 8.8 2.16 12 2.16zM12 0C8.74 0 8.33.01 7.05.07 2.7.27.27 2.69.07 7.05.01 8.33 0 8.74 0 12c0 3.26.01 3.67.07 4.95.2 4.36 2.62 6.78 6.98 6.98C8.33 23.99 8.74 24 12 24c3.26 0 3.67-.01 4.95-.07 4.35-.2 6.78-2.62 6.98-6.98.06-1.28.07-1.69.07-4.95 0-3.26-.01-3.67-.07-4.95-.2-4.35-2.62-6.78-6.98-6.98C15.67.01 15.26 0 12 0zm0 5.84a6.16 6.16 0 100 12.32 6.16 6.16 0 000-12.32zM12 16a4 4 0 110-8 4 4 0 010 8zm6.41-11.85a1.44 1.44 0 100 2.88 1.44 1.44 0 000-2.88z"/>' },
+  { re: /youtube|yt\b/i, name: 'YouTube', color: '#FF0000', svg: '<path d="M23.5 6.19a3.02 3.02 0 00-2.12-2.14C19.5 3.55 12 3.55 12 3.55s-7.5 0-9.38.5A3.02 3.02 0 00.5 6.19C0 8.07 0 12 0 12s0 3.93.5 5.81a3.02 3.02 0 002.12 2.14c1.87.5 9.38.5 9.38.5s7.5 0 9.38-.5a3.02 3.02 0 002.12-2.14C24 15.93 24 12 24 12s0-3.93-.5-5.81zM9.55 15.57V8.43L15.82 12l-6.27 3.57z"/>' },
+  { re: /tik\s?tok/i, name: 'TikTok', color: '#111', svg: '<path d="M12.53.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z"/>' },
+  { re: /x\b|twitter/i, name: 'X', color: '#111', svg: '<path d="M18.24 2.25h3.31l-7.23 8.26 8.5 11.24h-6.66l-5.21-6.82-5.97 6.82H1.68l7.73-8.84L1.25 2.25h6.83l4.71 6.23zm-1.16 17.52h1.83L7.08 4.13H5.12z"/>' },
+  { re: /facebook|fb\b/i, name: 'Facebook', color: '#1877F2', svg: '<path d="M24 12.07C24 5.44 18.63.07 12 .07S0 5.44 0 12.07c0 5.99 4.39 10.95 10.13 11.85v-8.38H7.08v-3.47h3.05V9.43c0-3.01 1.79-4.67 4.53-4.67 1.31 0 2.69.24 2.69.24v2.95h-1.51c-1.49 0-1.96.93-1.96 1.87v2.25h3.33l-.53 3.47h-2.8v8.38C19.61 23.02 24 18.06 24 12.07z"/>' },
+  { re: /soundcloud|sound\s?cloud/i, name: 'SoundCloud', color: '#FF5500', svg: '<path d="M1.18 11.3c-.07 0-.13.05-.14.13l-.27 2.16.27 2.11c0 .08.07.13.14.13.07 0 .13-.05.14-.13l.31-2.11-.31-2.16c-.01-.08-.07-.13-.14-.13zm1.46-.66c-.08 0-.14.06-.15.15l-.33 2.8.33 2.73c.01.09.07.15.15.15.08 0 .15-.06.15-.15l.37-2.73-.37-2.8c0-.09-.07-.15-.15-.15zm10.7-3.32c-.27 0-.53.05-.77.13-.16-1.86-1.72-3.32-3.62-3.32-.47 0-.92.09-1.32.25-.16.06-.2.12-.2.24v9.5c0 .12.09.22.21.23h5.7c1.14 0 2.06-.92 2.06-2.06 0-1.13-.92-2.05-2.06-2.05zM6.3 7.84c-.09 0-.16.07-.17.17l-.31 4.96.31 2.71c.01.1.08.16.17.16.08 0 .15-.06.16-.16l.36-2.71-.36-4.96c-.01-.1-.08-.17-.16-.17zm-1.48.33c-.08 0-.15.06-.16.16l-.29 4.64.29 2.71c.01.1.08.16.16.16.08 0 .15-.06.16-.16l.33-2.71-.33-4.64c-.01-.1-.08-.16-.16-.16zm-1.47.4c-.08 0-.14.06-.15.15l-.27 4.25.27 2.72c.01.09.07.15.15.15.08 0 .14-.06.15-.15l.31-2.72-.31-4.25c-.01-.09-.07-.15-.15-.15z"/>' },
+  { re: /apple\s?music|itunes/i, name: 'Apple Music', color: '#FA243C', svg: '<path d="M23.99 6.12c0-.51-.05-1.03-.15-1.53a4.6 4.6 0 00-.51-1.36 4.3 4.3 0 00-1.9-1.78A5.1 5.1 0 0019.7.97c-.5-.07-1-.1-1.5-.11H5.8c-.5.01-1 .04-1.5.11a5.1 5.1 0 00-1.73.48 4.3 4.3 0 00-1.9 1.78A4.6 4.6 0 00.16 4.6c-.1.5-.15 1.02-.15 1.53L0 6.86v10.27l.01.75c0 .51.05 1.03.15 1.53.1.47.27.93.51 1.36a4.3 4.3 0 001.9 1.78c.54.26 1.13.41 1.73.48.5.07 1 .1 1.5.11h12.4c.5-.01 1-.04 1.5-.11a5.1 5.1 0 001.73-.48 4.3 4.3 0 001.9-1.78c.24-.43.41-.89.51-1.36.1-.5.15-1.02.15-1.53l.01-.75V6.86l-.01-.74zM17.6 9.04v6.36c0 .42-.04.83-.27 1.2-.23.36-.55.6-.94.75-.4.15-.8.2-1.22.13a1.86 1.86 0 01-1.5-1.53c-.13-.74.16-1.5.8-1.92.32-.2.68-.3 1.05-.36l.84-.16c.16-.04.27-.13.3-.3l.01-.1V7.3c0-.06 0-.12-.04-.16-.06-.1-.16-.12-.27-.1l-.2.04-5.7 1.15-.2.05c-.16.05-.24.16-.25.33v8.1c0 .42-.04.83-.27 1.2-.23.36-.55.6-.94.75-.4.15-.8.2-1.22.13a1.86 1.86 0 01-1.5-1.53c-.13-.74.16-1.5.8-1.92.32-.2.68-.3 1.05-.36l.84-.16c.16-.04.27-.13.3-.3V6.5c0-.3.07-.46.5-.55l7.1-1.43c.07-.01.16-.03.24-.03.24 0 .4.16.43.4l.01.15z"/>' },
+  { re: /twitch/i, name: 'Twitch', color: '#9146FF', svg: '<path d="M11.57 4.43v4.28h-1.43V4.43h1.43zm3.93 0v4.28h-1.43V4.43h1.43zM4.29 0L.71 3.57v16.86h4.29V24l3.57-3.57h2.86L17.86 14V0H4.29zm12.14 13.29l-2.86 2.85h-2.86l-2.5 2.5v-2.5H4.64V1.43h11.79v11.86z"/>' },
+  { re: /deezer/i, name: 'Deezer', color: '#A238FF', svg: '<path d="M18.81 4.16h5.19v3.03h-5.19V4.16zM0 16.84h5.19v3.03H0v-3.03zm6.27 0h5.19v3.03H6.27v-3.03zm6.27 0h5.19v3.03h-5.19v-3.03zm6.27 0H24v3.03h-5.19v-3.03zm0-4.23H24v3.03h-5.19v-3.03zm-6.27 0h5.19v3.03h-5.19v-3.03zm0-4.22h5.19v3.03h-5.19V8.39zm6.27 0H24v3.03h-5.19V8.39z"/>' },
+  { re: /tidal/i, name: 'Tidal', color: '#111', svg: '<path d="M12.01 3.99L8.02 7.98 4.03 3.99 0 8.02l4.03 4.03 3.99-3.99 3.99 3.99-3.99 3.99 4.03 4.03 4.03-4.03-3.99-3.99 3.99-3.99-4.1-4.07zm7.96.04l-3.99 3.99 3.99 3.99L24 7.98l-4.03-3.95z"/>' },
+  { re: /bandcamp/i, name: 'Bandcamp', color: '#629AA9', svg: '<path d="M0 18.75l7.437-13.5H24l-7.437 13.5z"/>' },
+  { re: /threads/i, name: 'Threads', color: '#111', svg: '<path d="M12.19 0h-.38C5.46.04.5 5.05.5 11.99c0 6.96 4.98 11.97 11.32 12.01h.38c3.27-.02 5.79-1.1 7.62-3.19 1.59-1.82 2.41-4.33 2.44-7.46-.03-2.6-.74-4.66-2.1-6.13-1.02-1.1-2.46-1.87-4.18-2.24.08-.96-.06-1.79-.42-2.46C14.99.97 13.69.4 12.19 0zm.78 11.07c.95.06 1.7.34 2.2.83.45.44.68 1.03.68 1.74-.04 1.84-1.46 2.79-3.43 2.79-1.4-.01-2.5-.6-2.96-1.6-.18-.39-.06-.86.27-1.04.34-.18.86-.06 1.04.27.21.45.74.76 1.66.77 1.27 0 1.85-.5 1.86-1.21 0-.31-.12-.55-.32-.74-.27-.26-.74-.43-1.32-.46-.4-.02-.85.01-1.31.09z"/>' },
+  { re: /amazon/i, name: 'Amazon Music', color: '#00A8E1', svg: '<path d="M12 0C5.37 0 0 5.37 0 12s5.37 12 12 12 12-5.37 12-12S18.63 0 12 0zm0 4.5c2.9 0 5.25 2.35 5.25 5.25v3a5.25 5.25 0 01-10.5 0v-3C6.75 6.85 9.1 4.5 12 4.5zm0 1.5a3.75 3.75 0 00-3.75 3.75v3a3.75 3.75 0 007.5 0v-3A3.75 3.75 0 0012 6zm0 1.5a2.25 2.25 0 012.25 2.25v3a2.25 2.25 0 01-4.5 0v-3A2.25 2.25 0 0112 7.5z"/>' },
+  { re: /audiomack/i, name: 'Audiomack', color: '#FFA200', svg: null },
+  { re: /beatport/i, name: 'Beatport', color: '#A6CE39', svg: null },
+];
+function pkBrand(label) { const s = label || ''; for (const b of PK_BRANDS) if (b.re.test(s)) return b; return null; }
+function pkMetricIcon(label) {
+  const s = (label || '').toLowerCase();
+  if (/(seguidor|follower|suscrip|subscrib|fan)/.test(s)) return 'i-people';
+  if (/(reproduc|play|stream|oyente|listen|escucha)/.test(s)) return 'i-headphones';
+  if (/(visualizac|view|vista)/.test(s)) return 'i-play';
+  if (/(like|me gusta|favorit|guardado|save)/.test(s)) return 'i-heart';
+  if (/(mensual|monthly)/.test(s)) return 'i-chart';
+  return 'i-globe';
+}
+// parsea "1.2M" / "350k" / "12,5K" / "1 200 000" / "1.200.000" → número
+function pkParseNum(v) {
+  if (!v) return null;
+  let s = String(v).trim().toLowerCase().replace(/\s/g, '');
+  const suf = (s.match(/([kmb])\s*$/) || [])[1] || '';
+  s = s.replace(/[kmb]\s*$/, '').replace(/[^\d.,]/g, '');
+  if (!s) return null;
+  const hasDot = s.includes('.'), hasComma = s.includes(',');
+  if (hasDot && hasComma) {
+    // el último separador es el decimal; el otro son miles
+    if (s.lastIndexOf(',') > s.lastIndexOf('.')) s = s.replace(/\./g, '').replace(',', '.');
+    else s = s.replace(/,/g, '');
+  } else if (hasComma) {
+    // coma sola: miles si forma grupos de 3, si no decimal
+    s = /^\d{1,3}(,\d{3})+$/.test(s) ? s.replace(/,/g, '') : s.replace(',', '.');
+  } else if (hasDot) {
+    // punto solo: miles si forma grupos de 3, si no decimal
+    if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, '');
+  }
+  let n = parseFloat(s); if (isNaN(n)) return null;
+  if (suf === 'k') n *= 1e3; else if (suf === 'm') n *= 1e6; else if (suf === 'b') n *= 1e9;
+  return n;
+}
+function pkStatGlyph(label) {
+  const b = pkBrand(label);
+  if (b && b.svg) return `<svg viewBox="0 0 24 24" fill="#fff" aria-hidden="true">${b.svg}</svg>`;
+  return `<svg fill="none" stroke="#fff" aria-hidden="true"><use href="#${pkMetricIcon(label)}"/></svg>`;
+}
+function pkStatColor(label) { const b = pkBrand(label); return b ? b.color : 'var(--pk-accent)'; }
+
 /* ---- render del press kit (preview + público) ---- */
 function pressKitHTML(k) {
   if (!k) return '';
@@ -5919,13 +6009,34 @@ function pressKitHTML(k) {
       </div>
     </div>` : '';
   const extRows = (k.external || []).filter(e => e && (e.value || '').trim());
+  // alcance combinado: suma de métricas de audiencia (seguidores / oyentes / fans)
+  let combined = 0, combinedCount = 0;
+  extRows.forEach(e => {
+    if (/(seguidor|follower|fan|suscrip|subscrib|oyente|listener|monthly|mensual)/i.test(e.label || '')) {
+      const n = pkParseNum(e.value); if (n) { combined += n; combinedCount++; }
+    }
+  });
+  const reachHero = (combinedCount >= 2) ? `
+    <div class="pk-reach"><div class="pk-reach-n">${nfmt(Math.round(combined))}</div><div class="pk-reach-l">audiencia combinada en todas las plataformas</div></div>` : '';
   const external = (sec.external !== false && extRows.length) ? `
-    <div class="pk-ext">${extRows.map(e => `
-      <div><b>${esc((e.value || '').trim())}</b><span>${esc((e.label || '').trim())}</span></div>`).join('')}
-    </div>` : '';
+    <section class="pk-sec pk-ext-sec"><h3>Presencia global</h3>
+      ${reachHero}
+      <div class="pk-ext">${extRows.map(e => {
+        const lbl = (e.label || '').trim(); const b = pkBrand(lbl);
+        return `<div class="pk-ext-card" style="--c:${pkStatColor(lbl)}">
+          <span class="pk-ext-ic">${pkStatGlyph(lbl)}</span>
+          <b>${esc((e.value || '').trim())}</b>
+          <span class="pk-ext-lb">${esc(lbl)}</span>
+          ${b ? `<span class="pk-ext-pl">${esc(b.name)}</span>` : ''}
+        </div>`;
+      }).join('')}</div>
+    </section>` : '';
   const bioText = (k.bioLong || k.bioShort || '').trim();
   const bio = (sec.bio !== false && bioText) ? `<section class="pk-sec"><h3>Biografía</h3><p class="pk-bio">${esc(bioText).replace(/\n/g, '<br>')}</p></section>` : '';
   const hl = (sec.highlights !== false && (k.highlights || []).length) ? `<section class="pk-sec"><h3>Hitos</h3><ul class="pk-hl">${k.highlights.map(h => `<li>${esc(h)}</li>`).join('')}</ul></section>` : '';
+  const qRows = (k.quotes || []).filter(q => q && (q.text || '').trim());
+  const quotes = (sec.quotes !== false && qRows.length) ? `<section class="pk-sec"><h3>Prensa</h3><div class="pk-quotes">${qRows.map(q => `
+      <blockquote class="pk-quote"><p>${esc((q.text || '').trim())}</p>${(q.source || '').trim() ? `<cite>— ${esc((q.source || '').trim())}</cite>` : ''}</blockquote>`).join('')}</div></section>` : '';
   const tracks = (sec.tracks !== false && (k.tracks || []).length) ? `<section class="pk-sec"><h3>Pistas destacadas</h3><div class="pk-tracks">${k.tracks.map(t => `
       <div class="pk-track">
         <div class="pk-tk-cover" style="${czUrl(t.cover_url) ? `background-image:url('${czUrl(t.cover_url)}')` : ''}">${czUrl(t.cover_url) ? '' : '<svg fill="none" stroke="#fff"><use href="#i-music"/></svg>'}</div>
@@ -5952,7 +6063,7 @@ function pressKitHTML(k) {
         </div>
       </header>
       <div class="pk-body">
-        ${external}${stats}${bio}${hl}${tracks}${links}${contact}
+        ${external}${stats}${bio}${hl}${quotes}${tracks}${links}${contact}
       </div>
       <footer class="pk-foot">Press kit creado con <b>UnderBro</b> · underbro.app</footer>
     </article>`;
