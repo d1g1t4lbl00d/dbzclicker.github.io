@@ -2029,12 +2029,18 @@ async function handleDeepLink() {
   const trackId = params.get('track');
   const postId = params.get('post');
   const playlistId = params.get('playlist');
-  if (!trackId && !postId && !playlistId) return;
+  const uname = params.get('u');
+  const query = params.get('q');
+  if (!trackId && !postId && !playlistId && !uname && !query) return;
   history.replaceState(null, '', location.pathname);
   if (trackId) {
     const { data } = await sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)').eq('id', trackId).maybeSingle();
     if (data) { state.tracks = [data]; state.queue = [data.id]; playTrack(data); openNowPlaying(); }
     else toast('La pista no existe o fue eliminada');
+  } else if (query) {
+    state.search = query.trim(); switchView('search');
+  } else if (uname) {
+    openProfileByUsername(uname);
   } else if (postId) {
     const { data } = await sb.from('posts').select('*, profiles!posts_user_id_fkey(*)').eq('id', postId).maybeSingle();
     if (data) openPostModal(data);
