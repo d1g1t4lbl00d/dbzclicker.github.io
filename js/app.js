@@ -5670,7 +5670,8 @@ async function pkLoadOrDefault() {
     d.allTracks = allTracks;                 // refrescar catálogo para el selector
     d.links = profLinks;                     // enlaces siempre desde el perfil
     d.stats = { followers: foll.count || 0, plays: totalPlays, tracks: tr.length };
-    if (!d.sections) d.sections = { stats: true, bio: true, highlights: true, tracks: true, contact: true, links: true };
+    if (!Array.isArray(d.external)) d.external = [];
+    if (!d.sections) d.sections = { stats: true, bio: true, highlights: true, tracks: true, contact: true, links: true, external: true };
     d.published = !!saved.published;
     return d;
   }
@@ -5681,12 +5682,13 @@ async function pkLoadOrDefault() {
     avatar: p.avatar_url || '', banner: czUrl(theme.banner) || '',
     contactEmail: '', booking: '', management: '',
     highlights: [],
+    external: [],
     links: profLinks,
     showStats: true, stats: { followers: foll.count || 0, plays: totalPlays, tracks: tr.length },
     tracks: allTracks.slice(0, 4),
     allTracks,
     accent: czColor(theme.accent) || '#3e57fc', template: 'dark',
-    sections: { stats: true, bio: true, highlights: true, tracks: true, contact: true, links: true },
+    sections: { stats: true, bio: true, highlights: true, tracks: true, contact: true, links: true, external: true },
     published: false,
   };
 }
@@ -5718,6 +5720,11 @@ ${toolBar('presskit', 'Press Kit / EPK', 'Edita a la izquierda, mira el resultad
         <div class="pk-fsec"><h4>Hitos / logros <span class="pk-hint2">una línea por hito</span></h4>
           <textarea class="pk-in" data-k="highlights" rows="4" placeholder="+50.000 reproducciones&#10;Telonero en Sala X&#10;Reseñado por...">${esc((k.highlights || []).join('\n'))}</textarea>
         </div>
+        <div class="pk-fsec"><h4>Cifras externas <span class="pk-hint2">seguidores / logros en otras plataformas</span></h4>
+          <p class="pk-hint2" style="margin:0 0 8px">Añade tus números de Spotify, Instagram, SoundCloud, YouTube… lo que quieras. Escribe la etiqueta y el valor.</p>
+          <div id="pkExtRows" class="pk-ext-rows"></div>
+          <button type="button" class="btn sm" id="pkExtAdd">+ Añadir cifra</button>
+        </div>
         <div class="pk-fsec"><h4>Pistas destacadas <span class="pk-hint2">elige cuáles mostrar</span></h4>
           <div class="pk-tracks-pick">
             ${(k.allTracks || []).length ? k.allTracks.map(t => `<label class="pk-tk"><input type="checkbox" data-tk="${esc(t.id)}" ${k.tracks.some(x => x.id === t.id) ? 'checked' : ''}/> <span>${esc(t.title)}</span></label>`).join('') : '<p class="pk-hint2">Sube pistas para destacarlas aquí.</p>'}
@@ -5735,7 +5742,7 @@ ${toolBar('presskit', 'Press Kit / EPK', 'Edita a la izquierda, mira el resultad
           <div class="pk-tpls">${tpls.map(([v, n]) => `<button type="button" class="pk-tpl ${k.template === v ? 'on' : ''}" data-tpl="${v}">${n}</button>`).join('')}</div>
           <label class="pk-l">Secciones visibles</label>
           <div class="pk-toggles">
-            ${[['stats', 'Estadísticas'], ['bio', 'Biografía'], ['highlights', 'Hitos'], ['tracks', 'Pistas'], ['links', 'Enlaces'], ['contact', 'Contacto']].map(([s, n]) => `<label class="pk-tg"><input type="checkbox" data-sec="${s}" ${k.sections[s] !== false ? 'checked' : ''}/> ${n}</label>`).join('')}
+            ${[['stats', 'Estadísticas'], ['external', 'Cifras externas'], ['bio', 'Biografía'], ['highlights', 'Hitos'], ['tracks', 'Pistas'], ['links', 'Enlaces'], ['contact', 'Contacto']].map(([s, n]) => `<label class="pk-tg"><input type="checkbox" data-sec="${s}" ${k.sections[s] !== false ? 'checked' : ''}/> ${n}</label>`).join('')}
           </div>
         </div>
         <div class="pk-actions">
@@ -5783,6 +5790,22 @@ ${toolBar('presskit', 'Press Kit / EPK', 'Edita a la izquierda, mira el resultad
   main.querySelectorAll('input[data-sec]').forEach(cb => cb.onchange = () => {
     pkState.sections[cb.dataset.sec] = cb.checked; pkRenderPreview();
   });
+  // cifras externas (Spotify, Instagram, SoundCloud… genérico)
+  if (!Array.isArray(pkState.external)) pkState.external = [];
+  const extBox = $('pkExtRows');
+  const renderExtRows = () => {
+    extBox.innerHTML = pkState.external.map((row, i) => `
+      <div class="pk-ext-row" data-i="${i}">
+        <input class="pk-ext-lbl" data-i="${i}" value="${esc(row.label || '')}" maxlength="40" placeholder="Spotify · oyentes mensuales" />
+        <input class="pk-ext-val" data-i="${i}" value="${esc(row.value || '')}" maxlength="20" placeholder="1.2M" />
+        <button type="button" class="pk-ext-del" data-i="${i}" aria-label="Eliminar">×</button>
+      </div>`).join('') || '<p class="pk-hint2">Aún no has añadido cifras externas.</p>';
+    extBox.querySelectorAll('.pk-ext-lbl').forEach(inp => inp.oninput = () => { pkState.external[+inp.dataset.i].label = inp.value; pkRenderPreview(); });
+    extBox.querySelectorAll('.pk-ext-val').forEach(inp => inp.oninput = () => { pkState.external[+inp.dataset.i].value = inp.value; pkRenderPreview(); });
+    extBox.querySelectorAll('.pk-ext-del').forEach(b => b.onclick = () => { pkState.external.splice(+b.dataset.i, 1); renderExtRows(); pkRenderPreview(); });
+  };
+  renderExtRows();
+  $('pkExtAdd').onclick = () => { pkState.external.push({ label: '', value: '' }); renderExtRows(); pkRenderPreview(); };
   const pkSyncPub = () => {
     $('pkPubRow').classList.toggle('hidden', !pkState.published);
     $('pkPubNote').innerHTML = pkState.published
@@ -5888,6 +5911,11 @@ function pressKitHTML(k) {
       <div><b>${nfmt(k.stats.plays)}</b><span>reproducciones</span></div>
       <div><b>${nfmt(k.stats.tracks)}</b><span>pistas</span></div>
     </div>` : '';
+  const extRows = (k.external || []).filter(e => e && (e.value || '').trim());
+  const external = (sec.external !== false && extRows.length) ? `
+    <div class="pk-ext">${extRows.map(e => `
+      <div><b>${esc((e.value || '').trim())}</b><span>${esc((e.label || '').trim())}</span></div>`).join('')}
+    </div>` : '';
   const bioText = (k.bioLong || k.bioShort || '').trim();
   const bio = (sec.bio !== false && bioText) ? `<section class="pk-sec"><h3>Biografía</h3><p class="pk-bio">${esc(bioText).replace(/\n/g, '<br>')}</p></section>` : '';
   const hl = (sec.highlights !== false && (k.highlights || []).length) ? `<section class="pk-sec"><h3>Hitos</h3><ul class="pk-hl">${k.highlights.map(h => `<li>${esc(h)}</li>`).join('')}</ul></section>` : '';
@@ -5917,7 +5945,7 @@ function pressKitHTML(k) {
         </div>
       </header>
       <div class="pk-body">
-        ${stats}${bio}${hl}${tracks}${links}${contact}
+        ${stats}${external}${bio}${hl}${tracks}${links}${contact}
       </div>
       <footer class="pk-foot">Press kit creado con <b>UnderBro</b> · underbro.app</footer>
     </article>`;

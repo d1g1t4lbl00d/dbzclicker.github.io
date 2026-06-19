@@ -2007,6 +2007,17 @@ textarea.pk-in { resize: vertical; line-height: 1.5; }
 .pk-stats > div { flex: 1; background: var(--pk-bg2); border: 1px solid var(--pk-line); border-radius: 12px; padding: 12px; text-align: center; }
 .pk-stats b { display: block; font-size: 22px; font-weight: 850; color: var(--pk-text); }
 .pk-stats span { font-size: 11px; color: var(--pk-muted); }
+.pk-ext { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 10px; margin: 10px 0 4px; }
+.pk-ext > div { background: var(--pk-bg2); border: 1px solid var(--pk-line); border-radius: 12px; padding: 12px; text-align: center; }
+.pk-ext b { display: block; font-size: 20px; font-weight: 850; color: var(--pk-text); }
+.pk-ext span { font-size: 11px; color: var(--pk-muted); display: block; margin-top: 2px; line-height: 1.3; }
+.pk-ext-rows { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.pk-ext-row { display: flex; gap: 8px; align-items: center; }
+.pk-ext-row .pk-ext-lbl { flex: 1.6; min-width: 0; }
+.pk-ext-row .pk-ext-val { flex: 1; min-width: 0; }
+.pk-ext-row input { padding: 9px 11px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-soft); color: var(--text); font-size: 13px; }
+.pk-ext-del { width: 34px; height: 34px; flex-shrink: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-soft); color: var(--muted); font-size: 20px; line-height: 1; cursor: pointer; }
+.pk-ext-del:hover { color: #e5484d; border-color: #e5484d; }
 .pk-sec { margin-top: 22px; }
 .pk-sec h3 { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .8px; color: var(--pk-accent); margin-bottom: 10px; }
 .pk-bio { font-size: 14px; line-height: 1.65; color: var(--pk-text); opacity: .92; }
