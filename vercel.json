@@ -2,6 +2,7 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": true,
   "rewrites": [
+    { "source": "/", "has": [{ "type": "header", "key": "user-agent", "value": ".*([Bb]ot|[Cc]rawl|[Ss]pider|[Ss]lurp|[Gg]oogle|[Bb]ing|[Yy]andex|[Dd]uck|[Bb]aidu|facebookexternalhit|[Ww]hats[Aa]pp|[Tt]elegram|[Tt]witter|[Ll]inkedin|[Pp]interest|[Dd]iscord|[Aa]pple[Bb]ot|[Ee]mbedly|[Qq]uora|[Ll]ighthouse|[Hh]eadless|[Pp]review).*" }], "destination": "/api/home" },
     { "source": "/t/:id", "destination": "/api/share?track=:id" },
     { "source": "/p/:id", "destination": "/api/share?post=:id" },
     { "source": "/pl/:id", "destination": "/api/share?playlist=:id" },
