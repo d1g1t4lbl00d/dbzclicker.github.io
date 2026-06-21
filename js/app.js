@@ -921,6 +921,7 @@ function feedSpec(view, tab) {
 }
 const feedCache = new Map();   // key -> { tracks, ts }
 const feedDomCache = new Map(); // key -> { sig, node }  (DOM ya pintado por pestaña)
+let trendingArtists = [];      // artistas mejor valorados (derivados del Trending) para las tarjetas de artista
 const feedInflight = new Map(); // key -> Promise (evita peticiones duplicadas)
 function feedFetch(spec) {
   if (feedInflight.has(spec.key)) return feedInflight.get(spec.key);
@@ -1220,7 +1221,23 @@ async function fetchTrending({ days = 2, limit = 50 } = {}) {
       list = rows.map(t => ({ ...t, profiles: byId[t.user_id] || null }));
     }
   }
-  return await withFeatured(list);
+  const out = await withFeatured(list);
+  trendingArtists = computeTopArtists(out);
+  return out;
+}
+// agrupa las pistas en tendencia por artista y devuelve los mejor valorados,
+// cada uno con su mejor pista (para la tarjeta de artista del Trending)
+function computeTopArtists(tracks) {
+  const by = new Map();
+  for (const t of (tracks || [])) {
+    if (!t || !t.user_id || !t.profiles || isHidden(t.user_id)) continue;
+    const score = (t.plays || 0) + (t.likes_count || 0) * 2 + (t.reposts_count || 0) * 3;
+    let e = by.get(t.user_id);
+    if (!e) { e = { profile: t.profiles, score: 0, plays: 0, tracks: 0, best: t }; by.set(t.user_id, e); }
+    e.score += score; e.plays += (t.plays || 0); e.tracks += 1;
+    if ((t.plays || 0) > (e.best.plays || 0)) e.best = t;
+  }
+  return [...by.values()].sort((a, b) => b.score - a.score).slice(0, 6);
 }
 // antepone las pistas destacadas por un admin (columna tracks.featured)
 async function withFeatured(list) {
@@ -1372,15 +1389,28 @@ function renderFeed(head, tracks, view) {
   state.queue = tracks.map(t => t.id);
   // caché de DOM por pestaña del feed → cambiar entre Following/Trending/New es
   // instantáneo (reutiliza las tarjetas ya pintadas si no cambiaron)
+  const isTrending = (view === 'feed' && state.tab === 'trending') || view === 'feed-trending';
+  const arts = isTrending ? (trendingArtists || []) : [];
   const cacheKey = (view === 'feed') ? ('feed:' + state.tab) : null;
-  const sig = tracks.map(t => t.id + ':' + (t.likes_count || 0) + ':' + (t.reposts_count || 0)).join('|');
+  const sig = tracks.map(t => t.id + ':' + (t.likes_count || 0) + ':' + (t.reposts_count || 0)).join('|')
+    + '#A:' + arts.map(a => a.profile.id + ':' + a.score).join(',');
   if (cacheKey) {
     const c = feedDomCache.get(cacheKey);
     if (c && c.sig === sig && c.node) { list.replaceWith(c.node); if (state.current && audio && !audio.paused) markPlayingCard(); return; }
   }
-  const isTrending = (view === 'feed' && state.tab === 'trending') || view === 'feed-trending';
   const frag = document.createDocumentFragment();
-  tracks.forEach((t, i) => frag.appendChild(trackCard(t, { featured: isTrending && i === 0 })));
+  let artsInserted = false;
+  const insertArtists = () => {
+    if (artsInserted || !arts.length) return;
+    artsInserted = true;
+    frag.appendChild(el('<div class="feed-section-head">Artistas en tendencia</div>'));
+    arts.forEach(a => frag.appendChild(artistCard(a)));
+  };
+  tracks.forEach((t, i) => {
+    frag.appendChild(trackCard(t, { featured: isTrending && i === 0 }));
+    if (isTrending && i === 2) insertArtists(); // tras las 3 primeras pistas
+  });
+  if (isTrending) insertArtists(); // por si hay menos de 3 pistas
   list.appendChild(frag);   // un solo reflow en vez de uno por tarjeta
   if (cacheKey) feedDomCache.set(cacheKey, { sig, node: list });
   if (state.current && audio && !audio.paused) markPlayingCard();
@@ -1518,6 +1548,37 @@ function trackCard(t, opts = {}) {
   card.querySelectorAll('[data-collab]').forEach(a => a.onclick = (e) => { e.stopPropagation(); openProfile(a.dataset.collab); });
   card.addEventListener('click', (e) => handleTrackClick(e, t, card));
   attachLongPress(card, () => trackMenu(t, card));
+  return card;
+}
+
+// Tarjeta de artista para el Trending: mini perfil + su mejor pista.
+function artistCard(e) {
+  const p = e.profile || {}, best = e.best || null;
+  const mine = p.id === state.user.id;
+  const following = state.follows.has(p.id);
+  const av = p.avatar_url ? czUrl(p.avatar_url) : '';
+  const initials = (p.display_name || p.username || '?').trim().slice(0, 1).toUpperCase();
+  const bestCov = best && best.cover_url ? czUrl(best.cover_url) : '';
+  const card = el(`
+    <div class="artist-card" data-uid="${esc(p.id)}">
+      <div class="ac-top">
+        <div class="ac-av" data-act="profile" style="${av ? `background-image:url('${av}')` : ''}">${av ? '' : esc(initials)}</div>
+        <div class="ac-id" data-act="profile">
+          <div class="ac-name">${esc(p.display_name || p.username || 'Artista')}${verifiedBadge(p)}${displayBadgeHtml(p)}</div>
+          <div class="ac-sub">@${esc(p.username || '')} · ${nfmt(e.plays)} reproducciones</div>
+        </div>
+        ${mine ? '' : `<button class="ac-follow ${following ? 'on' : ''}" data-act="follow">${following ? 'Siguiendo' : 'Seguir'}</button>`}
+      </div>
+      ${best ? `
+      <div class="ac-track" data-act="playbest">
+        <div class="ac-tk-cover" style="${bestCov ? `background-image:url('${bestCov}')` : ''}">${bestCov ? '' : '<svg fill="none" stroke="#fff"><use href="#i-music"/></svg>'}</div>
+        <div class="ac-tk-meta"><span class="ac-tk-lbl">Mejor pista</span><b>${esc(best.title || '')}</b></div>
+        <button class="ac-tk-play" data-act="playbest" aria-label="Reproducir"><svg class="ci-play"><use href="#i-play"/></svg><svg class="ci-pause"><use href="#i-pause"/></svg></button>
+      </div>` : ''}
+    </div>`);
+  card.querySelectorAll('[data-act="profile"]').forEach(n => n.onclick = (ev) => { ev.stopPropagation(); openProfile(p.id); });
+  const fb = card.querySelector('[data-act="follow"]'); if (fb) fb.onclick = (ev) => { ev.stopPropagation(); toggleFollow(p.id, fb); };
+  if (best) card.querySelectorAll('[data-act="playbest"]').forEach(b => b.onclick = (ev) => { ev.stopPropagation(); haptic(10); playTrack(best); });
   return card;
 }
 
