@@ -1843,26 +1843,38 @@ async function renderTrackStoryVideo(t, coverImg, avatarImg, buffer, start, clip
   const dest = ac.createMediaStreamDestination();
   const analyser = ac.createAnalyser(); analyser.fftSize = 128; analyser.smoothingTimeConstant = 0.78;
   const src = ac.createBufferSource(); src.buffer = buffer; src.connect(analyser); analyser.connect(dest);
-  const vstream = cv.captureStream(30);
-  const mixed = new MediaStream([...vstream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
+  // Captura de fotogramas. En muchos navegadores móviles, captureStream(fps)
+  // NO vuelve a muestrear un canvas 2D por sí solo y el vídeo sale CONGELADO.
+  // Para evitarlo forzamos cada fotograma con requestFrame() cuando existe.
+  let vstream = cv.captureStream(0);
+  let vtrack = vstream.getVideoTracks()[0];
+  let manual = !!(vtrack && typeof vtrack.requestFrame === 'function');
+  if (!manual) { vstream = cv.captureStream(30); vtrack = vstream.getVideoTracks()[0]; }
+  const mixed = new MediaStream([vtrack, ...dest.stream.getAudioTracks()]);
   const mime = pickVideoMime();
   const rec = new MediaRecorder(mixed, mime ? { mimeType: mime, videoBitsPerSecond: 8000000 } : undefined);
   const chunks = []; rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
-  const stopped = new Promise((res) => { rec.onstop = res; });
+  const stopped = new Promise((res) => { rec.onstop = res; setTimeout(res, 4000); });
   const freq = new Uint8Array(analyser.frequencyBinCount);
   rec.start(100); src.start(0, start, clip);
   const t0 = performance.now();
   await new Promise((resolve) => {
+    const FPS = 30, step = 1000 / FPS; let nextT = t0;
     const frame = () => {
-      const el = (performance.now() - t0) / 1000, pr = Math.min(1, el / clip);
-      analyser.getByteFrequencyData(freq);
-      ctx.drawImage(stat, 0, 0);
-      _drawStoryWave(ctx, o, freq);
-      _drawStoryTimeline(ctx, o, pr);
-      if (onProgress) onProgress(pr);
+      const now = performance.now();
+      const el = (now - t0) / 1000, pr = Math.min(1, el / clip);
+      if (now >= nextT) {
+        nextT += step; if (now - nextT > step * 3) nextT = now + step; // no acumular si va por detrás
+        analyser.getByteFrequencyData(freq);
+        ctx.drawImage(stat, 0, 0);
+        _drawStoryWave(ctx, o, freq);
+        _drawStoryTimeline(ctx, o, pr);
+        if (manual) { try { vtrack.requestFrame(); } catch (_) {} }
+        if (onProgress) onProgress(pr);
+      }
       if (el < clip) requestAnimationFrame(frame); else resolve();
     };
-    frame();
+    requestAnimationFrame(frame);
   });
   try { rec.stop(); } catch (_) {} try { src.stop(); } catch (_) {}
   await stopped; try { ac.close(); } catch (_) {}
