@@ -574,6 +574,7 @@ async function onAuthenticated() {
   ubBack.init();
   switchView('feed');
   setTimeout(warmFeeds, 1500);   // precarga following/trending/new para que pasar de pestaña sea instantáneo
+  startFeedAutoRefresh();        // Trending y artistas se actualizan solos en segundo plano
   handleDeepLink();
   maybeOnboard();
 }
@@ -931,6 +932,15 @@ function feedFetch(spec) {
   return p;
 }
 function sameTracks(a, b) { return a && b && a.length === b.length && a.every((t, i) => t.id === b[i].id); }
+// como sameTracks pero detecta también cambios de estadísticas (para el auto-refresh)
+function feedChanged(a, b) {
+  if (!sameTracks(a, b)) return true;
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i], y = b[i];
+    if ((x.plays || 0) !== (y.plays || 0) || (x.likes_count || 0) !== (y.likes_count || 0) || (x.reposts_count || 0) !== (y.reposts_count || 0)) return true;
+  }
+  return false;
+}
 async function loadFeedView(view) {
   const spec = feedSpec(view, state.tab);
   if (!spec) return;
@@ -960,6 +970,41 @@ function prefetchScreen(idx) {
 }
 // precarga TODAS las pantallas del feed una vez tras arrancar (sin bloquear)
 function warmFeeds() { ['following', 'trending', 'new'].forEach((k) => { const s = feedSpec('feed', k); if (!feedCache.has(s.key)) feedFetch(s).catch(() => {}); }); }
+
+// Auto-actualización del feed (Trending incluido): cada cierto tiempo refresca
+// los datos en segundo plano, así los artistas en tendencia y sus estadísticas
+// se van actualizando solos según suben las reproducciones / aparecen nuevos.
+let _feedAutoTimer = null;
+function startFeedAutoRefresh() {
+  if (_feedAutoTimer) return;
+  _feedAutoTimer = setInterval(() => {
+    if (document.hidden) return;
+    if (state.view !== 'feed' && state.view !== 'feed-trending') return;
+    const spec = feedSpec(state.view, state.tab);
+    if (!spec) return;
+    feedFetch(spec).then((tracks) => {                      // refresca caché + trendingArtists
+      const cur = feedSpec(state.view, state.tab);
+      if (!cur || cur.key !== spec.key) return;             // el usuario cambió de pantalla
+      if (!feedChanged(state.tracks, tracks)) return;       // sin novedades (ni de orden ni de stats)
+      const main = $('main');
+      if (main && main.scrollTop > 120) return;             // no interrumpir si está leyendo más abajo
+      state.tracks = tracks; renderFeed(spec.head, tracks, state.view);
+    }).catch(() => {});
+  }, 60000);
+  // al volver a la app, refresca de inmediato la pantalla de feed visible
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    if (state.view !== 'feed' && state.view !== 'feed-trending') return;
+    const spec = feedSpec(state.view, state.tab); if (!spec) return;
+    feedFetch(spec).then((tracks) => {
+      const cur = feedSpec(state.view, state.tab);
+      if (cur && cur.key === spec.key && feedChanged(state.tracks, tracks)) {
+        const main = $('main'); if (main && main.scrollTop > 120) return;
+        state.tracks = tracks; renderFeed(spec.head, tracks, state.view);
+      }
+    }).catch(() => {});
+  });
+}
 
 /* =======================================================================
    NAVEGACIÓN POR GESTOS (deslizar entre pantallas, solo móvil)
@@ -1006,10 +1051,25 @@ const HAPTIC_SEL = [
   '.notif-row', '.story', '.lib-it', '.mk-card', '.layer-row', '.ord-item button', '.t-genre',
   '.cover-pick', '.upload-cta', '.fab', '.close', '.modal-backdrop .btn', '.action-sheet button',
 ].join(',');
+// Vibración al TOCAR un control, pero NO al deslizar/hacer scroll: esperamos al
+// "pointerup" y solo vibramos si el dedo apenas se movió (fue un toque, no un
+// gesto de desplazamiento).
+let _hapDown = null, _hapX = 0, _hapY = 0, _hapMoved = false;
 document.addEventListener('pointerdown', (e) => {
-  if (e.pointerType !== 'touch') return;
-  if (e.target.closest && e.target.closest(HAPTIC_SEL)) haptic(22);
+  if (e.pointerType !== 'touch') { _hapDown = null; return; }
+  _hapDown = (e.target.closest && e.target.closest(HAPTIC_SEL)) ? e.target : null;
+  _hapX = e.clientX; _hapY = e.clientY; _hapMoved = false;
 }, { passive: true });
+document.addEventListener('pointermove', (e) => {
+  if (!_hapDown || e.pointerType !== 'touch') return;
+  if (Math.abs(e.clientX - _hapX) > 10 || Math.abs(e.clientY - _hapY) > 10) _hapMoved = true;
+}, { passive: true });
+document.addEventListener('pointerup', (e) => {
+  if (e.pointerType !== 'touch') return;
+  if (_hapDown && !_hapMoved && e.target.closest && e.target.closest(HAPTIC_SEL)) haptic(22);
+  _hapDown = null;
+}, { passive: true });
+document.addEventListener('pointercancel', () => { _hapDown = null; }, { passive: true });
 
 // Sin zoom en móvil: iOS ignora user-scalable=no, así que bloqueamos el pellizco.
 ['gesturestart', 'gesturechange', 'gestureend'].forEach(ev =>
