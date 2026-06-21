@@ -2803,3 +2803,59 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
 }
 /* respeta reduce-motion para todo lo nuevo */
 @media (prefers-reduced-motion: reduce) { .main.swap, .btn::after, .ts-bar { animation: none !important; } }
+
+/* ====== Artistas en tendencia (tarjetas en el Trending) ====== */
+.feed-section-head {
+  font-size: 13px; font-weight: 800; letter-spacing: .2px; color: var(--ink);
+  margin: 6px 2px 12px; display: flex; align-items: center; gap: 8px;
+}
+.feed-section-head::before {
+  content: ""; width: 4px; height: 16px; border-radius: 3px; background: var(--accent-grad);
+}
+.artist-card {
+  position: relative; background: var(--panel); border: 1px solid var(--line);
+  border-radius: var(--r-lg); padding: 14px; margin-bottom: 14px; box-shadow: var(--sh-1);
+  transition: transform .18s var(--ease), box-shadow .22s var(--ease), border-color .2s;
+  animation: fadeUp .4s var(--ease) both;
+}
+.artist-card:hover { transform: translateY(-2px); box-shadow: var(--sh-2); }
+.ac-top { display: flex; align-items: center; gap: 12px; }
+.ac-av {
+  width: 52px; height: 52px; border-radius: 50%; flex-shrink: 0; cursor: pointer;
+  background: var(--accent-grad) center/cover no-repeat; color: #fff;
+  display: grid; place-items: center; font-weight: 800; font-size: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,.18);
+}
+.ac-id { flex: 1; min-width: 0; cursor: pointer; }
+.ac-name { font-weight: 750; font-size: 15px; color: var(--ink); display: flex; align-items: center; gap: 5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-name .vbadge { width: 15px; height: 15px; flex-shrink: 0; }
+.ac-sub { font-size: 12.5px; color: var(--ink-soft); margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-follow {
+  flex-shrink: 0; border: 1px solid var(--accent); background: var(--accent); color: #fff;
+  font-weight: 700; font-size: 13px; padding: 8px 16px; border-radius: 999px; cursor: pointer;
+  transition: filter .15s, background .15s, color .15s;
+}
+.ac-follow:hover { filter: brightness(1.06); }
+.ac-follow.on { background: transparent; color: var(--ink-soft); border-color: var(--line); }
+.ac-track {
+  display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 9px;
+  background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; cursor: pointer;
+}
+.ac-track:hover { border-color: var(--accent); }
+.ac-tk-cover {
+  width: 44px; height: 44px; border-radius: 9px; flex-shrink: 0;
+  background: var(--accent-grad) center/cover no-repeat; display: grid; place-items: center;
+}
+.ac-tk-cover svg { width: 18px; height: 18px; }
+.ac-tk-meta { flex: 1; min-width: 0; }
+.ac-tk-lbl { font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; color: var(--accent); }
+.ac-tk-meta b { display: block; font-size: 14px; font-weight: 650; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ac-tk-play {
+  width: 42px; height: 42px; border-radius: 50%; flex-shrink: 0; border: none; cursor: pointer;
+  background: var(--accent); color: #fff; display: grid; place-items: center;
+  box-shadow: 0 3px 10px var(--sh-blue);
+}
+.ac-tk-play svg { width: 18px; height: 18px; }
+.ac-tk-play .ci-pause { display: none; }
+.artist-card.playing-best .ac-tk-play .ci-play { display: none; }
+.artist-card.playing-best .ac-tk-play .ci-pause { display: inline; }
