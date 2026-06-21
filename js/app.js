@@ -1829,55 +1829,51 @@ function pickVideoMime() {
   for (const m of c) { try { if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m; } catch (_) {} }
   return '';
 }
-// graba un vídeo 1080x1920 (tarjeta animada + el clip de audio elegido) en tiempo real
+// graba un vídeo vertical (tarjeta animada + el clip de audio elegido) en tiempo real.
+// Método PROBADO: captureStream(fps) + dibujar en cada frame de animación (esto
+// ya animaba en el dispositivo del usuario). Único cambio respecto al original:
+// se graba a 720x1280 (más ligero → más fluido). La capa estática se dibuja a
+// 1080x1920 y se reescala, así no pierde nitidez.
 async function renderTrackStoryVideo(t, coverImg, avatarImg, buffer, start, clip, onProgress) {
   await ensurePoppins();
   const who = trackWho(t);
   const acc = coverImg ? storyAccent(coverImg) : null;
   const o = { shape: 'square', coverImg, avatarImg, title: t.title, subtitle: who, cta: '▶  Escúchala en UnderBro', footer: 'underbro.app', label: '♫  Sonando en UnderBro', clip, accent: acc ? acc.a : undefined, accent2: acc ? acc.a2 : undefined, tint: acc ? acc.tint : undefined };
-  // Capa estática (cara, fondo, blur): se dibuja UNA sola vez (el blur es caro)
+  const VW = 720, VH = 1280, SCALE = VW / 1080;
+  // capa estática (cara, fondo, blur) a resolución completa, se dibuja UNA vez
   const stat = document.createElement('canvas'); stat.width = 1080; stat.height = 1920; _drawStoryBase(stat.getContext('2d'), o);
-  const cv = document.createElement('canvas'); cv.width = 1080; cv.height = 1920; const ctx = cv.getContext('2d');
+  const cv = document.createElement('canvas'); cv.width = VW; cv.height = VH; const ctx = cv.getContext('2d');
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  ctx.scale(SCALE, SCALE); // el resto del dibujo sigue usando coords 1080x1920
   const ac = new (window.AudioContext || window.webkitAudioContext)();
   if (ac.state === 'suspended') { try { await ac.resume(); } catch (_) {} }
   const dest = ac.createMediaStreamDestination();
   const analyser = ac.createAnalyser(); analyser.fftSize = 128; analyser.smoothingTimeConstant = 0.78;
   const src = ac.createBufferSource(); src.buffer = buffer; src.connect(analyser); analyser.connect(dest);
-  // Captura de fotogramas. En muchos navegadores móviles, captureStream(fps)
-  // NO vuelve a muestrear un canvas 2D por sí solo y el vídeo sale CONGELADO.
-  // Para evitarlo forzamos cada fotograma con requestFrame() cuando existe.
-  let vstream = cv.captureStream(0);
-  let vtrack = vstream.getVideoTracks()[0];
-  let manual = !!(vtrack && typeof vtrack.requestFrame === 'function');
-  if (!manual) { vstream = cv.captureStream(30); vtrack = vstream.getVideoTracks()[0]; }
-  const mixed = new MediaStream([vtrack, ...dest.stream.getAudioTracks()]);
+  const vstream = cv.captureStream(30);
+  const mixed = new MediaStream([...vstream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
   const mime = pickVideoMime();
-  const rec = new MediaRecorder(mixed, mime ? { mimeType: mime, videoBitsPerSecond: 8000000 } : undefined);
+  const rec = new MediaRecorder(mixed, mime ? { mimeType: mime, videoBitsPerSecond: 6000000 } : undefined);
   const chunks = []; rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
   const stopped = new Promise((res) => { rec.onstop = res; setTimeout(res, 4000); });
   const freq = new Uint8Array(analyser.frequencyBinCount);
   rec.start(100); src.start(0, start, clip);
   const t0 = performance.now();
   await new Promise((resolve) => {
-    const FPS = 30, step = 1000 / FPS; let nextT = t0;
     const frame = () => {
-      const now = performance.now();
-      const el = (now - t0) / 1000, pr = Math.min(1, el / clip);
-      if (now >= nextT) {
-        nextT += step; if (now - nextT > step * 3) nextT = now + step; // no acumular si va por detrás
-        analyser.getByteFrequencyData(freq);
-        ctx.drawImage(stat, 0, 0);
-        _drawStoryWave(ctx, o, freq);
-        _drawStoryTimeline(ctx, o, pr);
-        if (manual) { try { vtrack.requestFrame(); } catch (_) {} }
-        if (onProgress) onProgress(pr);
-      }
+      const el = (performance.now() - t0) / 1000, pr = Math.min(1, el / clip);
+      analyser.getByteFrequencyData(freq);
+      ctx.drawImage(stat, 0, 0, 1080, 1920);
+      _drawStoryWave(ctx, o, freq);
+      _drawStoryTimeline(ctx, o, pr);
+      if (onProgress) onProgress(pr);
       if (el < clip) requestAnimationFrame(frame); else resolve();
     };
-    requestAnimationFrame(frame);
+    frame();
   });
   try { rec.stop(); } catch (_) {} try { src.stop(); } catch (_) {}
   await stopped; try { ac.close(); } catch (_) {}
+  if (!chunks.length) return null; // sin datos → el llamador comparte la imagen
   return new Blob(chunks, { type: mime || 'video/webm' });
 }
 // selector de los 10s + creación de la historia (vídeo con sonido) para una pista
@@ -1961,8 +1957,15 @@ async function openTrackStoryPicker(t) {
     try {
       const blob = await renderTrackStoryVideo(t, cov, avatar, buffer, start, clip, (p) => { fill.style.width = (p * 100) + '%'; });
       window.removeEventListener('resize', onResize); m.remove();
-      const ext = (blob.type.indexOf('mp4') >= 0) ? 'mp4' : 'webm';
-      await shareBlob(blob, 'underbro-story.' + ext, `${t.title} — escúchala en UnderBro`);
+      if (blob && blob.size > 1000) {
+        const ext = (blob.type.indexOf('mp4') >= 0) ? 'mp4' : 'webm';
+        await shareBlob(blob, 'underbro-story.' + ext, `${t.title} — escúchala en UnderBro`);
+      } else {
+        // red de seguridad: si el vídeo no se pudo grabar, comparte la imagen
+        toast('Vídeo no disponible en este navegador · comparto la imagen');
+        const img = await generateStoryImage({ shape: 'square', coverImg: cov, avatarImg: avatar, title: t.title, subtitle: who, cta: '▶  Escúchala en UnderBro', footer: 'underbro.app', label: '♫  Sonando en UnderBro' });
+        await shareBlob(img, 'underbro-story.png', `${t.title} en UnderBro`);
+      }
     } catch (e) { console.error('[story video]', e); toast('No se pudo generar el vídeo'); mk.disabled = false; mk.textContent = '🎬 Crear historia'; }
   };
 }
