@@ -1798,18 +1798,7 @@ function _drawStoryWave(ctx, o, freq) {
   const W = 1080, wy = _storyWaveY(), accent = o.accent || '#3e57fc', accent2 = o.accent2 || '#27c0ff';
   const nb = 56, bw = 7, gap = 8, tot = nb * (bw + gap) - gap, sx = (W - tot) / 2;
   const g = ctx.createLinearGradient(sx, 0, sx + tot, 0); g.addColorStop(0, accent); g.addColorStop(1, accent2); ctx.fillStyle = g;
-  const sm = o._smooth; // buffer de suavizado temporal (solo en vídeo): la onda fluye en vez de saltar
-  for (let i = 0; i < nb; i++) {
-    let v;
-    if (freq) {
-      // media de dos bins contiguos → onda menos ruidosa
-      const fi = i / nb * freq.length, a = freq[Math.floor(fi)] || 0, b = freq[Math.min(freq.length - 1, Math.floor(fi) + 1)] || 0;
-      v = ((a + b) / 2) / 255;
-    } else v = 0.12 + Math.abs(Math.sin(i * 0.5) * Math.cos(i * 0.16)) * 0.62;
-    if (sm) { sm[i] = (sm[i] == null) ? v : sm[i] + (v - sm[i]) * 0.3; v = sm[i]; }
-    const h = 12 + v * 128, x = sx + i * (bw + gap);
-    _roundRect(ctx, x, wy - h / 2, bw, h, bw / 2); ctx.fill();
-  }
+  for (let i = 0; i < nb; i++) { let v; if (freq) v = freq[Math.floor(i / nb * freq.length)] / 255; else v = 0.12 + Math.abs(Math.sin(i * 0.5) * Math.cos(i * 0.16)) * 0.62; const h = 12 + v * 128, x = sx + i * (bw + gap); _roundRect(ctx, x, wy - h / 2, bw, h, bw / 2); ctx.fill(); }
 }
 function _drawStoryTimeline(ctx, o, progress) {
   const W = 1080, wy = _storyWaveY(), accent = o.accent || '#3e57fc', accent2 = o.accent2 || '#27c0ff', clip = o.clip || 10;
@@ -1836,82 +1825,47 @@ async function shareBlob(blob, name, text) {
   toast('Guardado · súbelo a tu historia de Instagram 📸');
 }
 function pickVideoMime() {
-  // Orden pensado para grabación fluida en tiempo real:
-  // h264 (suele ir por hardware) → VP8 (codificación por software MUCHO más
-  // ligera que VP9) → VP9 → genérico.
-  const c = ['video/mp4;codecs=h264,aac', 'video/mp4', 'video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9,opus', 'video/webm'];
+  const c = ['video/mp4;codecs=h264,aac', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
   for (const m of c) { try { if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m; } catch (_) {} }
   return '';
 }
-// Graba en tiempo real un vídeo vertical (tarjeta animada + el clip de audio).
-// Fluidez: se graba a 720x1280 (≈55% menos píxeles que 1080p) para que el
-// codificador vaya sobrado; el navegador muestrea el canvas a 30 fps con su
-// propio reloj estable y nosotros lo mantenemos siempre fresco dibujando en
-// cada frame de animación.
+// graba un vídeo 1080x1920 (tarjeta animada + el clip de audio elegido) en tiempo real
 async function renderTrackStoryVideo(t, coverImg, avatarImg, buffer, start, clip, onProgress) {
   await ensurePoppins();
   const who = trackWho(t);
   const acc = coverImg ? storyAccent(coverImg) : null;
-  const o = { shape: 'square', coverImg, avatarImg, title: t.title, subtitle: who, cta: '▶  Escúchala en UnderBro', footer: 'underbro.app', label: '♫  Sonando en UnderBro', clip, accent: acc ? acc.a : undefined, accent2: acc ? acc.a2 : undefined, tint: acc ? acc.tint : undefined, _smooth: [] };
-
-  // Lienzo de grabación a 720x1280. La capa estática (fondo, blur, textos) se
-  // dibuja UNA vez a 1080x1920 y se reescala, así se mantiene nítida.
-  const VW = 720, VH = 1280, SCALE = VW / 1080;
-  const stat = document.createElement('canvas'); stat.width = 1080; stat.height = 1920;
-  _drawStoryBase(stat.getContext('2d'), o);
-  const cv = document.createElement('canvas'); cv.width = VW; cv.height = VH;
-  const ctx = cv.getContext('2d');           // contexto estándar (sin desynchronized: rompe captureStream)
-  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-  ctx.scale(SCALE, SCALE);                    // el resto del dibujo sigue en coords 1080x1920
-  const freq = new Uint8Array(64);
-
-  // pinta un fotograma; la onda se suaviza temporalmente dentro de _drawStoryWave
-  const paint = (pr, fdata) => {
-    ctx.drawImage(stat, 0, 0, 1080, 1920);
-    _drawStoryWave(ctx, o, fdata);
-    _drawStoryTimeline(ctx, o, pr);
-  };
-  paint(0, null);                             // primer fotograma listo antes de arrancar la captura
-
-  // audio: fuente → analizador (para la onda) → destino de stream (para grabar)
+  const o = { shape: 'square', coverImg, avatarImg, title: t.title, subtitle: who, cta: '▶  Escúchala en UnderBro', footer: 'underbro.app', label: '♫  Sonando en UnderBro', clip, accent: acc ? acc.a : undefined, accent2: acc ? acc.a2 : undefined, tint: acc ? acc.tint : undefined };
+  // Capa estática (cara, fondo, blur): se dibuja UNA sola vez (el blur es caro)
+  const stat = document.createElement('canvas'); stat.width = 1080; stat.height = 1920; _drawStoryBase(stat.getContext('2d'), o);
+  const cv = document.createElement('canvas'); cv.width = 1080; cv.height = 1920; const ctx = cv.getContext('2d');
   const ac = new (window.AudioContext || window.webkitAudioContext)();
   if (ac.state === 'suspended') { try { await ac.resume(); } catch (_) {} }
   const dest = ac.createMediaStreamDestination();
-  const analyser = ac.createAnalyser(); analyser.fftSize = 128; analyser.smoothingTimeConstant = 0.82;
+  const analyser = ac.createAnalyser(); analyser.fftSize = 128; analyser.smoothingTimeConstant = 0.78;
   const src = ac.createBufferSource(); src.buffer = buffer; src.connect(analyser); analyser.connect(dest);
-
-  const FPS = 30;
-  const vstream = cv.captureStream(FPS);
+  const vstream = cv.captureStream(30);
   const mixed = new MediaStream([...vstream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
   const mime = pickVideoMime();
-  const rec = new MediaRecorder(mixed, mime ? { mimeType: mime, videoBitsPerSecond: 5000000, audioBitsPerSecond: 128000 } : undefined);
+  const rec = new MediaRecorder(mixed, mime ? { mimeType: mime, videoBitsPerSecond: 8000000 } : undefined);
   const chunks = []; rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
-  // guarda de seguridad: nunca quedarse colgado esperando onstop
-  const stopped = new Promise((res) => { rec.onstop = res; setTimeout(res, 4000); });
-
-  rec.start(250);
-  src.start(0, start, clip);
+  const stopped = new Promise((res) => { rec.onstop = res; });
+  const freq = new Uint8Array(analyser.frequencyBinCount);
+  rec.start(100); src.start(0, start, clip);
   const t0 = performance.now();
-
   await new Promise((resolve) => {
     const frame = () => {
-      const el = (performance.now() - t0) / 1000;
-      const pr = Math.min(1, el / clip);
+      const el = (performance.now() - t0) / 1000, pr = Math.min(1, el / clip);
       analyser.getByteFrequencyData(freq);
-      paint(pr, freq);
+      ctx.drawImage(stat, 0, 0);
+      _drawStoryWave(ctx, o, freq);
+      _drawStoryTimeline(ctx, o, pr);
       if (onProgress) onProgress(pr);
-      if (el < clip) requestAnimationFrame(frame);
-      else resolve();
+      if (el < clip) requestAnimationFrame(frame); else resolve();
     };
-    requestAnimationFrame(frame);
+    frame();
   });
-
-  try { rec.requestData(); } catch (_) {}
-  try { rec.stop(); } catch (_) {}
-  try { src.stop(); } catch (_) {}
-  await stopped;
-  try { ac.close(); } catch (_) {}
-  if (onProgress) onProgress(1);
+  try { rec.stop(); } catch (_) {} try { src.stop(); } catch (_) {}
+  await stopped; try { ac.close(); } catch (_) {}
   return new Blob(chunks, { type: mime || 'video/webm' });
 }
 // selector de los 10s + creación de la historia (vídeo con sonido) para una pista
