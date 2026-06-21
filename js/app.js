@@ -1798,7 +1798,18 @@ function _drawStoryWave(ctx, o, freq) {
   const W = 1080, wy = _storyWaveY(), accent = o.accent || '#3e57fc', accent2 = o.accent2 || '#27c0ff';
   const nb = 56, bw = 7, gap = 8, tot = nb * (bw + gap) - gap, sx = (W - tot) / 2;
   const g = ctx.createLinearGradient(sx, 0, sx + tot, 0); g.addColorStop(0, accent); g.addColorStop(1, accent2); ctx.fillStyle = g;
-  for (let i = 0; i < nb; i++) { let v; if (freq) v = freq[Math.floor(i / nb * freq.length)] / 255; else v = 0.12 + Math.abs(Math.sin(i * 0.5) * Math.cos(i * 0.16)) * 0.62; const h = 12 + v * 128, x = sx + i * (bw + gap); _roundRect(ctx, x, wy - h / 2, bw, h, bw / 2); ctx.fill(); }
+  const sm = o._smooth; // buffer de suavizado temporal (solo en vídeo): la onda fluye en vez de saltar
+  for (let i = 0; i < nb; i++) {
+    let v;
+    if (freq) {
+      // media de dos bins contiguos → onda menos ruidosa
+      const fi = i / nb * freq.length, a = freq[Math.floor(fi)] || 0, b = freq[Math.min(freq.length - 1, Math.floor(fi) + 1)] || 0;
+      v = ((a + b) / 2) / 255;
+    } else v = 0.12 + Math.abs(Math.sin(i * 0.5) * Math.cos(i * 0.16)) * 0.62;
+    if (sm) { sm[i] = (sm[i] == null) ? v : sm[i] + (v - sm[i]) * 0.3; v = sm[i]; }
+    const h = 12 + v * 128, x = sx + i * (bw + gap);
+    _roundRect(ctx, x, wy - h / 2, bw, h, bw / 2); ctx.fill();
+  }
 }
 function _drawStoryTimeline(ctx, o, progress) {
   const W = 1080, wy = _storyWaveY(), accent = o.accent || '#3e57fc', accent2 = o.accent2 || '#27c0ff', clip = o.clip || 10;
@@ -1856,12 +1867,12 @@ async function renderTrackStoryVideo(t, coverImg, avatarImg, buffer, start, clip
   const analyser = ac.createAnalyser(); analyser.fftSize = 128; analyser.smoothingTimeConstant = 0.8;
   const src = ac.createBufferSource(); src.buffer = buffer; src.connect(analyser); analyser.connect(dest);
   const FPS = 30;
-  // captura manual: 1 fotograma por cada requestFrame() → cadencia perfectamente regular.
-  let vstream = cv.captureStream(0);
-  let vtrack = vstream.getVideoTracks()[0];
-  let manual = typeof vtrack.requestFrame === 'function';
-  if (!manual) { vstream = cv.captureStream(FPS); vtrack = vstream.getVideoTracks()[0]; manual = typeof vtrack.requestFrame === 'function'; }
-  const mixed = new MediaStream([vtrack, ...dest.stream.getAudioTracks()]);
+  o._smooth = []; // activa el suavizado temporal de la onda
+  // Muestreo AUTOMÁTICO a 30 fps: el navegador captura con su propio reloj
+  // estable (cadencia regular en pantallas de 60/90/120 Hz). Nosotros solo
+  // mantenemos el canvas siempre actualizado dibujando en cada frame.
+  const vstream = cv.captureStream(FPS);
+  const mixed = new MediaStream([...vstream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
   const mime = pickVideoMime();
   const rec = new MediaRecorder(mixed, mime ? { mimeType: mime, videoBitsPerSecond: 5000000, audioBitsPerSecond: 128000 } : undefined);
   const chunks = []; rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
@@ -1870,20 +1881,13 @@ async function renderTrackStoryVideo(t, coverImg, avatarImg, buffer, start, clip
   rec.start(250); src.start(0, start, clip);
   const t0 = performance.now();
   await new Promise((resolve) => {
-    let lastSlot = -1;
     const frame = () => {
       const el = (performance.now() - t0) / 1000, pr = Math.min(1, el / clip);
-      const slot = Math.floor(el * FPS);
-      // dibuja como mucho una vez por “hueco” de 1/30 s (alineado a vsync)
-      if (slot !== lastSlot) {
-        lastSlot = slot;
-        analyser.getByteFrequencyData(freq);
-        ctx.drawImage(stat, 0, 0, 1080, 1920);
-        _drawStoryWave(ctx, o, freq);
-        _drawStoryTimeline(ctx, o, pr);
-        if (manual) { try { vtrack.requestFrame(); } catch (_) {} }
-        if (onProgress) onProgress(pr);
-      }
+      analyser.getByteFrequencyData(freq);
+      ctx.drawImage(stat, 0, 0, 1080, 1920);
+      _drawStoryWave(ctx, o, freq);
+      _drawStoryTimeline(ctx, o, pr);
+      if (onProgress) onProgress(pr);
       if (el < clip) requestAnimationFrame(frame); else resolve();
     };
     frame();
