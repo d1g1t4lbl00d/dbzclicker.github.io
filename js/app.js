@@ -1843,57 +1843,75 @@ function pickVideoMime() {
   for (const m of c) { try { if (window.MediaRecorder && MediaRecorder.isTypeSupported(m)) return m; } catch (_) {} }
   return '';
 }
-// graba un vídeo vertical (tarjeta animada + el clip de audio elegido) en tiempo real.
-// Clave de fluidez: se graba a 720x1280 (no 1080x1920) y se capturan fotogramas
-// manualmente a una cadencia fija de 30 fps, para que el codificador no se sature.
+// Graba en tiempo real un vídeo vertical (tarjeta animada + el clip de audio).
+// Fluidez: se graba a 720x1280 (≈55% menos píxeles que 1080p) para que el
+// codificador vaya sobrado; el navegador muestrea el canvas a 30 fps con su
+// propio reloj estable y nosotros lo mantenemos siempre fresco dibujando en
+// cada frame de animación.
 async function renderTrackStoryVideo(t, coverImg, avatarImg, buffer, start, clip, onProgress) {
   await ensurePoppins();
   const who = trackWho(t);
   const acc = coverImg ? storyAccent(coverImg) : null;
-  const o = { shape: 'square', coverImg, avatarImg, title: t.title, subtitle: who, cta: '▶  Escúchala en UnderBro', footer: 'underbro.app', label: '♫  Sonando en UnderBro', clip, accent: acc ? acc.a : undefined, accent2: acc ? acc.a2 : undefined, tint: acc ? acc.tint : undefined };
-  // Resolución de grabación reducida (9:16) → ~55% menos píxeles que 1080p,
-  // el codificador en tiempo real va sobrado y el vídeo sale fluido.
+  const o = { shape: 'square', coverImg, avatarImg, title: t.title, subtitle: who, cta: '▶  Escúchala en UnderBro', footer: 'underbro.app', label: '♫  Sonando en UnderBro', clip, accent: acc ? acc.a : undefined, accent2: acc ? acc.a2 : undefined, tint: acc ? acc.tint : undefined, _smooth: [] };
+
+  // Lienzo de grabación a 720x1280. La capa estática (fondo, blur, textos) se
+  // dibuja UNA vez a 1080x1920 y se reescala, así se mantiene nítida.
   const VW = 720, VH = 1280, SCALE = VW / 1080;
-  // Capa estática a resolución COMPLETA (1080x1920) para que el blur y los
-  // textos queden nítidos; luego se reescala al canvas de grabación.
-  const stat = document.createElement('canvas'); stat.width = 1080; stat.height = 1920; _drawStoryBase(stat.getContext('2d'), o);
+  const stat = document.createElement('canvas'); stat.width = 1080; stat.height = 1920;
+  _drawStoryBase(stat.getContext('2d'), o);
   const cv = document.createElement('canvas'); cv.width = VW; cv.height = VH;
-  const ctx = cv.getContext('2d', { alpha: false, desynchronized: true });
+  const ctx = cv.getContext('2d');           // contexto estándar (sin desynchronized: rompe captureStream)
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-  ctx.scale(SCALE, SCALE); // todo el código de dibujo sigue usando coords 1080x1920
+  ctx.scale(SCALE, SCALE);                    // el resto del dibujo sigue en coords 1080x1920
+  const freq = new Uint8Array(64);
+
+  // pinta un fotograma; la onda se suaviza temporalmente dentro de _drawStoryWave
+  const paint = (pr, fdata) => {
+    ctx.drawImage(stat, 0, 0, 1080, 1920);
+    _drawStoryWave(ctx, o, fdata);
+    _drawStoryTimeline(ctx, o, pr);
+  };
+  paint(0, null);                             // primer fotograma listo antes de arrancar la captura
+
+  // audio: fuente → analizador (para la onda) → destino de stream (para grabar)
   const ac = new (window.AudioContext || window.webkitAudioContext)();
   if (ac.state === 'suspended') { try { await ac.resume(); } catch (_) {} }
   const dest = ac.createMediaStreamDestination();
-  const analyser = ac.createAnalyser(); analyser.fftSize = 128; analyser.smoothingTimeConstant = 0.8;
+  const analyser = ac.createAnalyser(); analyser.fftSize = 128; analyser.smoothingTimeConstant = 0.82;
   const src = ac.createBufferSource(); src.buffer = buffer; src.connect(analyser); analyser.connect(dest);
+
   const FPS = 30;
-  o._smooth = []; // activa el suavizado temporal de la onda
-  // Muestreo AUTOMÁTICO a 30 fps: el navegador captura con su propio reloj
-  // estable (cadencia regular en pantallas de 60/90/120 Hz). Nosotros solo
-  // mantenemos el canvas siempre actualizado dibujando en cada frame.
   const vstream = cv.captureStream(FPS);
   const mixed = new MediaStream([...vstream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
   const mime = pickVideoMime();
   const rec = new MediaRecorder(mixed, mime ? { mimeType: mime, videoBitsPerSecond: 5000000, audioBitsPerSecond: 128000 } : undefined);
   const chunks = []; rec.ondataavailable = (e) => { if (e.data && e.data.size) chunks.push(e.data); };
-  const stopped = new Promise((res) => { rec.onstop = res; });
-  const freq = new Uint8Array(analyser.frequencyBinCount);
-  rec.start(250); src.start(0, start, clip);
+  // guarda de seguridad: nunca quedarse colgado esperando onstop
+  const stopped = new Promise((res) => { rec.onstop = res; setTimeout(res, 4000); });
+
+  rec.start(250);
+  src.start(0, start, clip);
   const t0 = performance.now();
+
   await new Promise((resolve) => {
     const frame = () => {
-      const el = (performance.now() - t0) / 1000, pr = Math.min(1, el / clip);
+      const el = (performance.now() - t0) / 1000;
+      const pr = Math.min(1, el / clip);
       analyser.getByteFrequencyData(freq);
-      ctx.drawImage(stat, 0, 0, 1080, 1920);
-      _drawStoryWave(ctx, o, freq);
-      _drawStoryTimeline(ctx, o, pr);
+      paint(pr, freq);
       if (onProgress) onProgress(pr);
-      if (el < clip) requestAnimationFrame(frame); else resolve();
+      if (el < clip) requestAnimationFrame(frame);
+      else resolve();
     };
-    frame();
+    requestAnimationFrame(frame);
   });
-  try { rec.stop(); } catch (_) {} try { src.stop(); } catch (_) {}
-  await stopped; try { ac.close(); } catch (_) {}
+
+  try { rec.requestData(); } catch (_) {}
+  try { rec.stop(); } catch (_) {}
+  try { src.stop(); } catch (_) {}
+  await stopped;
+  try { ac.close(); } catch (_) {}
+  if (onProgress) onProgress(1);
   return new Blob(chunks, { type: mime || 'video/webm' });
 }
 // selector de los 10s + creación de la historia (vídeo con sonido) para una pista
