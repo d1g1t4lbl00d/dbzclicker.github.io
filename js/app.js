@@ -2596,7 +2596,8 @@ function syncNowPlaying() {
   $('npArtist').textContent = t.profiles?.display_name || t.profiles?.username || t.artist || '';
   $('npCover').innerHTML = t.cover_url ? `<img src="${esc(t.cover_url)}" alt="" />` : `<svg fill="none" stroke="#fff"><use href="#i-music"/></svg>`;
   $('npBg').style.backgroundImage = t.cover_url ? `url('${czUrl(t.cover_url)}')` : 'none';
-  const npPeaks = Array.isArray(t.waveform) && t.waveform.length ? t.waveform : waveBars(t.id, 120);
+  const rawPeaks = Array.isArray(t.waveform) && t.waveform.length ? t.waveform : waveBars(t.id, 80);
+  const npPeaks = resamplePeaks(rawPeaks, 80); // nº fijo de barras → siempre cabe y queda centrada
   $('npWave').innerHTML = npPeaks.map(h => `<div class="bar" style="--h:${czNum(h)}%"></div>`).join('');
   setNpPlayIcon(!audio.paused);
   updateNpProgress(audio.duration ? audio.currentTime / audio.duration : 0);
