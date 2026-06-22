@@ -728,8 +728,8 @@ body.has-player .right { padding-bottom: var(--player-h); }
 .np-meta { text-align: center; width: 100%; }
 .np-title { font-size: 22px; font-weight: 820; color: var(--ink); letter-spacing: -.3px; line-height: 1.2; }
 .np-artist { font-size: 14px; color: var(--ink-soft); margin-top: 5px; }
-.np-wave { display: flex; align-items: center; gap: 2px; height: 56px; width: 100%; cursor: pointer; }
-.np-wave .bar { flex: 1; min-width: 2px; height: 100%; display: flex; align-items: center; }
+.np-wave { display: flex; align-items: center; justify-content: center; gap: 2px; height: 56px; width: 100%; cursor: pointer; overflow: hidden; }
+.np-wave .bar { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: center; }
 .np-wave .bar::before { content: ""; width: 100%; border-radius: 3px; background: #cfd8ea; height: var(--h,40%); transition: background .1s; }
 .np-wave .bar.played::before { background: linear-gradient(180deg, var(--blue), var(--blue-deep)); }
 .np-times { display: flex; justify-content: space-between; width: 100%; font-size: 12px; color: var(--ink-soft); font-variant-numeric: tabular-nums; margin-top: -8px; }
