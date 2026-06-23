@@ -1355,7 +1355,7 @@ async function fetchTracks({ order='created_at', userId=null, limit=50 } = {}) {
 }
 // Trending dinámico vía RPC (hot score con ventana reciente). Embebe el perfil;
 // si el embed no estuviera disponible, lo adjunta con una segunda consulta.
-async function fetchTrending({ days = 2, limit = 50 } = {}) {
+async function fetchTrending({ days = 1, limit = 50 } = {}) {
   let list = [];
   try {
     const { data, error } = await sb.rpc('trending_tracks', { p_days: days, p_limit: limit })
