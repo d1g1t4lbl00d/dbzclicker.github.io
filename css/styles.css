@@ -2861,18 +2861,46 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
 .artist-card.playing-best .ac-tk-play .ci-pause { display: inline; }
 
 /* ====== Rueda radial estilo GTA V (mantener pulsado "Yo") ====== */
-.gta-wheel { position: fixed; inset: 0; z-index: 9000; background: rgba(5,7,16,.6); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); opacity: 0; transition: opacity .16s ease; touch-action: none; user-select: none; -webkit-user-select: none; }
+.gta-wheel { position: fixed; inset: 0; z-index: 9000; touch-action: none; user-select: none; -webkit-user-select: none;
+  background: radial-gradient(ellipse at 50% 58%, rgba(10,14,28,.5), rgba(3,5,12,.82) 70%);
+  -webkit-backdrop-filter: blur(8px) saturate(1.05); backdrop-filter: blur(8px) saturate(1.05);
+  opacity: 0; transition: opacity .2s ease; }
 .gta-wheel.show { opacity: 1; }
-.gtw-ring { position: absolute; transform: translate(-50%,-50%); border-radius: 50%; border: 2px dashed rgba(255,255,255,.13); pointer-events: none; }
-.gtw-hub { position: absolute; transform: translate(-50%,-50%); width: 128px; height: 128px; border-radius: 50%; display: grid; place-items: center; text-align: center; pointer-events: none;
-  background: radial-gradient(circle at 50% 35%, rgba(28,36,60,.95), rgba(10,14,26,.92)); border: 1px solid rgba(255,255,255,.14); box-shadow: 0 14px 50px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.04); }
-.gtw-hub-label { font-size: 12.5px; font-weight: 800; color: #e6ecff; padding: 0 14px; line-height: 1.25; letter-spacing: .2px; }
-.gtw-item { position: absolute; width: 78px; height: 78px; border-radius: 50%; border: 1px solid rgba(255,255,255,.14); cursor: pointer;
-  background: rgba(18,23,38,.92); color: #cdd6ee; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
-  transform: translate(calc(-50% - var(--dx,0px)), calc(-50% - var(--dy,0px))) scale(.4); opacity: 0;
-  transition: transform .2s cubic-bezier(.2,.8,.3,1.25), opacity .16s ease, background .12s, color .12s, box-shadow .12s, border-color .12s; }
+/* anillos decorativos */
+.gtw-ring { position: absolute; transform: translate(-50%,-50%) scale(.7); border-radius: 50%; pointer-events: none;
+  border: 1.5px solid rgba(130,160,255,.16); box-shadow: inset 0 0 60px rgba(80,120,255,.08);
+  opacity: 0; transition: transform .26s cubic-bezier(.2,.8,.3,1.2), opacity .2s; }
+.gtw-ring2 { border-style: dashed; border-color: rgba(130,160,255,.1); animation: gtwSpin 22s linear infinite; }
+.gta-wheel.show .gtw-ring { transform: translate(-50%,-50%) scale(1); opacity: 1; }
+@keyframes gtwSpin { to { transform: translate(-50%,-50%) rotate(360deg); } }
+.gta-wheel.show .gtw-ring2 { animation: gtwSpin 22s linear infinite; }
+/* hub central con avatar */
+.gtw-hub { position: absolute; transform: translate(-50%,-50%) scale(.6); width: 138px; height: 138px; border-radius: 50%;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 7px; text-align: center; pointer-events: none;
+  background: radial-gradient(circle at 50% 32%, rgba(32,42,70,.96), rgba(9,12,24,.94));
+  border: 1px solid rgba(255,255,255,.16); box-shadow: 0 18px 60px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.08);
+  opacity: 0; transition: transform .24s cubic-bezier(.2,.8,.3,1.3), opacity .2s, box-shadow .2s, border-color .2s; }
+.gta-wheel.show .gtw-hub { transform: translate(-50%,-50%) scale(1); opacity: 1; }
+.gta-wheel.has-sel .gtw-hub { border-color: color-mix(in srgb, var(--accent) 60%, transparent); box-shadow: 0 18px 60px rgba(0,0,0,.6), 0 0 34px color-mix(in srgb, var(--accent) 45%, transparent), inset 0 1px 0 rgba(255,255,255,.08); }
+.gtw-hub-av { width: 60px; height: 60px; border-radius: 50%; overflow: hidden; background: var(--accent-grad); display: grid; place-items: center; box-shadow: 0 4px 14px rgba(0,0,0,.4), 0 0 0 2px rgba(255,255,255,.12); }
+.gtw-hub-av img { width: 100%; height: 100%; object-fit: cover; }
+.gtw-hub-av .avatar, .gtw-hub-av .avatar img { width: 100%; height: 100%; }
+.gtw-hub-label { font-size: 13px; font-weight: 850; color: #eef2ff; padding: 0 12px; line-height: 1.2; letter-spacing: .2px; max-width: 120px; }
+.gta-wheel.has-sel .gtw-hub-label { color: #fff; }
+/* segmentos */
+.gtw-item { position: absolute; width: 80px; height: 80px; border-radius: 24px; cursor: pointer;
+  border: 1px solid rgba(255,255,255,.12); color: #d3dcf2;
+  background: linear-gradient(160deg, rgba(30,38,60,.92), rgba(16,20,34,.92));
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 5px;
+  box-shadow: 0 8px 22px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.06);
+  transform: translate(calc(-50% - var(--dx,0px)), calc(-50% - var(--dy,0px))) scale(.3); opacity: 0;
+  transition: transform .26s cubic-bezier(.2,.85,.3,1.3), opacity .18s ease, background .14s, color .14s, box-shadow .14s, border-color .14s; }
 .gta-wheel.show .gtw-item { transform: translate(-50%,-50%) scale(1); opacity: 1; }
-.gtw-item svg { width: 25px; height: 25px; }
-.gtw-lb { font-size: 9.5px; font-weight: 800; max-width: 72px; line-height: 1; text-align: center; letter-spacing: .1px; }
-.gta-wheel.show .gtw-item.sel { transform: translate(-50%,-50%) scale(1.22); background: var(--accent-grad); color: #fff; border-color: transparent; box-shadow: 0 10px 32px rgba(62,87,252,.6); }
+.gtw-item svg { width: 26px; height: 26px; }
+.gtw-ic { display: grid; place-items: center; width: 34px; height: 34px; }
+.gtw-lb { font-size: 10px; font-weight: 800; max-width: 74px; line-height: 1; text-align: center; letter-spacing: .15px; opacity: .92; }
+.gta-wheel.show .gtw-item.sel { transform: translate(-50%,-50%) scale(1.26) translateY(-2px); color: #fff; border-color: transparent;
+  background: var(--accent-grad); box-shadow: 0 14px 40px color-mix(in srgb, var(--accent) 55%, transparent), 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
+.gta-wheel.show .gtw-item.sel .gtw-lb { opacity: 1; }
 #bottomNav button[data-bnav="me"] { touch-action: none; }
