@@ -29,6 +29,7 @@ module.exports = async (req, res) => {
   const nodes = [];
   // páginas fijas
   nodes.push(urlNode(BASE + '/', null, '1.0', 'daily'));
+  nodes.push(urlNode(BASE + '/charts', null, '0.9', 'daily'));
   // artistas
   for (const a of artists) {
     if (!a.username) continue;

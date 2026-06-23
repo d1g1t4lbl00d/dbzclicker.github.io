@@ -2904,3 +2904,9 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
   background: var(--accent-grad); box-shadow: 0 14px 40px color-mix(in srgb, var(--accent) 55%, transparent), 0 0 0 4px color-mix(in srgb, var(--accent) 22%, transparent); }
 .gta-wheel.show .gtw-item.sel .gtw-lb { opacity: 1; }
 #bottomNav button[data-bnav="me"] { touch-action: none; }
+
+/* ====== Insertar pista (embed) en el panel de compartir ====== */
+.share-embed { margin-top: 10px; }
+.share-embed > .btn { width: 100%; }
+.share-embed-box { margin-top: 10px; }
+.share-embed-box textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-soft); color: var(--ink-soft); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px; padding: 9px 11px; resize: none; }
