@@ -2859,34 +2859,3 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
 .ac-tk-play .ci-pause { display: none; }
 .artist-card.playing-best .ac-tk-play .ci-play { display: none; }
 .artist-card.playing-best .ac-tk-play .ci-pause { display: inline; }
-
-/* ====== Filas de pista compactas estilo SoundCloud (perfil) ====== */
-.tk-row { display: flex; align-items: center; gap: 12px; padding: 9px 6px; cursor: pointer; border-radius: 12px; transition: background .14s; }
-.tk-row:hover { background: rgba(120,140,200,.08); }
-.tk-cover { position: relative; width: 66px; height: 66px; flex: none; border: none; padding: 0; border-radius: 9px; overflow: hidden; background: var(--panel-2); display: grid; place-items: center; cursor: pointer; }
-.tk-cover img { width: 100%; height: 100%; object-fit: cover; }
-.tk-cover > svg { width: 24px; height: 24px; color: var(--ink-soft); }
-.tk-cov-ov { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.34); opacity: 0; transition: opacity .15s; }
-.tk-cov-ov svg { width: 26px; height: 26px; }
-.tk-cov-ov .ci-pause { display: none; }
-.tk-row:hover .tk-cov-ov, .tk-row.playing .tk-cov-ov { opacity: 1; }
-.tk-row.playing .tk-cov-ov .ci-play { display: none; }
-.tk-row.playing .tk-cov-ov .ci-pause { display: inline; }
-.tk-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.tk-title { font-weight: 700; font-size: 15px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tk-row.playing .tk-title { color: var(--accent); }
-.tk-artist { font-size: 13px; color: var(--ink-soft); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 4px; }
-.tk-artist a { color: inherit; text-decoration: none; }
-.tk-artist a:hover { text-decoration: underline; }
-.tk-artist .vbadge { width: 13px; height: 13px; }
-.tk-meta { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--ink-soft); margin-top: 3px; font-variant-numeric: tabular-nums; }
-.tk-meta > span { display: inline-flex; align-items: center; gap: 4px; }
-.tk-meta svg { width: 12px; height: 12px; }
-.tk-dot { opacity: .55; gap: 0 !important; }
-.tk-likes.on { color: #ff5500; }
-.tk-genre { color: var(--ink-soft); opacity: .8; }
-.tk-more { flex: none; width: 36px; height: 36px; border: none; background: transparent; color: var(--ink-soft); display: grid; place-items: center; border-radius: 50%; cursor: pointer; transition: background .14s, color .14s; }
-.tk-more:hover { background: rgba(120,140,200,.12); color: var(--ink); }
-.tk-more svg { width: 20px; height: 20px; }
-/* en el perfil, la lista compacta no necesita el padding de tarjetas */
-.profile-view .feed-list { display: flex; flex-direction: column; gap: 2px; }

@@ -1642,42 +1642,6 @@ function artistCard(e) {
   return card;
 }
 
-// Fila de pista compacta estilo SoundCloud (para el perfil): carátula a la
-// izquierda, título + artista, y una línea de meta (reproducciones · duración ·
-// me gusta). Misma interacción que las tarjetas (tocar = reproducir, ⋮ = menú).
-function trackRow(t) {
-  const prof = t.profiles || {};
-  const who = prof.display_name || prof.username || t.artist || 'anónimo';
-  const liked = state.likes.has(t.id);
-  const cov = t.cover_url ? czUrl(t.cover_url) : (prof.avatar_url ? czUrl(prof.avatar_url) : '');
-  const row = el(`
-    <div class="tk-row" data-id="${t.id}">
-      <button class="tk-cover" data-act="play" aria-label="Reproducir">
-        ${cov ? `<img src="${esc(cov)}" alt="">` : `<svg fill="none" stroke="currentColor"><use href="#i-music"/></svg>`}
-        <span class="tk-cov-ov"><svg class="ci-play" fill="#fff" stroke="none"><use href="#i-play"/></svg><svg class="ci-pause" fill="#fff" stroke="none"><use href="#i-pause"/></svg></span>
-      </button>
-      <div class="tk-main" data-act="play">
-        <div class="tk-title">${esc(t.title || 'Sin título')}</div>
-        <div class="tk-artist"><a data-act="profile">${esc(who)}</a>${verifiedBadge(prof)}${displayBadgeHtml(prof)}</div>
-        <div class="tk-meta">
-          <span><svg fill="#9aa7c2" stroke="none"><use href="#i-play"/></svg>${nfmt(t.plays || 0)}</span>
-          <span class="tk-dot">·</span><span>${fmtTime(t.duration)}</span>
-          <span class="tk-dot">·</span><span class="tk-likes ${liked ? 'on' : ''}"><svg fill="currentColor" stroke="none"><use href="#i-heart"/></svg>${nfmt(t.likes_count || 0)}</span>
-          ${t.genre ? `<span class="tk-dot">·</span><span class="tk-genre">${esc(t.genre)}</span>` : ''}
-        </div>
-      </div>
-      <button class="tk-more" data-act="more" aria-label="Más opciones"><svg fill="none" stroke="currentColor"><use href="#i-more"/></svg></button>
-    </div>`);
-  row.addEventListener('click', (e) => {
-    const act = e.target.closest('[data-act]')?.dataset.act;
-    if (act === 'more') openActionSheet(trackMenu(t, row));
-    else if (act === 'profile') { e.stopPropagation(); openProfile(t.user_id); }
-    else playTrack(t);
-  });
-  attachLongPress(row, () => trackMenu(t, row));
-  return row;
-}
-
 function openEditTrack(t, card) {
   const m = openModal(`
     <div class="modal-head"><h3>Editar pista</h3><button class="close">&times;</button></div>
@@ -2562,10 +2526,10 @@ function showEq(on) {
   else if (eq) eq.remove();
 }
 function markPlayingCard() {
-  document.querySelectorAll('.track.playing, .dm-track.playing, .tk-row.playing').forEach(c => c.classList.remove('playing'));
+  document.querySelectorAll('.track.playing, .dm-track.playing').forEach(c => c.classList.remove('playing'));
   if (!state.current?.id) return;
   // puede haber la misma pista en varias listas (p. ej. Pistas y Feats) y en el chat: marcarlas todas
-  document.querySelectorAll(`.track[data-id="${state.current.id}"], .dm-track[data-track-id="${state.current.id}"], .tk-row[data-id="${state.current.id}"]`).forEach(card => card.classList.add('playing'));
+  document.querySelectorAll(`.track[data-id="${state.current.id}"], .dm-track[data-track-id="${state.current.id}"]`).forEach(card => card.classList.add('playing'));
 }
 
 /* ---- Vista "Reproduciendo ahora" a pantalla completa ---- */
@@ -3570,7 +3534,7 @@ async function loadProfileReposts(userId, container, isMe) {
     return [];
   }
   container.innerHTML = '';
-  tracks.forEach(t => container.appendChild(trackRow(t)));
+  tracks.forEach(t => container.appendChild(trackCard(t)));
   return tracks;
 }
 
@@ -4036,7 +4000,7 @@ async function openProfile(userId) {
 
   const list = $('feedList');
   if (!myTracks.length) list.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-music"/></svg><p>Sin pistas todavía.</p></div>`;
-  else myTracks.forEach(t => list.appendChild(trackRow(t)));
+  else myTracks.forEach(t => list.appendChild(trackCard(t)));
 
   // Destacadas: top de canciones por reproducciones
   const topEl = $('profTop');
@@ -4057,7 +4021,7 @@ async function openProfile(userId) {
 
   const featEl = $('featList');
   if (!featTracks.length) featEl.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-people"/></svg><p>Sin colaboraciones todavía. Aquí aparecen las canciones en colaboración: las tuyas con invitados (<b>ft.</b>) y las de otros donde te añaden.</p></div>`;
-  else featTracks.forEach(t => featEl.appendChild(trackRow(t)));
+  else featTracks.forEach(t => featEl.appendChild(trackCard(t)));
 
   // cola de reproducción inicial = pestaña Pistas
   state.tracks = myTracks; state.queue = myTracks.map(t => t.id);
