@@ -1035,8 +1035,13 @@ function initMeWheel() {
     overlay = el(`<div class="gta-wheel"><div class="gtw-ring"></div><div class="gtw-ring gtw-ring2"></div><div class="gtw-hub"><span class="gtw-hub-av">${avatarHTML(state.profile)}</span><span class="gtw-hub-label">Desliza</span></div></div>`);
     document.body.appendChild(overlay);
     const W = window.innerWidth, Hh = window.innerHeight;
-    cx = W / 2; cy = Math.min(Hh - 180, Hh / 2 + 30);
-    R = Math.max(118, Math.min(176, Math.min(W, Hh) * 0.30));
+    cx = W / 2; cy = Math.min(Hh - 168, Hh / 2 + 22);
+    // radio máximo que cabe sin salirse por los lados/arriba/abajo (half = mitad del icono)
+    const half = 40, m = 12;
+    const maxRW = W / 2 - half - m;
+    const maxRH = Math.min(cy - 62, Hh - 62 - cy);
+    R = Math.min(190, maxRW, maxRH);
+    if (R < 124) R = Math.min(maxRW, maxRH);   // pantallas muy estrechas: lo máximo posible
     const r1 = overlay.querySelector('.gtw-ring'); r1.style.cssText += `left:${cx}px;top:${cy}px;width:${R*2}px;height:${R*2}px;`;
     const r2 = overlay.querySelector('.gtw-ring2'); r2.style.cssText += `left:${cx}px;top:${cy}px;width:${R*2+44}px;height:${R*2+44}px;`;
     const hub = overlay.querySelector('.gtw-hub'); hub.style.left = cx + 'px'; hub.style.top = cy + 'px';
