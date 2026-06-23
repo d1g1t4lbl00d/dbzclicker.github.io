@@ -3153,7 +3153,7 @@ function openUploadModal(prefill) {
 
   dzA.onclick = () => fA.click();
   dzC.onclick = () => fC.click();
-  fA.onchange = () => setAudio(fA.files[0]);
+  fA.onchange = () => { if (fA.files[0]) setAudio(fA.files[0]); };
   const setCover = (f) => {
     if (!f || !f.type.startsWith('image')) { toast('Selecciona una imagen'); return; }
     coverFile = f;
