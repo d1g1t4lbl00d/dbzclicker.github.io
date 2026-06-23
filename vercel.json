@@ -3,6 +3,7 @@
   "cleanUrls": true,
   "rewrites": [
     { "source": "/google08061c74156461e8.html", "destination": "/api/gverify" },
+    { "source": "/google08061c74156461e8", "destination": "/api/gverify" },
     { "source": "/", "has": [{ "type": "header", "key": "user-agent", "value": ".*([Bb]ot|[Cc]rawl|[Ss]pider|[Ss]lurp|[Gg]oogle|[Bb]ing|[Yy]andex|[Dd]uck|[Bb]aidu|facebookexternalhit|[Ww]hats[Aa]pp|[Tt]elegram|[Tt]witter|[Ll]inkedin|[Pp]interest|[Dd]iscord|[Aa]pple[Bb]ot|[Ee]mbedly|[Qq]uora|[Ll]ighthouse|[Hh]eadless|[Pp]review).*" }], "destination": "/api/home" },
     { "source": "/t/:id", "destination": "/api/share?track=:id" },
     { "source": "/p/:id", "destination": "/api/share?post=:id" },
