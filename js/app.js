@@ -1886,6 +1886,7 @@ function shareTrack(t) {
   const url = trackShareUrl(t);
   const who = t.profiles?.display_name || t.profiles?.username || t.artist || 'UnderBro';
   const title = `${t.title} — ${who}`;
+  const embedCode = `<iframe src="${location.origin}/embed/${t.id}" width="100%" height="160" frameborder="0" loading="lazy" allow="autoplay" style="border:0;border-radius:14px;max-width:480px"></iframe>`;
   const m = openModal(`
     <div class="modal-head"><h3>Compartir</h3><button class="close">&times;</button></div>
     <div class="modal-body">
@@ -1901,8 +1902,20 @@ function shareTrack(t) {
       </button>
       ${shareQuickRow(url, title)}
       <div class="share-link"><input type="text" id="shareUrl" readonly value="${esc(url)}" /><button class="btn sm primary" id="copyLink">Copiar</button></div>
+      <div class="share-embed">
+        <button class="btn sm" id="embedToggle"><svg fill="none" stroke="currentColor"><use href="#i-globe"/></svg> Insertar en una web</button>
+        <div class="share-embed-box hidden" id="embedBox">
+          <p class="pk-hint2" style="margin:0 0 6px">Pega este código en tu Linktree, blog o web para mostrar la pista:</p>
+          <textarea id="embedCode" readonly rows="2" onclick="this.select()">${esc(embedCode)}</textarea>
+          <button class="btn sm primary" id="copyEmbed" style="margin-top:6px">Copiar código</button>
+        </div>
+      </div>
     </div>`);
   m.querySelector('#shareStory').onclick = () => { m.remove(); shareStory(t); };
+  const embedToggle = m.querySelector('#embedToggle'), embedBox = m.querySelector('#embedBox');
+  if (embedToggle) embedToggle.onclick = () => embedBox.classList.toggle('hidden');
+  const copyEmbed = m.querySelector('#copyEmbed');
+  if (copyEmbed) copyEmbed.onclick = async () => { try { await navigator.clipboard.writeText(embedCode); } catch { const i = m.querySelector('#embedCode'); i.select(); try { document.execCommand('copy'); } catch {} } copyEmbed.textContent = 'Copiado ✓'; toast('Código copiado'); };
   const copyBtn = m.querySelector('#copyLink');
   copyBtn.onclick = async () => { try { await navigator.clipboard.writeText(url); } catch { const i = m.querySelector('#shareUrl'); i.select(); try { document.execCommand('copy'); } catch {} } copyBtn.textContent = 'Copiado ✓'; toast('Enlace copiado'); };
   wireQuickRow(m, url, title, () => { m.remove(); shareToChatPicker(t); });
