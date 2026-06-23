@@ -810,6 +810,7 @@ function bindUI() {
   document.querySelectorAll('#bottomNav button[data-bnav]').forEach(b => {
     b.onclick = () => {
       const act = b.dataset.bnav;
+      if (b._wheelJustClosed) return;   // se acaba de usar la ruleta: ignora el clic
       document.querySelectorAll('#bottomNav button').forEach(x => x.classList.toggle('active', x === b && act !== 'upload'));
       if (act === 'feed') { state.tab = 'trending'; switchView('feed'); $('main').scrollTo({top:0,behavior:'smooth'}); }
       else if (act === 'posts') switchView('posts');
@@ -820,6 +821,7 @@ function bindUI() {
       if (act !== 'upload') hideDrawers();
     };
   });
+  initMeWheel();
 
   let st;
   $('searchInput').addEventListener('input', (e) => {
@@ -1010,6 +1012,88 @@ function startFeedAutoRefresh() {
    NAVEGACIÓN POR GESTOS (deslizar entre pantallas, solo móvil)
    ======================================================================= */
 const SWIPE_SEQ = ['following', 'trending', 'new', 'posts', 'chat'];
+// Rueda radial estilo GTA V al mantener pulsado el botón "Yo": se abre una
+// ruleta de accesos directos; deslizando hacia una opción y soltando se abre.
+function initMeWheel() {
+  if (initMeWheel._done) return; initMeWheel._done = true;
+  const btn = document.querySelector('#bottomNav button[data-bnav="me"]');
+  if (!btn) return;
+  const ITEMS = [
+    { label: 'Mi perfil',    icon: 'i-people',   run: () => openProfile(state.user.id) },
+    { label: 'Personalizar', icon: 'i-palette',  run: () => openProfileCustomizer() },
+    { label: 'Subir',        icon: 'i-plus',     run: () => openCreateChooser() },
+    { label: 'Mis listas',   icon: 'i-list',     run: () => switchView('playlists') },
+    { label: 'Herramientas', icon: 'i-tools',    run: () => switchView('tools') },
+    { label: 'Press Kit',    icon: 'i-file',     run: () => switchView('presskit') },
+    { label: 'Estadísticas', icon: 'i-chart',    run: () => switchView('dashboard') },
+    { label: 'Ajustes',      icon: 'i-settings', run: () => switchView('settings') },
+  ];
+  let overlay = null, items = [], sel = -1, holdTimer = 0, opened = false, active = false, sx = 0, sy = 0, cx = 0, cy = 0, R = 0;
+
+  const open = () => {
+    opened = true; haptic(28);
+    overlay = el('<div class="gta-wheel"><div class="gtw-ring"></div><div class="gtw-hub"><span class="gtw-hub-label">Desliza y suelta</span></div></div>');
+    document.body.appendChild(overlay);
+    const W = window.innerWidth, Hh = window.innerHeight;
+    cx = W / 2; cy = Math.min(Hh - 180, Hh / 2 + 30);
+    R = Math.max(118, Math.min(176, Math.min(W, Hh) * 0.30));
+    const ring = overlay.querySelector('.gtw-ring'); ring.style.cssText += `left:${cx}px;top:${cy}px;width:${R*2}px;height:${R*2}px;`;
+    const hub = overlay.querySelector('.gtw-hub'); hub.style.left = cx + 'px'; hub.style.top = cy + 'px';
+    items = ITEMS.map((it, i) => {
+      const ang = (-90 + i * 45) * Math.PI / 180;
+      const x = cx + R * Math.cos(ang), y = cy + R * Math.sin(ang);
+      const node = el(`<button class="gtw-item" style="left:${x}px;top:${y}px"><span class="gtw-ic"><svg fill="none" stroke="currentColor"><use href="#${it.icon}"/></svg></span><span class="gtw-lb">${esc(it.label)}</span></button>`);
+      node.style.setProperty('--dx', (x - cx) + 'px'); node.style.setProperty('--dy', (y - cy) + 'px');
+      overlay.appendChild(node); return node;
+    });
+    requestAnimationFrame(() => overlay.classList.add('show'));
+  };
+
+  const updateSel = (px, py) => {
+    if (!opened) return;
+    // la selección va por la DIRECCIÓN del deslizamiento desde el punto inicial
+    // de pulsación (como el stick en GTA), no desde el centro de la rueda.
+    const dx = px - sx, dy = py - sy, dist = Math.hypot(dx, dy);
+    const lbl = overlay.querySelector('.gtw-hub-label');
+    if (dist < 34) { if (sel >= 0) { items[sel].classList.remove('sel'); sel = -1; lbl.textContent = 'Desliza y suelta'; } return; }
+    let a = (Math.atan2(dy, dx) * 180 / Math.PI) + 90;
+    a = ((a % 360) + 360) % 360;
+    const idx = Math.round(a / 45) % 8;
+    if (idx !== sel) {
+      if (sel >= 0) items[sel].classList.remove('sel');
+      sel = idx; items[sel].classList.add('sel'); lbl.textContent = ITEMS[idx].label; haptic(9);
+    }
+  };
+
+  const close = (activate) => {
+    clearTimeout(holdTimer);
+    if (opened && overlay) {
+      const chosen = (activate && sel >= 0) ? ITEMS[sel] : null;
+      const ov = overlay; ov.classList.remove('show'); setTimeout(() => ov.remove(), 170);
+      overlay = null; opened = false;
+      if (chosen) { haptic(22); try { chosen.run(); } catch (e) { console.error(e); } }
+    }
+    sel = -1; active = false;
+  };
+
+  btn.addEventListener('pointerdown', (e) => {
+    active = true; sx = e.clientX; sy = e.clientY;
+    try { btn.setPointerCapture(e.pointerId); } catch (_) {}
+    clearTimeout(holdTimer); holdTimer = setTimeout(open, 260);
+  });
+  btn.addEventListener('pointermove', (e) => {
+    if (!active) return;
+    if (opened) updateSel(e.clientX, e.clientY);
+    else if (Math.hypot(e.clientX - sx, e.clientY - sy) > 16) clearTimeout(holdTimer);
+  });
+  btn.addEventListener('pointerup', () => {
+    if (!active) return;
+    if (opened) { btn._wheelJustClosed = true; setTimeout(() => { btn._wheelJustClosed = false; }, 400); }
+    close(true);
+  });
+  btn.addEventListener('pointercancel', () => { clearTimeout(holdTimer); close(false); });
+}
+
 function setBnavActive(bnav) {
   document.querySelectorAll('#bottomNav button').forEach(x => x.classList.toggle('active', x.dataset.bnav === bnav));
 }

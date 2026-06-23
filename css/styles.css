@@ -2859,3 +2859,20 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
 .ac-tk-play .ci-pause { display: none; }
 .artist-card.playing-best .ac-tk-play .ci-play { display: none; }
 .artist-card.playing-best .ac-tk-play .ci-pause { display: inline; }
+
+/* ====== Rueda radial estilo GTA V (mantener pulsado "Yo") ====== */
+.gta-wheel { position: fixed; inset: 0; z-index: 9000; background: rgba(5,7,16,.6); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); opacity: 0; transition: opacity .16s ease; touch-action: none; user-select: none; -webkit-user-select: none; }
+.gta-wheel.show { opacity: 1; }
+.gtw-ring { position: absolute; transform: translate(-50%,-50%); border-radius: 50%; border: 2px dashed rgba(255,255,255,.13); pointer-events: none; }
+.gtw-hub { position: absolute; transform: translate(-50%,-50%); width: 128px; height: 128px; border-radius: 50%; display: grid; place-items: center; text-align: center; pointer-events: none;
+  background: radial-gradient(circle at 50% 35%, rgba(28,36,60,.95), rgba(10,14,26,.92)); border: 1px solid rgba(255,255,255,.14); box-shadow: 0 14px 50px rgba(0,0,0,.55), inset 0 0 0 1px rgba(255,255,255,.04); }
+.gtw-hub-label { font-size: 12.5px; font-weight: 800; color: #e6ecff; padding: 0 14px; line-height: 1.25; letter-spacing: .2px; }
+.gtw-item { position: absolute; width: 78px; height: 78px; border-radius: 50%; border: 1px solid rgba(255,255,255,.14); cursor: pointer;
+  background: rgba(18,23,38,.92); color: #cdd6ee; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px;
+  transform: translate(calc(-50% - var(--dx,0px)), calc(-50% - var(--dy,0px))) scale(.4); opacity: 0;
+  transition: transform .2s cubic-bezier(.2,.8,.3,1.25), opacity .16s ease, background .12s, color .12s, box-shadow .12s, border-color .12s; }
+.gta-wheel.show .gtw-item { transform: translate(-50%,-50%) scale(1); opacity: 1; }
+.gtw-item svg { width: 25px; height: 25px; }
+.gtw-lb { font-size: 9.5px; font-weight: 800; max-width: 72px; line-height: 1; text-align: center; letter-spacing: .1px; }
+.gta-wheel.show .gtw-item.sel { transform: translate(-50%,-50%) scale(1.22); background: var(--accent-grad); color: #fff; border-color: transparent; box-shadow: 0 10px 32px rgba(62,87,252,.6); }
+#bottomNav button[data-bnav="me"] { touch-action: none; }
