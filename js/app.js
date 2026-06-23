@@ -3121,7 +3121,7 @@ function openUploadModal(prefill) {
           <div>Arrastra tu MP3/WAV aquí o haz clic</div>
           <div class="fname" id="audioName"></div>
         </div>
-        <input type="file" id="fAudio" accept="audio/*" hidden />
+        <input type="file" id="fAudio" accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.oga,.opus,.aif,.aiff,.wma,.alac" hidden />
         <audio id="audioPreview" class="up-preview hidden" controls preload="metadata"></audio>
       </div>
       <div class="field">
@@ -3177,7 +3177,11 @@ function openUploadModal(prefill) {
     if (ev==='drop' && e.dataTransfer.files[0]) setAudio(e.dataTransfer.files[0]);
   }));
   function setAudio(f) {
-    if (!f || !f.type.startsWith('audio')) { toast('Selecciona un archivo de audio'); return; }
+    // iOS a veces entrega el archivo con type vacío o genérico (sobre todo WAV),
+    // así que aceptamos también por extensión.
+    const okType = !!(f && f.type && f.type.startsWith('audio'));
+    const okExt = !!(f && /\.(mp3|wav|m4a|aac|flac|ogg|oga|opus|aif|aiff|wma|alac)$/i.test(f.name || ''));
+    if (!f || (!okType && !okExt)) { toast('Selecciona un archivo de audio'); return; }
     audioFile = f;
     m.querySelector('#audioName').textContent = f.name;
     if (!m.querySelector('#uTitle').value) m.querySelector('#uTitle').value = f.name.replace(/\.[^.]+$/,'');
@@ -3270,7 +3274,10 @@ function openUploadModal(prefill) {
       }
       const ext = (uploadFile.name.split('.').pop() || 'mp3').toLowerCase();
       const audioPath = `${uid}/${stamp}.${ext}`;
-      const up = await sb.storage.from('tracks').upload(audioPath, uploadFile, { contentType: uploadFile.type || 'audio/mpeg', upsert: false });
+      // iOS suele dar type vacío en WAV: deducimos el content-type por extensión
+      const AUDIO_MIME = { mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac', flac: 'audio/flac', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/opus', aif: 'audio/aiff', aiff: 'audio/aiff', wma: 'audio/x-ms-wma', alac: 'audio/mp4' };
+      const audioCT = uploadFile.type || AUDIO_MIME[ext] || 'audio/mpeg';
+      const up = await sb.storage.from('tracks').upload(audioPath, uploadFile, { contentType: audioCT, upsert: false });
       if (up.error) throw up.error;
       fill.style.width = '60%';
       const audioUrl = sb.storage.from('tracks').getPublicUrl(audioPath).data.publicUrl;
@@ -5782,7 +5789,7 @@ ${toolBar('analyzer', 'Analizador de audio', 'Tono · BPM · volumen — sin sal
         <div>Arrastra una canción (MP3/WAV) o haz clic</div>
         <div class="fname" id="anName"></div>
       </div>
-      <input type="file" id="anFile" accept="audio/*" hidden />
+      <input type="file" id="anFile" accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.oga,.opus,.aif,.aiff,.wma,.alac" hidden />
       <div id="anResult"></div>
     </div>`;
   $('anBack').onclick = () => switchView('tools');
