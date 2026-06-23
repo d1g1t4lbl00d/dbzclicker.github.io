@@ -115,6 +115,34 @@ async function applyReferral() {
   } catch (_) {}
 }
 
+// Modal "Invitar amigos": enlace personal con ?ref= + compartir nativo + contador.
+function openInviteModal() {
+  const uname = (state.profile && state.profile.username) || '';
+  const url = uname ? `${location.origin}/?ref=${encodeURIComponent(uname)}` : location.origin + '/';
+  const text = 'Únete a mí en UnderBro, la red social de la música. Sube tus pistas gratis 🎵🚀';
+  const m = openModal(`
+    <div class="modal-head"><h3>Invitar amigos</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <div class="invite-hero">
+        <div class="invite-ic"><svg fill="none" stroke="#fff"><use href="#i-people"/></svg></div>
+        <p class="invite-txt">Comparte tu enlace. Cuando alguien entre y se una con él, contará como tu invitado y harás crecer tu comunidad.</p>
+        <div class="invite-count" id="inviteCount">—</div>
+        <div class="invite-count-l">amigos invitados</div>
+      </div>
+      <button class="btn primary share-big" id="inviteShare"><svg fill="none" stroke="#fff"><use href="#i-share"/></svg> Compartir invitación</button>
+      <div class="share-link"><input type="text" id="inviteUrl" readonly value="${esc(url)}" onclick="this.select()" /><button class="btn sm primary" id="inviteCopy">Copiar</button></div>
+    </div>`);
+  sb.from('profiles').select('id', { count: 'exact', head: true }).eq('referred_by', state.user.id)
+    .then(({ count }) => { const e = m.querySelector('#inviteCount'); if (e) e.textContent = count || 0; }).catch(() => {});
+  m.querySelector('#inviteShare').onclick = async () => {
+    haptic(12);
+    if (navigator.share) { try { await navigator.share({ title: 'UnderBro', text, url }); return; } catch (err) { if (err && err.name === 'AbortError') return; } }
+    try { await navigator.clipboard.writeText(url); toast('Enlace de invitación copiado'); } catch (_) { toast(url); }
+  };
+  const cp = m.querySelector('#inviteCopy');
+  cp.onclick = async () => { try { await navigator.clipboard.writeText(url); } catch { const i = m.querySelector('#inviteUrl'); i.select(); try { document.execCommand('copy'); } catch {} } cp.textContent = 'Copiado ✓'; toast('Enlace copiado'); };
+}
+
 // ---------------------------------------------------------------- helpers
 const $ = (id) => document.getElementById(id);
 const el = (html) => { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstElementChild; };
@@ -1019,7 +1047,7 @@ function initMeWheel() {
   const btn = document.querySelector('#bottomNav button[data-bnav="me"]');
   if (!btn) return;
   const ITEMS = [
-    { label: 'Mi perfil',    icon: 'i-people',   run: () => openProfile(state.user.id) },
+    { label: 'Invitar',      icon: 'i-share',    run: () => openInviteModal() },
     { label: 'Personalizar', icon: 'i-palette',  run: () => openProfileCustomizer() },
     { label: 'Subir',        icon: 'i-plus',     run: () => openCreateChooser() },
     { label: 'Mis listas',   icon: 'i-list',     run: () => switchView('playlists') },
@@ -4076,7 +4104,7 @@ async function openProfile(userId) {
           <span class="pstat" data-pstat="likes"><b>${totalLikes}</b><i>likes</i></span>
         </div>
         <div class="pactions">
-          ${isMe ? `<button class="btn primary" id="customizeBtn"><svg fill="none" stroke="#fff"><use href="#i-palette"/></svg> Personalizar</button><button class="btn" id="editProfBtn"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg> Editar perfil</button><button class="btn" id="logoutBtn"><svg fill="none" stroke="currentColor"><use href="#i-logout"/></svg> Cerrar sesión</button>`
+          ${isMe ? `<button class="btn primary" id="customizeBtn"><svg fill="none" stroke="#fff"><use href="#i-palette"/></svg> Personalizar</button><button class="btn" id="inviteBtn"><svg fill="none" stroke="currentColor"><use href="#i-people"/></svg> Invitar amigos</button><button class="btn" id="editProfBtn"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg> Editar perfil</button><button class="btn" id="logoutBtn"><svg fill="none" stroke="currentColor"><use href="#i-logout"/></svg> Cerrar sesión</button>`
                   : `<button class="btn ${followsHim?'':'primary'}" id="followBtn">${followsHim?'Siguiendo ✓':'+ Seguir'}</button>`}
           ${!isMe ? `<button class="btn" id="msgBtn"><svg fill="none" stroke="currentColor"><use href="#i-mail"/></svg> Mensaje</button>` : ''}
           ${(!isMe && state.profile.is_admin && !prof.is_admin) ? `<button class="btn" id="banBtn" style="border-color:#e3b7b0;color:#c0533f">${prof.banned?'Desbanear':'Banear usuario'}</button>` : ''}
@@ -4106,7 +4134,7 @@ async function openProfile(userId) {
   if (theme.effect && theme.effect !== 'none' && EFFECTS[theme.effect]) {
     const v = main.querySelector('.profile-view'); if (v) v.prepend(buildEffect(theme.effect));
   }
-  if (isMe) { const cb = $('customizeBtn'); if (cb) cb.onclick = openProfileCustomizer; const lo = $('logoutBtn'); if (lo) lo.onclick = logout; }
+  if (isMe) { const cb = $('customizeBtn'); if (cb) cb.onclick = openProfileCustomizer; const lo = $('logoutBtn'); if (lo) lo.onclick = logout; const ib = $('inviteBtn'); if (ib) ib.onclick = openInviteModal; }
 
   const list = $('feedList');
   if (!myTracks.length) list.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-music"/></svg><p>Sin pistas todavía.</p></div>`;
