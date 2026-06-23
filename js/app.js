@@ -1032,12 +1032,13 @@ function initMeWheel() {
 
   const open = () => {
     opened = true; haptic(28);
-    overlay = el('<div class="gta-wheel"><div class="gtw-ring"></div><div class="gtw-hub"><span class="gtw-hub-label">Desliza y suelta</span></div></div>');
+    overlay = el(`<div class="gta-wheel"><div class="gtw-ring"></div><div class="gtw-ring gtw-ring2"></div><div class="gtw-hub"><span class="gtw-hub-av">${avatarHTML(state.profile)}</span><span class="gtw-hub-label">Desliza</span></div></div>`);
     document.body.appendChild(overlay);
     const W = window.innerWidth, Hh = window.innerHeight;
     cx = W / 2; cy = Math.min(Hh - 180, Hh / 2 + 30);
     R = Math.max(118, Math.min(176, Math.min(W, Hh) * 0.30));
-    const ring = overlay.querySelector('.gtw-ring'); ring.style.cssText += `left:${cx}px;top:${cy}px;width:${R*2}px;height:${R*2}px;`;
+    const r1 = overlay.querySelector('.gtw-ring'); r1.style.cssText += `left:${cx}px;top:${cy}px;width:${R*2}px;height:${R*2}px;`;
+    const r2 = overlay.querySelector('.gtw-ring2'); r2.style.cssText += `left:${cx}px;top:${cy}px;width:${R*2+44}px;height:${R*2+44}px;`;
     const hub = overlay.querySelector('.gtw-hub'); hub.style.left = cx + 'px'; hub.style.top = cy + 'px';
     items = ITEMS.map((it, i) => {
       const ang = (-90 + i * 45) * Math.PI / 180;
@@ -1055,13 +1056,13 @@ function initMeWheel() {
     // de pulsación (como el stick en GTA), no desde el centro de la rueda.
     const dx = px - sx, dy = py - sy, dist = Math.hypot(dx, dy);
     const lbl = overlay.querySelector('.gtw-hub-label');
-    if (dist < 34) { if (sel >= 0) { items[sel].classList.remove('sel'); sel = -1; lbl.textContent = 'Desliza y suelta'; } return; }
+    if (dist < 34) { if (sel >= 0) { items[sel].classList.remove('sel'); sel = -1; lbl.textContent = 'Desliza'; overlay.classList.remove('has-sel'); } return; }
     let a = (Math.atan2(dy, dx) * 180 / Math.PI) + 90;
     a = ((a % 360) + 360) % 360;
     const idx = Math.round(a / 45) % 8;
     if (idx !== sel) {
       if (sel >= 0) items[sel].classList.remove('sel');
-      sel = idx; items[sel].classList.add('sel'); lbl.textContent = ITEMS[idx].label; haptic(9);
+      sel = idx; items[sel].classList.add('sel'); lbl.textContent = ITEMS[idx].label; overlay.classList.add('has-sel'); haptic(9);
     }
   };
 
