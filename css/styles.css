@@ -3116,3 +3116,66 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
 @keyframes duelRays { to { transform: translate(-50%,-50%) rotate(360deg); } }
 .duel-result.win .duel-res-badge { animation: duelWinPop .5s ease both; }
 @keyframes duelWinPop { 0% { transform: scale(.4); opacity: 0; } 60% { transform: scale(1.12); } 100% { transform: scale(1); opacity: 1; } }
+
+/* ======================================================================
+   EL DUELO — escenario low-poly + enemigo stickman (cabeza = avatar)
+   ====================================================================== */
+.duel-arena { background: #0b0a16; }
+.duel-arena > .lp-sky, .duel-arena > .lp-stars, .duel-arena > .lp-sun, .duel-arena > .lp-mts, .duel-arena > .lp-ground, .duel-arena > .lp-road { z-index: 0; }
+.lp-sky { position: absolute; inset: 0; background: linear-gradient(180deg, #120c2c 0%, #281650 24%, #5e2a63 50%, #c2554c 70%, #ef9f48 86%, #ffd57e 100%); }
+.lp-stars { position: absolute; left: 0; right: 0; top: 0; height: 48%; opacity: .6;
+  background-image: radial-gradient(1.4px 1.4px at 18% 30%, #fff, transparent), radial-gradient(1.2px 1.2px at 62% 18%, #fff, transparent), radial-gradient(1.4px 1.4px at 82% 42%, #fff, transparent), radial-gradient(1.2px 1.2px at 38% 12%, #fff, transparent), radial-gradient(1.2px 1.2px at 50% 36%, #fff, transparent); }
+.lp-sun { position: absolute; left: 50%; bottom: 32%; width: 220px; height: 220px; transform: translate(-50%, 42%); border-radius: 50%; background: radial-gradient(circle, #fff4cc 0%, #ffd57e 36%, #ff9d4d 58%, rgba(255,140,70,0) 72%); }
+.lp-mts { position: absolute; left: -2%; right: -2%; }
+.lp-mts-3 { bottom: 32%; height: 120px; background: #3a2358; opacity: .85; clip-path: polygon(0 100%,12% 42%,24% 72%,38% 30%,52% 62%,66% 26%,80% 64%,92% 38%,100% 70%,100% 100%); }
+.lp-mts-2 { bottom: 31%; height: 102px; background: #2a1842; clip-path: polygon(0 100%,16% 55%,32% 80%,48% 40%,62% 74%,76% 46%,90% 78%,100% 56%,100% 100%); }
+.lp-mts-1 { bottom: 30%; height: 82px; background: #1b1030; clip-path: polygon(0 100%,20% 60%,40% 84%,58% 50%,74% 80%,90% 58%,100% 82%,100% 100%); }
+.lp-ground { position: absolute; left: 0; right: 0; bottom: 0; height: 31%; background: linear-gradient(180deg, #251533 0%, #150b1f 100%); box-shadow: inset 0 3px 0 rgba(255,165,95,.14); }
+.lp-road { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); width: 72%; height: 31%; background: linear-gradient(180deg, rgba(255,185,120,.12), rgba(255,185,120,0)); clip-path: polygon(43% 0, 57% 0, 100% 100%, 0 100%); }
+/* stacking general de la arena */
+.duel-bar { z-index: 1 !important; }
+.duel-vig { z-index: 2 !important; }
+.duel-enemy-tag { z-index: 3; }
+.duel-center { z-index: 4 !important; }
+.duel-gun, .duel-smoke { z-index: 5 !important; }
+.duel-muzzle { z-index: 6 !important; }
+.duel-flash { z-index: 7 !important; }
+.duel-slate { z-index: 8 !important; }
+.duel-arena.fire::after { content: ""; position: absolute; inset: 0; z-index: 3; pointer-events: none; background: radial-gradient(ellipse at 50% 45%, rgba(255,45,45,.42), transparent 62%); }
+/* etiqueta del rival */
+.duel-enemy-tag { position: absolute; top: calc(env(safe-area-inset-top,0px) + 16px); left: 50%; transform: translateX(-50%); text-align: center; }
+.duel-enemy-tag b { display: block; font-size: 15px; color: #fff; text-shadow: 0 1px 5px rgba(0,0,0,.6); letter-spacing: .3px; }
+.duel-enemy-tag span { font-size: 12px; color: #ffd57e; font-variant-numeric: tabular-nums; }
+/* enemigo stickman */
+.duel-enemy { position: absolute; left: 50%; bottom: 30%; transform: translateX(-50%); width: 84px; height: 150px; z-index: 1; transform-origin: 50% 100%; animation: smIdle 3s ease-in-out infinite; filter: drop-shadow(0 6px 10px rgba(0,0,0,.5)); }
+@keyframes smIdle { 0%,100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(-4px); } }
+.sm-head { position: absolute; left: 50%; top: 0; transform: translateX(-50%); width: 44px; height: 44px; border-radius: 50%; background: #222 center/cover no-repeat; border: 3px solid #0d0a14; box-shadow: 0 3px 9px rgba(0,0,0,.55); z-index: 2; }
+.sm-head-ph { display: grid; place-items: center; background: linear-gradient(160deg, #3a4a7a, #1a1f33); color: #fff; font-weight: 800; font-size: 18px; }
+.sm-body { position: absolute; left: 50%; top: 44px; transform: translateX(-50%); width: 6px; height: 50px; background: #12141d; border-radius: 3px; }
+.sm-arm { position: absolute; top: 50px; left: calc(50% - 3px); width: 6px; height: 38px; background: #12141d; border-radius: 3px; transform-origin: top center; }
+.sm-arm-l { transform: rotate(40deg); }
+.sm-arm-r { transform: rotate(-56deg); }
+.sm-gun { position: absolute; top: 30px; left: -3px; width: 22px; height: 6px; background: #0b0d14; border-radius: 2px; transform: rotate(-16deg); box-shadow: 0 0 6px rgba(255,90,90,.3); }
+.sm-leg { position: absolute; top: 92px; left: calc(50% - 3px); width: 6px; height: 46px; background: #12141d; border-radius: 3px; transform-origin: top center; }
+.sm-leg-l { transform: rotate(15deg); }
+.sm-leg-r { transform: rotate(-15deg); }
+.sm-shadow { position: absolute; left: 50%; bottom: -6px; transform: translateX(-50%); width: 58px; height: 13px; border-radius: 50%; background: radial-gradient(ellipse, rgba(0,0,0,.55), transparent 70%); }
+/* poses */
+.duel-enemy.victor { animation: smVictor 1.6s ease-in-out infinite; }
+.duel-enemy.victor .sm-arm-r { transform: rotate(-115deg); }
+@keyframes smVictor { 0%,100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(-9px); } }
+.duel-enemy.down { animation: smFall .8s cubic-bezier(.4,1.3,.6,1) forwards; }
+@keyframes smFall { 0% { transform: translateX(-50%) rotate(0); } 60% { transform: translate(-50%, 18px) rotate(60deg); } 100% { transform: translate(-50%, 30px) rotate(88deg); opacity: .45; } }
+.duel-arena.fire .sm-gun { box-shadow: 0 0 12px rgba(255,60,60,.7); }
+/* panel de resultado sobre la escena */
+.duel-end-panel { position: absolute; left: 50%; bottom: 0; transform: translateX(-50%); width: 100%; max-width: 480px; z-index: 6; text-align: center;
+  padding: 20px 22px calc(env(safe-area-inset-bottom,0px) + 22px);
+  background: linear-gradient(180deg, transparent 0%, rgba(5,6,12,.72) 26%, rgba(5,6,12,.96) 60%); }
+.duel-end-panel .duel-res-badge { font-size: 34px; font-weight: 900; letter-spacing: 2px; margin-bottom: 10px; animation: duelWinPop .5s ease both; }
+.duel-end-panel.win .duel-res-badge { color: #38d39f; text-shadow: 0 0 26px rgba(56,211,159,.6); }
+.duel-end-panel.lose .duel-res-badge { color: #ff5a5a; text-shadow: 0 0 22px rgba(255,90,90,.5); }
+.duel-end-panel.draw .duel-res-badge { color: #cfd8ea; }
+.duel-end-panel .duel-score { margin: 2px 0; }
+.duel-end-panel .duel-res-actions { margin-top: 6px; }
+.duel-end.win .lp-sky { filter: saturate(1.05); }
+.duel-end.lose { filter: saturate(.55) brightness(.82); }
