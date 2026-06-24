@@ -1456,30 +1456,34 @@ async function openMatch(id) {
         <div class="duel-enemy-tag"><b>${esc(oppName(g))}</b><span id="oppState">en posición…</span></div>
         <div class="duel-hud"><div class="duel-status" id="duelStatus">PREPARADO…</div><div class="duel-rt" id="duelRt"></div></div>
         <div class="duel-gun" id="duelGun">
-          <svg class="dg-svg" viewBox="0 0 240 210" aria-hidden="true" preserveAspectRatio="xMidYMax meet">
-            <!-- corredera en perspectiva (apuntando en primera persona) -->
-            <polygon class="dg-side" points="60,210 104,46 96,46 48,210"/>
-            <polygon class="dg-side2" points="180,210 136,46 144,46 192,210"/>
-            <polygon class="dg-slide" points="62,210 178,210 136,46 104,46"/>
-            <polygon class="dg-slide-hi" points="106,208 134,208 126,52 114,52"/>
+          <svg class="dg-svg" viewBox="0 0 240 220" aria-hidden="true" preserveAspectRatio="xMidYMax meet">
+            <!-- flancos de la corredera (perspectiva, simétricos) -->
+            <polygon class="dg-side" points="66,216 106,48 99,48 56,216"/>
+            <polygon class="dg-side2" points="174,216 134,48 141,48 184,216"/>
+            <!-- corredera -->
+            <polygon class="dg-slide" points="66,216 174,216 134,48 106,48"/>
+            <!-- brillo central -->
+            <polygon class="dg-slide-hi" points="111,214 129,214 124,56 116,56"/>
             <!-- serraciones traseras -->
             <g class="dg-serr">
-              <rect x="82" y="178" width="76" height="5" rx="2"/>
-              <rect x="85" y="166" width="70" height="5" rx="2"/>
-              <rect x="88" y="154" width="64" height="5" rx="2"/>
+              <rect x="80" y="184" width="80" height="5" rx="2"/>
+              <rect x="84" y="172" width="72" height="5" rx="2"/>
+              <rect x="88" y="160" width="64" height="5" rx="2"/>
             </g>
             <!-- puerto de expulsión -->
-            <rect class="dg-port" x="124" y="92" width="22" height="46" rx="6" transform="rotate(3 135 115)"/>
-            <!-- mira trasera (dos postes + muesca) con puntos -->
-            <rect class="dg-iron" x="90" y="180" width="20" height="24" rx="3"/>
-            <rect class="dg-iron" x="130" y="180" width="20" height="24" rx="3"/>
-            <circle class="dg-dot" cx="100" cy="192" r="3.4"/>
-            <circle class="dg-dot" cx="140" cy="192" r="3.4"/>
-            <!-- mira delantera (poste) + punto, sobre el objetivo -->
-            <rect class="dg-iron dg-front" x="112" y="38" width="16" height="22" rx="2"/>
-            <circle class="dg-dot dg-dot-front" cx="120" cy="46" r="3.2"/>
-            <!-- boca del cañón -->
-            <circle class="dg-muzzle-hole" cx="120" cy="58" r="5"/>
+            <rect class="dg-port" x="126" y="98" width="19" height="40" rx="6"/>
+            <!-- capucha / boca del cañón al fondo -->
+            <rect class="dg-hood" x="108" y="46" width="24" height="13" rx="4"/>
+            <circle class="dg-muzzle-hole" cx="120" cy="54" r="5"/>
+            <!-- mira trasera: dos postes simétricos con muesca centrada -->
+            <rect class="dg-iron" x="88" y="184" width="22" height="26" rx="3"/>
+            <rect class="dg-iron" x="130" y="184" width="22" height="26" rx="3"/>
+            <circle class="dg-dot" cx="99" cy="197" r="3.4"/>
+            <circle class="dg-dot" cx="141" cy="197" r="3.4"/>
+            <!-- mira delantera centrada (con brillo) -->
+            <rect class="dg-iron dg-front" x="113" y="34" width="14" height="24" rx="2"/>
+            <rect class="dg-front-hi" x="116" y="37" width="8" height="20" rx="2"/>
+            <circle class="dg-dot dg-dot-front" cx="120" cy="44" r="3.4"/>
           </svg>
         </div>
         <div class="duel-smoke" id="duelSmoke"></div>
