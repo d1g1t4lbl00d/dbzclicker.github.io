@@ -1288,7 +1288,15 @@ async function openMatch(id) {
         <button class="btn primary duel-ready ${meReady ? 'done' : ''}" id="readyBtn" ${meReady ? 'disabled' : ''}>${meReady ? 'Esperando al rival…' : '¡Estoy listo!'}</button>
       </div>`;
     const r = body.querySelector('#readyBtn');
-    if (r && !meReady) r.onclick = () => { haptic(14); sb.from('game_matches').update(isHost() ? { host_ready: true } : { guest_ready: true }).eq('id', id); };
+    if (r && !meReady) r.onclick = async () => {
+      haptic(14);
+      const col = isHost() ? 'host_ready' : 'guest_ready';
+      if (cur) cur[col] = true;       // optimista: el botón cambia al instante
+      lastSig = '';                    // fuerza reproceso en el próximo sondeo
+      renderLobby(cur);
+      const { error } = await sb.from('game_matches').update({ [col]: true, updated_at: new Date().toISOString() }).eq('id', id);
+      if (error) toast('No se pudo marcar listo: ' + (error.message || error.code || 'error'));
+    };
   }
   function renderResult(g) {
     stopAudio();
