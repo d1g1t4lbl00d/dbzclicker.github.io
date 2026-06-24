@@ -1310,10 +1310,11 @@ async function openMatch(id) {
   const oppAvatar = (g) => isHost() ? g.guest_avatar : g.host_avatar;
   const oppName = (g) => (isHost() ? g.guest_name : g.host_name) || 'Rival';
   // escena low-poly + enemigo stickman (cabeza = foto de perfil del rival)
-  function sceneHTML(g, pose) {
+  function sceneHTML(g, pose, reticle) {
     const av = oppAvatar(g);
     const headStyle = av ? `style="background-image:url('${esc(czUrl(av))}')"` : '';
     const init = esc((oppName(g) || '?').trim().slice(0, 1).toUpperCase());
+    const ret = reticle ? `<div class="duel-cross sm-reticle" id="duelCross"><i></i><i></i><span class="duel-ring"></span><span class="duel-ring2"></span><span class="duel-dot"></span></div>` : '';
     return `
       <div class="lp-sky"></div>
       <div class="lp-stars"></div>
@@ -1330,6 +1331,7 @@ async function openMatch(id) {
         <div class="sm-arm sm-arm-l"></div>
         <div class="sm-arm sm-arm-r"><span class="sm-gun"></span></div>
         <div class="sm-head ${av ? '' : 'sm-head-ph'}" ${headStyle}>${av ? '' : init}</div>
+        ${ret}
       </div>`;
   }
 
@@ -1446,18 +1448,26 @@ async function openMatch(id) {
     DuelSFX.unlock();
     body.innerHTML = `
       <div class="duel-arena" id="duelArena">
-        ${sceneHTML(g, 'aim')}
+        ${sceneHTML(g, 'aim', true)}
         <div class="duel-scan"></div>
         <div class="duel-vig"></div>
         <div class="duel-bar duel-bar-top"></div>
         <div class="duel-bar duel-bar-bot"></div>
         <div class="duel-enemy-tag"><b>${esc(oppName(g))}</b><span id="oppState">en posición…</span></div>
-        <div class="duel-center">
-          <div class="duel-cross" id="duelCross"><i></i><i></i><span class="duel-ring"></span><span class="duel-ring2"></span><span class="duel-dot"></span></div>
-          <div class="duel-status" id="duelStatus">PREPARADO…</div>
-          <div class="duel-rt" id="duelRt"></div>
+        <div class="duel-hud"><div class="duel-status" id="duelStatus">PREPARADO…</div><div class="duel-rt" id="duelRt"></div></div>
+        <div class="duel-gun" id="duelGun">
+          <svg class="dg-svg" viewBox="0 0 220 180" aria-hidden="true">
+            <path class="dg-grip" d="M104 110 L156 110 L138 178 L86 178 Z"/>
+            <path class="dg-grip-hi" d="M104 110 L126 110 L112 178 L92 178 Z"/>
+            <path class="dg-guard" d="M150 106 q26 4 25 36 q-1 20 -25 16 l0 -16 q11 1 9 -10 q-2 -10 -16 -10 Z"/>
+            <rect class="dg-frame" x="90" y="98" width="84" height="22" rx="7"/>
+            <rect class="dg-slide" x="94" y="20" width="56" height="86" rx="13"/>
+            <rect class="dg-slide-hi" x="99" y="25" width="15" height="78" rx="7"/>
+            <rect class="dg-rail" x="143" y="26" width="6" height="78" rx="3"/>
+            <circle class="dg-muzzle-hole" cx="122" cy="33" r="7"/>
+            <rect class="dg-sight" x="116" y="14" width="12" height="9" rx="2"/>
+          </svg>
         </div>
-        <div class="duel-gun" id="duelGun"><span class="dg-slide"></span><span class="dg-barrel"></span><span class="dg-body"></span><span class="dg-grip"></span></div>
         <div class="duel-smoke" id="duelSmoke"></div>
         <div class="duel-muzzle" id="duelMuzzle"></div>
         <div class="duel-bottom"><span class="duel-me-tag">TÚ</span></div>
