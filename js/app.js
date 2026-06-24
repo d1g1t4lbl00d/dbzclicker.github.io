@@ -1246,12 +1246,12 @@ async function openMatch(id) {
   const body = scr.querySelector('#gsBody');
   try { window.audio && audio.pause(); } catch (_) {}
 
-  let cur = null, dAudio = null, fireT = 0, armed = false, myReacted = false, playedRound = 0, fireTimer = 0, startTimer = 0;
+  let cur = null, dAudio = null, fireT = 0, armed = false, myReacted = false, playedRound = 0, fireTimer = 0, startTimer = 0, pollTimer = 0, lastSig = '';
   const isHost = () => cur && cur.host === state.user.id;
   const myReactCol = () => isHost() ? 'host_reaction' : 'guest_reaction';
 
   const stopAudio = () => { try { dAudio && dAudio.pause(); } catch (_) {} clearTimeout(fireTimer); clearTimeout(startTimer); };
-  const cleanup = () => { stopAudio(); gmCloseChan(); };
+  const cleanup = () => { stopAudio(); gmCloseChan(); clearInterval(pollTimer); };
   const close = async () => {
     cleanup();
     // si la partida no terminó, márcala cancelada para que el rival no espere
@@ -1404,6 +1404,9 @@ async function openMatch(id) {
 
   function onUpdate(g) {
     if (!g) return;
+    // anti-rebote: ignora actualizaciones idénticas (sondeo/realtime duplicados)
+    const sig = [g.status, g.host_ready, g.guest_ready, g.host_reaction, g.guest_reaction, g.round, g.winner, g.guest, g.stop_offset].join('|');
+    if (sig === lastSig) return; lastSig = sig;
     const prev = cur; cur = g;
     if (g.status === 'cancelled') { if (prev && prev.status !== 'cancelled') { toast('El rival salió de la partida'); } stopAudio(); body.innerHTML = `<div class="duel-wait"><h3>Partida cancelada</h3><button class="btn primary" id="bk">Volver</button></div>`; const b = body.querySelector('#bk'); if (b) b.onclick = close; return; }
     if (g.status === 'open') return renderWaiting(g);
@@ -1426,6 +1429,10 @@ async function openMatch(id) {
     .subscribe();
   const { data: g0 } = await sb.from('game_matches').select('*').eq('id', id).single();
   onUpdate(g0);
+  // sondeo de respaldo: si el realtime falla (redes móviles), la partida avanza igual
+  pollTimer = setInterval(async () => {
+    try { const { data } = await sb.from('game_matches').select('*').eq('id', id).single(); if (data) onUpdate(data); } catch (_) {}
+  }, 1500);
 }
 
 // aviso en vivo cuando te invitan a un duelo (suscripción ligera global)
