@@ -1246,7 +1246,7 @@ async function openMatch(id) {
   const body = scr.querySelector('#gsBody');
   try { window.audio && audio.pause(); } catch (_) {}
 
-  let cur = null, dAudio = null, fireT = 0, armed = false, myReacted = false, playedRound = 0, fireTimer = 0, startTimer = 0, pollTimer = 0, lastSig = '';
+  let cur = null, dAudio = null, fireT = 0, armed = false, myReacted = false, playedRound = 0, fireTimer = 0, startTimer = 0, pollTimer = 0, lastSig = '', resolvedRound = 0;
   const isHost = () => cur && cur.host === state.user.id;
   const myReactCol = () => isHost() ? 'host_reaction' : 'guest_reaction';
 
@@ -1298,14 +1298,26 @@ async function openMatch(id) {
       if (error) toast('No se pudo marcar listo: ' + (error.message || error.code || 'error'));
     };
   }
+  function computeWinner(g) {
+    const h = g.host_reaction, gu = g.guest_reaction, hOk = h >= 0, gOk = gu >= 0;
+    if (hOk && gOk) return h <= gu ? g.host : g.guest;
+    if (hOk) return g.host;
+    if (gOk) return g.guest;
+    return null;
+  }
   function renderResult(g) {
+    if (resolvedRound === g.round) return;   // ya pintado este round (evita repintar)
+    resolvedRound = g.round;
     stopAudio();
-    const meWin = g.winner === state.user.id;
-    const draw = !g.winner;
+    const winner = (g.status === 'done') ? g.winner : computeWinner(g);
+    const meWin = winner === state.user.id;
+    const draw = !winner;
     const myR = isHost() ? g.host_reaction : g.guest_reaction;
     const opR = isHost() ? g.guest_reaction : g.host_reaction;
-    const myWins = isHost() ? (g.host_wins || 0) : (g.guest_wins || 0);
-    const opWins = isHost() ? (g.guest_wins || 0) : (g.host_wins || 0);
+    let myWins = isHost() ? (g.host_wins || 0) : (g.guest_wins || 0);
+    let opWins = isHost() ? (g.guest_wins || 0) : (g.host_wins || 0);
+    // si aún no se ha persistido (resolución local), suma este round al marcador
+    if (g.status !== 'done' && winner) { if (meWin) myWins++; else opWins++; }
     const oppName = (isHost() ? g.guest_name : g.host_name) || 'Rival';
     const rtxt = (v) => v == null ? '—' : (v < 0 ? 'Antes de tiempo ✗' : v + ' ms');
     const myFaster = (myR >= 0) && (opR == null || opR < 0 || myR <= opR);
@@ -1445,8 +1457,13 @@ async function openMatch(id) {
       return;
     }
     if (g.status === 'playing') {
-      if (playedRound !== g.round) startRound(g);
-      else { paintOpp(g); maybeResolve(g); }
+      if (playedRound !== g.round) { startRound(g); return; }
+      paintOpp(g);
+      // en cuanto AMBOS han disparado, los dos móviles muestran el resultado ya
+      if (g.host_reaction != null && g.guest_reaction != null) {
+        if (isHost()) maybeResolve(g);   // el anfitrión persiste resultado + marcador
+        renderResult(g);                 // ambos pintan el resultado al instante
+      }
       return;
     }
     if (g.status === 'done') return renderResult(g);
