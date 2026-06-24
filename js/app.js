@@ -1304,21 +1304,38 @@ async function openMatch(id) {
     const draw = !g.winner;
     const myR = isHost() ? g.host_reaction : g.guest_reaction;
     const opR = isHost() ? g.guest_reaction : g.host_reaction;
-    const rtxt = (v) => v == null ? '—' : (v < 0 ? 'Disparó antes ✗' : v + ' ms');
+    const myWins = isHost() ? (g.host_wins || 0) : (g.guest_wins || 0);
+    const opWins = isHost() ? (g.guest_wins || 0) : (g.host_wins || 0);
+    const oppName = (isHost() ? g.guest_name : g.host_name) || 'Rival';
+    const rtxt = (v) => v == null ? '—' : (v < 0 ? 'Antes de tiempo ✗' : v + ' ms');
+    const myFaster = (myR >= 0) && (opR == null || opR < 0 || myR <= opR);
+    const opFaster = (opR >= 0) && (myR == null || myR < 0 || opR < myR);
+    if (meWin) haptic(60);
     body.innerHTML = `
       <div class="duel-result ${draw ? 'draw' : meWin ? 'win' : 'lose'}">
         <div class="duel-res-badge">${draw ? 'EMPATE' : meWin ? '¡GANASTE!' : 'PERDISTE'}</div>
+        <div class="duel-score"><span class="ds-n ${myWins > opWins ? 'lead' : ''}">${myWins}</span><span class="ds-sep">—</span><span class="ds-n ${opWins > myWins ? 'lead' : ''}">${opWins}</span></div>
+        <div class="duel-score-l">Tú · ${esc(oppName)}</div>
+        ${g.cover_url || g.track_title ? `<div class="duel-song"><span class="duel-song-cov" style="${g.cover_url ? `background-image:url('${esc(czUrl(g.cover_url))}')` : ''}"></span><span class="duel-song-m"><i>Sonaba</i><b>${esc(g.track_title || 'una pista')}</b></span></div>` : ''}
         <div class="duel-res-rows">
-          <div class="duel-res-row"><span>Tú</span><b>${rtxt(myR)}</b></div>
-          <div class="duel-res-row"><span>${esc((isHost() ? g.guest_name : g.host_name) || 'Rival')}</span><b>${rtxt(opR)}</b></div>
+          <div class="duel-res-row ${myFaster ? 'fast' : ''}"><span>Tú</span><b>${rtxt(myR)}</b></div>
+          <div class="duel-res-row ${opFaster ? 'fast' : ''}"><span>${esc(oppName)}</span><b>${rtxt(opR)}</b></div>
         </div>
         <div class="duel-res-actions">
           <button class="btn primary" id="rematchBtn">Revancha</button>
           <button class="btn" id="leaveBtn">Salir</button>
         </div>
+        <div class="duel-res-hint" id="rematchHint"></div>
       </div>`;
     body.querySelector('#leaveBtn').onclick = close;
-    body.querySelector('#rematchBtn').onclick = async () => { haptic(14); await startNewRound(g.round + 1); };
+    body.querySelector('#rematchBtn').onclick = async () => {
+      haptic(14);
+      const btn = body.querySelector('#rematchBtn'); btn.disabled = true; btn.textContent = 'Esperando al rival…';
+      // revancha mutua: vuelve al lobby (ambos confirman "listo")
+      const col = isHost() ? 'host_ready' : 'guest_ready';
+      lastSig = '';
+      await sb.from('game_matches').update({ status: 'ready', host_ready: false, guest_ready: false, host_reaction: null, guest_reaction: null, winner: null, round: (g.round || 1) + 1, [col]: true }).eq('id', id);
+    };
   }
 
   async function startNewRound(nextRound) {
@@ -1407,7 +1424,10 @@ async function openMatch(id) {
     if (hOk && gOk) winner = h <= gu ? g.host : g.guest;
     else if (hOk) winner = g.host;
     else if (gOk) winner = g.guest;
-    sb.from('game_matches').update({ status: 'done', winner }).eq('id', id);
+    const patch = { status: 'done', winner };
+    if (winner === g.host) patch.host_wins = (g.host_wins || 0) + 1;
+    else if (winner === g.guest) patch.guest_wins = (g.guest_wins || 0) + 1;
+    sb.from('game_matches').update(patch).eq('id', id);
   }
 
   function onUpdate(g) {

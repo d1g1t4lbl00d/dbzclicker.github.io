@@ -3016,3 +3016,18 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
 .dip-m b { font-size: 14px; } .dip-m i { font-style: normal; font-size: 12px; color: #aab6da; }
 .dip-go { background: var(--accent); color: #fff; border: none; font-weight: 800; font-size: 13px; padding: 8px 14px; border-radius: 999px; cursor: pointer; }
 .dip-x { background: transparent; border: none; color: #8a96b8; font-size: 22px; line-height: 1; cursor: pointer; padding: 0 4px; }
+
+/* fin de partida del duelo: marcador + canción + más rápido */
+.duel-score { display: flex; align-items: center; justify-content: center; gap: 16px; margin: 6px 0 2px; }
+.duel-score .ds-n { font-family: ui-monospace, monospace; font-size: 46px; font-weight: 900; color: #6e7a9e; line-height: 1; }
+.duel-score .ds-n.lead { color: #fff; text-shadow: 0 0 20px rgba(120,150,255,.5); }
+.duel-score .ds-sep { color: #46506e; font-size: 28px; font-weight: 800; }
+.duel-score-l { font-size: 12px; color: #7e8cb5; letter-spacing: .5px; margin-bottom: 16px; }
+.duel-song { display: inline-flex; align-items: center; gap: 10px; padding: 8px 14px 8px 8px; border: 1px solid rgba(255,255,255,.1); border-radius: 999px; background: rgba(255,255,255,.04); margin-bottom: 16px; }
+.duel-song-cov { width: 34px; height: 34px; border-radius: 8px; background: #1b2138 center/cover no-repeat; flex: none; }
+.duel-song-m { display: flex; flex-direction: column; text-align: left; min-width: 0; }
+.duel-song-m i { font-style: normal; font-size: 10px; text-transform: uppercase; letter-spacing: .5px; color: #7e8cb5; }
+.duel-song-m b { font-size: 13px; color: #dbe2f5; max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.duel-res-row.fast { border-color: color-mix(in srgb, var(--accent) 55%, transparent); background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.duel-res-row.fast b { color: #fff; }
+.duel-res-hint { margin-top: 12px; font-size: 12.5px; color: #7e8cb5; min-height: 16px; }
