@@ -1134,6 +1134,48 @@ function initMeWheel() {
    El primero en tocar gana. Disparar antes del corte = pierdes.
    Cada móvil mide su reacción localmente (justo sin importar el ping).
    ======================================================================= */
+// Motor de efectos de sonido del duelo (sintetizados con Web Audio, sin archivos).
+const DuelSFX = (() => {
+  let ac = null;
+  const ctx = () => {
+    try { if (!ac) ac = new (window.AudioContext || window.webkitAudioContext)(); } catch (_) {}
+    if (ac && ac.state === 'suspended') ac.resume().catch(() => {});
+    return ac;
+  };
+  const on = () => { try { return localStorage.getItem('ub_sfx') !== '0'; } catch (_) { return true; } };
+  function tone(freq, dur, type = 'sine', gain = 0.2, slideTo = null) {
+    const a = ctx(); if (!a) return; const t0 = a.currentTime;
+    const o = a.createOscillator(), g = a.createGain();
+    o.type = type; o.frequency.setValueAtTime(freq, t0);
+    if (slideTo) o.frequency.exponentialRampToValueAtTime(Math.max(20, slideTo), t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0); g.gain.exponentialRampToValueAtTime(gain, t0 + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(g); g.connect(a.destination); o.start(t0); o.stop(t0 + dur + 0.03);
+  }
+  function noise(dur, gain = 0.5, filterFreq = 2000) {
+    const a = ctx(); if (!a) return; const t0 = a.currentTime;
+    const n = Math.floor(a.sampleRate * dur), buf = a.createBuffer(1, n, a.sampleRate), d = buf.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / n);
+    const src = a.createBufferSource(); src.buffer = buf;
+    const f = a.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = filterFreq;
+    const g = a.createGain(); g.gain.setValueAtTime(gain, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(f); f.connect(g); g.connect(a.destination); src.start(t0); src.stop(t0 + dur + 0.03);
+  }
+  const seq = (notes, type, gain) => { const a = ctx(); if (!a) return; notes.forEach(([f, d], i) => setTimeout(() => tone(f, d, type, gain), i * 90)); };
+  return {
+    unlock() { ctx(); },
+    tick() { if (on()) tone(680, 0.07, 'square', 0.1); },
+    ready() { if (on()) { tone(520, 0.06, 'triangle', 0.13); setTimeout(() => tone(800, 0.08, 'triangle', 0.13), 60); } },
+    draw() { if (on()) tone(1500, 0.16, 'sawtooth', 0.18, 380); },   // alerta "¡DISPARA!"
+    bang() { if (on()) { noise(0.18, 0.6, 2400); tone(95, 0.18, 'sine', 0.5, 38); } },
+    falseStart() { if (on()) tone(320, 0.4, 'sawtooth', 0.22, 80); },
+    win() { if (on()) seq([[523, .16], [659, .16], [784, .16], [1047, .26]], 'triangle', 0.2); },
+    lose() { if (on()) seq([[420, .2], [330, .22], [247, .3]], 'sine', 0.2); },
+    toggle() { try { const v = localStorage.getItem('ub_sfx') === '0'; localStorage.setItem('ub_sfx', v ? '1' : '0'); return !v ? false : true; } catch (_) { return true; } },
+    get enabled() { return on(); },
+  };
+})();
+
 let gameChan = null;
 function gmCloseChan() { try { gameChan && sb.removeChannel(gameChan); } catch (_) {} gameChan = null; }
 const gmName = (p) => (p && (p.display_name || p.username)) || 'Tú';
@@ -1241,8 +1283,12 @@ async function acceptInvite(id) {
 async function openMatch(id) {
   gmCloseChan();
   document.getElementById('gameScreen')?.remove();
-  const scr = el('<div id="gameScreen" class="game-screen"><div class="gs-body" id="gsBody"></div><button class="gs-exit" id="gsExit" aria-label="Salir">&times;</button></div>');
+  const scr = el('<div id="gameScreen" class="game-screen"><div class="gs-body" id="gsBody"></div><button class="gs-mute" id="gsMute" aria-label="Sonido"></button><button class="gs-exit" id="gsExit" aria-label="Salir">&times;</button></div>');
   document.body.appendChild(scr);
+  const muteBtn = scr.querySelector('#gsMute');
+  const paintMute = () => { muteBtn.textContent = DuelSFX.enabled ? '🔊' : '🔇'; };
+  paintMute();
+  muteBtn.onclick = () => { DuelSFX.toggle(); paintMute(); haptic(8); };
   const body = scr.querySelector('#gsBody');
   try { window.audio && audio.pause(); } catch (_) {}
 
@@ -1289,7 +1335,7 @@ async function openMatch(id) {
       </div>`;
     const r = body.querySelector('#readyBtn');
     if (r && !meReady) r.onclick = async () => {
-      haptic(14);
+      haptic(14); DuelSFX.unlock(); DuelSFX.ready();
       const col = isHost() ? 'host_ready' : 'guest_ready';
       if (cur) cur[col] = true;       // optimista: el botón cambia al instante
       lastSig = '';                    // fuerza reproceso en el próximo sondeo
@@ -1322,7 +1368,7 @@ async function openMatch(id) {
     const rtxt = (v) => v == null ? '—' : (v < 0 ? 'Antes de tiempo ✗' : v + ' ms');
     const myFaster = (myR >= 0) && (opR == null || opR < 0 || myR <= opR);
     const opFaster = (opR >= 0) && (myR == null || myR < 0 || opR < myR);
-    if (meWin) haptic(60);
+    if (meWin) { haptic(60); DuelSFX.win(); } else if (!draw) { DuelSFX.lose(); }
     body.innerHTML = `
       <div class="duel-result ${draw ? 'draw' : meWin ? 'win' : 'lose'}">
         <div class="duel-res-badge">${draw ? 'EMPATE' : meWin ? '¡GANASTE!' : 'PERDISTE'}</div>
@@ -1363,15 +1409,21 @@ async function openMatch(id) {
   // -------- la ronda del duelo (con audio + medición local) --------
   function startRound(g) {
     playedRound = g.round; myReacted = false; armed = false;
+    DuelSFX.unlock();
     body.innerHTML = `
       <div class="duel-arena" id="duelArena">
+        <div class="duel-sky"></div>
+        <div class="duel-grid"></div>
         <div class="duel-scan"></div>
+        <div class="duel-vig"></div>
         <div class="duel-top"><div class="duel-fig">${avHtml(isHost() ? g.guest_avatar : g.host_avatar, isHost() ? g.guest_name : g.host_name)}<b>${esc((isHost() ? g.guest_name : g.host_name) || 'Rival')}</b><span id="oppState">en posición…</span></div></div>
         <div class="duel-center">
-          <div class="duel-cross" id="duelCross"><i></i><i></i><span class="duel-ring"></span></div>
+          <div class="duel-cross" id="duelCross"><i></i><i></i><span class="duel-ring"></span><span class="duel-ring2"></span><span class="duel-dot"></span></div>
           <div class="duel-status" id="duelStatus">PREPARADO…</div>
           <div class="duel-rt" id="duelRt"></div>
         </div>
+        <div class="duel-gun" id="duelGun"><span class="dg-slide"></span><span class="dg-barrel"></span><span class="dg-body"></span><span class="dg-grip"></span></div>
+        <div class="duel-muzzle" id="duelMuzzle"></div>
         <div class="duel-bottom"><span class="duel-me-tag">TÚ</span></div>
         <div class="duel-flash" id="duelFlash"></div>
       </div>`;
@@ -1380,18 +1432,22 @@ async function openMatch(id) {
     const crossEl = body.querySelector('#duelCross');
     const rtEl = body.querySelector('#duelRt');
     const flashEl = body.querySelector('#duelFlash');
+    const gunEl = body.querySelector('#duelGun');
+    const muzEl = body.querySelector('#duelMuzzle');
+    const pulse = (node, cls, ms) => { if (!node) return; node.classList.remove(cls); void node.offsetWidth; node.classList.add(cls); if (ms) setTimeout(() => node.classList.remove(cls), ms); };
 
     const onShoot = () => {
       if (myReacted) return;
       if (!armed) { // salida en falso
-        myReacted = true; haptic(40); stopAudio();
+        myReacted = true; haptic(40); DuelSFX.falseStart(); stopAudio();
         arena.classList.add('falsestart'); statusEl.textContent = '¡ANTES DE TIEMPO!'; rtEl.textContent = 'Has fallado el disparo';
         submitReaction(-1);
         return;
       }
-      myReacted = true; haptic(30);
+      myReacted = true; haptic(30); DuelSFX.bang();
       const rt = Math.round(performance.now() - fireT);
       crossEl.classList.add('shot'); statusEl.textContent = '¡DISPARO!'; rtEl.textContent = rt + ' ms';
+      pulse(gunEl, 'recoil', 320); pulse(muzEl, 'go', 320); pulse(arena, 'kick', 300);
       submitReaction(rt);
     };
     arena.addEventListener('pointerdown', onShoot);
@@ -1400,7 +1456,7 @@ async function openMatch(id) {
     let n = 3; statusEl.textContent = String(n); statusEl.classList.add('count');
     const cd = setInterval(() => {
       n--;
-      if (n > 0) { statusEl.textContent = String(n); haptic(8); }
+      if (n > 0) { statusEl.textContent = String(n); haptic(8); DuelSFX.tick(); }
       else { clearInterval(cd); statusEl.classList.remove('count'); beginAudio(); }
     }, 800);
 
@@ -1412,7 +1468,7 @@ async function openMatch(id) {
         stopAudio(); armed = true; fireT = performance.now();
         arena.classList.add('fire'); statusEl.textContent = '¡DISPARA!';
         if (flashEl) { flashEl.classList.remove('go'); void flashEl.offsetWidth; flashEl.classList.add('go'); }
-        haptic(50);
+        haptic(50); DuelSFX.draw();
       }, Math.max(1200, g.stop_offset || 4000));
     }
   }
