@@ -1470,8 +1470,6 @@ async function openMatch(id) {
               <rect x="84" y="172" width="72" height="5" rx="2"/>
               <rect x="88" y="160" width="64" height="5" rx="2"/>
             </g>
-            <!-- puerto de expulsión -->
-            <rect class="dg-port" x="126" y="98" width="19" height="40" rx="6"/>
             <!-- capucha / boca del cañón al fondo -->
             <rect class="dg-hood" x="108" y="46" width="24" height="13" rx="4"/>
             <circle class="dg-muzzle-hole" cx="120" cy="54" r="5"/>
