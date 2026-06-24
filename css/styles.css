@@ -3229,3 +3229,16 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
 /* boca del cañón ahora al fondo (lejos) en la vista ADS */
 .duel-muzzle { bottom: 150px; width: 58px; height: 58px; }
 .duel-smoke { bottom: 156px; width: 52px; height: 52px; }
+
+/* ======================================================================
+   EL DUELO — pistola ADS v2 (mira centrada, flancos equilibrados)
+   ====================================================================== */
+.duel-gun { width: 204px; height: 187px; bottom: 0; }
+.dg-svg .dg-side { fill: #283149; }
+.dg-svg .dg-side2 { fill: #3a4660; }
+.dg-svg .dg-hood { fill: #161b28; }
+.dg-svg .dg-front { fill: #0c1018; }
+.dg-svg .dg-front-hi { fill: rgba(190,234,255,.22); }
+.dg-svg .dg-dot-front { fill: #eaf6ff; }
+.duel-muzzle { bottom: 138px; width: 56px; height: 56px; }
+.duel-smoke { bottom: 144px; width: 50px; height: 50px; }
