@@ -3071,3 +3071,48 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
 /* sacudida de pantalla al disparar */
 .duel-arena.kick { animation: duelShake .3s ease; }
 @keyframes duelShake { 0%,100% { transform: translate(0,0) } 20% { transform: translate(-6px,4px) } 40% { transform: translate(6px,-3px) } 60% { transform: translate(-5px,-4px) } 80% { transform: translate(4px,4px) } }
+
+/* ======================================================================
+   EL DUELO — capa de producción extra (intro, grados, partículas, VS)
+   ====================================================================== */
+/* barras de cine */
+.duel-bar { position: absolute; left: 0; right: 0; height: 6.5%; background: #000; z-index: 1; pointer-events: none; animation: duelBars .5s ease both; }
+.duel-bar-top { top: 0; transform-origin: top; }
+.duel-bar-bot { bottom: 0; transform-origin: bottom; }
+@keyframes duelBars { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+/* slate de intro de ronda */
+.duel-slate { position: absolute; inset: 0; z-index: 7; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; background: rgba(4,6,12,.55); -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px); transition: opacity .35s ease; }
+.duel-slate.hide { opacity: 0; pointer-events: none; }
+.ds-round { font-family: ui-monospace, monospace; font-size: 18px; letter-spacing: 5px; color: #8aa0ff; font-weight: 800; animation: dsIn .4s ease both; }
+.ds-go { font-size: 42px; font-weight: 900; letter-spacing: 3px; color: #fff; text-shadow: 0 0 26px rgba(120,150,255,.6); animation: dsIn .4s .08s ease both; }
+@keyframes dsIn { from { opacity: 0; transform: translateY(14px) scale(.9); } to { opacity: 1; transform: none; } }
+/* vaivén (idle) del arma */
+.duel-gun { animation: gunIdle 3.6s ease-in-out infinite; }
+@keyframes gunIdle { 0%,100% { transform: translateX(-50%) translateY(0); } 50% { transform: translateX(-50%) translateY(-5px); } }
+/* humo del cañón */
+.duel-smoke { position: absolute; bottom: 96px; left: 50%; width: 64px; height: 64px; transform: translate(-50%,0); border-radius: 50%; background: radial-gradient(circle, rgba(205,214,234,.5), transparent 70%); opacity: 0; pointer-events: none; z-index: 3; }
+.duel-smoke.go { animation: duelSmoke 1.4s ease-out; }
+@keyframes duelSmoke { 0% { opacity: .55; transform: translate(-50%,0) scale(.4); } 100% { opacity: 0; transform: translate(-50%,-74px) scale(2.1); } }
+/* grado de reacción */
+.duel-rt .rt-ms { display: block; }
+.duel-rt .rt-grade { display: block; font-size: 15px; font-weight: 900; letter-spacing: 2px; margin-top: 2px; }
+.duel-rt.g-insane { color: #ffd166; text-shadow: 0 0 18px rgba(255,209,102,.75); }
+.duel-rt.g-fast { color: #38d39f; }
+.duel-rt.g-ok { color: #27c0ff; }
+.duel-rt.g-mid { color: #cfd8ea; }
+.duel-rt.g-slow { color: #9aa7c2; }
+/* intro VS del lobby */
+.duel-vs .duel-side:first-child { animation: duelSideL .5s ease both; }
+.duel-vs .duel-side:last-child { animation: duelSideR .5s ease both; }
+@keyframes duelSideL { from { opacity: 0; transform: translateX(-44px); } to { opacity: 1; transform: none; } }
+@keyframes duelSideR { from { opacity: 0; transform: translateX(44px); } to { opacity: 1; transform: none; } }
+.duel-vs-x { animation: duelVsPop .55s .22s ease both; }
+@keyframes duelVsPop { 0% { opacity: 0; transform: scale(2.4); } 60% { transform: scale(.82); } 100% { opacity: 1; transform: scale(1); } }
+/* rayos tras la victoria */
+.duel-result.win { position: relative; z-index: 0; }
+.duel-result.win::before { content: ""; position: absolute; left: 50%; top: 40px; width: 520px; height: 520px; transform: translate(-50%,-50%); z-index: -1;
+  background: conic-gradient(from 0deg, rgba(56,211,159,.16) 0 7deg, transparent 7deg 30deg); animation: duelRays 16s linear infinite;
+  -webkit-mask-image: radial-gradient(circle, #000 0, transparent 62%); mask-image: radial-gradient(circle, #000 0, transparent 62%); }
+@keyframes duelRays { to { transform: translate(-50%,-50%) rotate(360deg); } }
+.duel-result.win .duel-res-badge { animation: duelWinPop .5s ease both; }
+@keyframes duelWinPop { 0% { transform: scale(.4); opacity: 0; } 60% { transform: scale(1.12); } 100% { transform: scale(1); opacity: 1; } }
