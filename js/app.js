@@ -1416,6 +1416,8 @@ async function openMatch(id) {
         <div class="duel-grid"></div>
         <div class="duel-scan"></div>
         <div class="duel-vig"></div>
+        <div class="duel-bar duel-bar-top"></div>
+        <div class="duel-bar duel-bar-bot"></div>
         <div class="duel-top"><div class="duel-fig">${avHtml(isHost() ? g.guest_avatar : g.host_avatar, isHost() ? g.guest_name : g.host_name)}<b>${esc((isHost() ? g.guest_name : g.host_name) || 'Rival')}</b><span id="oppState">en posición…</span></div></div>
         <div class="duel-center">
           <div class="duel-cross" id="duelCross"><i></i><i></i><span class="duel-ring"></span><span class="duel-ring2"></span><span class="duel-dot"></span></div>
@@ -1423,9 +1425,11 @@ async function openMatch(id) {
           <div class="duel-rt" id="duelRt"></div>
         </div>
         <div class="duel-gun" id="duelGun"><span class="dg-slide"></span><span class="dg-barrel"></span><span class="dg-body"></span><span class="dg-grip"></span></div>
+        <div class="duel-smoke" id="duelSmoke"></div>
         <div class="duel-muzzle" id="duelMuzzle"></div>
         <div class="duel-bottom"><span class="duel-me-tag">TÚ</span></div>
         <div class="duel-flash" id="duelFlash"></div>
+        <div class="duel-slate" id="duelSlate"><span class="ds-round">RONDA ${g.round || 1}</span><span class="ds-go">PREPÁRATE</span></div>
       </div>`;
     const arena = body.querySelector('#duelArena');
     const statusEl = body.querySelector('#duelStatus');
@@ -1434,10 +1438,13 @@ async function openMatch(id) {
     const flashEl = body.querySelector('#duelFlash');
     const gunEl = body.querySelector('#duelGun');
     const muzEl = body.querySelector('#duelMuzzle');
+    const smokeEl = body.querySelector('#duelSmoke');
     const pulse = (node, cls, ms) => { if (!node) return; node.classList.remove(cls); void node.offsetWidth; node.classList.add(cls); if (ms) setTimeout(() => node.classList.remove(cls), ms); };
+    const grade = (ms) => ms < 200 ? ['INSANO', 'g-insane'] : ms < 280 ? ['RAPIDÍSIMO', 'g-fast'] : ms < 380 ? ['RÁPIDO', 'g-ok'] : ms < 500 ? ['BIEN', 'g-mid'] : ['LENTO', 'g-slow'];
 
+    let live = false;   // los toques durante la intro no cuentan
     const onShoot = () => {
-      if (myReacted) return;
+      if (myReacted || !live) return;
       if (!armed) { // salida en falso
         myReacted = true; haptic(40); DuelSFX.falseStart(); stopAudio();
         arena.classList.add('falsestart'); statusEl.textContent = '¡ANTES DE TIEMPO!'; rtEl.textContent = 'Has fallado el disparo';
@@ -1446,19 +1453,27 @@ async function openMatch(id) {
       }
       myReacted = true; haptic(30); DuelSFX.bang();
       const rt = Math.round(performance.now() - fireT);
-      crossEl.classList.add('shot'); statusEl.textContent = '¡DISPARO!'; rtEl.textContent = rt + ' ms';
-      pulse(gunEl, 'recoil', 320); pulse(muzEl, 'go', 320); pulse(arena, 'kick', 300);
+      const [gtxt, gcls] = grade(rt);
+      crossEl.classList.add('shot'); statusEl.textContent = '¡DISPARO!';
+      rtEl.className = 'duel-rt ' + gcls; rtEl.innerHTML = `<span class="rt-ms">${rt} ms</span><span class="rt-grade">${gtxt}</span>`;
+      pulse(gunEl, 'recoil', 320); pulse(muzEl, 'go', 320); pulse(arena, 'kick', 300); pulse(smokeEl, 'go', 1400);
       submitReaction(rt);
     };
     arena.addEventListener('pointerdown', onShoot);
 
-    // cuenta atrás 3·2·1, luego suena la pista
-    let n = 3; statusEl.textContent = String(n); statusEl.classList.add('count');
-    const cd = setInterval(() => {
-      n--;
-      if (n > 0) { statusEl.textContent = String(n); haptic(8); DuelSFX.tick(); }
-      else { clearInterval(cd); statusEl.classList.remove('count'); beginAudio(); }
-    }, 800);
+    // intro cinematográfica de ronda, luego cuenta atrás 3·2·1 y la pista
+    statusEl.textContent = '';
+    const slate = body.querySelector('#duelSlate');
+    startTimer = setTimeout(() => {
+      if (slate) slate.classList.add('hide');
+      live = true;
+      let n = 3; statusEl.textContent = String(n); statusEl.classList.add('count'); DuelSFX.tick();
+      const cd = setInterval(() => {
+        n--;
+        if (n > 0) { statusEl.textContent = String(n); haptic(8); DuelSFX.tick(); }
+        else { clearInterval(cd); statusEl.classList.remove('count'); beginAudio(); }
+      }, 800);
+    }, 1150);
 
     function beginAudio() {
       statusEl.textContent = 'NO DISPARES…';
