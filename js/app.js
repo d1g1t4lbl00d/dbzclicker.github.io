@@ -1307,6 +1307,31 @@ async function openMatch(id) {
   scr.querySelector('#gsExit').onclick = close;
 
   const avHtml = (url, name) => url ? `<span class="duel-av" style="background-image:url('${esc(czUrl(url))}')"></span>` : `<span class="duel-av duel-av-ph">${esc((name || '?').slice(0, 1).toUpperCase())}</span>`;
+  const oppAvatar = (g) => isHost() ? g.guest_avatar : g.host_avatar;
+  const oppName = (g) => (isHost() ? g.guest_name : g.host_name) || 'Rival';
+  // escena low-poly + enemigo stickman (cabeza = foto de perfil del rival)
+  function sceneHTML(g, pose) {
+    const av = oppAvatar(g);
+    const headStyle = av ? `style="background-image:url('${esc(czUrl(av))}')"` : '';
+    const init = esc((oppName(g) || '?').trim().slice(0, 1).toUpperCase());
+    return `
+      <div class="lp-sky"></div>
+      <div class="lp-stars"></div>
+      <div class="lp-sun"></div>
+      <div class="lp-mts lp-mts-3"></div>
+      <div class="lp-mts lp-mts-2"></div>
+      <div class="lp-mts lp-mts-1"></div>
+      <div class="lp-ground"></div>
+      <div class="lp-road"></div>
+      <div class="duel-enemy ${pose || ''}" id="duelEnemy">
+        <div class="sm-shadow"></div>
+        <div class="sm-leg sm-leg-l"></div><div class="sm-leg sm-leg-r"></div>
+        <div class="sm-body"></div>
+        <div class="sm-arm sm-arm-l"></div>
+        <div class="sm-arm sm-arm-r"><span class="sm-gun"></span></div>
+        <div class="sm-head ${av ? '' : 'sm-head-ph'}" ${headStyle}>${av ? '' : init}</div>
+      </div>`;
+  }
 
   // -------- escenas estáticas (no se redibujan durante una ronda) --------
   function renderWaiting(g) {
@@ -1369,22 +1394,31 @@ async function openMatch(id) {
     const myFaster = (myR >= 0) && (opR == null || opR < 0 || myR <= opR);
     const opFaster = (opR >= 0) && (myR == null || myR < 0 || opR < myR);
     if (meWin) { haptic(60); DuelSFX.win(); } else if (!draw) { DuelSFX.lose(); }
+    // pose del enemigo: derrotado (caído) si gano, de pie/victorioso si pierdo
+    const pose = meWin ? 'down' : (draw ? 'aim' : 'victor');
     body.innerHTML = `
-      <div class="duel-result ${draw ? 'draw' : meWin ? 'win' : 'lose'}">
-        <div class="duel-res-badge">${draw ? 'EMPATE' : meWin ? '¡GANASTE!' : 'PERDISTE'}</div>
-        <div class="duel-score"><span class="ds-n ${myWins > opWins ? 'lead' : ''}">${myWins}</span><span class="ds-sep">—</span><span class="ds-n ${opWins > myWins ? 'lead' : ''}">${opWins}</span></div>
-        <div class="duel-score-l">Tú · ${esc(oppName)}</div>
-        ${g.cover_url || g.track_title ? `<div class="duel-song"><span class="duel-song-cov" style="${g.cover_url ? `background-image:url('${esc(czUrl(g.cover_url))}')` : ''}"></span><span class="duel-song-m"><i>Sonaba</i><b>${esc(g.track_title || 'una pista')}</b></span></div>` : ''}
-        <div class="duel-res-rows">
-          <div class="duel-res-row ${myFaster ? 'fast' : ''}"><span>Tú</span><b>${rtxt(myR)}</b></div>
-          <div class="duel-res-row ${opFaster ? 'fast' : ''}"><span>${esc(oppName)}</span><b>${rtxt(opR)}</b></div>
+      <div class="duel-arena duel-end ${draw ? 'draw' : meWin ? 'win' : 'lose'}" id="duelArena">
+        ${sceneHTML(g, pose)}
+        <div class="duel-scan"></div>
+        <div class="duel-vig"></div>
+        <div class="duel-bar duel-bar-top"></div>
+        <div class="duel-bar duel-bar-bot"></div>
+        <div class="duel-end-panel ${draw ? 'draw' : meWin ? 'win' : 'lose'}">
+          <div class="duel-res-badge">${draw ? 'EMPATE' : meWin ? '¡GANASTE!' : 'ELIMINADO'}</div>
+          <div class="duel-score"><span class="ds-n ${myWins > opWins ? 'lead' : ''}">${myWins}</span><span class="ds-sep">—</span><span class="ds-n ${opWins > myWins ? 'lead' : ''}">${opWins}</span></div>
+          <div class="duel-score-l">Tú · ${esc(oppName)}</div>
+          ${g.cover_url || g.track_title ? `<div class="duel-song"><span class="duel-song-cov" style="${g.cover_url ? `background-image:url('${esc(czUrl(g.cover_url))}')` : ''}"></span><span class="duel-song-m"><i>Sonaba</i><b>${esc(g.track_title || 'una pista')}</b></span></div>` : ''}
+          <div class="duel-res-rows">
+            <div class="duel-res-row ${myFaster ? 'fast' : ''}"><span>Tú</span><b>${rtxt(myR)}</b></div>
+            <div class="duel-res-row ${opFaster ? 'fast' : ''}"><span>${esc(oppName)}</span><b>${rtxt(opR)}</b></div>
+          </div>
+          <div class="duel-res-actions">
+            <button class="btn primary" id="rematchBtn">Revancha</button>
+            <button class="btn" id="leaveBtn">Salir</button>
+          </div>
         </div>
-        <div class="duel-res-actions">
-          <button class="btn primary" id="rematchBtn">Revancha</button>
-          <button class="btn" id="leaveBtn">Salir</button>
-        </div>
-        <div class="duel-res-hint" id="rematchHint"></div>
       </div>`;
+    if (meWin) { const fl = body.querySelector('#duelArena'); if (fl) { fl.classList.add('kick'); setTimeout(() => fl.classList.remove('kick'), 300); } }
     body.querySelector('#leaveBtn').onclick = close;
     body.querySelector('#rematchBtn').onclick = async () => {
       haptic(14);
@@ -1412,13 +1446,12 @@ async function openMatch(id) {
     DuelSFX.unlock();
     body.innerHTML = `
       <div class="duel-arena" id="duelArena">
-        <div class="duel-sky"></div>
-        <div class="duel-grid"></div>
+        ${sceneHTML(g, 'aim')}
         <div class="duel-scan"></div>
         <div class="duel-vig"></div>
         <div class="duel-bar duel-bar-top"></div>
         <div class="duel-bar duel-bar-bot"></div>
-        <div class="duel-top"><div class="duel-fig">${avHtml(isHost() ? g.guest_avatar : g.host_avatar, isHost() ? g.guest_name : g.host_name)}<b>${esc((isHost() ? g.guest_name : g.host_name) || 'Rival')}</b><span id="oppState">en posición…</span></div></div>
+        <div class="duel-enemy-tag"><b>${esc(oppName(g))}</b><span id="oppState">en posición…</span></div>
         <div class="duel-center">
           <div class="duel-cross" id="duelCross"><i></i><i></i><span class="duel-ring"></span><span class="duel-ring2"></span><span class="duel-dot"></span></div>
           <div class="duel-status" id="duelStatus">PREPARADO…</div>
