@@ -3211,3 +3211,21 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
 /* fogonazo y humo en la boca del cañón */
 .duel-muzzle { bottom: 110px; }
 .duel-smoke { bottom: 116px; }
+
+/* ======================================================================
+   EL DUELO — pistola en vista ADS (apuntando por los hierros)
+   ====================================================================== */
+.duel-gun { width: 200px; height: 222px; bottom: 0; }
+.dg-svg .dg-slide { fill: #333c52; }
+.dg-svg .dg-side { fill: #1c2333; }
+.dg-svg .dg-side2 { fill: #465173; }
+.dg-svg .dg-slide-hi { fill: rgba(255,255,255,.08); }
+.dg-svg .dg-serr rect { fill: rgba(0,0,0,.45); }
+.dg-svg .dg-port { fill: #080b12; }
+.dg-svg .dg-iron { fill: #0e121c; }
+.dg-svg .dg-dot { fill: #9fe7c0; }
+.dg-svg .dg-dot-front { fill: #bdeaff; }
+.duel-arena.fire .dg-svg .dg-dot, .duel-arena.fire .dg-svg .dg-dot-front { fill: #ff5a5a; }
+/* boca del cañón ahora al fondo (lejos) en la vista ADS */
+.duel-muzzle { bottom: 150px; width: 58px; height: 58px; }
+.duel-smoke { bottom: 156px; width: 52px; height: 52px; }
