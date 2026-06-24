@@ -603,6 +603,7 @@ async function onAuthenticated() {
   switchView('feed');
   setTimeout(warmFeeds, 1500);   // precarga following/trending/new para que pasar de pestaña sea instantáneo
   startFeedAutoRefresh();        // Trending y artistas se actualizan solos en segundo plano
+  initDuelInvites();             // aviso en vivo cuando te invitan a un duelo
   handleDeepLink();
   maybeOnboard();
 }
@@ -1052,7 +1053,7 @@ function initMeWheel() {
     { label: 'Subir',        icon: 'i-plus',     run: () => openCreateChooser() },
     { label: 'Mis listas',   icon: 'i-list',     run: () => switchView('playlists') },
     { label: 'Herramientas', icon: 'i-tools',    run: () => switchView('tools') },
-    { label: 'Press Kit',    icon: 'i-file',     run: () => switchView('presskit') },
+    { label: 'Duelo',        icon: 'i-radio',    run: () => openGamesHub() },
     { label: 'Estadísticas', icon: 'i-chart',    run: () => switchView('dashboard') },
     { label: 'Ajustes',      icon: 'i-settings', run: () => switchView('settings') },
   ];
@@ -1126,6 +1127,323 @@ function initMeWheel() {
     close(true);
   });
   btn.addEventListener('pointercancel', () => { clearTimeout(holdTimer); close(false); });
+}
+
+/* =======================================================================
+   JUEGOS 1v1 — "EL DUELO" (reflejos): suena una pista; al cortarse, dispara.
+   El primero en tocar gana. Disparar antes del corte = pierdes.
+   Cada móvil mide su reacción localmente (justo sin importar el ping).
+   ======================================================================= */
+let gameChan = null;
+function gmCloseChan() { try { gameChan && sb.removeChannel(gameChan); } catch (_) {} gameChan = null; }
+const gmName = (p) => (p && (p.display_name || p.username)) || 'Tú';
+
+async function pickRandomTrack() {
+  try {
+    const { data } = await sb.from('tracks').select('id,title,audio_url,cover_url').not('audio_url', 'is', null).order('created_at', { ascending: false }).limit(80);
+    const pool = (data || []).filter(t => t.audio_url);
+    if (!pool.length) return null;
+    return pool[Math.floor(Math.random() * pool.length)];
+  } catch (_) { return null; }
+}
+
+function openGamesHub() {
+  const me = state.profile;
+  const m = openModal(`
+    <div class="modal-head"><h3>El Duelo</h3><button class="close">&times;</button></div>
+    <div class="modal-body game-hub">
+      <div class="gh-hero">
+        <div class="gh-cross"><i></i><i></i></div>
+        <h2>EL DUELO</h2>
+        <p>Suena una pista… cuando <b>se corta de golpe</b>, el primero en disparar gana.<br><span class="gh-warn">Si disparas antes de tiempo, pierdes.</span></p>
+      </div>
+      <button class="btn primary share-big" id="ghQuick"><svg fill="none" stroke="#fff"><use href="#i-people"/></svg> <span class="ig-tx"><b>Partida rápida</b><i>Te emparejamos con cualquiera</i></span></button>
+      <button class="btn share-big" id="ghInvite"><svg fill="none" stroke="currentColor"><use href="#i-mail"/></svg> <span class="ig-tx"><b>Invitar a un amigo</b><i>Elige a quién retar</i></span></button>
+      <div id="ghInvites"></div>
+    </div>`);
+  m.querySelector('#ghQuick').onclick = () => { m.remove(); quickMatch(); };
+  m.querySelector('#ghInvite').onclick = () => { m.remove(); openGameInvitePicker(); };
+  const box = m.querySelector('#ghInvites');
+  sb.from('game_matches').select('*').eq('guest', state.user.id).eq('status', 'invited').order('created_at', { ascending: false }).limit(10).then(({ data: invs }) => {
+    if (!invs || !invs.length || !box.isConnected) return;
+    box.innerHTML = `<div class="gh-sec">Te han invitado</div>` + invs.map(g => `
+      <button class="gh-inv" data-id="${esc(g.id)}"><span class="gh-inv-av" style="${g.host_avatar ? `background-image:url('${esc(czUrl(g.host_avatar))}')` : ''}">${g.host_avatar ? '' : esc((g.host_name || '?').slice(0, 1).toUpperCase())}</span><span class="gh-inv-m"><b>${esc(g.host_name || 'Alguien')}</b><i>te invita a un duelo</i></span><span class="gh-inv-go">Jugar →</span></button>`).join('');
+    box.querySelectorAll('.gh-inv').forEach(b => b.onclick = () => { m.remove(); acceptInvite(b.dataset.id); });
+  });
+}
+
+async function openGameInvitePicker() {
+  const m = openModal(`
+    <div class="modal-head"><h3>Invitar a un duelo</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <input type="text" id="gipSearch" class="inp" placeholder="Busca por nombre o @usuario…" autocomplete="off" style="width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:11px;background:var(--bg-soft);color:var(--ink);margin-bottom:10px" />
+      <div id="gipList" class="gip-list"></div>
+    </div>`);
+  const list = m.querySelector('#gipList');
+  const render = (people) => {
+    people = (people || []).filter(p => p.id !== state.user.id && !isHidden(p.id));
+    if (!people.length) { list.innerHTML = '<p class="eco-hint" style="padding:14px;text-align:center">Sin resultados.</p>'; return; }
+    list.innerHTML = people.map(p => `
+      <button class="gip-row" data-id="${esc(p.id)}" data-name="${esc(p.display_name || p.username)}" data-av="${esc(p.avatar_url || '')}">
+        <span class="gip-av" style="${p.avatar_url ? `background-image:url('${esc(czUrl(p.avatar_url))}')` : ''}">${p.avatar_url ? '' : esc((p.display_name || p.username || '?').slice(0, 1).toUpperCase())}</span>
+        <span class="gip-m"><b>${esc(p.display_name || p.username)}</b><i>@${esc(p.username || '')}</i></span>
+        <span class="gip-go">Retar</span>
+      </button>`).join('');
+    list.querySelectorAll('.gip-row').forEach(b => b.onclick = () => { m.remove(); createInviteMatch(b.dataset.id, b.dataset.name, b.dataset.av); });
+  };
+  // por defecto: a quién sigues
+  try {
+    const ids = [...state.follows].slice(0, 40);
+    if (ids.length) { const { data } = await sb.from('profiles').select('id,username,display_name,avatar_url').in('id', ids); render(data); }
+    else list.innerHTML = '<p class="eco-hint" style="padding:14px;text-align:center">Busca a alguien para retarle.</p>';
+  } catch (_) {}
+  let st; m.querySelector('#gipSearch').addEventListener('input', (e) => {
+    clearTimeout(st); const term = e.target.value.trim();
+    st = setTimeout(async () => {
+      if (!term) return;
+      try { const { data } = await sb.from('profiles').select('id,username,display_name,avatar_url').or(`username.ilike.%${term}%,display_name.ilike.%${term}%`).limit(20); render(data); } catch (_) {}
+    }, 280);
+  });
+}
+
+async function createInviteMatch(guestId, guestName, guestAvatar) {
+  const me = state.profile;
+  const { data, error } = await sb.from('game_matches').insert({
+    game: 'duel', host: state.user.id, guest: guestId, status: 'invited', is_public: false,
+    host_name: gmName(me), host_avatar: me.avatar_url || null, guest_name: guestName || null, guest_avatar: guestAvatar || null,
+  }).select().single();
+  if (error || !data) { toast('No se pudo crear el duelo'); return; }
+  openMatch(data.id);
+}
+
+async function quickMatch() {
+  const me = state.profile;
+  toast('Buscando rival…');
+  try {
+    const { data: open } = await sb.from('game_matches').select('*').eq('status', 'open').eq('is_public', true).is('guest', null).neq('host', state.user.id).order('created_at', { ascending: true }).limit(1);
+    if (open && open[0]) {
+      const { data, error } = await sb.from('game_matches').update({ guest: state.user.id, guest_name: gmName(me), guest_avatar: me.avatar_url || null, status: 'ready' }).eq('id', open[0].id).eq('status', 'open').is('guest', null).select().single();
+      if (!error && data) { openMatch(data.id); return; }
+    }
+  } catch (_) {}
+  const { data, error } = await sb.from('game_matches').insert({ game: 'duel', host: state.user.id, status: 'open', is_public: true, host_name: gmName(me), host_avatar: me.avatar_url || null }).select().single();
+  if (error || !data) { toast('No se pudo crear la partida'); return; }
+  openMatch(data.id);
+}
+
+async function acceptInvite(id) {
+  const me = state.profile;
+  const { data, error } = await sb.from('game_matches').update({ status: 'ready', guest_name: gmName(me), guest_avatar: me.avatar_url || null }).eq('id', id).eq('status', 'invited').select().single();
+  if (error || !data) { toast('La invitación ya no está disponible'); return; }
+  openMatch(id);
+}
+
+async function openMatch(id) {
+  gmCloseChan();
+  document.getElementById('gameScreen')?.remove();
+  const scr = el('<div id="gameScreen" class="game-screen"><div class="gs-body" id="gsBody"></div><button class="gs-exit" id="gsExit" aria-label="Salir">&times;</button></div>');
+  document.body.appendChild(scr);
+  const body = scr.querySelector('#gsBody');
+  try { window.audio && audio.pause(); } catch (_) {}
+
+  let cur = null, dAudio = null, fireT = 0, armed = false, myReacted = false, playedRound = 0, fireTimer = 0, startTimer = 0;
+  const isHost = () => cur && cur.host === state.user.id;
+  const myReactCol = () => isHost() ? 'host_reaction' : 'guest_reaction';
+
+  const stopAudio = () => { try { dAudio && dAudio.pause(); } catch (_) {} clearTimeout(fireTimer); clearTimeout(startTimer); };
+  const cleanup = () => { stopAudio(); gmCloseChan(); };
+  const close = async () => {
+    cleanup();
+    // si la partida no terminó, márcala cancelada para que el rival no espere
+    try { if (cur && cur.status !== 'done') await sb.from('game_matches').update({ status: 'cancelled' }).eq('id', id); } catch (_) {}
+    scr.remove();
+  };
+  scr.querySelector('#gsExit').onclick = close;
+
+  const avHtml = (url, name) => url ? `<span class="duel-av" style="background-image:url('${esc(czUrl(url))}')"></span>` : `<span class="duel-av duel-av-ph">${esc((name || '?').slice(0, 1).toUpperCase())}</span>`;
+
+  // -------- escenas estáticas (no se redibujan durante una ronda) --------
+  function renderWaiting(g) {
+    body.innerHTML = `<div class="duel-wait"><div class="duel-spinner"></div><h3>Buscando rival…</h3><p class="duel-sub">Comparte la app para encontrar a alguien, o invita a un amigo.</p></div>`;
+  }
+  function renderInvited(g) {
+    if (isHost()) body.innerHTML = `<div class="duel-wait"><div class="duel-spinner"></div><h3>Esperando a ${esc(g.guest_name || 'tu rival')}…</h3><p class="duel-sub">Le ha llegado la invitación al duelo.</p></div>`;
+    else body.innerHTML = `<div class="duel-wait"><h3>${esc(g.host_name || 'Alguien')} te reta a un duelo</h3><button class="btn primary" id="acceptNow">Aceptar duelo</button></div>`;
+    const a = body.querySelector('#acceptNow'); if (a) a.onclick = () => sb.from('game_matches').update({ status: 'ready', guest_name: gmName(state.profile), guest_avatar: state.profile.avatar_url || null }).eq('id', id);
+  }
+  function renderLobby(g) {
+    const meReady = isHost() ? g.host_ready : g.guest_ready;
+    const oppReady = isHost() ? g.guest_ready : g.host_ready;
+    const oppName = isHost() ? g.guest_name : g.host_name;
+    const oppAv = isHost() ? g.guest_avatar : g.host_avatar;
+    body.innerHTML = `
+      <div class="duel-lobby">
+        <h2 class="duel-vs-t">PREPARADOS</h2>
+        <div class="duel-vs">
+          <div class="duel-side"><div class="duel-av-wrap ${meReady ? 'on' : ''}">${avHtml(state.profile.avatar_url, gmName(state.profile))}</div><b>Tú</b><span class="${meReady ? 'rdy' : ''}">${meReady ? 'Listo' : 'Sin confirmar'}</span></div>
+          <div class="duel-vs-x">VS</div>
+          <div class="duel-side"><div class="duel-av-wrap ${oppReady ? 'on' : ''}">${avHtml(oppAv, oppName)}</div><b>${esc(oppName || 'Rival')}</b><span class="${oppReady ? 'rdy' : ''}">${oppReady ? 'Listo' : 'Esperando…'}</span></div>
+        </div>
+        <p class="duel-tip">Cuando la música pare, <b>toca la pantalla</b> lo más rápido que puedas. No dispares antes.</p>
+        <button class="btn primary duel-ready ${meReady ? 'done' : ''}" id="readyBtn" ${meReady ? 'disabled' : ''}>${meReady ? 'Esperando al rival…' : '¡Estoy listo!'}</button>
+      </div>`;
+    const r = body.querySelector('#readyBtn');
+    if (r && !meReady) r.onclick = () => { haptic(14); sb.from('game_matches').update(isHost() ? { host_ready: true } : { guest_ready: true }).eq('id', id); };
+  }
+  function renderResult(g) {
+    stopAudio();
+    const meWin = g.winner === state.user.id;
+    const draw = !g.winner;
+    const myR = isHost() ? g.host_reaction : g.guest_reaction;
+    const opR = isHost() ? g.guest_reaction : g.host_reaction;
+    const rtxt = (v) => v == null ? '—' : (v < 0 ? 'Disparó antes ✗' : v + ' ms');
+    body.innerHTML = `
+      <div class="duel-result ${draw ? 'draw' : meWin ? 'win' : 'lose'}">
+        <div class="duel-res-badge">${draw ? 'EMPATE' : meWin ? '¡GANASTE!' : 'PERDISTE'}</div>
+        <div class="duel-res-rows">
+          <div class="duel-res-row"><span>Tú</span><b>${rtxt(myR)}</b></div>
+          <div class="duel-res-row"><span>${esc((isHost() ? g.guest_name : g.host_name) || 'Rival')}</span><b>${rtxt(opR)}</b></div>
+        </div>
+        <div class="duel-res-actions">
+          <button class="btn primary" id="rematchBtn">Revancha</button>
+          <button class="btn" id="leaveBtn">Salir</button>
+        </div>
+      </div>`;
+    body.querySelector('#leaveBtn').onclick = close;
+    body.querySelector('#rematchBtn').onclick = async () => { haptic(14); await startNewRound(g.round + 1); };
+  }
+
+  async function startNewRound(nextRound) {
+    const t = await pickRandomTrack();
+    if (!t) { toast('No hay pistas para jugar'); return; }
+    const stop = 2600 + Math.floor(Math.random() * 5200); // corte entre 2.6s y 7.8s
+    await sb.from('game_matches').update({
+      status: 'playing', round: nextRound, track_id: t.id, audio_url: t.audio_url, cover_url: t.cover_url || null, track_title: t.title || null,
+      stop_offset: stop, host_reaction: null, guest_reaction: null, winner: null,
+    }).eq('id', id);
+  }
+
+  // -------- la ronda del duelo (con audio + medición local) --------
+  function startRound(g) {
+    playedRound = g.round; myReacted = false; armed = false;
+    body.innerHTML = `
+      <div class="duel-arena" id="duelArena">
+        <div class="duel-scan"></div>
+        <div class="duel-top"><div class="duel-fig">${avHtml(isHost() ? g.guest_avatar : g.host_avatar, isHost() ? g.guest_name : g.host_name)}<b>${esc((isHost() ? g.guest_name : g.host_name) || 'Rival')}</b><span id="oppState">en posición…</span></div></div>
+        <div class="duel-center">
+          <div class="duel-cross" id="duelCross"><i></i><i></i><span class="duel-ring"></span></div>
+          <div class="duel-status" id="duelStatus">PREPARADO…</div>
+          <div class="duel-rt" id="duelRt"></div>
+        </div>
+        <div class="duel-bottom"><span class="duel-me-tag">TÚ</span></div>
+        <div class="duel-flash" id="duelFlash"></div>
+      </div>`;
+    const arena = body.querySelector('#duelArena');
+    const statusEl = body.querySelector('#duelStatus');
+    const crossEl = body.querySelector('#duelCross');
+    const rtEl = body.querySelector('#duelRt');
+    const flashEl = body.querySelector('#duelFlash');
+
+    const onShoot = () => {
+      if (myReacted) return;
+      if (!armed) { // salida en falso
+        myReacted = true; haptic(40); stopAudio();
+        arena.classList.add('falsestart'); statusEl.textContent = '¡ANTES DE TIEMPO!'; rtEl.textContent = 'Has fallado el disparo';
+        submitReaction(-1);
+        return;
+      }
+      myReacted = true; haptic(30);
+      const rt = Math.round(performance.now() - fireT);
+      crossEl.classList.add('shot'); statusEl.textContent = '¡DISPARO!'; rtEl.textContent = rt + ' ms';
+      submitReaction(rt);
+    };
+    arena.addEventListener('pointerdown', onShoot);
+
+    // cuenta atrás 3·2·1, luego suena la pista
+    let n = 3; statusEl.textContent = String(n); statusEl.classList.add('count');
+    const cd = setInterval(() => {
+      n--;
+      if (n > 0) { statusEl.textContent = String(n); haptic(8); }
+      else { clearInterval(cd); statusEl.classList.remove('count'); beginAudio(); }
+    }, 800);
+
+    function beginAudio() {
+      statusEl.textContent = 'NO DISPARES…';
+      try { dAudio = new Audio(czHref(g.audio_url)); dAudio.play().catch(() => {}); } catch (_) {}
+      // momento del corte → ¡DISPARA!
+      fireTimer = setTimeout(() => {
+        stopAudio(); armed = true; fireT = performance.now();
+        arena.classList.add('fire'); statusEl.textContent = '¡DISPARA!';
+        if (flashEl) { flashEl.classList.remove('go'); void flashEl.offsetWidth; flashEl.classList.add('go'); }
+        haptic(50);
+      }, Math.max(1200, g.stop_offset || 4000));
+    }
+  }
+
+  function submitReaction(rt) {
+    sb.from('game_matches').update({ [myReactCol()]: rt }).eq('id', id).then(() => {}).catch(() => {});
+  }
+
+  function paintOpp(g) {
+    const el2 = body.querySelector('#oppState'); if (!el2) return;
+    const opR = isHost() ? g.guest_reaction : g.host_reaction;
+    if (opR != null) el2.textContent = opR < 0 ? 'disparó antes ✗' : 'disparó · ' + opR + ' ms';
+  }
+
+  function maybeResolve(g) {
+    if (g.status !== 'playing') return;
+    if (g.host_reaction == null || g.guest_reaction == null) return;
+    if (!isHost()) return; // solo el anfitrión escribe el resultado (evita carrera)
+    const h = g.host_reaction, gu = g.guest_reaction, hOk = h >= 0, gOk = gu >= 0;
+    let winner = null;
+    if (hOk && gOk) winner = h <= gu ? g.host : g.guest;
+    else if (hOk) winner = g.host;
+    else if (gOk) winner = g.guest;
+    sb.from('game_matches').update({ status: 'done', winner }).eq('id', id);
+  }
+
+  function onUpdate(g) {
+    if (!g) return;
+    const prev = cur; cur = g;
+    if (g.status === 'cancelled') { if (prev && prev.status !== 'cancelled') { toast('El rival salió de la partida'); } stopAudio(); body.innerHTML = `<div class="duel-wait"><h3>Partida cancelada</h3><button class="btn primary" id="bk">Volver</button></div>`; const b = body.querySelector('#bk'); if (b) b.onclick = close; return; }
+    if (g.status === 'open') return renderWaiting(g);
+    if (g.status === 'invited') return renderInvited(g);
+    if (g.status === 'ready') {
+      renderLobby(g);
+      if (g.host_ready && g.guest_ready && isHost()) startNewRound(g.round || 1);
+      return;
+    }
+    if (g.status === 'playing') {
+      if (playedRound !== g.round) startRound(g);
+      else { paintOpp(g); maybeResolve(g); }
+      return;
+    }
+    if (g.status === 'done') return renderResult(g);
+  }
+
+  gameChan = sb.channel('gm:' + id)
+    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'game_matches', filter: 'id=eq.' + id }, (p) => onUpdate(p.new))
+    .subscribe();
+  const { data: g0 } = await sb.from('game_matches').select('*').eq('id', id).single();
+  onUpdate(g0);
+}
+
+// aviso en vivo cuando te invitan a un duelo (suscripción ligera global)
+function initDuelInvites() {
+  if (initDuelInvites._done || !state.user) return; initDuelInvites._done = true;
+  try {
+    sb.channel('gm-invites:' + state.user.id)
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'game_matches', filter: 'guest=eq.' + state.user.id }, (p) => {
+        const g = p.new; if (!g || g.status !== 'invited') return;
+        const t = el(`<div class="duel-invite-pop"><span class="dip-ic"><svg fill="none" stroke="#fff"><use href="#i-people"/></svg></span><div class="dip-m"><b>${esc(g.host_name || 'Alguien')}</b><i>te invita a un duelo</i></div><button class="dip-go">Jugar</button><button class="dip-x" aria-label="Cerrar">&times;</button></div>`);
+        document.body.appendChild(t);
+        const kill = () => t.remove();
+        t.querySelector('.dip-go').onclick = () => { kill(); acceptInvite(g.id); };
+        t.querySelector('.dip-x').onclick = kill;
+        setTimeout(kill, 12000);
+        haptic(30);
+      }).subscribe();
+  } catch (_) {}
 }
 
 function setBnavActive(bnav) {
