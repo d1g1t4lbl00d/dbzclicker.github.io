@@ -1833,7 +1833,7 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
 .post-photo-prev img { width: 100%; max-height: 320px; object-fit: cover; display: block; }
 
 /* pestañas del perfil (Pistas / Fotos) — control segmentado, legible sobre cualquier tema */
-.profile-tabs { display: flex; flex-wrap: wrap; justify-content: center; width: fit-content; max-width: 100%; margin: 6px auto 16px; gap: 4px; padding: 4px; background: var(--glass); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 22px; box-shadow: var(--sh-1); }
+.profile-tabs { display: flex; flex-wrap: nowrap; justify-content: center; width: fit-content; max-width: 100%; margin: 6px auto 16px; gap: 4px; padding: 4px; background: var(--glass); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 30px; box-shadow: var(--sh-1); }
 .profile-tabs button { display: inline-flex; align-items: center; gap: 6px; border: none; background: none; padding: 8px 16px; font-size: 13px; font-weight: 700; color: var(--ink-soft); border-radius: 24px; cursor: pointer; transition: background .16s, color .16s; }
 .profile-tabs button svg { width: 15px; height: 15px; stroke: currentColor; }
 .profile-tabs button:not(.active):hover { color: var(--ink-2); background: rgba(62,87,252,.10); }
@@ -1841,9 +1841,10 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
 .profile-tabs button.active svg { stroke: #fff; }
 .profile-tabs .ptab-n { font-size: 11px; opacity: .82; font-weight: 700; }
 @media (max-width: 460px) {
-  .profile-tabs { display: flex; flex-wrap: wrap; justify-content: center; width: 100%; border-radius: 16px; }
-  .profile-tabs button { flex: 0 0 auto; justify-content: center; padding: 9px 12px; gap: 5px; white-space: nowrap; }
-  .profile-tabs button svg { width: 14px; height: 14px; }
+  .profile-tabs { display: flex; flex-wrap: nowrap; justify-content: center; width: 100%; gap: 2px; padding: 3px; border-radius: 18px; }
+  .profile-tabs button { flex: 1 1 0; min-width: 0; justify-content: center; padding: 7px 3px; gap: 3px; font-size: 10.5px; white-space: nowrap; border-radius: 14px; }
+  .profile-tabs button svg { width: 13px; height: 13px; flex-shrink: 0; }
+  .profile-tabs .ptab-n { display: none; }
 }
 
 /* resultados de búsqueda: personas */
