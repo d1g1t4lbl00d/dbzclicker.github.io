@@ -4747,7 +4747,7 @@ async function openProfile(userId) {
         <button data-ptab="feats"><svg fill="none" stroke="currentColor"><use href="#i-people"/></svg> Feats <span class="ptab-n">${featTracks.length}</span></button>
         <button data-ptab="reposts"><svg fill="none" stroke="currentColor"><use href="#i-repeat"/></svg> Reposts</button>
         <button data-ptab="events"><svg fill="none" stroke="currentColor"><use href="#i-calendar"/></svg> Eventos</button>
-        <button data-ptab="shop"><svg fill="none" stroke="currentColor"><use href="#i-bookmark"/></svg> Tienda</button>
+        <button data-ptab="shop"><svg fill="none" stroke="currentColor"><use href="#i-cart"/></svg> Tienda</button>
       </div>
       <div id="profTop" class="prof-top-wrap"></div>
       <div id="feedList" class="feed-list"></div>
