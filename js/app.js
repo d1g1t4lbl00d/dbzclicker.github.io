@@ -4202,7 +4202,7 @@ async function handlePayReturn(pay, sid) {
   if (pay === 'connect_done' || pay === 'connect_refresh') {
     _sellerStatus = null;
     const st = await fetchSellerStatus(true);
-    toast(st.ready ? '✅ Cobros activados' : 'Alta guardada — Stripe está verificando tus datos');
+    toast(st.ready ? '🛍️ ¡Tienda activada!' : 'Alta guardada — Stripe está verificando tus datos');
     return;
   }
   if (pay === 'ok' && sid) { openPurchaseResult(sid); }
@@ -4279,13 +4279,11 @@ function shopProductCard(p, isMe, refresh) {
         <div class="shop-foot">
           <span class="shop-price">${esc(priceTxt)}</span>
           ${free ? `<button class="btn sm primary" data-act="download"><svg fill="none" stroke="#fff"><use href="#i-download"/></svg> Descargar</button>`
-                 : (inapp ? `<button class="btn sm primary" data-act="paybuy">${cta}</button>`
-                 : (p.buy_url ? `<button class="btn sm primary" data-act="buy">${cta}</button>` : ''))}
+                 : (inapp ? `<button class="btn sm primary" data-act="paybuy">${cta}</button>` : '')}
         </div>
       </div>
     </div>`);
   card.querySelector('[data-act="paybuy"]')?.addEventListener('click', (e) => buyInApp(p, e.currentTarget));
-  card.querySelector('[data-act="buy"]')?.addEventListener('click', () => { haptic(10); window.open(czHref(p.buy_url), '_blank', 'noopener'); });
   card.querySelector('[data-act="download"]')?.addEventListener('click', () => { haptic(10); const a = document.createElement('a'); a.href = czHref(p.file_url); a.download = ''; a.target = '_blank'; a.rel = 'noopener'; a.click(); });
   card.querySelector('[data-act="edit"]')?.addEventListener('click', () => openShopEdit(p, p.user_id, refresh));
   return card;
@@ -4304,7 +4302,7 @@ function shopPayBar(userId, refresh) {
     const net = (sales || []).reduce((s, o) => s + (o.amount_cents - (o.fee_cents || 0)), 0);
     const count = (sales || []).length;
     if (!st.connected) {
-      bar.innerHTML = `<div class="spb-line"><span class="spb-ic">💳</span><div class="spb-body"><b>Cobra dentro de UnderBro</b><span>Activa los pagos con tarjeta para vender beats, packs y entradas. UnderBro retiene un 10% por venta.</span></div></div><button class="btn sm primary" id="spbConnect">Activar cobros</button>`;
+      bar.innerHTML = `<div class="spb-line"><span class="spb-ic">🛍️</span><div class="spb-body"><b>Crea tu tienda en UnderBro</b><span>Vende beats, packs y entradas con cobro seguro con tarjeta. Recibes el 90% de cada venta (UnderBro retiene un 10%).</span></div></div><button class="btn sm primary" id="spbConnect">Crear tienda</button>`;
     } else if (!st.ready) {
       bar.innerHTML = `<div class="spb-line"><span class="spb-ic">⏳</span><div class="spb-body"><b>Verificación en curso</b><span>Stripe está revisando tus datos. Completa el alta si quedó algo pendiente.</span></div></div><button class="btn sm ghost" id="spbConnect">Continuar alta</button>`;
     } else {
@@ -4329,17 +4327,8 @@ async function openShopEdit(p, userId, onSaved) {
       <div class="field"><label>Título</label><input type="text" id="shTitle" maxlength="80" value="${esc(p.title || '')}" placeholder="Ej: Pack de beats Vol.1" /></div>
       <div class="field"><label class="pk-tg" style="font-weight:600"><input type="checkbox" id="shFree" style="width:auto" ${p.is_free ? 'checked' : ''}/> <span>Es <b>gratis</b> (descarga directa)</span></label></div>
       <div class="field"><label>Descripción</label><textarea id="shDesc" maxlength="400" rows="2" placeholder="Detalles del producto…">${esc(p.description || '')}</textarea></div>
-      <div id="shPayWrap">
-        <label class="pk-l">¿Cómo cobras?</label>
-        <div class="seg" id="shPayMode">
-          <button data-pm="inapp" class="${p.pay_inapp || !p.buy_url ? 'on' : ''}">En UnderBro 💳</button>
-          <button data-pm="ext" class="${!p.pay_inapp && p.buy_url ? 'on' : ''}">Enlace externo</button>
-        </div>
-        <div class="field" id="shEurRow"><label>Precio (€)</label><input type="number" id="shPriceEur" min="0.50" step="0.01" inputmode="decimal" value="${p.price_cents ? (p.price_cents / 100) : ''}" placeholder="9,99" /><span class="pk-hint">Cobro con tarjeta dentro de la app. UnderBro retiene un 10%; el resto va a tu cuenta.</span></div>
-        <div class="pk-warn" id="shConnNote" style="display:none">Para cobrar en UnderBro primero <b>activa los cobros</b> en tu tienda (botón “Activar cobros”).</div>
-        <div class="field" id="shPriceRow"><label>Precio (texto)</label><input type="text" id="shPrice" maxlength="24" value="${esc(p.price || '')}" placeholder="9,99 €" /></div>
-        <div class="field" id="shBuyRow"><label>Enlace de compra (tu PayPal/Gumroad/Beatstars/web)</label><input type="text" id="shBuy" value="${esc(p.buy_url || '')}" placeholder="https://…" /></div>
-      </div>
+      <div class="field" id="shEurRow"><label>Precio (€)</label><input type="number" id="shPriceEur" min="0.50" step="0.01" inputmode="decimal" value="${p.price_cents ? (p.price_cents / 100) : ''}" placeholder="9,99" /><span class="pk-hint">Cobro seguro con tarjeta dentro de UnderBro. Tú recibes el 90%; UnderBro retiene un 10%.</span></div>
+      <div class="pk-warn" id="shConnNote" style="display:none">Para vender necesitas tu tienda activa: pulsa <b>“Crear tienda”</b> arriba para activar los cobros.</div>
       <div class="field" id="shFileRow"><label>Archivo a entregar</label>
         <div class="cover-pick" id="shFileDz"><div class="cover-pick-txt"><b id="shFileName">${p.file_url ? 'Archivo subido ✓' : 'Subir archivo (zip, mp3, wav…)'}</b><span>se entrega tras el pago / al pulsar “Descargar”</span></div></div>
         <input type="file" id="shFile" hidden />
@@ -4353,25 +4342,18 @@ async function openShopEdit(p, userId, onSaved) {
       <div class="auth-msg" id="shMsg"></div>
     </div>`);
   let type = p.type || 'beat', imgFile = null, dataFile = null;
-  let payMode = (p.pay_inapp || !p.buy_url) ? 'inapp' : 'ext';
   const syncRows = () => {
     const free = m.querySelector('#shFree').checked;
-    const inapp = !free && payMode === 'inapp';
-    const ext = !free && payMode === 'ext';
-    m.querySelector('#shPayWrap').style.display = free ? 'none' : '';
-    m.querySelector('#shEurRow').style.display = inapp ? '' : 'none';
-    m.querySelector('#shPriceRow').style.display = ext ? '' : 'none';
-    m.querySelector('#shBuyRow').style.display = ext ? '' : 'none';
-    m.querySelector('#shConnNote').style.display = (inapp && _sellerStatus && !_sellerStatus.ready) ? '' : 'none';
-    // entrega de archivo: beats/packs gratis o de pago in-app
-    m.querySelector('#shFileRow').style.display = (type === 'beat' && (free || inapp)) ? '' : 'none';
+    m.querySelector('#shEurRow').style.display = free ? 'none' : '';
+    m.querySelector('#shConnNote').style.display = (!free && _sellerStatus && !_sellerStatus.ready) ? '' : 'none';
+    // entrega de archivo: beats/packs (gratis o de pago)
+    m.querySelector('#shFileRow').style.display = (type === 'beat') ? '' : 'none';
     m.querySelector('#shEvRow').style.display = type === 'ticket' ? '' : 'none';
   };
   m.querySelectorAll('#shType button').forEach(b => b.onclick = () => { type = b.dataset.ty; m.querySelectorAll('#shType button').forEach(x => x.classList.toggle('on', x === b)); syncRows(); });
-  m.querySelectorAll('#shPayMode button').forEach(b => b.onclick = () => { payMode = b.dataset.pm; m.querySelectorAll('#shPayMode button').forEach(x => x.classList.toggle('on', x === b)); syncRows(); });
   m.querySelector('#shFree').onchange = syncRows;
   syncRows();
-  fetchSellerStatus().then(() => syncRows()); // refresca el aviso de “activa cobros”
+  fetchSellerStatus().then(() => syncRows()); // refresca el aviso de “crear tienda”
   m.querySelector('#shDz').onclick = () => m.querySelector('#shImg').click();
   m.querySelector('#shImg').onchange = (e) => { const f = e.target.files[0]; if (!f) return; imgFile = f; m.querySelector('#shPrev').innerHTML = `<img src="${URL.createObjectURL(f)}" alt="">`; };
   m.querySelector('#shFileDz').onclick = () => m.querySelector('#shFile').click();
@@ -4388,20 +4370,19 @@ async function openShopEdit(p, userId, onSaved) {
       if (imgFile) { const path = `${userId}/shop-${stamp}`; const up = await sb.storage.from('covers').upload(path, imgFile, { contentType: imgFile.type, upsert: true }); if (!up.error) image_url = sb.storage.from('covers').getPublicUrl(path).data.publicUrl; }
       if (dataFile) { const ext = (dataFile.name.split('.').pop() || 'zip').toLowerCase(); const path = `${userId}/shopfile-${stamp}.${ext}`; const up = await sb.storage.from('tracks').upload(path, dataFile, { contentType: dataFile.type || 'application/octet-stream', upsert: true }); if (!up.error) file_url = sb.storage.from('tracks').getPublicUrl(path).data.publicUrl; }
       const free = m.querySelector('#shFree').checked;
-      const inapp = !free && payMode === 'inapp';
       let price_cents = null;
-      if (inapp) {
+      if (!free) {
         const eur = parseFloat(String(m.querySelector('#shPriceEur').value || '').replace(',', '.'));
         if (!(eur >= 0.5)) { msg.className = 'auth-msg error'; msg.textContent = 'Pon un precio de al menos 0,50 €.'; btn.disabled = false; btn.textContent = edit ? 'Guardar cambios' : 'Publicar producto'; return; }
         price_cents = Math.round(eur * 100);
       }
       const row = {
         user_id: userId, type, title, is_free: free,
-        pay_inapp: inapp, price_cents, currency: 'eur',
-        price: free ? null : (inapp ? fmtEur(price_cents, 'eur') : (m.querySelector('#shPrice').value.trim() || null)),
+        pay_inapp: !free, price_cents, currency: 'eur',
+        price: free ? null : fmtEur(price_cents, 'eur'),
         description: m.querySelector('#shDesc').value.trim() || null,
         image_url, file_url,
-        buy_url: (!free && payMode === 'ext') ? (m.querySelector('#shBuy').value.trim() || null) : null,
+        buy_url: null,
         event_date: type === 'ticket' && m.querySelector('#shEvDate').value ? new Date(m.querySelector('#shEvDate').value).toISOString() : null,
         event_place: type === 'ticket' ? (m.querySelector('#shEvPlace').value.trim() || null) : null,
       };
