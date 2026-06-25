@@ -4143,7 +4143,16 @@ async function loadProfileEvents(userId, container) {
    Cobro DENTRO de UnderBro con Stripe (UnderBro se lleva comisión) o, como
    alternativa, enlace externo del artista; descarga directa si es gratis.
    ======================================================================= */
-const SHOP_TYPES = { beat: { label: 'Beat / pack', icon: 'i-music' }, merch: { label: 'Merch', icon: 'i-files' }, ticket: { label: 'Entrada', icon: 'i-calendar' } };
+const SHOP_TYPES = {
+  beat: { label: 'Beat / Pack', icon: 'i-music' },
+  feat: { label: 'Colaboración / FT', icon: 'i-people' },
+  service: { label: 'Servicio (mezcla, master…)', icon: 'i-mixer' },
+  merch: { label: 'Merch', icon: 'i-files' },
+  ticket: { label: 'Entrada / Evento', icon: 'i-calendar' },
+  other: { label: 'Otro', icon: 'i-cart' },
+};
+// categorías digitales (se entregan con archivo descargable)
+const SHOP_DIGITAL = ['beat', 'feat', 'service', 'other'];
 
 // ---- Pagos in-app (Stripe Connect) ----
 async function payAuthHeaders() {
@@ -4267,6 +4276,7 @@ function shopProductCard(p, isMe, refresh) {
   const free = p.is_free && p.file_url;
   const inapp = !p.is_free && p.pay_inapp && p.price_cents >= 50;
   const cta = p.type === 'ticket' ? 'Conseguir' : 'Comprar';
+  const ship = p.needs_shipping && p.ship_cents > 0;
   const priceTxt = p.is_free ? 'Gratis' : (inapp ? fmtEur(p.price_cents, p.currency) : (p.price || ''));
   const card = el(`
     <div class="shop-card">
@@ -4277,7 +4287,7 @@ function shopProductCard(p, isMe, refresh) {
         ${p.description ? `<div class="shop-desc">${esc(p.description)}</div>` : ''}
         ${inapp ? '<div class="shop-secure"><svg fill="none" stroke="currentColor"><use href="#i-lock"/></svg> Pago seguro en UnderBro</div>' : ''}
         <div class="shop-foot">
-          <span class="shop-price">${esc(priceTxt)}</span>
+          <span class="shop-price">${esc(priceTxt)}${ship ? ' <span class="shop-ship">+ envío</span>' : ''}</span>
           ${free ? `<button class="btn sm primary" data-act="download"><svg fill="none" stroke="#fff"><use href="#i-download"/></svg> Descargar</button>`
                  : (inapp ? `<button class="btn sm primary" data-act="paybuy">${cta}</button>` : '')}
         </div>
@@ -4296,21 +4306,45 @@ function shopPayBar(userId, refresh) {
     const st = await fetchSellerStatus(true);
     let sales = null;
     try {
-      const { data } = await sb.from('shop_orders').select('amount_cents,fee_cents,status').eq('seller_id', userId).eq('status', 'paid');
+      const { data } = await sb.from('shop_orders').select('amount_cents,ship_cents,status').eq('seller_id', userId).eq('status', 'paid');
       sales = data || [];
     } catch (_) {}
-    const net = (sales || []).reduce((s, o) => s + (o.amount_cents - (o.fee_cents || 0)), 0);
+    const net = (sales || []).reduce((s, o) => s + (o.amount_cents || 0) + (o.ship_cents || 0), 0);
     const count = (sales || []).length;
     if (!st.connected) {
-      bar.innerHTML = `<div class="spb-line"><span class="spb-ic">🛍️</span><div class="spb-body"><b>Crea tu tienda en UnderBro</b><span>Vende beats, packs y entradas con cobro seguro con tarjeta. Recibes el 90% de cada venta (UnderBro retiene un 10%).</span></div></div><button class="btn sm primary" id="spbConnect">Crear tienda</button>`;
+      bar.innerHTML = `<div class="spb-line"><span class="spb-ic">🛍️</span><div class="spb-body"><b>Crea tu tienda en UnderBro</b><span>Vende beats, packs, servicios, merch y entradas con cobro seguro con tarjeta.</span></div></div><button class="btn sm primary" id="spbConnect">Crear tienda</button>`;
     } else if (!st.ready) {
       bar.innerHTML = `<div class="spb-line"><span class="spb-ic">⏳</span><div class="spb-body"><b>Verificación en curso</b><span>Stripe está revisando tus datos. Completa el alta si quedó algo pendiente.</span></div></div><button class="btn sm ghost" id="spbConnect">Continuar alta</button>`;
     } else {
-      bar.innerHTML = `<div class="spb-line"><span class="spb-ic">✅</span><div class="spb-body"><b>Cobros activados</b><span>${count} venta${count === 1 ? '' : 's'} · ${esc(fmtEur(net, 'eur'))} netos para ti</span></div></div><button class="btn sm ghost" id="spbConnect">Gestionar</button>`;
+      bar.innerHTML = `<div class="spb-line"><span class="spb-ic">✅</span><div class="spb-body"><b>Tienda activa</b><span>${count} venta${count === 1 ? '' : 's'} · ${esc(fmtEur(net, 'eur'))} ingresados</span></div></div><div class="spb-actions"><button class="btn sm primary" id="spbSales">Ventas</button><button class="btn sm ghost" id="spbConnect">Gestionar</button></div>`;
     }
     bar.querySelector('#spbConnect')?.addEventListener('click', (e) => startSellerConnect(e.currentTarget));
+    bar.querySelector('#spbSales')?.addEventListener('click', () => openSellerSales(userId));
   })();
   return bar;
+}
+
+// Lista de ventas del artista (con dirección de envío para el merch)
+async function openSellerSales(userId) {
+  const m = openModal(`<div class="modal-head"><h3>Mis ventas</h3><button class="close">&times;</button></div><div class="modal-body" id="salesBody"><div class="loading" style="padding:24px"><div class="spinner"></div></div></div>`);
+  const box = m.querySelector('#salesBody');
+  let rows = [];
+  try {
+    const { data } = await sb.from('shop_orders')
+      .select('title,type,amount_cents,ship_cents,currency,buyer_email,ship_addr,paid_at')
+      .eq('seller_id', userId).eq('status', 'paid').order('paid_at', { ascending: false }).limit(100);
+    rows = data || [];
+  } catch (_) {}
+  if (!rows.length) { box.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-cart"/></svg><p>Aún no tienes ventas. Cuando alguien compre, aparecerá aquí (con la dirección si es un envío).</p></div>`; return; }
+  box.innerHTML = rows.map(o => {
+    const total = (o.amount_cents || 0) + (o.ship_cents || 0);
+    const tlabel = (SHOP_TYPES[o.type] || SHOP_TYPES.other).label;
+    return `<div class="sale-row">
+      <div class="sale-top"><b>${esc(o.title || 'Producto')}</b><span class="sale-amt">${esc(fmtEur(total, o.currency))}</span></div>
+      <div class="sale-meta">${esc(tlabel)} · ${o.paid_at ? esc(new Date(o.paid_at).toLocaleDateString('es-ES')) : ''}${o.buyer_email ? ' · ' + esc(o.buyer_email) : ''}</div>
+      ${o.ship_addr ? `<div class="sale-ship"><svg fill="none" stroke="currentColor"><use href="#i-files"/></svg> Enviar a: ${esc(o.ship_addr)}</div>` : ''}
+    </div>`;
+  }).join('');
 }
 
 async function openShopEdit(p, userId, onSaved) {
@@ -4318,8 +4352,9 @@ async function openShopEdit(p, userId, onSaved) {
   const m = openModal(`
     <div class="modal-head"><h3>${edit ? 'Editar producto' : 'Nuevo producto'}</h3><button class="close">&times;</button></div>
     <div class="modal-body">
-      <label class="pk-l">Tipo</label>
-      <div class="seg" id="shType">${Object.entries(SHOP_TYPES).map(([k, v]) => `<button data-ty="${k}" class="${(p.type || 'beat') === k ? 'on' : ''}">${esc(v.label)}</button>`).join('')}</div>
+      <div class="field"><label>Categoría</label>
+        <select id="shCat" class="pk-select">${Object.entries(SHOP_TYPES).map(([k, v]) => `<option value="${k}" ${(p.type || 'beat') === k ? 'selected' : ''}>${esc(v.label)}</option>`).join('')}</select>
+      </div>
       <div class="field"><label>Imagen</label>
         <div class="cover-pick" id="shDz"><div class="cover-prev" id="shPrev">${p.image_url ? `<img src="${esc(czUrl(p.image_url))}" alt="">` : `<svg width="24" height="24" fill="none" stroke="currentColor"><use href="#i-image"/></svg>`}</div><div class="cover-pick-txt"><b>Foto del producto</b><span>cuadrada, JPG/PNG/WebP</span></div></div>
         <input type="file" id="shImg" accept="image/*" hidden />
@@ -4327,11 +4362,15 @@ async function openShopEdit(p, userId, onSaved) {
       <div class="field"><label>Título</label><input type="text" id="shTitle" maxlength="80" value="${esc(p.title || '')}" placeholder="Ej: Pack de beats Vol.1" /></div>
       <div class="field"><label class="pk-tg" style="font-weight:600"><input type="checkbox" id="shFree" style="width:auto" ${p.is_free ? 'checked' : ''}/> <span>Es <b>gratis</b> (descarga directa)</span></label></div>
       <div class="field"><label>Descripción</label><textarea id="shDesc" maxlength="400" rows="2" placeholder="Detalles del producto…">${esc(p.description || '')}</textarea></div>
-      <div class="field" id="shEurRow"><label>Precio (€)</label><input type="number" id="shPriceEur" min="0.50" step="0.01" inputmode="decimal" value="${p.price_cents ? (p.price_cents / 100) : ''}" placeholder="9,99" /><span class="pk-hint">Cobro seguro con tarjeta dentro de UnderBro. Tú recibes el 90%; UnderBro retiene un 10%.</span></div>
+      <div class="field" id="shEurRow"><label>Precio (€)</label><input type="number" id="shPriceEur" min="0.50" step="0.01" inputmode="decimal" value="${p.price_cents ? (p.price_cents / 100) : ''}" placeholder="9,99" /><span class="pk-hint">Cobro seguro con tarjeta dentro de UnderBro.</span></div>
       <div class="pk-warn" id="shConnNote" style="display:none">Para vender necesitas tu tienda activa: pulsa <b>“Crear tienda”</b> arriba para activar los cobros.</div>
       <div class="field" id="shFileRow"><label>Archivo a entregar</label>
         <div class="cover-pick" id="shFileDz"><div class="cover-pick-txt"><b id="shFileName">${p.file_url ? 'Archivo subido ✓' : 'Subir archivo (zip, mp3, wav…)'}</b><span>se entrega tras el pago / al pulsar “Descargar”</span></div></div>
         <input type="file" id="shFile" hidden />
+      </div>
+      <div id="shShipRow" style="display:none">
+        <div class="field"><label class="pk-tg" style="font-weight:600"><input type="checkbox" id="shShip" style="width:auto" ${p.needs_shipping ? 'checked' : ''}/> <span>Requiere <b>envío</b> (producto físico)</span></label></div>
+        <div class="field" id="shShipCostRow"><label>Coste de envío (€)</label><input type="number" id="shShipEur" min="0" step="0.01" inputmode="decimal" value="${p.ship_cents ? (p.ship_cents / 100) : ''}" placeholder="3,99" /><span class="pk-hint">Se pide la dirección del comprador al pagar y la verás en “Ventas” para enviar el pedido.</span></div>
       </div>
       <div class="pk-row2" id="shEvRow" style="${p.type === 'ticket' ? '' : 'display:none'}">
         <div><label class="pk-l">Fecha (entrada)</label><input type="datetime-local" id="shEvDate" value="${p.event_date ? new Date(p.event_date).toISOString().slice(0, 16) : ''}" /></div>
@@ -4346,12 +4385,15 @@ async function openShopEdit(p, userId, onSaved) {
     const free = m.querySelector('#shFree').checked;
     m.querySelector('#shEurRow').style.display = free ? 'none' : '';
     m.querySelector('#shConnNote').style.display = (!free && _sellerStatus && !_sellerStatus.ready) ? '' : 'none';
-    // entrega de archivo: beats/packs (gratis o de pago)
-    m.querySelector('#shFileRow').style.display = (type === 'beat') ? '' : 'none';
+    m.querySelector('#shFileRow').style.display = SHOP_DIGITAL.includes(type) ? '' : 'none';
+    const merch = type === 'merch';
+    m.querySelector('#shShipRow').style.display = merch ? '' : 'none';
+    m.querySelector('#shShipCostRow').style.display = (merch && m.querySelector('#shShip').checked) ? '' : 'none';
     m.querySelector('#shEvRow').style.display = type === 'ticket' ? '' : 'none';
   };
-  m.querySelectorAll('#shType button').forEach(b => b.onclick = () => { type = b.dataset.ty; m.querySelectorAll('#shType button').forEach(x => x.classList.toggle('on', x === b)); syncRows(); });
+  m.querySelector('#shCat').onchange = (e) => { type = e.target.value; syncRows(); };
   m.querySelector('#shFree').onchange = syncRows;
+  m.querySelector('#shShip').onchange = syncRows;
   syncRows();
   fetchSellerStatus().then(() => syncRows()); // refresca el aviso de “crear tienda”
   m.querySelector('#shDz').onclick = () => m.querySelector('#shImg').click();
@@ -4376,9 +4418,13 @@ async function openShopEdit(p, userId, onSaved) {
         if (!(eur >= 0.5)) { msg.className = 'auth-msg error'; msg.textContent = 'Pon un precio de al menos 0,50 €.'; btn.disabled = false; btn.textContent = edit ? 'Guardar cambios' : 'Publicar producto'; return; }
         price_cents = Math.round(eur * 100);
       }
+      const needsShip = type === 'merch' && m.querySelector('#shShip').checked;
+      let ship_cents = null;
+      if (needsShip) { const se = parseFloat(String(m.querySelector('#shShipEur').value || '').replace(',', '.')); ship_cents = (Number.isFinite(se) && se > 0) ? Math.round(se * 100) : 0; }
       const row = {
         user_id: userId, type, title, is_free: free,
         pay_inapp: !free, price_cents, currency: 'eur',
+        needs_shipping: needsShip, ship_cents,
         price: free ? null : fmtEur(price_cents, 'eur'),
         description: m.querySelector('#shDesc').value.trim() || null,
         image_url, file_url,

@@ -28,10 +28,18 @@ async function fulfill(sessionId) {
   if (!o || o.status === 'paid') return; // idempotente
   const token = crypto.randomBytes(18).toString('hex');
   const ticket = 'UB-' + crypto.randomBytes(4).toString('hex').toUpperCase();
+  // dirección de envío (si el comprador la introdujo) para que el vendedor pueda enviar
+  let ship = null;
+  const sd = s.shipping_details || (s.collected_information && s.collected_information.shipping_details);
+  if (sd && sd.address) {
+    const a = sd.address;
+    ship = [sd.name, a.line1, a.line2, [a.postal_code, a.city].filter(Boolean).join(' '), a.state, a.country]
+      .filter(Boolean).join(', ');
+  }
   await sbAdmin(`shop_orders?id=eq.${orderId}`, { method: 'PATCH', prefer: 'return=minimal', body: {
     status: 'paid', paid_at: new Date().toISOString(),
     stripe_payment_intent: s.payment_intent || null,
-    download_token: token, ticket_code: ticket,
+    download_token: token, ticket_code: ticket, ship_addr: ship,
   }});
 }
 

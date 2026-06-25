@@ -22,35 +22,47 @@ module.exports = async (req, res) => {
     const seller = sRows && sRows[0];
     if (!seller || !seller.stripe_account_id || !seller.stripe_ready) return json(res, 400, { error: 'seller_not_ready' });
 
-    const amount = p.price_cents;
-    const fee = Math.max(0, Math.round(amount * FEE_BPS / 10000));
+    const cur = p.currency || 'eur';
+    const amount = p.price_cents;                                   // precio del producto (lo recibe el vendedor)
+    const fee = Math.max(0, Math.round(amount * FEE_BPS / 10000));  // gastos de gestión (los paga el comprador, los recibe UnderBro)
+    const needsShip = !!p.needs_shipping && p.ship_cents > 0;
+    const shipCents = needsShip ? p.ship_cents : null;
 
     const ord = await sbAdmin('shop_orders', { method: 'POST', body: {
       product_id: p.id, seller_id: p.user_id, buyer_id: user.id, buyer_email: user.email || null,
-      title: p.title, type: p.type, amount_cents: amount, fee_cents: fee, currency: p.currency || 'eur', status: 'pending',
+      title: p.title, type: p.type, amount_cents: amount, fee_cents: fee, ship_cents: shipCents, currency: cur, status: 'pending',
     }});
     const order = Array.isArray(ord) ? ord[0] : ord;
 
-    const session = await stripe('checkout/sessions', {
+    const sellerName = (seller.display_name || seller.username || 'UnderBro');
+    const lineItems = {
+      0: { quantity: 1, price_data: { currency: cur, unit_amount: amount,
+        product_data: { name: (p.title || 'Producto').slice(0, 120), description: (sellerName + ' · UnderBro').slice(0, 200) } } },
+      1: { quantity: 1, price_data: { currency: cur, unit_amount: fee,
+        product_data: { name: 'Gastos de gestión' } } },
+    };
+
+    const params = {
       mode: 'payment',
       success_url: `${APP_URL}/?pay=ok&sid={CHECKOUT_SESSION_ID}`,
       cancel_url: `${APP_URL}/?pay=cancel`,
       customer_email: user.email || undefined,
-      line_items: { 0: {
-        quantity: 1,
-        price_data: {
-          currency: p.currency || 'eur',
-          unit_amount: amount,
-          product_data: { name: (p.title || 'Producto').slice(0, 120), description: ((seller.display_name || seller.username || 'UnderBro') + ' · UnderBro').slice(0, 200) },
-        },
-      }},
+      line_items: lineItems,
       payment_intent_data: {
-        application_fee_amount: fee,
-        transfer_data: { destination: seller.stripe_account_id },
+        application_fee_amount: fee,                                // UnderBro se queda exactamente los gastos de gestión
+        transfer_data: { destination: seller.stripe_account_id },   // el resto (producto + envío) va al vendedor
         metadata: { order_id: order.id, product_id: p.id, seller_id: p.user_id, buyer_id: user.id },
       },
       metadata: { order_id: order.id, product_id: p.id },
-    });
+    };
+    if (needsShip) {
+      params.shipping_address_collection = { allowed_countries: { 0: 'ES', 1: 'PT', 2: 'FR', 3: 'IT', 4: 'DE', 5: 'GB', 6: 'US', 7: 'MX', 8: 'AR' } };
+      params.shipping_options = { 0: { shipping_rate_data: {
+        type: 'fixed_amount', display_name: 'Envío',
+        fixed_amount: { amount: shipCents, currency: cur },
+      } } };
+    }
+    const session = await stripe('checkout/sessions', params);
 
     await sbAdmin(`shop_orders?id=eq.${order.id}`, { method: 'PATCH', prefer: 'return=minimal', body: { stripe_session_id: session.id } });
     return json(res, 200, { url: session.url });
