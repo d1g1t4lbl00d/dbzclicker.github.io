@@ -4206,7 +4206,7 @@ async function buyInApp(p, btn) {
     const r = await fetch('/api/pay/checkout', { method: 'POST', headers: h, body: JSON.stringify({ product_id: p.id }) });
     const d = await r.json();
     if (d && d.url) { location.href = d.url; return; }
-    const map = { seller_not_ready: 'El vendedor aún no tiene los cobros activados.', own_product: 'No puedes comprar tu propio producto.', not_payable: 'Producto no disponible para compra.' };
+    const map = { seller_not_ready: 'El vendedor aún no tiene los cobros activados.', own_product: 'No puedes comprar tu propio producto.', not_payable: 'Producto no disponible para compra.', sold_out: 'Producto agotado.' };
     toast(map[d.error] || 'No se pudo iniciar el pago.');
   } catch (e) { toast('Error de conexión'); }
   if (btn) { btn.disabled = false; btn.innerHTML = btn.dataset.t || 'Comprar'; }
@@ -4276,33 +4276,47 @@ async function loadProfileShop(userId, container, isMe) {
       const k = SHOP_KINDS[kind];
       container.appendChild(el(`<div class="shop-section-h"><span>${k.emoji} ${k.label}</span></div>`));
       const grid = el(`<div class="shop-grid"></div>`);
-      list.forEach(p => grid.appendChild(shopProductCard(p, isMe, refresh)));
+      list.forEach(p => grid.appendChild(shopProductCard(p, isMe, refresh, soldMap[p.id] || 0)));
       container.appendChild(grid);
     });
   };
+  // recuento de ventas por producto (solo para el dueño, para mostrar “N vendidos”)
+  let soldMap = {};
+  if (isMe) {
+    try {
+      const { data } = await sb.from('shop_orders').select('product_id').eq('seller_id', userId).eq('status', 'paid');
+      (data || []).forEach(o => { if (o.product_id) soldMap[o.product_id] = (soldMap[o.product_id] || 0) + 1; });
+    } catch (_) {}
+  }
   render();
 }
 
-function shopProductCard(p, isMe, refresh) {
+function shopProductCard(p, isMe, refresh, sold) {
+  sold = sold || 0;
   const t = SHOP_TYPES[p.type] || SHOP_TYPES.merch;
   const img = p.image_url ? czUrl(p.image_url) : '';
-  const free = p.is_free && p.file_url;
-  const inapp = !p.is_free && p.pay_inapp && p.price_cents >= 50;
+  const soldOut = p.stock != null && p.stock <= 0;
+  const free = p.is_free && p.file_url && !soldOut;
+  const inapp = !p.is_free && p.pay_inapp && p.price_cents >= 50 && !soldOut;
   const cta = p.type === 'ticket' ? 'Conseguir' : 'Comprar';
   const ship = p.needs_shipping && p.ship_cents > 0;
-  const priceTxt = p.is_free ? 'Gratis' : (inapp ? fmtEur(p.price_cents, p.currency) : (p.price || ''));
+  const priceTxt = p.is_free ? 'Gratis' : (!p.is_free && p.price_cents >= 50 ? fmtEur(p.price_cents, p.currency) : (p.price || ''));
+  const stockTag = soldOut ? '<span class="shop-stock out">Agotado</span>'
+    : (p.stock != null ? `<span class="shop-stock">Quedan ${p.stock}</span>` : '');
   const card = el(`
-    <div class="shop-card">
-      <div class="shop-cover" ${img ? `style="background-image:url('${esc(img)}')"` : ''}>${img ? '' : `<svg fill="none" stroke="#fff"><use href="#${t.icon}"/></svg>`}<span class="shop-type">${esc(t.label)}</span>${isMe ? '<button class="shop-edit" data-act="edit" aria-label="Editar">⋯</button>' : ''}</div>
+    <div class="shop-card${soldOut ? ' is-sold' : ''}">
+      <div class="shop-cover" ${img ? `style="background-image:url('${esc(img)}')"` : ''}>${img ? '' : `<svg fill="none" stroke="#fff"><use href="#${t.icon}"/></svg>`}<span class="shop-type">${esc(t.label)}</span>${soldOut ? '<span class="shop-soldbadge">AGOTADO</span>' : ''}${isMe ? '<button class="shop-edit" data-act="edit" aria-label="Editar">⋯</button>' : ''}</div>
       <div class="shop-body">
         <div class="shop-title">${esc(p.title || '')}</div>
         ${p.type === 'ticket' && p.event_date ? `<div class="shop-meta">${esc(schedLabel ? schedLabel(p.event_date) : new Date(p.event_date).toLocaleDateString('es-ES'))}${p.event_place ? ' · ' + esc(p.event_place) : ''}</div>` : ''}
         ${p.description ? `<div class="shop-desc">${esc(p.description)}</div>` : ''}
+        ${stockTag}${isMe && sold > 0 ? `<span class="shop-sold">${sold} vendido${sold === 1 ? '' : 's'}</span>` : ''}
         ${inapp ? '<div class="shop-secure"><svg fill="none" stroke="currentColor"><use href="#i-lock"/></svg> Pago seguro en UnderBro</div>' : ''}
         <div class="shop-foot">
           <span class="shop-price">${esc(priceTxt)}${ship ? ' <span class="shop-ship">+ envío</span>' : ''}</span>
-          ${free ? `<button class="btn sm primary" data-act="download"><svg fill="none" stroke="#fff"><use href="#i-download"/></svg> Descargar</button>`
-                 : (inapp ? `<button class="btn sm primary" data-act="paybuy">${cta}</button>` : '')}
+          ${soldOut ? '<button class="btn sm" disabled>Agotado</button>'
+            : (free ? `<button class="btn sm primary" data-act="download"><svg fill="none" stroke="#fff"><use href="#i-download"/></svg> Descargar</button>`
+                 : (inapp ? `<button class="btn sm primary" data-act="paybuy">${cta}</button>` : ''))}
         </div>
       </div>
     </div>`);
@@ -4355,7 +4369,7 @@ async function openWallet(userId) {
     </div>
     <p class="wallet-note">Tus ventas pasan a “Disponible” y Stripe las ingresa en tu cuenta bancaria automáticamente. En el panel de Stripe puedes ver/cambiar tu banco y los pagos.</p>
     <button class="btn primary" id="wSales"><svg fill="none" stroke="#fff"><use href="#i-cart"/></svg> Mis ventas</button>
-    <button class="btn" id="wBank"><svg fill="none" stroke="currentColor"><use href="#i-download"/></svg> Retirar / Panel de cobros</button>
+    <button class="btn" id="wBank"><svg fill="none" stroke="currentColor"><use href="#i-download"/></svg> Pagos, banco y retiradas</button>
     <div class="auth-msg" id="wMsg"></div>`;
   m.querySelector('#wSales').onclick = () => { m.remove(); openSellerSales(userId); };
   m.querySelector('#wBank').onclick = async (e) => {
@@ -4366,7 +4380,7 @@ async function openWallet(userId) {
       if (d && d.url) { window.open(d.url, '_blank', 'noopener'); }
       else m.querySelector('#wMsg').textContent = 'No se pudo abrir el panel.';
     } catch (_) { m.querySelector('#wMsg').textContent = 'Error de conexión.'; }
-    b.disabled = false; b.innerHTML = '<svg fill="none" stroke="currentColor"><use href="#i-download"/></svg> Retirar / Panel de cobros';
+    b.disabled = false; b.innerHTML = '<svg fill="none" stroke="currentColor"><use href="#i-download"/></svg> Pagos, banco y retiradas';
   };
 }
 
@@ -4424,6 +4438,7 @@ async function openShopEdit(p, userId, onSaved) {
         <div><label class="pk-l">Fecha (entrada)</label><input type="datetime-local" id="shEvDate" value="${p.event_date ? new Date(p.event_date).toISOString().slice(0, 16) : ''}" /></div>
         <div><label class="pk-l">Lugar</label><input type="text" id="shEvPlace" maxlength="80" value="${esc(p.event_place || '')}" placeholder="Sala, ciudad" /></div>
       </div>
+      <div class="field" id="shStockRow"><label>Unidades disponibles</label><input type="number" id="shStock" min="0" step="1" inputmode="numeric" value="${p.stock != null ? p.stock : ''}" placeholder="Vacío = ilimitado" /><span class="pk-hint">Pon un número para limitar (ej. <b>1</b> para algo único). Al agotarse se marca <b>“Agotado”</b> y deja de venderse.</span></div>
       <button class="btn primary" id="shSave">${edit ? 'Guardar cambios' : 'Publicar producto'}</button>
       ${edit ? '<button class="btn danger-btn" id="shDel"><svg fill="none" stroke="#fff"><use href="#i-trash"/></svg> Eliminar</button>' : ''}
       <div class="auth-msg" id="shMsg"></div>
@@ -4461,27 +4476,34 @@ async function openShopEdit(p, userId, onSaved) {
   m.querySelector('#shSave').onclick = async () => {
     const btn = m.querySelector('#shSave'); const msg = m.querySelector('#shMsg');
     const title = m.querySelector('#shTitle').value.trim();
-    if (!title) { msg.className = 'auth-msg error'; msg.textContent = 'Ponle un título.'; return; }
+    const physical = kind === 'physical';
+    const free = !physical && m.querySelector('#shFree').checked;
+    const hasFile = !!dataFile || !!p.file_url;
+    // ---- validación: un producto debe tener contenido real ----
+    if (title.length < 2) { msg.className = 'auth-msg error'; msg.textContent = 'Ponle un título (mínimo 2 caracteres).'; return; }
+    let price_cents = null;
+    if (!free) {
+      const eur = parseFloat(String(m.querySelector('#shPriceEur').value || '').replace(',', '.'));
+      if (!(eur >= 0.5)) { msg.className = 'auth-msg error'; msg.textContent = 'Pon un precio de al menos 0,50 €.'; return; }
+      price_cents = Math.round(eur * 100);
+    }
+    if (free && !hasFile) { msg.className = 'auth-msg error'; msg.textContent = 'Sube el archivo del producto gratuito (o ponle precio).'; return; }
+    // digital descargable de pago: recomendable archivo, pero servicios/feats se entregan por acuerdo → no obligatorio
+    let stock = null;
+    const sv = m.querySelector('#shStock').value.trim();
+    if (sv !== '') { const n = parseInt(sv, 10); if (!Number.isFinite(n) || n < 0) { msg.className = 'auth-msg error'; msg.textContent = 'Las unidades deben ser 0 o más (vacío = ilimitado).'; return; } stock = n; }
+    let ship_cents = null;
+    if (physical) { const se = parseFloat(String(m.querySelector('#shShipEur').value || '').replace(',', '.')); ship_cents = (Number.isFinite(se) && se > 0) ? Math.round(se * 100) : 0; }
     btn.disabled = true; btn.textContent = 'Guardando…';
     try {
       const stamp = Date.now();
       let image_url = p.image_url || null, file_url = p.file_url || null;
       if (imgFile) { const path = `${userId}/shop-${stamp}`; const up = await sb.storage.from('covers').upload(path, imgFile, { contentType: imgFile.type, upsert: true }); if (!up.error) image_url = sb.storage.from('covers').getPublicUrl(path).data.publicUrl; }
-      if (dataFile) { const ext = (dataFile.name.split('.').pop() || 'zip').toLowerCase(); const path = `${userId}/shopfile-${stamp}.${ext}`; const up = await sb.storage.from('tracks').upload(path, dataFile, { contentType: dataFile.type || 'application/octet-stream', upsert: true }); if (!up.error) file_url = sb.storage.from('tracks').getPublicUrl(path).data.publicUrl; }
-      const physical = kind === 'physical';
-      const free = !physical && m.querySelector('#shFree').checked;
-      let price_cents = null;
-      if (!free) {
-        const eur = parseFloat(String(m.querySelector('#shPriceEur').value || '').replace(',', '.'));
-        if (!(eur >= 0.5)) { msg.className = 'auth-msg error'; msg.textContent = 'Pon un precio de al menos 0,50 €.'; btn.disabled = false; btn.textContent = edit ? 'Guardar cambios' : 'Publicar producto'; return; }
-        price_cents = Math.round(eur * 100);
-      }
-      let ship_cents = null;
-      if (physical) { const se = parseFloat(String(m.querySelector('#shShipEur').value || '').replace(',', '.')); ship_cents = (Number.isFinite(se) && se > 0) ? Math.round(se * 100) : 0; }
+      if (dataFile) { const ext = (dataFile.name.split('.').pop() || 'zip').toLowerCase(); const rand = Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 12); const path = `${userId}/shopfile-${stamp}-${rand}.${ext}`; const up = await sb.storage.from('tracks').upload(path, dataFile, { contentType: dataFile.type || 'application/octet-stream', upsert: true }); if (!up.error) file_url = sb.storage.from('tracks').getPublicUrl(path).data.publicUrl; }
       const row = {
         user_id: userId, kind, type, title, is_free: free,
         pay_inapp: !free, price_cents, currency: 'eur',
-        needs_shipping: physical, ship_cents,
+        needs_shipping: physical, ship_cents, stock,
         price: free ? null : fmtEur(price_cents, 'eur'),
         description: m.querySelector('#shDesc').value.trim() || null,
         image_url, file_url,

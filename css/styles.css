@@ -3316,6 +3316,11 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
 .shop-paybar .btn.sm { white-space: nowrap; }
 .shop-paybar .spb-actions { display: flex; gap: 6px; }
 .shop-ship { font-size: 11px; font-weight: 700; color: var(--ink-soft); }
+.shop-card.is-sold .shop-cover { filter: grayscale(.7) brightness(.85); }
+.shop-soldbadge { position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%) rotate(-8deg); font-size: 15px; font-weight: 900; letter-spacing: 1px; color: #fff; background: rgba(220,40,60,.92); padding: 6px 14px; border-radius: 8px; box-shadow: 0 4px 14px rgba(0,0,0,.35); }
+.shop-stock { display: inline-block; font-size: 10.5px; font-weight: 800; color: var(--ink-soft); }
+.shop-stock.out { color: #d8283c; }
+.shop-sold { display: inline-block; margin-left: 6px; font-size: 10.5px; font-weight: 800; color: #1f9d57; }
 
 /* select del editor de producto */
 .pk-select { width: 100%; padding: 11px 12px; font-size: 14px; font-weight: 600; color: var(--ink); background: var(--panel); border: 1px solid var(--line); border-radius: 12px; -webkit-appearance: none; appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%238390a8' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; padding-right: 36px; }

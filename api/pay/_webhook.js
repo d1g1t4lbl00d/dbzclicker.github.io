@@ -41,6 +41,11 @@ async function fulfill(sessionId) {
     stripe_payment_intent: s.payment_intent || null,
     download_token: token, ticket_code: ticket, ship_addr: ship,
   }});
+  // descuenta stock (no-op si el producto es de unidades ilimitadas)
+  const productId = s.metadata && s.metadata.product_id;
+  if (productId) {
+    await sbAdmin('rpc/shop_decrement_stock', { method: 'POST', prefer: 'return=minimal', body: { p_id: productId } }).catch(() => {});
+  }
 }
 
 module.exports = async (req, res) => {
