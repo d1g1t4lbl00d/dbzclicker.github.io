@@ -42,14 +42,16 @@ function encodeForm(obj, prefix, out) {
   }
   return out;
 }
-async function stripe(path, params, method) {
+async function stripe(path, params, method, opts) {
   if (!STRIPE_SECRET) { const e = new Error('stripe_not_configured'); e.code = 'no_key'; throw e; }
+  const headers = {
+    Authorization: 'Bearer ' + STRIPE_SECRET,
+    'Content-Type': 'application/x-www-form-urlencoded',
+  };
+  if (opts && opts.account) headers['Stripe-Account'] = opts.account; // actuar en nombre de la cuenta conectada
   const r = await fetch('https://api.stripe.com/v1/' + path, {
     method: method || 'POST',
-    headers: {
-      Authorization: 'Bearer ' + STRIPE_SECRET,
-      'Content-Type': 'application/x-www-form-urlencoded',
-    },
+    headers,
     body: params ? encodeForm(params).join('&') : undefined,
   });
   const d = await r.json().catch(() => ({}));

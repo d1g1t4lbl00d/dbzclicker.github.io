@@ -4147,12 +4147,18 @@ const SHOP_TYPES = {
   beat: { label: 'Beat / Pack', icon: 'i-music' },
   feat: { label: 'Colaboración / FT', icon: 'i-people' },
   service: { label: 'Servicio (mezcla, master…)', icon: 'i-mixer' },
-  merch: { label: 'Merch', icon: 'i-files' },
   ticket: { label: 'Entrada / Evento', icon: 'i-calendar' },
+  merch: { label: 'Merch', icon: 'i-files' },
   other: { label: 'Otro', icon: 'i-cart' },
 };
-// categorías digitales (se entregan con archivo descargable)
-const SHOP_DIGITAL = ['beat', 'feat', 'service', 'other'];
+// Dos secciones mayores: Digital (pago + descarga directa) y Físico (con envío)
+const SHOP_KINDS = {
+  digital: { label: 'Digital', emoji: '💿', cats: ['beat', 'feat', 'service', 'ticket', 'other'] },
+  physical: { label: 'Físico', emoji: '📦', cats: ['merch', 'other'] },
+};
+function shopKindOf(p) { return p.kind || (p.needs_shipping || p.type === 'merch' ? 'physical' : 'digital'); }
+// categorías digitales que se entregan con archivo descargable
+const SHOP_DIGITAL_FILE = ['beat', 'feat', 'service', 'other'];
 
 // ---- Pagos in-app (Stripe Connect) ----
 async function payAuthHeaders() {
@@ -4260,12 +4266,19 @@ async function loadProfileShop(userId, container, isMe) {
       container.appendChild(add);
     }
     if (!items.length) {
-      container.appendChild(el(`<div class="empty"><svg fill="none"><use href="#i-bookmark"/></svg><p>${isMe ? 'Tu tienda está vacía. Añade beats, merch o entradas.' : 'Este artista aún no tiene tienda.'}</p></div>`));
+      container.appendChild(el(`<div class="empty"><svg fill="none"><use href="#i-cart"/></svg><p>${isMe ? 'Tu tienda está vacía. Añade productos digitales (beats, packs, servicios, entradas) o físicos (merch).' : 'Este artista aún no tiene tienda.'}</p></div>`));
       return;
     }
-    const grid = el(`<div class="shop-grid"></div>`);
-    items.forEach(p => grid.appendChild(shopProductCard(p, isMe, () => loadProfileShop(userId, container, isMe))));
-    container.appendChild(grid);
+    const refresh = () => loadProfileShop(userId, container, isMe);
+    ['digital', 'physical'].forEach(kind => {
+      const list = items.filter(p => shopKindOf(p) === kind);
+      if (!list.length) return;
+      const k = SHOP_KINDS[kind];
+      container.appendChild(el(`<div class="shop-section-h"><span>${k.emoji} ${k.label}</span></div>`));
+      const grid = el(`<div class="shop-grid"></div>`);
+      list.forEach(p => grid.appendChild(shopProductCard(p, isMe, refresh)));
+      container.appendChild(grid);
+    });
   };
   render();
 }
@@ -4316,12 +4329,45 @@ function shopPayBar(userId, refresh) {
     } else if (!st.ready) {
       bar.innerHTML = `<div class="spb-line"><span class="spb-ic">⏳</span><div class="spb-body"><b>Verificación en curso</b><span>Stripe está revisando tus datos. Completa el alta si quedó algo pendiente.</span></div></div><button class="btn sm ghost" id="spbConnect">Continuar alta</button>`;
     } else {
-      bar.innerHTML = `<div class="spb-line"><span class="spb-ic">✅</span><div class="spb-body"><b>Tienda activa</b><span>${count} venta${count === 1 ? '' : 's'} · ${esc(fmtEur(net, 'eur'))} ingresados</span></div></div><div class="spb-actions"><button class="btn sm primary" id="spbSales">Ventas</button><button class="btn sm ghost" id="spbConnect">Gestionar</button></div>`;
+      bar.innerHTML = `<div class="spb-line"><span class="spb-ic">👛</span><div class="spb-body"><b>Tienda activa</b><span>${count} venta${count === 1 ? '' : 's'} · ${esc(fmtEur(net, 'eur'))} ingresados</span></div></div><div class="spb-actions"><button class="btn sm primary" id="spbWallet">Monedero</button></div>`;
     }
     bar.querySelector('#spbConnect')?.addEventListener('click', (e) => startSellerConnect(e.currentTarget));
-    bar.querySelector('#spbSales')?.addEventListener('click', () => openSellerSales(userId));
+    bar.querySelector('#spbWallet')?.addEventListener('click', () => openWallet(userId));
   })();
   return bar;
+}
+
+// Monedero del artista: saldo, ventas y retirar a su banco (panel Stripe)
+async function openWallet(userId) {
+  const m = openModal(`<div class="modal-head"><h3>👛 Mi monedero</h3><button class="close">&times;</button></div><div class="modal-body" id="walletBody"><div class="loading" style="padding:24px"><div class="spinner"></div></div></div>`);
+  const box = m.querySelector('#walletBody');
+  const h = await payAuthHeaders();
+  let bal = null, sales = [];
+  try { if (h) { const r = await fetch('/api/pay/balance', { headers: h }); bal = await r.json(); } } catch (_) {}
+  try { const { data } = await sb.from('shop_orders').select('amount_cents,ship_cents,status').eq('seller_id', userId).eq('status', 'paid'); sales = data || []; } catch (_) {}
+  const totalIn = sales.reduce((s, o) => s + (o.amount_cents || 0) + (o.ship_cents || 0), 0);
+  const avail = bal && bal.available_cents != null ? bal.available_cents : null;
+  const pend = bal && bal.pending_cents != null ? bal.pending_cents : null;
+  box.innerHTML = `
+    <div class="wallet-bal">
+      <div class="wallet-main"><span class="wallet-lbl">Disponible</span><span class="wallet-amt">${avail != null ? esc(fmtEur(avail, 'eur')) : '—'}</span></div>
+      <div class="wallet-sub"><span>En camino: <b>${pend != null ? esc(fmtEur(pend, 'eur')) : '—'}</b></span><span>${sales.length} venta${sales.length === 1 ? '' : 's'} · ${esc(fmtEur(totalIn, 'eur'))}</span></div>
+    </div>
+    <p class="wallet-note">Tus ventas pasan a “Disponible” y Stripe las ingresa en tu cuenta bancaria automáticamente. En el panel de Stripe puedes ver/cambiar tu banco y los pagos.</p>
+    <button class="btn primary" id="wSales"><svg fill="none" stroke="#fff"><use href="#i-cart"/></svg> Mis ventas</button>
+    <button class="btn" id="wBank"><svg fill="none" stroke="currentColor"><use href="#i-download"/></svg> Retirar / Panel de cobros</button>
+    <div class="auth-msg" id="wMsg"></div>`;
+  m.querySelector('#wSales').onclick = () => { m.remove(); openSellerSales(userId); };
+  m.querySelector('#wBank').onclick = async (e) => {
+    const b = e.currentTarget; b.disabled = true; b.textContent = 'Abriendo Stripe…';
+    try {
+      const r = await fetch('/api/pay/dashboard', { method: 'POST', headers: h });
+      const d = await r.json();
+      if (d && d.url) { window.open(d.url, '_blank', 'noopener'); }
+      else m.querySelector('#wMsg').textContent = 'No se pudo abrir el panel.';
+    } catch (_) { m.querySelector('#wMsg').textContent = 'Error de conexión.'; }
+    b.disabled = false; b.innerHTML = '<svg fill="none" stroke="currentColor"><use href="#i-download"/></svg> Retirar / Panel de cobros';
+  };
 }
 
 // Lista de ventas del artista (con dirección de envío para el merch)
@@ -4352,15 +4398,20 @@ async function openShopEdit(p, userId, onSaved) {
   const m = openModal(`
     <div class="modal-head"><h3>${edit ? 'Editar producto' : 'Nuevo producto'}</h3><button class="close">&times;</button></div>
     <div class="modal-body">
+      <label class="pk-l">¿Qué vendes?</label>
+      <div class="seg seg-kind" id="shKind">
+        <button data-kind="digital">💿 Digital<small>pagas y descargas</small></button>
+        <button data-kind="physical">📦 Físico<small>con envío a casa</small></button>
+      </div>
       <div class="field"><label>Categoría</label>
-        <select id="shCat" class="pk-select">${Object.entries(SHOP_TYPES).map(([k, v]) => `<option value="${k}" ${(p.type || 'beat') === k ? 'selected' : ''}>${esc(v.label)}</option>`).join('')}</select>
+        <select id="shCat" class="pk-select"></select>
       </div>
       <div class="field"><label>Imagen</label>
         <div class="cover-pick" id="shDz"><div class="cover-prev" id="shPrev">${p.image_url ? `<img src="${esc(czUrl(p.image_url))}" alt="">` : `<svg width="24" height="24" fill="none" stroke="currentColor"><use href="#i-image"/></svg>`}</div><div class="cover-pick-txt"><b>Foto del producto</b><span>cuadrada, JPG/PNG/WebP</span></div></div>
         <input type="file" id="shImg" accept="image/*" hidden />
       </div>
       <div class="field"><label>Título</label><input type="text" id="shTitle" maxlength="80" value="${esc(p.title || '')}" placeholder="Ej: Pack de beats Vol.1" /></div>
-      <div class="field"><label class="pk-tg" style="font-weight:600"><input type="checkbox" id="shFree" style="width:auto" ${p.is_free ? 'checked' : ''}/> <span>Es <b>gratis</b> (descarga directa)</span></label></div>
+      <div class="field" id="shFreeRow"><label class="pk-tg" style="font-weight:600"><input type="checkbox" id="shFree" style="width:auto" ${p.is_free ? 'checked' : ''}/> <span>Es <b>gratis</b> (descarga directa)</span></label></div>
       <div class="field"><label>Descripción</label><textarea id="shDesc" maxlength="400" rows="2" placeholder="Detalles del producto…">${esc(p.description || '')}</textarea></div>
       <div class="field" id="shEurRow"><label>Precio (€)</label><input type="number" id="shPriceEur" min="0.50" step="0.01" inputmode="decimal" value="${p.price_cents ? (p.price_cents / 100) : ''}" placeholder="9,99" /><span class="pk-hint">Cobro seguro con tarjeta dentro de UnderBro.</span></div>
       <div class="pk-warn" id="shConnNote" style="display:none">Para vender necesitas tu tienda activa: pulsa <b>“Crear tienda”</b> arriba para activar los cobros.</div>
@@ -4368,10 +4419,7 @@ async function openShopEdit(p, userId, onSaved) {
         <div class="cover-pick" id="shFileDz"><div class="cover-pick-txt"><b id="shFileName">${p.file_url ? 'Archivo subido ✓' : 'Subir archivo (zip, mp3, wav…)'}</b><span>se entrega tras el pago / al pulsar “Descargar”</span></div></div>
         <input type="file" id="shFile" hidden />
       </div>
-      <div id="shShipRow" style="display:none">
-        <div class="field"><label class="pk-tg" style="font-weight:600"><input type="checkbox" id="shShip" style="width:auto" ${p.needs_shipping ? 'checked' : ''}/> <span>Requiere <b>envío</b> (producto físico)</span></label></div>
-        <div class="field" id="shShipCostRow"><label>Coste de envío (€)</label><input type="number" id="shShipEur" min="0" step="0.01" inputmode="decimal" value="${p.ship_cents ? (p.ship_cents / 100) : ''}" placeholder="3,99" /><span class="pk-hint">Se pide la dirección del comprador al pagar y la verás en “Ventas” para enviar el pedido.</span></div>
-      </div>
+      <div class="field" id="shShipRow" style="display:none"><label>Coste de envío (€)</label><input type="number" id="shShipEur" min="0" step="0.01" inputmode="decimal" value="${p.ship_cents != null ? (p.ship_cents / 100) : ''}" placeholder="3,99 (0 = envío gratis)" /><span class="pk-hint">Se pide la dirección del comprador al pagar y la verás en tu <b>Monedero → Ventas</b> para enviar el pedido.</span></div>
       <div class="pk-row2" id="shEvRow" style="${p.type === 'ticket' ? '' : 'display:none'}">
         <div><label class="pk-l">Fecha (entrada)</label><input type="datetime-local" id="shEvDate" value="${p.event_date ? new Date(p.event_date).toISOString().slice(0, 16) : ''}" /></div>
         <div><label class="pk-l">Lugar</label><input type="text" id="shEvPlace" maxlength="80" value="${esc(p.event_place || '')}" placeholder="Sala, ciudad" /></div>
@@ -4380,20 +4428,29 @@ async function openShopEdit(p, userId, onSaved) {
       ${edit ? '<button class="btn danger-btn" id="shDel"><svg fill="none" stroke="#fff"><use href="#i-trash"/></svg> Eliminar</button>' : ''}
       <div class="auth-msg" id="shMsg"></div>
     </div>`);
-  let type = p.type || 'beat', imgFile = null, dataFile = null;
+  let kind = shopKindOf(p), type = p.type || 'beat', imgFile = null, dataFile = null;
+  const catSel = m.querySelector('#shCat');
+  const fillCats = () => {
+    const cats = SHOP_KINDS[kind].cats;
+    if (!cats.includes(type)) type = cats[0];
+    catSel.innerHTML = cats.map(k => `<option value="${k}" ${type === k ? 'selected' : ''}>${esc(SHOP_TYPES[k].label)}</option>`).join('');
+  };
   const syncRows = () => {
     const free = m.querySelector('#shFree').checked;
-    m.querySelector('#shEurRow').style.display = free ? 'none' : '';
-    m.querySelector('#shConnNote').style.display = (!free && _sellerStatus && !_sellerStatus.ready) ? '' : 'none';
-    m.querySelector('#shFileRow').style.display = SHOP_DIGITAL.includes(type) ? '' : 'none';
-    const merch = type === 'merch';
-    m.querySelector('#shShipRow').style.display = merch ? '' : 'none';
-    m.querySelector('#shShipCostRow').style.display = (merch && m.querySelector('#shShip').checked) ? '' : 'none';
+    const physical = kind === 'physical';
+    m.querySelectorAll('#shKind button').forEach(b => b.classList.toggle('on', b.dataset.kind === kind));
+    // gratis solo tiene sentido en digital descargable
+    m.querySelector('#shFreeRow').style.display = physical ? 'none' : '';
+    m.querySelector('#shEurRow').style.display = free && !physical ? 'none' : '';
+    m.querySelector('#shConnNote').style.display = ((physical || !free) && _sellerStatus && !_sellerStatus.ready) ? '' : 'none';
+    m.querySelector('#shFileRow').style.display = (!physical && SHOP_DIGITAL_FILE.includes(type)) ? '' : 'none';
+    m.querySelector('#shShipRow').style.display = physical ? '' : 'none';
     m.querySelector('#shEvRow').style.display = type === 'ticket' ? '' : 'none';
   };
-  m.querySelector('#shCat').onchange = (e) => { type = e.target.value; syncRows(); };
+  m.querySelectorAll('#shKind button').forEach(b => b.onclick = () => { kind = b.dataset.kind; if (kind === 'physical') m.querySelector('#shFree').checked = false; fillCats(); syncRows(); });
+  catSel.onchange = (e) => { type = e.target.value; syncRows(); };
   m.querySelector('#shFree').onchange = syncRows;
-  m.querySelector('#shShip').onchange = syncRows;
+  fillCats();
   syncRows();
   fetchSellerStatus().then(() => syncRows()); // refresca el aviso de “crear tienda”
   m.querySelector('#shDz').onclick = () => m.querySelector('#shImg').click();
@@ -4411,20 +4468,20 @@ async function openShopEdit(p, userId, onSaved) {
       let image_url = p.image_url || null, file_url = p.file_url || null;
       if (imgFile) { const path = `${userId}/shop-${stamp}`; const up = await sb.storage.from('covers').upload(path, imgFile, { contentType: imgFile.type, upsert: true }); if (!up.error) image_url = sb.storage.from('covers').getPublicUrl(path).data.publicUrl; }
       if (dataFile) { const ext = (dataFile.name.split('.').pop() || 'zip').toLowerCase(); const path = `${userId}/shopfile-${stamp}.${ext}`; const up = await sb.storage.from('tracks').upload(path, dataFile, { contentType: dataFile.type || 'application/octet-stream', upsert: true }); if (!up.error) file_url = sb.storage.from('tracks').getPublicUrl(path).data.publicUrl; }
-      const free = m.querySelector('#shFree').checked;
+      const physical = kind === 'physical';
+      const free = !physical && m.querySelector('#shFree').checked;
       let price_cents = null;
       if (!free) {
         const eur = parseFloat(String(m.querySelector('#shPriceEur').value || '').replace(',', '.'));
         if (!(eur >= 0.5)) { msg.className = 'auth-msg error'; msg.textContent = 'Pon un precio de al menos 0,50 €.'; btn.disabled = false; btn.textContent = edit ? 'Guardar cambios' : 'Publicar producto'; return; }
         price_cents = Math.round(eur * 100);
       }
-      const needsShip = type === 'merch' && m.querySelector('#shShip').checked;
       let ship_cents = null;
-      if (needsShip) { const se = parseFloat(String(m.querySelector('#shShipEur').value || '').replace(',', '.')); ship_cents = (Number.isFinite(se) && se > 0) ? Math.round(se * 100) : 0; }
+      if (physical) { const se = parseFloat(String(m.querySelector('#shShipEur').value || '').replace(',', '.')); ship_cents = (Number.isFinite(se) && se > 0) ? Math.round(se * 100) : 0; }
       const row = {
-        user_id: userId, type, title, is_free: free,
+        user_id: userId, kind, type, title, is_free: free,
         pay_inapp: !free, price_cents, currency: 'eur',
-        needs_shipping: needsShip, ship_cents,
+        needs_shipping: physical, ship_cents,
         price: free ? null : fmtEur(price_cents, 'eur'),
         description: m.querySelector('#shDesc').value.trim() || null,
         image_url, file_url,

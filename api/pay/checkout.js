@@ -25,8 +25,8 @@ module.exports = async (req, res) => {
     const cur = p.currency || 'eur';
     const amount = p.price_cents;                                   // precio del producto (lo recibe el vendedor)
     const fee = Math.max(0, Math.round(amount * FEE_BPS / 10000));  // gastos de gestión (los paga el comprador, los recibe UnderBro)
-    const needsShip = !!p.needs_shipping && p.ship_cents > 0;
-    const shipCents = needsShip ? p.ship_cents : null;
+    const needsShip = !!p.needs_shipping;                 // físico: siempre pedimos dirección
+    const shipCents = needsShip ? (p.ship_cents || 0) : null;
 
     const ord = await sbAdmin('shop_orders', { method: 'POST', body: {
       product_id: p.id, seller_id: p.user_id, buyer_id: user.id, buyer_email: user.email || null,
