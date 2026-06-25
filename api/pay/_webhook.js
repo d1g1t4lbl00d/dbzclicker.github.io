@@ -69,7 +69,14 @@ module.exports = async (req, res) => {
       else if (a.id) await sbAdmin(`profiles?stripe_account_id=eq.${a.id}`, { method: 'PATCH', prefer: 'return=minimal', body: { stripe_ready: ready } });
     } else if (evt.type === 'charge.refunded') {
       const pi = evt.data.object && evt.data.object.payment_intent;
-      if (pi) await sbAdmin(`shop_orders?stripe_payment_intent=eq.${pi}`, { method: 'PATCH', prefer: 'return=minimal', body: { status: 'refunded' } });
+      if (pi) {
+        const ords = await sbAdmin(`shop_orders?stripe_payment_intent=eq.${pi}&select=id,product_id,status`).catch(() => null);
+        const o = ords && ords[0];
+        if (o && o.status !== 'refunded') {
+          await sbAdmin(`shop_orders?id=eq.${o.id}`, { method: 'PATCH', prefer: 'return=minimal', body: { status: 'refunded' } });
+          if (o.product_id) await sbAdmin('rpc/shop_increment_stock', { method: 'POST', prefer: 'return=minimal', body: { p_id: o.product_id } }).catch(() => {});
+        }
+      }
     }
   } catch (_) { /* no reventamos: respondemos 200 para que Stripe no reintente en bucle */ }
   res.statusCode = 200; res.end('ok');

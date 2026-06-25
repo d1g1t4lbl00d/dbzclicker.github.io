@@ -4261,9 +4261,13 @@ async function loadProfileShop(userId, container, isMe) {
     container.innerHTML = '';
     if (isMe) {
       container.appendChild(shopPayBar(userId, () => loadProfileShop(userId, container, isMe)));
-      const add = el(`<button class="btn primary shop-add" id="shopAdd"><svg fill="none" stroke="#fff"><use href="#i-plus"/></svg> Añadir producto</button>`);
-      add.onclick = () => openShopEdit(null, userId, () => loadProfileShop(userId, container, isMe));
-      container.appendChild(add);
+      const actions = el(`<div class="shop-actions">
+        <button class="btn primary shop-add" id="shopAdd"><svg fill="none" stroke="#fff"><use href="#i-plus"/></svg> Añadir producto</button>
+        <button class="btn" id="shopBuys"><svg fill="none" stroke="currentColor"><use href="#i-cart"/></svg> Mis compras</button>
+      </div>`);
+      actions.querySelector('#shopAdd').onclick = () => openShopEdit(null, userId, () => loadProfileShop(userId, container, isMe));
+      actions.querySelector('#shopBuys').onclick = () => openMyPurchases();
+      container.appendChild(actions);
     }
     if (!items.length) {
       container.appendChild(el(`<div class="empty"><svg fill="none"><use href="#i-cart"/></svg><p>${isMe ? 'Tu tienda está vacía. Añade productos digitales (beats, packs, servicios, entradas) o físicos (merch).' : 'Este artista aún no tiene tienda.'}</p></div>`));
@@ -4391,20 +4395,65 @@ async function openSellerSales(userId) {
   let rows = [];
   try {
     const { data } = await sb.from('shop_orders')
-      .select('title,type,amount_cents,ship_cents,currency,buyer_email,ship_addr,paid_at')
+      .select('id,title,type,amount_cents,ship_cents,currency,buyer_email,ship_addr,shipped,paid_at')
       .eq('seller_id', userId).eq('status', 'paid').order('paid_at', { ascending: false }).limit(100);
     rows = data || [];
   } catch (_) {}
   if (!rows.length) { box.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-cart"/></svg><p>Aún no tienes ventas. Cuando alguien compre, aparecerá aquí (con la dirección si es un envío).</p></div>`; return; }
-  box.innerHTML = rows.map(o => {
+  box.innerHTML = '';
+  rows.forEach(o => {
     const total = (o.amount_cents || 0) + (o.ship_cents || 0);
     const tlabel = (SHOP_TYPES[o.type] || SHOP_TYPES.other).label;
-    return `<div class="sale-row">
+    const row = el(`<div class="sale-row">
       <div class="sale-top"><b>${esc(o.title || 'Producto')}</b><span class="sale-amt">${esc(fmtEur(total, o.currency))}</span></div>
       <div class="sale-meta">${esc(tlabel)} · ${o.paid_at ? esc(new Date(o.paid_at).toLocaleDateString('es-ES')) : ''}${o.buyer_email ? ' · ' + esc(o.buyer_email) : ''}</div>
-      ${o.ship_addr ? `<div class="sale-ship"><svg fill="none" stroke="currentColor"><use href="#i-files"/></svg> Enviar a: ${esc(o.ship_addr)}</div>` : ''}
-    </div>`;
-  }).join('');
+      ${o.ship_addr ? `<div class="sale-ship"><svg fill="none" stroke="currentColor"><use href="#i-files"/></svg> Enviar a: ${esc(o.ship_addr)}</div>
+        <button class="btn sm ${o.shipped ? '' : 'primary'}" data-ship style="margin-top:8px">${o.shipped ? '✓ Enviado — deshacer' : 'Marcar como enviado'}</button>` : ''}
+    </div>`);
+    const sb2 = row.querySelector('[data-ship]');
+    if (sb2) sb2.onclick = async () => {
+      const nv = !o.shipped;
+      sb2.disabled = true;
+      const { error } = await sb.rpc('shop_mark_shipped', { o_id: o.id, val: nv });
+      sb2.disabled = false;
+      if (error) { toast('No se pudo actualizar'); return; }
+      o.shipped = nv;
+      sb2.className = `btn sm ${nv ? '' : 'primary'}`;
+      sb2.textContent = nv ? '✓ Enviado — deshacer' : 'Marcar como enviado';
+      toast(nv ? 'Marcado como enviado' : 'Marcado como pendiente');
+    };
+    box.appendChild(row);
+  });
+}
+
+// Compras del usuario (re-descarga / código de entrada / estado de envío)
+async function openMyPurchases() {
+  const m = openModal(`<div class="modal-head"><h3>🛍️ Mis compras</h3><button class="close">&times;</button></div><div class="modal-body" id="buysBody"><div class="loading" style="padding:24px"><div class="spinner"></div></div></div>`);
+  const box = m.querySelector('#buysBody');
+  let rows = [];
+  try {
+    const { data } = await sb.from('shop_orders')
+      .select('id,title,type,amount_cents,ship_cents,currency,ticket_code,ship_addr,shipped,paid_at,shop_products(file_url,event_date,event_place)')
+      .eq('buyer_id', state.user.id).eq('status', 'paid').order('paid_at', { ascending: false }).limit(100);
+    rows = data || [];
+  } catch (_) {}
+  if (!rows.length) { box.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-cart"/></svg><p>Aún no has comprado nada. Lo que compres aparecerá aquí para descargarlo cuando quieras.</p></div>`; return; }
+  box.innerHTML = '';
+  rows.forEach(o => {
+    const prod = o.shop_products || {};
+    const total = (o.amount_cents || 0) + (o.ship_cents || 0);
+    const tlabel = (SHOP_TYPES[o.type] || SHOP_TYPES.other).label;
+    let action = '';
+    if (o.type === 'ticket') action = `<div class="buy-ticket" style="margin-top:8px"><span class="buy-ticket-l">Entrada</span><span class="buy-ticket-code">${esc(o.ticket_code || '')}</span>${prod.event_date ? `<span class="buy-ticket-meta">${esc(new Date(prod.event_date).toLocaleString('es-ES'))}${prod.event_place ? ' · ' + esc(prod.event_place) : ''}</span>` : ''}</div>`;
+    else if (o.ship_addr) action = `<div class="sale-meta" style="margin-top:6px">${o.shipped ? '📦 Enviado' : '⏳ Preparando envío'} · a ${esc(o.ship_addr)}</div>`;
+    else if (prod.file_url) action = `<a class="btn sm primary" style="margin-top:8px" href="${esc(czHref(prod.file_url))}" target="_blank" rel="noopener"><svg fill="none" stroke="#fff"><use href="#i-download"/></svg> Descargar</a>`;
+    else action = `<div class="sale-meta" style="margin-top:6px">El artista te entregará el producto.</div>`;
+    box.appendChild(el(`<div class="sale-row">
+      <div class="sale-top"><b>${esc(o.title || 'Producto')}</b><span class="sale-amt">${esc(fmtEur(total, o.currency))}</span></div>
+      <div class="sale-meta">${esc(tlabel)} · ${o.paid_at ? esc(new Date(o.paid_at).toLocaleDateString('es-ES')) : ''}</div>
+      ${action}
+    </div>`));
+  });
 }
 
 async function openShopEdit(p, userId, onSaved) {
@@ -7878,9 +7927,19 @@ async function renderAdmin() {
         <div class="sub" id="admBcMsg" style="margin-top:8px"></div>
         <button class="btn" id="admReports" style="width:100%;margin-top:14px"><svg fill="none" stroke="currentColor"><use href="#i-bell"/></svg> Reportes de la comunidad</button>
       </div>
+      <div class="admin-card span2"><h3>🛒 Tienda y ventas</h3>
+        <div class="adm-kpis" id="admShopKpis"><div class="loading" style="padding:14px"><div class="spinner"></div></div></div>
+        <div class="adm-tabs" id="admShopTabs" style="margin-top:12px"><button class="active" data-st="orders">Pedidos</button><button data-st="products">Productos</button></div>
+        <div id="admShopList" class="adm-list"><div class="loading" style="padding:18px"><div class="spinner"></div></div></div>
+      </div>
     </div>`;
   loadAdminStats();
   loadAdminContent('tracks');
+  loadAdminShop();
+  main.querySelectorAll('#admShopTabs button').forEach((b) => b.onclick = () => {
+    main.querySelectorAll('#admShopTabs button').forEach((x) => x.classList.toggle('active', x === b));
+    adminShopList(b.dataset.st);
+  });
   const doSearch = () => adminUserSearch($('admUserQ').value);
   $('admUserGo').onclick = doSearch;
   $('admUserQ').addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
@@ -7974,6 +8033,59 @@ async function loadAdminContent(kind) {
       });
     }
   } catch (_) { box.innerHTML = '<div class="sub">Error al cargar el contenido.</div>'; }
+}
+
+// Resuelve @usernames a partir de una lista de ids (auth.users.id == profiles.id)
+async function adminNamesByIds(ids) {
+  const uniq = [...new Set(ids.filter(Boolean))];
+  if (!uniq.length) return {};
+  try {
+    const { data } = await sb.from('profiles').select('id,username,display_name').in('id', uniq);
+    const map = {}; (data || []).forEach(p => { map[p.id] = p.username || p.display_name || '—'; });
+    return map;
+  } catch (_) { return {}; }
+}
+async function loadAdminShop() {
+  const kbox = $('admShopKpis'); if (!kbox) return;
+  let prodCount = 0, orders = [];
+  try { const { count } = await sb.from('shop_products').select('id', { count: 'exact', head: true }); prodCount = count || 0; } catch (_) {}
+  try { const { data } = await sb.from('shop_orders').select('amount_cents,fee_cents,ship_cents').eq('status', 'paid').limit(2000); orders = data || []; } catch (_) {}
+  const gross = orders.reduce((s, o) => s + (o.amount_cents || 0) + (o.ship_cents || 0) + (o.fee_cents || 0), 0);
+  const commission = orders.reduce((s, o) => s + (o.fee_cents || 0), 0);
+  const kpi = (k, v) => `<div class="adm-kpi"><b>${v}</b><span>${k}</span></div>`;
+  kbox.innerHTML = kpi('Productos', nfmt(prodCount)) + kpi('Pedidos pagados', nfmt(orders.length))
+    + kpi('Ventas brutas', fmtEur(gross, 'eur')) + kpi('Comisión UnderBro', fmtEur(commission, 'eur'));
+  adminShopList('orders');
+}
+async function adminShopList(tab) {
+  const box = $('admShopList'); if (!box) return;
+  box.innerHTML = '<div class="loading" style="padding:18px"><div class="spinner"></div></div>';
+  try {
+    if (tab === 'products') {
+      const { data } = await sb.from('shop_products').select('id,title,kind,type,price_cents,is_free,stock,user_id,created_at').order('created_at', { ascending: false }).limit(40);
+      const rows = data || [];
+      const names = await adminNamesByIds(rows.map(r => r.user_id));
+      box.innerHTML = ''; if (!rows.length) { box.innerHTML = '<div class="sub">Sin productos.</div>'; return; }
+      rows.forEach(p => {
+        const price = p.is_free ? 'Gratis' : (p.price_cents ? fmtEur(p.price_cents, 'eur') : '—');
+        const stk = p.stock != null ? (p.stock <= 0 ? ' · AGOTADO' : ` · ${p.stock} ud.`) : '';
+        const r = el(`<div class="adm-row"><div class="adm-row-main"><b>${esc((p.title || '—').slice(0, 46))}</b><span>@${esc(names[p.user_id] || '—')} · ${esc((SHOP_TYPES[p.type] || SHOP_TYPES.other).label)} · ${esc(price)}${stk}</span></div><div class="adm-row-acts"><button class="btn sm danger" data-del>Borrar</button></div></div>`);
+        r.querySelector('[data-del]').onclick = async () => { if (!confirm('¿Borrar este producto de la tienda del usuario?')) return; const { error } = await sb.from('shop_products').delete().eq('id', p.id); if (error) { toast('No se pudo (¿permisos?)'); return; } r.remove(); toast('Producto borrado'); };
+        box.appendChild(r);
+      });
+    } else {
+      const { data } = await sb.from('shop_orders').select('id,title,type,amount_cents,fee_cents,ship_cents,currency,status,buyer_email,seller_id,shipped,paid_at').eq('status', 'paid').order('paid_at', { ascending: false }).limit(40);
+      const rows = data || [];
+      const names = await adminNamesByIds(rows.map(r => r.seller_id));
+      box.innerHTML = ''; if (!rows.length) { box.innerHTML = '<div class="sub">Sin pedidos todavía.</div>'; return; }
+      rows.forEach(o => {
+        const total = (o.amount_cents || 0) + (o.ship_cents || 0) + (o.fee_cents || 0);
+        const ship = o.ship_cents != null ? (o.shipped ? ' · 📦 enviado' : ' · ⏳ pendiente') : '';
+        const r = el(`<div class="adm-row"><div class="adm-row-main"><b>${esc((o.title || 'Producto').slice(0, 40))} <span class="sub">${esc(fmtEur(total, o.currency))}</span></b><span>vende @${esc(names[o.seller_id] || '—')} · comisión ${esc(fmtEur(o.fee_cents || 0, o.currency))} · ${o.paid_at ? esc(new Date(o.paid_at).toLocaleDateString('es-ES')) : ''}${ship}</span></div></div>`);
+        box.appendChild(r);
+      });
+    }
+  } catch (_) { box.innerHTML = '<div class="sub">Error al cargar.</div>'; }
 }
 async function adminBroadcast() {
   const title = $('admBcTitle').value.trim(), body = $('admBcBody').value.trim();
@@ -8168,6 +8280,16 @@ async function fetchNotifications() {
       (pl||[]).forEach(l => out.push({ ts: l.created_at, type:'like', who: l.profiles, text: 'marcó ♥ tu foto' }));
       const { data: pc } = await sb.from('post_comments').select('created_at, body, profiles!post_comments_user_id_fkey(*)').in('post_id', pids).neq('user_id', state.user.id).order('created_at',{ascending:false}).limit(20);
       (pc||[]).forEach(c => out.push({ ts: c.created_at, type:'comment', who: c.profiles, text: `comentó tu foto: ${c.body}` }));
+    }
+  } catch (_) {}
+  // ventas en tu tienda
+  try {
+    const { data: sales } = await sb.from('shop_orders').select('paid_at,title,buyer_id,amount_cents,ship_cents,currency').eq('seller_id', state.user.id).eq('status', 'paid').order('paid_at', { ascending: false }).limit(20);
+    if (sales && sales.length) {
+      const buyerIds = [...new Set(sales.map(s => s.buyer_id).filter(Boolean))];
+      let buyers = {};
+      if (buyerIds.length) { const { data: bp } = await sb.from('profiles').select('id,username,display_name,avatar_url').in('id', buyerIds); (bp || []).forEach(p => buyers[p.id] = p); }
+      sales.forEach(s => out.push({ ts: s.paid_at, type: 'sale', who: buyers[s.buyer_id] || { display_name: 'Alguien' }, text: `🛒 compró "${s.title || 'tu producto'}" · ${fmtEur((s.amount_cents || 0) + (s.ship_cents || 0), s.currency)}` }));
     }
   } catch (_) {}
   out.sort((a,b) => new Date(b.ts) - new Date(a.ts));
