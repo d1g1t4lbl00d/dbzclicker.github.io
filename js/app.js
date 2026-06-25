@@ -4136,6 +4136,132 @@ async function loadProfileEvents(userId, container) {
   }
 }
 
+/* =======================================================================
+   TIENDA DEL PERFIL — escaparate (beats/packs, merch, entradas).
+   Pago por enlace externo del artista; descarga directa si es gratis.
+   ======================================================================= */
+const SHOP_TYPES = { beat: { label: 'Beat / pack', icon: 'i-music' }, merch: { label: 'Merch', icon: 'i-files' }, ticket: { label: 'Entrada', icon: 'i-calendar' } };
+
+async function loadProfileShop(userId, container, isMe) {
+  container.innerHTML = `<div class="loading" style="padding:24px"><div class="spinner"></div></div>`;
+  let items = [];
+  try { const { data } = await sb.from('shop_products').select('*').eq('user_id', userId).order('sort', { ascending: true }).order('created_at', { ascending: false }); items = data || []; }
+  catch (e) { console.error(e); }
+  const render = () => {
+    container.innerHTML = '';
+    if (isMe) {
+      const add = el(`<button class="btn primary shop-add" id="shopAdd"><svg fill="none" stroke="#fff"><use href="#i-plus"/></svg> Añadir producto</button>`);
+      add.onclick = () => openShopEdit(null, userId, () => loadProfileShop(userId, container, isMe));
+      container.appendChild(add);
+    }
+    if (!items.length) {
+      container.appendChild(el(`<div class="empty"><svg fill="none"><use href="#i-bookmark"/></svg><p>${isMe ? 'Tu tienda está vacía. Añade beats, merch o entradas.' : 'Este artista aún no tiene tienda.'}</p></div>`));
+      return;
+    }
+    const grid = el(`<div class="shop-grid"></div>`);
+    items.forEach(p => grid.appendChild(shopProductCard(p, isMe, () => loadProfileShop(userId, container, isMe))));
+    container.appendChild(grid);
+  };
+  render();
+}
+
+function shopProductCard(p, isMe, refresh) {
+  const t = SHOP_TYPES[p.type] || SHOP_TYPES.merch;
+  const img = p.image_url ? czUrl(p.image_url) : '';
+  const free = p.is_free && p.file_url;
+  const card = el(`
+    <div class="shop-card">
+      <div class="shop-cover" ${img ? `style="background-image:url('${esc(img)}')"` : ''}>${img ? '' : `<svg fill="none" stroke="#fff"><use href="#${t.icon}"/></svg>`}<span class="shop-type">${esc(t.label)}</span>${isMe ? '<button class="shop-edit" data-act="edit" aria-label="Editar">⋯</button>' : ''}</div>
+      <div class="shop-body">
+        <div class="shop-title">${esc(p.title || '')}</div>
+        ${p.type === 'ticket' && p.event_date ? `<div class="shop-meta">${esc(schedLabel ? schedLabel(p.event_date) : new Date(p.event_date).toLocaleDateString('es-ES'))}${p.event_place ? ' · ' + esc(p.event_place) : ''}</div>` : ''}
+        ${p.description ? `<div class="shop-desc">${esc(p.description)}</div>` : ''}
+        <div class="shop-foot">
+          <span class="shop-price">${esc(p.is_free ? 'Gratis' : (p.price || ''))}</span>
+          ${free ? `<button class="btn sm primary" data-act="download"><svg fill="none" stroke="#fff"><use href="#i-download"/></svg> Descargar</button>`
+                 : (p.buy_url ? `<button class="btn sm primary" data-act="buy">${p.type === 'ticket' ? 'Conseguir' : 'Comprar'}</button>` : '')}
+        </div>
+      </div>
+    </div>`);
+  card.querySelector('[data-act="buy"]')?.addEventListener('click', () => { haptic(10); window.open(czHref(p.buy_url), '_blank', 'noopener'); });
+  card.querySelector('[data-act="download"]')?.addEventListener('click', () => { haptic(10); const a = document.createElement('a'); a.href = czHref(p.file_url); a.download = ''; a.target = '_blank'; a.rel = 'noopener'; a.click(); });
+  card.querySelector('[data-act="edit"]')?.addEventListener('click', () => openShopEdit(p, p.user_id, refresh));
+  return card;
+}
+
+async function openShopEdit(p, userId, onSaved) {
+  const edit = !!p; p = p || { type: 'beat', is_free: false };
+  const m = openModal(`
+    <div class="modal-head"><h3>${edit ? 'Editar producto' : 'Nuevo producto'}</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <label class="pk-l">Tipo</label>
+      <div class="seg" id="shType">${Object.entries(SHOP_TYPES).map(([k, v]) => `<button data-ty="${k}" class="${(p.type || 'beat') === k ? 'on' : ''}">${esc(v.label)}</button>`).join('')}</div>
+      <div class="field"><label>Imagen</label>
+        <div class="cover-pick" id="shDz"><div class="cover-prev" id="shPrev">${p.image_url ? `<img src="${esc(czUrl(p.image_url))}" alt="">` : `<svg width="24" height="24" fill="none" stroke="currentColor"><use href="#i-image"/></svg>`}</div><div class="cover-pick-txt"><b>Foto del producto</b><span>cuadrada, JPG/PNG/WebP</span></div></div>
+        <input type="file" id="shImg" accept="image/*" hidden />
+      </div>
+      <div class="field"><label>Título</label><input type="text" id="shTitle" maxlength="80" value="${esc(p.title || '')}" placeholder="Ej: Pack de beats Vol.1" /></div>
+      <div class="field"><label class="pk-tg" style="font-weight:600"><input type="checkbox" id="shFree" style="width:auto" ${p.is_free ? 'checked' : ''}/> <span>Es <b>gratis</b> (descarga directa)</span></label></div>
+      <div class="field" id="shPriceRow"><label>Precio</label><input type="text" id="shPrice" maxlength="24" value="${esc(p.price || '')}" placeholder="9,99 €" /></div>
+      <div class="field"><label>Descripción</label><textarea id="shDesc" maxlength="400" rows="2" placeholder="Detalles del producto…">${esc(p.description || '')}</textarea></div>
+      <div class="field" id="shFileRow"><label>Archivo a entregar (solo si es gratis)</label>
+        <div class="cover-pick" id="shFileDz"><div class="cover-pick-txt"><b id="shFileName">${p.file_url ? 'Archivo subido ✓' : 'Subir archivo (zip, mp3, wav…)'}</b><span>se descarga al pulsar “Descargar”</span></div></div>
+        <input type="file" id="shFile" hidden />
+      </div>
+      <div class="field" id="shBuyRow"><label>Enlace de compra (tu Stripe/PayPal/Gumroad/Beatstars/web)</label><input type="text" id="shBuy" value="${esc(p.buy_url || '')}" placeholder="https://…" /></div>
+      <div class="pk-row2" id="shEvRow" style="${p.type === 'ticket' ? '' : 'display:none'}">
+        <div><label class="pk-l">Fecha (entrada)</label><input type="datetime-local" id="shEvDate" value="${p.event_date ? new Date(p.event_date).toISOString().slice(0, 16) : ''}" /></div>
+        <div><label class="pk-l">Lugar</label><input type="text" id="shEvPlace" maxlength="80" value="${esc(p.event_place || '')}" placeholder="Sala, ciudad" /></div>
+      </div>
+      <button class="btn primary" id="shSave">${edit ? 'Guardar cambios' : 'Publicar producto'}</button>
+      ${edit ? '<button class="btn danger-btn" id="shDel"><svg fill="none" stroke="#fff"><use href="#i-trash"/></svg> Eliminar</button>' : ''}
+      <div class="auth-msg" id="shMsg"></div>
+    </div>`);
+  let type = p.type || 'beat', imgFile = null, dataFile = null;
+  const syncRows = () => {
+    const free = m.querySelector('#shFree').checked;
+    m.querySelector('#shFileRow').style.display = (type === 'beat' && free) ? '' : 'none';
+    m.querySelector('#shPriceRow').style.display = free ? 'none' : '';
+    m.querySelector('#shBuyRow').style.display = free ? 'none' : '';
+    m.querySelector('#shEvRow').style.display = type === 'ticket' ? '' : 'none';
+  };
+  m.querySelectorAll('#shType button').forEach(b => b.onclick = () => { type = b.dataset.ty; m.querySelectorAll('#shType button').forEach(x => x.classList.toggle('on', x === b)); syncRows(); });
+  m.querySelector('#shFree').onchange = syncRows;
+  syncRows();
+  m.querySelector('#shDz').onclick = () => m.querySelector('#shImg').click();
+  m.querySelector('#shImg').onchange = (e) => { const f = e.target.files[0]; if (!f) return; imgFile = f; m.querySelector('#shPrev').innerHTML = `<img src="${URL.createObjectURL(f)}" alt="">`; };
+  m.querySelector('#shFileDz').onclick = () => m.querySelector('#shFile').click();
+  m.querySelector('#shFile').onchange = (e) => { const f = e.target.files[0]; if (!f) return; dataFile = f; m.querySelector('#shFileName').textContent = f.name; };
+  if (edit) m.querySelector('#shDel').onclick = async () => { if (!confirm('¿Eliminar este producto?')) return; await sb.from('shop_products').delete().eq('id', p.id); m.remove(); toast('Producto eliminado'); onSaved && onSaved(); };
+  m.querySelector('#shSave').onclick = async () => {
+    const btn = m.querySelector('#shSave'); const msg = m.querySelector('#shMsg');
+    const title = m.querySelector('#shTitle').value.trim();
+    if (!title) { msg.className = 'auth-msg error'; msg.textContent = 'Ponle un título.'; return; }
+    btn.disabled = true; btn.textContent = 'Guardando…';
+    try {
+      const stamp = Date.now();
+      let image_url = p.image_url || null, file_url = p.file_url || null;
+      if (imgFile) { const path = `${userId}/shop-${stamp}`; const up = await sb.storage.from('covers').upload(path, imgFile, { contentType: imgFile.type, upsert: true }); if (!up.error) image_url = sb.storage.from('covers').getPublicUrl(path).data.publicUrl; }
+      if (dataFile) { const ext = (dataFile.name.split('.').pop() || 'zip').toLowerCase(); const path = `${userId}/shopfile-${stamp}.${ext}`; const up = await sb.storage.from('tracks').upload(path, dataFile, { contentType: dataFile.type || 'application/octet-stream', upsert: true }); if (!up.error) file_url = sb.storage.from('tracks').getPublicUrl(path).data.publicUrl; }
+      const free = m.querySelector('#shFree').checked;
+      const row = {
+        user_id: userId, type, title, is_free: free,
+        price: free ? null : (m.querySelector('#shPrice').value.trim() || null),
+        description: m.querySelector('#shDesc').value.trim() || null,
+        image_url, file_url,
+        buy_url: free ? null : (m.querySelector('#shBuy').value.trim() || null),
+        event_date: type === 'ticket' && m.querySelector('#shEvDate').value ? new Date(m.querySelector('#shEvDate').value).toISOString() : null,
+        event_place: type === 'ticket' ? (m.querySelector('#shEvPlace').value.trim() || null) : null,
+      };
+      let error;
+      if (edit) ({ error } = await sb.from('shop_products').update(row).eq('id', p.id));
+      else ({ error } = await sb.from('shop_products').insert(row));
+      if (error) throw error;
+      m.remove(); toast(edit ? 'Producto actualizado' : '🛍️ Producto publicado'); onSaved && onSaved();
+    } catch (e) { console.error(e); msg.className = 'auth-msg error'; msg.textContent = 'No se pudo guardar: ' + (e.message || ''); btn.disabled = false; btn.textContent = edit ? 'Guardar cambios' : 'Publicar producto'; }
+  };
+}
+
 async function loadProfilePosts(userId, grid) {
   grid.innerHTML = skeletonGrid(6);
   let posts = [];
@@ -4621,6 +4747,7 @@ async function openProfile(userId) {
         <button data-ptab="feats"><svg fill="none" stroke="currentColor"><use href="#i-people"/></svg> Feats <span class="ptab-n">${featTracks.length}</span></button>
         <button data-ptab="reposts"><svg fill="none" stroke="currentColor"><use href="#i-repeat"/></svg> Reposts</button>
         <button data-ptab="events"><svg fill="none" stroke="currentColor"><use href="#i-calendar"/></svg> Eventos</button>
+        <button data-ptab="shop"><svg fill="none" stroke="currentColor"><use href="#i-bookmark"/></svg> Tienda</button>
       </div>
       <div id="profTop" class="prof-top-wrap"></div>
       <div id="feedList" class="feed-list"></div>
@@ -4628,6 +4755,7 @@ async function openProfile(userId) {
       <div id="featList" class="feed-list hidden"></div>
       <div id="repostList" class="feed-list hidden"></div>
       <div id="profEvents" class="hidden"></div>
+      <div id="profShop" class="hidden"></div>
     </div>`;
   $('profileBack').onclick = () => switchView(backTo);
   if (font) loadFont(font);
@@ -4665,8 +4793,8 @@ async function openProfile(userId) {
   state.tracks = myTracks; state.queue = myTracks.map(t => t.id);
 
   // pestañas Pistas / Fotos / Feats / Eventos
-  const tabsEl = $('profileTabs'), gridEl = $('postGrid'), evEl = $('profEvents'), repEl = $('repostList');
-  let postsLoaded = false, eventsLoaded = false, repostsLoaded = false, repostTracks = [];
+  const tabsEl = $('profileTabs'), gridEl = $('postGrid'), evEl = $('profEvents'), repEl = $('repostList'), shopEl = $('profShop');
+  let postsLoaded = false, eventsLoaded = false, repostsLoaded = false, repostTracks = [], shopLoaded = false;
   tabsEl.querySelectorAll('button').forEach(b => b.onclick = () => {
     tabsEl.querySelectorAll('button').forEach(x => x.classList.toggle('active', x === b));
     const tab = b.dataset.ptab;
@@ -4676,11 +4804,13 @@ async function openProfile(userId) {
     featEl.classList.toggle('hidden', tab !== 'feats');
     repEl.classList.toggle('hidden', tab !== 'reposts');
     evEl.classList.toggle('hidden', tab !== 'events');
+    shopEl.classList.toggle('hidden', tab !== 'shop');
     if (tab === 'tracks') { state.tracks = myTracks; state.queue = myTracks.map(t => t.id); }
     else if (tab === 'feats') { state.tracks = featTracks; state.queue = featTracks.map(t => t.id); }
     else if (tab === 'reposts' && repostsLoaded) { state.tracks = repostTracks; state.queue = repostTracks.map(t => t.id); }
     if (tab === 'posts' && !postsLoaded) { postsLoaded = true; loadProfilePosts(userId, gridEl); }
     if (tab === 'events' && !eventsLoaded) { eventsLoaded = true; loadProfileEvents(userId, evEl); }
+    if (tab === 'shop' && !shopLoaded) { shopLoaded = true; loadProfileShop(userId, shopEl, isMe); }
     if (tab === 'reposts' && !repostsLoaded) {
       repostsLoaded = true;
       loadProfileReposts(userId, repEl, isMe).then(ts => { repostTracks = ts; state.tracks = ts; state.queue = ts.map(t => t.id); });
