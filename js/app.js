@@ -4530,6 +4530,8 @@ async function openShopEdit(p, userId, onSaved) {
     const hasFile = !!dataFile || !!p.file_url;
     // ---- validación: un producto debe tener contenido real ----
     if (title.length < 2) { msg.className = 'auth-msg error'; msg.textContent = 'Ponle un título (mínimo 2 caracteres).'; return; }
+    // Beat/Pack: el archivo es obligatorio (entrega automática al comprar)
+    if (type === 'beat' && !hasFile) { msg.className = 'auth-msg error'; msg.textContent = 'Sube el archivo del beat/pack: se entrega automáticamente al comprar.'; return; }
     let price_cents = null;
     if (!free) {
       const eur = parseFloat(String(m.querySelector('#shPriceEur').value || '').replace(',', '.'));

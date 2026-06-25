@@ -3285,7 +3285,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
 .duel-smoke { bottom: 144px; width: 50px; height: 50px; }
 
 /* ====== Tienda del perfil ====== */
-.shop-add { width: 100%; margin-bottom: 14px; }
+.shop-add { margin: 0; }
 #shType { display: flex; gap: 8px; margin-bottom: 12px; }
 #shType button { flex: 1; padding: 9px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg-soft); color: var(--ink-soft); font-weight: 700; font-size: 13px; cursor: pointer; }
 #shType button.on { background: var(--accent); color: #fff; border-color: var(--accent); }
@@ -3337,7 +3337,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
 
 /* cabecera de sección Digital / Físico */
 .shop-actions { display: flex; gap: 8px; margin-bottom: 12px; }
-.shop-actions .btn { flex: 1; justify-content: center; }
+.shop-actions .btn { flex: 1 1 0; min-width: 0; justify-content: center; white-space: nowrap; font-size: 13.5px; padding-left: 10px; padding-right: 10px; }
 .shop-section-h { display: flex; align-items: center; gap: 8px; margin: 18px 2px 10px; font-size: 13px; font-weight: 800; letter-spacing: .3px; text-transform: uppercase; color: var(--ink-soft); }
 .shop-section-h::after { content: ""; flex: 1; height: 1px; background: var(--line); }
 
