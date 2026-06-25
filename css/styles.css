@@ -3302,3 +3302,30 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
 .shop-foot { margin-top: auto; padding-top: 6px; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .shop-price { font-weight: 800; font-size: 14px; color: var(--ink); }
 .shop-foot .btn.sm { padding: 7px 12px; font-size: 12.5px; white-space: nowrap; }
+.shop-secure { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 700; color: #1f9d57; margin-top: 2px; }
+.shop-secure svg { width: 12px; height: 12px; }
+
+/* barra de cobros del vendedor */
+.shop-paybar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: space-between; padding: 12px 14px; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 14px; background: linear-gradient(180deg, rgba(62,87,252,.06), transparent), var(--panel); box-shadow: var(--sh-1); }
+.shop-paybar .spb-line { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 200px; }
+.shop-paybar .spb-ic { font-size: 22px; line-height: 1; }
+.shop-paybar .spb-body { display: flex; flex-direction: column; gap: 2px; }
+.shop-paybar .spb-body b { font-size: 13.5px; color: var(--ink); }
+.shop-paybar .spb-body span { font-size: 11.5px; color: var(--ink-soft); line-height: 1.35; }
+.shop-paybar .spb-txt { font-size: 12.5px; color: var(--ink-soft); }
+.shop-paybar .btn.sm { white-space: nowrap; }
+
+/* aviso/hint dentro del editor */
+.pk-warn { font-size: 12px; color: #b4541a; background: rgba(255,160,60,.12); border: 1px solid rgba(255,160,60,.3); border-radius: 10px; padding: 8px 10px; line-height: 1.4; margin: 2px 0 6px; }
+
+/* pantalla de compra completada */
+.buy-ok { text-align: center; padding: 8px 4px 4px; }
+.buy-ok-ic { font-size: 46px; line-height: 1; }
+.buy-ok h3 { margin: 8px 0 4px; font-size: 19px; }
+.buy-ok-sub { font-size: 13px; color: var(--ink-soft); margin-bottom: 14px; }
+.buy-ok .btn { width: 100%; }
+.buy-ticket { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 16px; border: 1.5px dashed var(--accent); border-radius: 14px; background: rgba(62,87,252,.05); }
+.buy-ticket-l { font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .5px; color: var(--ink-soft); }
+.buy-ticket-code { font-size: 24px; font-weight: 900; letter-spacing: 2px; color: var(--accent); font-variant-numeric: tabular-nums; }
+.buy-ticket-meta { font-size: 12.5px; color: var(--ink); font-weight: 600; }
+.buy-ticket-hint { font-size: 11.5px; color: var(--ink-soft); margin-top: 4px; }

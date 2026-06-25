@@ -2793,6 +2793,8 @@ function shareToChatPicker(t) {
 // abrir una pista compartida por enlace (?track=ID)
 async function handleDeepLink() {
   const params = new URLSearchParams(location.search);
+  const pay = params.get('pay');
+  if (pay) { history.replaceState(null, '', location.pathname); handlePayReturn(pay, params.get('sid')); return; }
   const trackId = params.get('track');
   const postId = params.get('post');
   const playlistId = params.get('playlist');
@@ -4137,10 +4139,103 @@ async function loadProfileEvents(userId, container) {
 }
 
 /* =======================================================================
-   TIENDA DEL PERFIL — escaparate (beats/packs, merch, entradas).
-   Pago por enlace externo del artista; descarga directa si es gratis.
+   TIENDA DEL PERFIL — beats/packs, merch, entradas.
+   Cobro DENTRO de UnderBro con Stripe (UnderBro se lleva comisión) o, como
+   alternativa, enlace externo del artista; descarga directa si es gratis.
    ======================================================================= */
 const SHOP_TYPES = { beat: { label: 'Beat / pack', icon: 'i-music' }, merch: { label: 'Merch', icon: 'i-files' }, ticket: { label: 'Entrada', icon: 'i-calendar' } };
+
+// ---- Pagos in-app (Stripe Connect) ----
+async function payAuthHeaders() {
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    const tok = session && session.access_token;
+    return tok ? { Authorization: 'Bearer ' + tok, 'Content-Type': 'application/json' } : null;
+  } catch (_) { return null; }
+}
+function fmtEur(cents, cur) {
+  if (cents == null) return '';
+  try { return new Intl.NumberFormat('es-ES', { style: 'currency', currency: (cur || 'eur').toUpperCase() }).format(cents / 100); }
+  catch (_) { return (cents / 100).toFixed(2) + ' €'; }
+}
+// Estado de cobros del vendedor (cacheado por sesión)
+let _sellerStatus = null;
+async function fetchSellerStatus(force) {
+  if (_sellerStatus && !force) return _sellerStatus;
+  const h = await payAuthHeaders(); if (!h) return { connected: false, ready: false };
+  try {
+    const r = await fetch('/api/pay/status', { headers: h });
+    _sellerStatus = await r.json();
+  } catch (_) { _sellerStatus = { connected: false, ready: false }; }
+  return _sellerStatus;
+}
+async function startSellerConnect(btn) {
+  const h = await payAuthHeaders();
+  if (!h) { toast('Inicia sesión primero'); return; }
+  if (btn) { btn.disabled = true; btn.dataset.t = btn.textContent; btn.textContent = 'Abriendo Stripe…'; }
+  try {
+    const r = await fetch('/api/pay/connect', { method: 'POST', headers: h });
+    const d = await r.json();
+    if (d && d.url) { location.href = d.url; return; }
+    toast('No se pudo abrir Stripe: ' + (d.error || ''));
+  } catch (e) { toast('Error de conexión'); }
+  if (btn) { btn.disabled = false; btn.textContent = btn.dataset.t || 'Configurar cobros'; }
+}
+async function buyInApp(p, btn) {
+  if (!state.user) { toast('Inicia sesión para comprar'); return; }
+  const h = await payAuthHeaders();
+  if (!h) { toast('Inicia sesión para comprar'); return; }
+  haptic(12);
+  if (btn) { btn.disabled = true; btn.dataset.t = btn.innerHTML; btn.textContent = 'Conectando…'; }
+  try {
+    const r = await fetch('/api/pay/checkout', { method: 'POST', headers: h, body: JSON.stringify({ product_id: p.id }) });
+    const d = await r.json();
+    if (d && d.url) { location.href = d.url; return; }
+    const map = { seller_not_ready: 'El vendedor aún no tiene los cobros activados.', own_product: 'No puedes comprar tu propio producto.', not_payable: 'Producto no disponible para compra.' };
+    toast(map[d.error] || 'No se pudo iniciar el pago.');
+  } catch (e) { toast('Error de conexión'); }
+  if (btn) { btn.disabled = false; btn.innerHTML = btn.dataset.t || 'Comprar'; }
+}
+// Vuelta desde Stripe (?pay=...)
+async function handlePayReturn(pay, sid) {
+  if (pay === 'cancel') { toast('Pago cancelado'); return; }
+  if (pay === 'connect_done' || pay === 'connect_refresh') {
+    _sellerStatus = null;
+    const st = await fetchSellerStatus(true);
+    toast(st.ready ? '✅ Cobros activados' : 'Alta guardada — Stripe está verificando tus datos');
+    return;
+  }
+  if (pay === 'ok' && sid) { openPurchaseResult(sid); }
+}
+async function openPurchaseResult(sid) {
+  const m = openModal(`<div class="modal-head"><h3>Compra</h3><button class="close">&times;</button></div><div class="modal-body" id="buyRes"><div class="loading" style="padding:24px"><div class="spinner"></div></div></div>`);
+  const box = m.querySelector('#buyRes');
+  let d = null;
+  for (let i = 0; i < 6; i++) { // el webhook puede tardar 1-2s en confirmar
+    try { const r = await fetch('/api/pay/order?sid=' + encodeURIComponent(sid)); d = await r.json(); } catch (_) {}
+    if (d && d.status === 'paid') break;
+    await new Promise(r => setTimeout(r, 1200));
+  }
+  if (!d || d.status !== 'paid') {
+    box.innerHTML = `<div class="empty"><p>Estamos confirmando tu pago. Si ya pagaste, lo recibirás en unos segundos — revisa “Mis compras”.</p></div>`;
+    return;
+  }
+  haptic(20);
+  const isTicket = d.type === 'ticket';
+  box.innerHTML = `
+    <div class="buy-ok">
+      <div class="buy-ok-ic">✅</div>
+      <h3>¡Pago completado!</h3>
+      <p class="buy-ok-sub">${esc(d.title || '')} · ${esc(fmtEur(d.amount_cents, d.currency))}</p>
+      ${isTicket ? `
+        <div class="buy-ticket">
+          <span class="buy-ticket-l">Tu entrada</span>
+          <span class="buy-ticket-code">${esc(d.ticket_code || '')}</span>
+          ${d.event_date ? `<span class="buy-ticket-meta">${esc(new Date(d.event_date).toLocaleString('es-ES'))}${d.event_place ? ' · ' + esc(d.event_place) : ''}</span>` : ''}
+          <span class="buy-ticket-hint">Muestra este código en la entrada.</span>
+        </div>` : (d.file_url ? `<a class="btn primary" id="buyDl" href="${esc(czHref(d.file_url))}" target="_blank" rel="noopener"><svg fill="none" stroke="#fff"><use href="#i-download"/></svg> Descargar</a>` : `<p class="buy-ok-sub">El artista te entregará el producto. Te avisaremos por mensaje.</p>`)}
+    </div>`;
+}
 
 async function loadProfileShop(userId, container, isMe) {
   container.innerHTML = `<div class="loading" style="padding:24px"><div class="spinner"></div></div>`;
@@ -4150,6 +4245,7 @@ async function loadProfileShop(userId, container, isMe) {
   const render = () => {
     container.innerHTML = '';
     if (isMe) {
+      container.appendChild(shopPayBar(userId, () => loadProfileShop(userId, container, isMe)));
       const add = el(`<button class="btn primary shop-add" id="shopAdd"><svg fill="none" stroke="#fff"><use href="#i-plus"/></svg> Añadir producto</button>`);
       add.onclick = () => openShopEdit(null, userId, () => loadProfileShop(userId, container, isMe));
       container.appendChild(add);
@@ -4169,6 +4265,9 @@ function shopProductCard(p, isMe, refresh) {
   const t = SHOP_TYPES[p.type] || SHOP_TYPES.merch;
   const img = p.image_url ? czUrl(p.image_url) : '';
   const free = p.is_free && p.file_url;
+  const inapp = !p.is_free && p.pay_inapp && p.price_cents >= 50;
+  const cta = p.type === 'ticket' ? 'Conseguir' : 'Comprar';
+  const priceTxt = p.is_free ? 'Gratis' : (inapp ? fmtEur(p.price_cents, p.currency) : (p.price || ''));
   const card = el(`
     <div class="shop-card">
       <div class="shop-cover" ${img ? `style="background-image:url('${esc(img)}')"` : ''}>${img ? '' : `<svg fill="none" stroke="#fff"><use href="#${t.icon}"/></svg>`}<span class="shop-type">${esc(t.label)}</span>${isMe ? '<button class="shop-edit" data-act="edit" aria-label="Editar">⋯</button>' : ''}</div>
@@ -4176,17 +4275,44 @@ function shopProductCard(p, isMe, refresh) {
         <div class="shop-title">${esc(p.title || '')}</div>
         ${p.type === 'ticket' && p.event_date ? `<div class="shop-meta">${esc(schedLabel ? schedLabel(p.event_date) : new Date(p.event_date).toLocaleDateString('es-ES'))}${p.event_place ? ' · ' + esc(p.event_place) : ''}</div>` : ''}
         ${p.description ? `<div class="shop-desc">${esc(p.description)}</div>` : ''}
+        ${inapp ? '<div class="shop-secure"><svg fill="none" stroke="currentColor"><use href="#i-lock"/></svg> Pago seguro en UnderBro</div>' : ''}
         <div class="shop-foot">
-          <span class="shop-price">${esc(p.is_free ? 'Gratis' : (p.price || ''))}</span>
+          <span class="shop-price">${esc(priceTxt)}</span>
           ${free ? `<button class="btn sm primary" data-act="download"><svg fill="none" stroke="#fff"><use href="#i-download"/></svg> Descargar</button>`
-                 : (p.buy_url ? `<button class="btn sm primary" data-act="buy">${p.type === 'ticket' ? 'Conseguir' : 'Comprar'}</button>` : '')}
+                 : (inapp ? `<button class="btn sm primary" data-act="paybuy">${cta}</button>`
+                 : (p.buy_url ? `<button class="btn sm primary" data-act="buy">${cta}</button>` : ''))}
         </div>
       </div>
     </div>`);
+  card.querySelector('[data-act="paybuy"]')?.addEventListener('click', (e) => buyInApp(p, e.currentTarget));
   card.querySelector('[data-act="buy"]')?.addEventListener('click', () => { haptic(10); window.open(czHref(p.buy_url), '_blank', 'noopener'); });
   card.querySelector('[data-act="download"]')?.addEventListener('click', () => { haptic(10); const a = document.createElement('a'); a.href = czHref(p.file_url); a.download = ''; a.target = '_blank'; a.rel = 'noopener'; a.click(); });
   card.querySelector('[data-act="edit"]')?.addEventListener('click', () => openShopEdit(p, p.user_id, refresh));
   return card;
+}
+
+// Barra de estado de cobros + ventas para el dueño de la tienda
+function shopPayBar(userId, refresh) {
+  const bar = el(`<div class="shop-paybar" id="shopPayBar"><div class="spb-line"><span class="spb-ic">💳</span><span class="spb-txt">Comprobando cobros…</span></div></div>`);
+  (async () => {
+    const st = await fetchSellerStatus(true);
+    let sales = null;
+    try {
+      const { data } = await sb.from('shop_orders').select('amount_cents,fee_cents,status').eq('seller_id', userId).eq('status', 'paid');
+      sales = data || [];
+    } catch (_) {}
+    const net = (sales || []).reduce((s, o) => s + (o.amount_cents - (o.fee_cents || 0)), 0);
+    const count = (sales || []).length;
+    if (!st.connected) {
+      bar.innerHTML = `<div class="spb-line"><span class="spb-ic">💳</span><div class="spb-body"><b>Cobra dentro de UnderBro</b><span>Activa los pagos con tarjeta para vender beats, packs y entradas. UnderBro retiene un 10% por venta.</span></div></div><button class="btn sm primary" id="spbConnect">Activar cobros</button>`;
+    } else if (!st.ready) {
+      bar.innerHTML = `<div class="spb-line"><span class="spb-ic">⏳</span><div class="spb-body"><b>Verificación en curso</b><span>Stripe está revisando tus datos. Completa el alta si quedó algo pendiente.</span></div></div><button class="btn sm ghost" id="spbConnect">Continuar alta</button>`;
+    } else {
+      bar.innerHTML = `<div class="spb-line"><span class="spb-ic">✅</span><div class="spb-body"><b>Cobros activados</b><span>${count} venta${count === 1 ? '' : 's'} · ${esc(fmtEur(net, 'eur'))} netos para ti</span></div></div><button class="btn sm ghost" id="spbConnect">Gestionar</button>`;
+    }
+    bar.querySelector('#spbConnect')?.addEventListener('click', (e) => startSellerConnect(e.currentTarget));
+  })();
+  return bar;
 }
 
 async function openShopEdit(p, userId, onSaved) {
@@ -4202,13 +4328,22 @@ async function openShopEdit(p, userId, onSaved) {
       </div>
       <div class="field"><label>Título</label><input type="text" id="shTitle" maxlength="80" value="${esc(p.title || '')}" placeholder="Ej: Pack de beats Vol.1" /></div>
       <div class="field"><label class="pk-tg" style="font-weight:600"><input type="checkbox" id="shFree" style="width:auto" ${p.is_free ? 'checked' : ''}/> <span>Es <b>gratis</b> (descarga directa)</span></label></div>
-      <div class="field" id="shPriceRow"><label>Precio</label><input type="text" id="shPrice" maxlength="24" value="${esc(p.price || '')}" placeholder="9,99 €" /></div>
       <div class="field"><label>Descripción</label><textarea id="shDesc" maxlength="400" rows="2" placeholder="Detalles del producto…">${esc(p.description || '')}</textarea></div>
-      <div class="field" id="shFileRow"><label>Archivo a entregar (solo si es gratis)</label>
-        <div class="cover-pick" id="shFileDz"><div class="cover-pick-txt"><b id="shFileName">${p.file_url ? 'Archivo subido ✓' : 'Subir archivo (zip, mp3, wav…)'}</b><span>se descarga al pulsar “Descargar”</span></div></div>
+      <div id="shPayWrap">
+        <label class="pk-l">¿Cómo cobras?</label>
+        <div class="seg" id="shPayMode">
+          <button data-pm="inapp" class="${p.pay_inapp || !p.buy_url ? 'on' : ''}">En UnderBro 💳</button>
+          <button data-pm="ext" class="${!p.pay_inapp && p.buy_url ? 'on' : ''}">Enlace externo</button>
+        </div>
+        <div class="field" id="shEurRow"><label>Precio (€)</label><input type="number" id="shPriceEur" min="0.50" step="0.01" inputmode="decimal" value="${p.price_cents ? (p.price_cents / 100) : ''}" placeholder="9,99" /><span class="pk-hint">Cobro con tarjeta dentro de la app. UnderBro retiene un 10%; el resto va a tu cuenta.</span></div>
+        <div class="pk-warn" id="shConnNote" style="display:none">Para cobrar en UnderBro primero <b>activa los cobros</b> en tu tienda (botón “Activar cobros”).</div>
+        <div class="field" id="shPriceRow"><label>Precio (texto)</label><input type="text" id="shPrice" maxlength="24" value="${esc(p.price || '')}" placeholder="9,99 €" /></div>
+        <div class="field" id="shBuyRow"><label>Enlace de compra (tu PayPal/Gumroad/Beatstars/web)</label><input type="text" id="shBuy" value="${esc(p.buy_url || '')}" placeholder="https://…" /></div>
+      </div>
+      <div class="field" id="shFileRow"><label>Archivo a entregar</label>
+        <div class="cover-pick" id="shFileDz"><div class="cover-pick-txt"><b id="shFileName">${p.file_url ? 'Archivo subido ✓' : 'Subir archivo (zip, mp3, wav…)'}</b><span>se entrega tras el pago / al pulsar “Descargar”</span></div></div>
         <input type="file" id="shFile" hidden />
       </div>
-      <div class="field" id="shBuyRow"><label>Enlace de compra (tu Stripe/PayPal/Gumroad/Beatstars/web)</label><input type="text" id="shBuy" value="${esc(p.buy_url || '')}" placeholder="https://…" /></div>
       <div class="pk-row2" id="shEvRow" style="${p.type === 'ticket' ? '' : 'display:none'}">
         <div><label class="pk-l">Fecha (entrada)</label><input type="datetime-local" id="shEvDate" value="${p.event_date ? new Date(p.event_date).toISOString().slice(0, 16) : ''}" /></div>
         <div><label class="pk-l">Lugar</label><input type="text" id="shEvPlace" maxlength="80" value="${esc(p.event_place || '')}" placeholder="Sala, ciudad" /></div>
@@ -4218,16 +4353,25 @@ async function openShopEdit(p, userId, onSaved) {
       <div class="auth-msg" id="shMsg"></div>
     </div>`);
   let type = p.type || 'beat', imgFile = null, dataFile = null;
+  let payMode = (p.pay_inapp || !p.buy_url) ? 'inapp' : 'ext';
   const syncRows = () => {
     const free = m.querySelector('#shFree').checked;
-    m.querySelector('#shFileRow').style.display = (type === 'beat' && free) ? '' : 'none';
-    m.querySelector('#shPriceRow').style.display = free ? 'none' : '';
-    m.querySelector('#shBuyRow').style.display = free ? 'none' : '';
+    const inapp = !free && payMode === 'inapp';
+    const ext = !free && payMode === 'ext';
+    m.querySelector('#shPayWrap').style.display = free ? 'none' : '';
+    m.querySelector('#shEurRow').style.display = inapp ? '' : 'none';
+    m.querySelector('#shPriceRow').style.display = ext ? '' : 'none';
+    m.querySelector('#shBuyRow').style.display = ext ? '' : 'none';
+    m.querySelector('#shConnNote').style.display = (inapp && _sellerStatus && !_sellerStatus.ready) ? '' : 'none';
+    // entrega de archivo: beats/packs gratis o de pago in-app
+    m.querySelector('#shFileRow').style.display = (type === 'beat' && (free || inapp)) ? '' : 'none';
     m.querySelector('#shEvRow').style.display = type === 'ticket' ? '' : 'none';
   };
   m.querySelectorAll('#shType button').forEach(b => b.onclick = () => { type = b.dataset.ty; m.querySelectorAll('#shType button').forEach(x => x.classList.toggle('on', x === b)); syncRows(); });
+  m.querySelectorAll('#shPayMode button').forEach(b => b.onclick = () => { payMode = b.dataset.pm; m.querySelectorAll('#shPayMode button').forEach(x => x.classList.toggle('on', x === b)); syncRows(); });
   m.querySelector('#shFree').onchange = syncRows;
   syncRows();
+  fetchSellerStatus().then(() => syncRows()); // refresca el aviso de “activa cobros”
   m.querySelector('#shDz').onclick = () => m.querySelector('#shImg').click();
   m.querySelector('#shImg').onchange = (e) => { const f = e.target.files[0]; if (!f) return; imgFile = f; m.querySelector('#shPrev').innerHTML = `<img src="${URL.createObjectURL(f)}" alt="">`; };
   m.querySelector('#shFileDz').onclick = () => m.querySelector('#shFile').click();
@@ -4244,12 +4388,20 @@ async function openShopEdit(p, userId, onSaved) {
       if (imgFile) { const path = `${userId}/shop-${stamp}`; const up = await sb.storage.from('covers').upload(path, imgFile, { contentType: imgFile.type, upsert: true }); if (!up.error) image_url = sb.storage.from('covers').getPublicUrl(path).data.publicUrl; }
       if (dataFile) { const ext = (dataFile.name.split('.').pop() || 'zip').toLowerCase(); const path = `${userId}/shopfile-${stamp}.${ext}`; const up = await sb.storage.from('tracks').upload(path, dataFile, { contentType: dataFile.type || 'application/octet-stream', upsert: true }); if (!up.error) file_url = sb.storage.from('tracks').getPublicUrl(path).data.publicUrl; }
       const free = m.querySelector('#shFree').checked;
+      const inapp = !free && payMode === 'inapp';
+      let price_cents = null;
+      if (inapp) {
+        const eur = parseFloat(String(m.querySelector('#shPriceEur').value || '').replace(',', '.'));
+        if (!(eur >= 0.5)) { msg.className = 'auth-msg error'; msg.textContent = 'Pon un precio de al menos 0,50 €.'; btn.disabled = false; btn.textContent = edit ? 'Guardar cambios' : 'Publicar producto'; return; }
+        price_cents = Math.round(eur * 100);
+      }
       const row = {
         user_id: userId, type, title, is_free: free,
-        price: free ? null : (m.querySelector('#shPrice').value.trim() || null),
+        pay_inapp: inapp, price_cents, currency: 'eur',
+        price: free ? null : (inapp ? fmtEur(price_cents, 'eur') : (m.querySelector('#shPrice').value.trim() || null)),
         description: m.querySelector('#shDesc').value.trim() || null,
         image_url, file_url,
-        buy_url: free ? null : (m.querySelector('#shBuy').value.trim() || null),
+        buy_url: (!free && payMode === 'ext') ? (m.querySelector('#shBuy').value.trim() || null) : null,
         event_date: type === 'ticket' && m.querySelector('#shEvDate').value ? new Date(m.querySelector('#shEvDate').value).toISOString() : null,
         event_place: type === 'ticket' ? (m.querySelector('#shEvPlace').value.trim() || null) : null,
       };
