@@ -1833,17 +1833,57 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
 .post-photo-prev img { width: 100%; max-height: 320px; object-fit: cover; display: block; }
 
 /* pestañas del perfil (Pistas / Fotos) — control segmentado, legible sobre cualquier tema */
-.profile-tabs { display: flex; flex-wrap: nowrap; justify-content: center; width: fit-content; max-width: 100%; margin: 6px auto 16px; gap: 4px; padding: 4px; background: var(--glass); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); border: 1px solid var(--line); border-radius: 30px; box-shadow: var(--sh-1); }
-.profile-tabs button { display: inline-flex; align-items: center; gap: 6px; border: none; background: none; padding: 8px 16px; font-size: 13px; font-weight: 700; color: var(--ink-soft); border-radius: 24px; cursor: pointer; transition: background .16s, color .16s; }
-.profile-tabs button svg { width: 15px; height: 15px; stroke: currentColor; }
-.profile-tabs button:not(.active):hover { color: var(--ink-2); background: rgba(62,87,252,.10); }
-.profile-tabs button.active { background: var(--accent-grad); color: #fff; box-shadow: 0 2px 8px rgba(62,87,252,.32); }
-.profile-tabs button.active svg { stroke: #fff; }
-.profile-tabs .ptab-n { font-size: 11px; opacity: .82; font-weight: 700; }
+.profile-tabs {
+  display: flex; flex-wrap: nowrap; justify-content: center;
+  width: fit-content; max-width: 100%; margin: 8px auto 18px;
+  gap: 3px; padding: 5px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.45), rgba(255,255,255,0)),
+    var(--glass);
+  -webkit-backdrop-filter: blur(14px) saturate(150%);
+  backdrop-filter: blur(14px) saturate(150%);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,.55),
+    0 6px 18px rgba(47,56,80,.10),
+    0 1px 3px rgba(47,56,80,.06);
+}
+.profile-tabs button {
+  position: relative; display: inline-flex; align-items: center; gap: 7px;
+  border: none; background: none; padding: 9px 16px;
+  font-size: 13px; font-weight: 700; letter-spacing: .1px;
+  color: var(--ink-soft); border-radius: 999px; cursor: pointer;
+  white-space: nowrap;
+  transition: color .2s ease, background .2s ease, transform .22s cubic-bezier(.34,1.56,.64,1), box-shadow .2s ease;
+}
+.profile-tabs button svg { width: 16px; height: 16px; stroke: currentColor; transition: transform .22s cubic-bezier(.34,1.56,.64,1); }
+.profile-tabs button:not(.active):hover { color: var(--ink-2); background: rgba(62,87,252,.09); }
+.profile-tabs button:not(.active):active { transform: scale(.94); }
+.profile-tabs button.active {
+  color: #fff;
+  background: var(--accent-grad);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(62,87,252,.40), 0 1px 3px rgba(62,87,252,.30), inset 0 1px 0 rgba(255,255,255,.30);
+}
+.profile-tabs button.active svg { stroke: #fff; transform: scale(1.06); }
+.profile-tabs .ptab-n {
+  font-size: 10.5px; font-weight: 800; line-height: 1;
+  padding: 2px 6px; border-radius: 999px;
+  background: rgba(62,87,252,.12); color: var(--accent);
+  transition: background .2s ease, color .2s ease;
+}
+.profile-tabs button.active .ptab-n { background: rgba(255,255,255,.24); color: #fff; }
+:root[data-theme="dark"] .profile-tabs {
+  background: linear-gradient(180deg, rgba(255,255,255,.05), rgba(255,255,255,0)), var(--glass);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 8px 22px rgba(0,0,0,.45), 0 1px 3px rgba(0,0,0,.4);
+}
+:root[data-theme="dark"] .profile-tabs button:not(.active):hover { background: rgba(110,130,255,.14); }
+:root[data-theme="dark"] .profile-tabs .ptab-n { background: rgba(110,130,255,.18); color: #aeb9ff; }
 @media (max-width: 460px) {
-  .profile-tabs { display: flex; flex-wrap: nowrap; justify-content: center; width: 100%; gap: 2px; padding: 3px; border-radius: 18px; }
-  .profile-tabs button { flex: 1 1 0; min-width: 0; justify-content: center; padding: 7px 3px; gap: 3px; font-size: 10.5px; white-space: nowrap; border-radius: 14px; }
-  .profile-tabs button svg { width: 13px; height: 13px; flex-shrink: 0; }
+  .profile-tabs { width: 100%; gap: 2px; padding: 4px; }
+  .profile-tabs button { flex: 1 1 0; min-width: 0; justify-content: center; padding: 8px 3px; gap: 4px; font-size: 10.5px; }
+  .profile-tabs button svg { width: 14px; height: 14px; flex-shrink: 0; }
   .profile-tabs .ptab-n { display: none; }
 }
 
