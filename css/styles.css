@@ -3509,3 +3509,17 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
 /* botón volver en el login */
 .auth-card { position: relative; }
 .auth-back { position: absolute; left: 12px; top: 10px; background: none; border: none; color: var(--ink-soft); font-size: 13px; font-weight: 600; cursor: pointer; padding: 6px 8px; z-index: 2; }
+
+/* landing mockup — portadas reales y micro-animación */
+.lpm-cov, .lpm-np-cov { background-size: cover; background-position: center; }
+.lpm-card.has-cover { background-size: cover; background-position: center; }
+.lpm-card.has-cover .lpm-t, .lpm-card.has-cover .lpm-a { text-shadow: 0 1px 6px rgba(0,0,0,.5); }
+.lpm-card.feat .lpm-t { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.lpm-rmeta .lpm-t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@keyframes lpFloat { 0%,100% { transform: rotate(-2deg) translateY(0); } 50% { transform: rotate(-2deg) translateY(-9px); } }
+@keyframes lpFloatM { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+.lp-phone { animation: lpFloat 6.5s ease-in-out infinite; }
+@media (max-width: 880px) { .lp-phone { animation: lpFloatM 6.5s ease-in-out infinite; } }
+@media (prefers-reduced-motion: reduce) { .lp-phone { animation: none; } }
+.lpm-card.feat .lpm-genre { display: none; }
+.lpm-card.feat .lpm-c-head { padding-right: 44px; }
