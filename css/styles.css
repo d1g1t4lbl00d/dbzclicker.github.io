@@ -3556,3 +3556,61 @@ img.lpm-np-cov { width: 34px; height: 34px; border-radius: 9px; object-fit: cove
 .lp-soon-txt h3 { font-size: 18px; font-weight: 800; color: #fff; margin: 0 0 5px; }
 .lp-soon-txt p { font-size: 13.5px; line-height: 1.5; color: #a7b2cd; margin: 0; }
 @media (max-width: 560px) { .lp-soon { flex-direction: column; text-align: center; align-items: center; } }
+
+/* ---- landing v3: pulido estético (animaciones sutiles, aurora, glow) ---- */
+/* fondo con aurora en movimiento */
+.lp-bg::before, .lp-bg::after { content: ""; position: absolute; border-radius: 50%; filter: blur(55px); will-change: transform; }
+.lp-bg::before { width: 62vmax; height: 62vmax; top: -16%; right: -12%; background: radial-gradient(circle, rgba(110,45,245,.42), transparent 64%); animation: lpDrift1 24s ease-in-out infinite alternate; }
+.lp-bg::after  { width: 52vmax; height: 52vmax; bottom: -14%; left: -14%; background: radial-gradient(circle, rgba(39,169,255,.32), transparent 64%); animation: lpDrift2 28s ease-in-out infinite alternate; }
+@keyframes lpDrift1 { from { transform: translate(0,0) scale(1); } to { transform: translate(-6%,9%) scale(1.16); } }
+@keyframes lpDrift2 { from { transform: translate(0,0) scale(1); } to { transform: translate(9%,-7%) scale(1.13); } }
+
+/* entrada del hero (escalonada) */
+@keyframes lpUp { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
+.lp-hero-copy > * { animation: lpUp .72s var(--ease) both; }
+.lp-hero-copy > *:nth-child(1) { animation-delay: .04s; }
+.lp-hero-copy > *:nth-child(2) { animation-delay: .12s; }
+.lp-hero-copy > *:nth-child(3) { animation-delay: .20s; }
+.lp-hero-copy > *:nth-child(4) { animation-delay: .28s; }
+.lp-hero-copy > *:nth-child(5) { animation-delay: .36s; }
+.lp-hero-art { animation: lpUp .85s var(--ease) both; animation-delay: .22s; }
+
+/* reveal al hacer scroll */
+.landing .reveal { opacity: 0; transform: translateY(28px); transition: opacity .7s var(--ease), transform .7s var(--ease); }
+.landing .reveal.in { opacity: 1; transform: none; }
+.lp-features .lp-feat:nth-child(2).reveal { transition-delay: .06s; }
+.lp-features .lp-feat:nth-child(3).reveal { transition-delay: .12s; }
+.lp-features .lp-feat:nth-child(4).reveal { transition-delay: .06s; }
+.lp-features .lp-feat:nth-child(5).reveal { transition-delay: .12s; }
+.lp-features .lp-feat:nth-child(6).reveal { transition-delay: .18s; }
+
+/* borde-glow en tarjetas al pasar el ratón */
+.lp-feat { position: relative; }
+.lp-feat::before { content: ""; position: absolute; inset: 0; border-radius: 20px; padding: 1px; pointer-events: none;
+  background: linear-gradient(135deg, rgba(39,169,255,.55), rgba(110,45,245,.55));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
+  opacity: 0; transition: opacity .25s var(--ease); }
+.lp-feat:hover::before { opacity: 1; }
+.lp-fic { box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 6px 16px rgba(40,40,120,.25); transition: transform .25s var(--ease-spring); }
+.lp-feat:hover .lp-fic { transform: translateY(-2px) scale(1.05); }
+
+/* brillo que recorre el botón principal */
+.landing .btn.primary.lp-big { position: relative; overflow: hidden; }
+.landing .btn.primary.lp-big::after { content: ""; position: absolute; top: 0; bottom: 0; left: -70%; width: 45%;
+  background: linear-gradient(100deg, transparent, rgba(255,255,255,.32), transparent); transform: skewX(-18deg); animation: lpSheen 5s ease-in-out infinite; }
+@keyframes lpSheen { 0%, 62% { left: -70%; } 84%, 100% { left: 140%; } }
+
+/* reflejo/cristal en la pantalla del teléfono */
+.lp-phone-scr { position: relative; }
+.lp-phone-scr::after { content: ""; position: absolute; inset: 0; z-index: 6; pointer-events: none; border-radius: 31px;
+  background: linear-gradient(125deg, rgba(255,255,255,.12) 0%, rgba(255,255,255,0) 36%); }
+
+/* hairline degradado entre secciones */
+.lp-section { position: relative; }
+.lp-section::before { content: ""; position: absolute; top: 0; left: 12%; right: 12%; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,.12), transparent); }
+
+@media (prefers-reduced-motion: reduce) {
+  .lp-bg::before, .lp-bg::after, .lp-hero-copy > *, .lp-hero-art, .landing .btn.primary.lp-big::after { animation: none; }
+  .landing .reveal { opacity: 1; transform: none; transition: none; }
+}

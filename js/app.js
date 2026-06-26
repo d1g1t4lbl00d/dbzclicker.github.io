@@ -230,6 +230,17 @@ function initLanding() {
   ['lpLogin', 'lpLogin2'].forEach(id => { const b = $(id); if (b) b.onclick = () => showAuth('login'); });
   ['lpRegister', 'lpRegister2', 'lpRegister3'].forEach(id => { const b = $(id); if (b) b.onclick = () => showAuth('register'); });
   const back = $('authBack'); if (back) back.onclick = () => { $('authScreen')?.classList.add('hidden'); lp.classList.remove('hidden'); try { window.scrollTo(0, 0); } catch (_) {} };
+  initLandingReveal(lp);
+}
+// Animación de aparición de secciones al hacer scroll dentro de la landing
+function initLandingReveal(root) {
+  const els = root.querySelectorAll('.lp-h2, .lp-h2-sub, .lp-feat, .lp-soon, .lp-final-inner, .lp-marquee');
+  els.forEach(e => e.classList.add('reveal'));
+  if (!('IntersectionObserver' in window)) { els.forEach(e => e.classList.add('in')); return; }
+  const io = new IntersectionObserver((ents) => {
+    ents.forEach(en => { if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); } });
+  }, { root, rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+  els.forEach(e => io.observe(e));
 }
 $('authPolicyLink').onclick = (e) => { e.preventDefault(); showPrivacyPolicy(); };
 $('authPolicyFooter').onclick = (e) => { e.preventDefault(); showPrivacyPolicy(); };
