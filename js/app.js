@@ -1021,7 +1021,7 @@ function startFeedAutoRefresh() {
       if (main && main.scrollTop > 120) return;             // no interrumpir si está leyendo más abajo
       state.tracks = tracks; renderFeed(spec.head, tracks, state.view);
     }).catch(() => {});
-  }, 60000);
+  }, 20000);   // recalcula el ranking cada 20s → el Top se reordena casi al momento
   // al volver a la app, refresca de inmediato la pantalla de feed visible
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
