@@ -4143,6 +4143,8 @@ async function loadProfileEvents(userId, container) {
    Cobro DENTRO de UnderBro con Stripe (UnderBro se lleva comisión) o, como
    alternativa, enlace externo del artista; descarga directa si es gratis.
    ======================================================================= */
+// Tienda oculta de momento (funcionalidad completa, lista para reactivar): poner a true.
+const SHOP_ENABLED = false;
 const SHOP_TYPES = {
   beat: { label: 'Beat / Pack', icon: 'i-music' },
   feat: { label: 'Colaboración / FT', icon: 'i-people' },
@@ -4242,14 +4244,51 @@ async function openPurchaseResult(sid) {
       <div class="buy-ok-ic">✅</div>
       <h3>¡Pago completado!</h3>
       <p class="buy-ok-sub">${esc(d.title || '')} · ${esc(fmtEur(d.amount_cents, d.currency))}</p>
-      ${isTicket ? `
-        <div class="buy-ticket">
-          <span class="buy-ticket-l">Tu entrada</span>
-          <span class="buy-ticket-code">${esc(d.ticket_code || '')}</span>
-          ${d.event_date ? `<span class="buy-ticket-meta">${esc(new Date(d.event_date).toLocaleString('es-ES'))}${d.event_place ? ' · ' + esc(d.event_place) : ''}</span>` : ''}
-          <span class="buy-ticket-hint">Muestra este código en la entrada.</span>
-        </div>` : (d.file_url ? `<a class="btn primary" id="buyDl" href="${esc(czHref(d.file_url))}" target="_blank" rel="noopener"><svg fill="none" stroke="#fff"><use href="#i-download"/></svg> Descargar</a>` : `<p class="buy-ok-sub">El artista te entregará el producto. Te avisaremos por mensaje.</p>`)}
+      ${isTicket ? ticketDeliveryHTML(d) : (d.file_url ? `<a class="btn primary" id="buyDl" href="${esc(czHref(d.file_url))}" target="_blank" rel="noopener"><svg fill="none" stroke="#fff"><use href="#i-download"/></svg> Descargar</a>` : `<p class="buy-ok-sub">El artista te entregará el producto. Te avisaremos por mensaje.</p>`)}
     </div>`;
+  if (isTicket && !d.event_online && d.ticket_code) renderQR(box.querySelector('[data-qr]'), d.ticket_code);
+}
+
+// HTML de entrega de una entrada (online → enlace · presencial → código + QR)
+function ticketDeliveryHTML(d) {
+  const when = d.event_date ? `<span class="buy-ticket-meta">${esc(new Date(d.event_date).toLocaleString('es-ES'))}${d.event_place && !d.event_online ? ' · ' + esc(d.event_place) : ''}</span>` : '';
+  if (d.event_online) {
+    return `<div class="buy-ticket">
+      <span class="buy-ticket-l">Entrada · evento online</span>
+      ${when}
+      ${d.event_url ? `<a class="btn primary" style="margin-top:10px" href="${esc(czHref(d.event_url))}" target="_blank" rel="noopener">💻 Acceder al evento</a>` : '<span class="buy-ticket-hint">El organizador te enviará el acceso.</span>'}
+      <span class="buy-ticket-hint">También en “Mis compras”.</span>
+    </div>`;
+  }
+  return `<div class="buy-ticket">
+    <span class="buy-ticket-l">Tu entrada</span>
+    <div class="ticket-qr" data-qr></div>
+    <span class="buy-ticket-code">${esc(d.ticket_code || '')}</span>
+    ${when}
+    <span class="buy-ticket-hint">Muestra este QR/código en la puerta (un solo uso).</span>
+  </div>`;
+}
+
+// Cargador perezoso de la librería QR (CDN) + render
+let _qrLibP = null;
+function loadQRLib() {
+  if (window.QRCode && window.QRCode.toDataURL) return Promise.resolve();
+  if (_qrLibP) return _qrLibP;
+  _qrLibP = new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/qrcode@1.5.4/build/qrcode.min.js';
+    s.onload = res; s.onerror = rej;
+    document.head.appendChild(s);
+  });
+  return _qrLibP;
+}
+async function renderQR(container, text) {
+  if (!container || !text) return;
+  try {
+    await loadQRLib();
+    const url = await window.QRCode.toDataURL(text, { width: 180, margin: 1 });
+    container.innerHTML = `<img src="${url}" width="180" height="180" alt="QR entrada">`;
+  } catch (_) { /* si falla, el código de texto basta */ }
 }
 
 async function loadProfileShop(userId, container, isMe) {
@@ -4372,9 +4411,11 @@ async function openWallet(userId) {
     </div>
     <p class="wallet-note">Tus ventas pasan a “Disponible” y Stripe las ingresa en tu cuenta bancaria automáticamente. En el panel de Stripe puedes ver/cambiar tu banco y los pagos.</p>
     <button class="btn primary" id="wSales"><svg fill="none" stroke="#fff"><use href="#i-cart"/></svg> Mis ventas</button>
+    <button class="btn" id="wValidate"><svg fill="none" stroke="currentColor"><use href="#i-calendar"/></svg> Validar entradas</button>
     <button class="btn" id="wBank"><svg fill="none" stroke="currentColor"><use href="#i-download"/></svg> Pagos, banco y retiradas</button>
     <div class="auth-msg" id="wMsg"></div>`;
   m.querySelector('#wSales').onclick = () => { m.remove(); openSellerSales(userId); };
+  m.querySelector('#wValidate').onclick = () => { m.remove(); openTicketValidator(); };
   m.querySelector('#wBank').onclick = async (e) => {
     const b = e.currentTarget; b.disabled = true; b.textContent = 'Abriendo Stripe…';
     try {
@@ -4432,7 +4473,7 @@ async function openMyPurchases() {
   let rows = [];
   try {
     const { data } = await sb.from('shop_orders')
-      .select('id,title,type,amount_cents,ship_cents,currency,ticket_code,ship_addr,shipped,paid_at,shop_products(file_url,event_date,event_place)')
+      .select('id,title,type,amount_cents,ship_cents,currency,ticket_code,ticket_used,ship_addr,shipped,paid_at,shop_products(file_url,event_date,event_place,event_online,event_url)')
       .eq('buyer_id', state.user.id).eq('status', 'paid').order('paid_at', { ascending: false }).limit(100);
     rows = data || [];
   } catch (_) {}
@@ -4442,17 +4483,73 @@ async function openMyPurchases() {
     const prod = o.shop_products || {};
     const total = (o.amount_cents || 0) + (o.ship_cents || 0);
     const tlabel = (SHOP_TYPES[o.type] || SHOP_TYPES.other).label;
-    let action = '';
-    if (o.type === 'ticket') action = `<div class="buy-ticket" style="margin-top:8px"><span class="buy-ticket-l">Entrada</span><span class="buy-ticket-code">${esc(o.ticket_code || '')}</span>${prod.event_date ? `<span class="buy-ticket-meta">${esc(new Date(prod.event_date).toLocaleString('es-ES'))}${prod.event_place ? ' · ' + esc(prod.event_place) : ''}</span>` : ''}</div>`;
+    let action = '', qrCode = null;
+    if (o.type === 'ticket') {
+      const d = { event_online: prod.event_online, event_url: prod.event_url, event_date: prod.event_date, event_place: prod.event_place, ticket_code: o.ticket_code };
+      action = ticketDeliveryHTML(d);
+      if (!prod.event_online && o.ticket_code) qrCode = o.ticket_code;
+      if (o.ticket_used) action += `<div class="sale-meta" style="margin-top:6px">✓ Entrada ya validada</div>`;
+    }
     else if (o.ship_addr) action = `<div class="sale-meta" style="margin-top:6px">${o.shipped ? '📦 Enviado' : '⏳ Preparando envío'} · a ${esc(o.ship_addr)}</div>`;
     else if (prod.file_url) action = `<a class="btn sm primary" style="margin-top:8px" href="${esc(czHref(prod.file_url))}" target="_blank" rel="noopener"><svg fill="none" stroke="#fff"><use href="#i-download"/></svg> Descargar</a>`;
     else action = `<div class="sale-meta" style="margin-top:6px">El artista te entregará el producto.</div>`;
-    box.appendChild(el(`<div class="sale-row">
+    const row = el(`<div class="sale-row">
       <div class="sale-top"><b>${esc(o.title || 'Producto')}</b><span class="sale-amt">${esc(fmtEur(total, o.currency))}</span></div>
       <div class="sale-meta">${esc(tlabel)} · ${o.paid_at ? esc(new Date(o.paid_at).toLocaleDateString('es-ES')) : ''}</div>
       ${action}
-    </div>`));
+    </div>`);
+    box.appendChild(row);
+    if (qrCode) renderQR(row.querySelector('[data-qr]'), qrCode);
   });
+}
+
+// Validador de entradas para el organizador (presencial): código manual o escaneo de QR, un solo uso
+async function openTicketValidator() {
+  const canScan = ('BarcodeDetector' in window);
+  const m = openModal(`<div class="modal-head"><h3>🎟️ Validar entradas</h3><button class="close">&times;</button></div>
+    <div class="modal-body" id="valBody">
+      <p class="sub" style="margin-top:0">Introduce el código de la entrada (o escanéalo) para validarla en la puerta. Cada entrada solo se puede usar una vez.</p>
+      ${canScan ? `<button class="btn" id="valScan" style="width:100%;margin-bottom:10px"><svg fill="none" stroke="currentColor"><use href="#i-camera"/></svg> Escanear QR con la cámara</button><div id="valCam"></div>` : ''}
+      <div class="field"><input type="text" id="valCode" placeholder="UB-XXXXXXXX" autocapitalize="characters" style="text-transform:uppercase" /></div>
+      <button class="btn primary" id="valGo" style="width:100%">Validar</button>
+      <div id="valResult" style="margin-top:14px"></div>
+    </div>`);
+  const resBox = m.querySelector('#valResult');
+  const show = (cls, icon, title, sub) => { resBox.innerHTML = `<div class="val-res ${cls}"><div class="val-ic">${icon}</div><div><b>${esc(title)}</b>${sub ? `<span>${esc(sub)}</span>` : ''}</div></div>`; };
+  const validate = async (code) => {
+    code = (code || '').trim().toUpperCase();
+    if (!code) return;
+    resBox.innerHTML = `<div class="loading" style="padding:10px"><div class="spinner"></div></div>`;
+    const { data, error } = await sb.rpc('shop_redeem_ticket', { p_code: code });
+    if (error) { show('bad', '⚠️', 'Error al validar', error.message || ''); return; }
+    const r = data || {};
+    if (r.result === 'ok') { haptic(30); show('ok', '✅', 'Entrada válida', `${r.title || ''}${r.buyer_email ? ' · ' + r.buyer_email : ''}`); }
+    else if (r.result === 'used') { haptic(40); show('bad', '⛔', 'Ya usada', `Validada el ${r.used_at ? new Date(r.used_at).toLocaleString('es-ES') : ''}`); }
+    else { haptic(40); show('bad', '❌', 'No válida', 'El código no existe o no es de tus eventos.'); }
+  };
+  m.querySelector('#valGo').onclick = () => validate(m.querySelector('#valCode').value);
+  m.querySelector('#valCode').addEventListener('keydown', (e) => { if (e.key === 'Enter') validate(e.target.value); });
+  if (canScan) {
+    let stream = null, scanning = false, det = null;
+    m.querySelector('#valScan').onclick = async () => {
+      if (scanning) return;
+      const cam = m.querySelector('#valCam');
+      try {
+        det = new window.BarcodeDetector({ formats: ['qr_code'] });
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        const video = el(`<video playsinline style="width:100%;border-radius:12px;margin-bottom:10px"></video>`);
+        cam.innerHTML = ''; cam.appendChild(video); video.srcObject = stream; await video.play(); scanning = true;
+        const tick = async () => {
+          if (!scanning) return;
+          try { const codes = await det.detect(video); if (codes && codes[0]) { const v = codes[0].rawValue; stop(); validate(v); return; } } catch (_) {}
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      } catch (_) { cam.innerHTML = '<p class="sub">No se pudo abrir la cámara. Introduce el código a mano.</p>'; }
+    };
+    const stop = () => { scanning = false; if (stream) { stream.getTracks().forEach(t => t.stop()); stream = null; } const cam = m.querySelector('#valCam'); if (cam) cam.innerHTML = ''; };
+    m.querySelector('.close').addEventListener('click', stop);
+  }
 }
 
 async function openShopEdit(p, userId, onSaved) {
@@ -4484,9 +4581,18 @@ async function openShopEdit(p, userId, onSaved) {
         <input type="file" id="shFile" hidden />
       </div>
       <div class="field" id="shShipRow" style="display:none"><label>Coste de envío (€)</label><input type="number" id="shShipEur" min="0" step="0.01" inputmode="decimal" value="${p.ship_cents != null ? (p.ship_cents / 100) : ''}" placeholder="3,99 (0 = envío gratis)" /><span class="pk-hint">Se pide la dirección del comprador al pagar y la verás en tu <b>Monedero → Ventas</b> para enviar el pedido.</span></div>
-      <div class="pk-row2" id="shEvRow" style="${p.type === 'ticket' ? '' : 'display:none'}">
-        <div><label class="pk-l">Fecha (entrada)</label><input type="datetime-local" id="shEvDate" value="${p.event_date ? new Date(p.event_date).toISOString().slice(0, 16) : ''}" /></div>
-        <div><label class="pk-l">Lugar</label><input type="text" id="shEvPlace" maxlength="80" value="${esc(p.event_place || '')}" placeholder="Sala, ciudad" /></div>
+      <div id="shEvRow" style="${p.type === 'ticket' ? '' : 'display:none'}">
+        <label class="pk-l">Tipo de evento</label>
+        <div class="seg" id="shEvMode">
+          <button data-em="presencial" class="${p.event_online ? '' : 'on'}">📍 Presencial</button>
+          <button data-em="online" class="${p.event_online ? 'on' : ''}">💻 Online</button>
+        </div>
+        <div class="pk-row2">
+          <div><label class="pk-l">Fecha</label><input type="datetime-local" id="shEvDate" value="${p.event_date ? new Date(p.event_date).toISOString().slice(0, 16) : ''}" /></div>
+          <div><label class="pk-l">Lugar</label><input type="text" id="shEvPlace" maxlength="80" value="${esc(p.event_place || '')}" placeholder="Sala, ciudad" /></div>
+        </div>
+        <div class="field" id="shEvUrlRow" style="display:none"><label>Enlace de acceso (online)</label><input type="text" id="shEvUrl" value="${esc(p.event_url || '')}" placeholder="https://… (Zoom, YouTube, Twitch…)" /><span class="pk-hint">Se desbloquea al comprador <b>tras pagar</b>.</span></div>
+        <div class="field" id="shEvDoorNote" style="display:none"><span class="pk-hint">📍 Presencial: cada entrada lleva un <b>código + QR</b>. En la puerta lo validas desde <b>Monedero → Validar entradas</b> (un solo uso).</span></div>
       </div>
       <div class="field" id="shStockRow"><label>Unidades disponibles</label><input type="number" id="shStock" min="0" step="1" inputmode="numeric" value="${p.stock != null ? p.stock : ''}" placeholder="Vacío = ilimitado" /><span class="pk-hint">Pon un número para limitar (ej. <b>1</b> para algo único). Al agotarse se marca <b>“Agotado”</b> y deja de venderse.</span></div>
       <button class="btn primary" id="shSave">${edit ? 'Guardar cambios' : 'Publicar producto'}</button>
@@ -4494,6 +4600,7 @@ async function openShopEdit(p, userId, onSaved) {
       <div class="auth-msg" id="shMsg"></div>
     </div>`);
   let kind = 'digital', type = p.type || 'beat', imgFile = null, dataFile = null;  // ventas físicas desactivadas → solo digital
+  let evOnline = !!p.event_online;
   const catSel = m.querySelector('#shCat');
   const fillCats = () => {
     const cats = SHOP_KINDS[kind].cats;
@@ -4511,8 +4618,14 @@ async function openShopEdit(p, userId, onSaved) {
     m.querySelector('#shFileRow').style.display = (!physical && SHOP_DIGITAL_FILE.includes(type)) ? '' : 'none';
     m.querySelector('#shShipRow').style.display = physical ? '' : 'none';
     m.querySelector('#shEvRow').style.display = type === 'ticket' ? '' : 'none';
+    if (type === 'ticket') {
+      m.querySelectorAll('#shEvMode button').forEach(b => b.classList.toggle('on', (b.dataset.em === 'online') === evOnline));
+      m.querySelector('#shEvUrlRow').style.display = evOnline ? '' : 'none';
+      m.querySelector('#shEvDoorNote').style.display = evOnline ? 'none' : '';
+    }
   };
   m.querySelectorAll('#shKind button').forEach(b => b.onclick = () => { kind = b.dataset.kind; if (kind === 'physical') m.querySelector('#shFree').checked = false; fillCats(); syncRows(); });
+  m.querySelectorAll('#shEvMode button').forEach(b => b.onclick = () => { evOnline = b.dataset.em === 'online'; syncRows(); });
   catSel.onchange = (e) => { type = e.target.value; syncRows(); };
   m.querySelector('#shFree').onchange = syncRows;
   fillCats();
@@ -4562,6 +4675,8 @@ async function openShopEdit(p, userId, onSaved) {
         buy_url: null,
         event_date: type === 'ticket' && m.querySelector('#shEvDate').value ? new Date(m.querySelector('#shEvDate').value).toISOString() : null,
         event_place: type === 'ticket' ? (m.querySelector('#shEvPlace').value.trim() || null) : null,
+        event_online: type === 'ticket' ? evOnline : false,
+        event_url: (type === 'ticket' && evOnline) ? (m.querySelector('#shEvUrl').value.trim() || null) : null,
       };
       let error;
       if (edit) ({ error } = await sb.from('shop_products').update(row).eq('id', p.id));
@@ -5057,7 +5172,7 @@ async function openProfile(userId) {
         <button data-ptab="feats"><svg fill="none" stroke="currentColor"><use href="#i-people"/></svg> Feats <span class="ptab-n">${featTracks.length}</span></button>
         <button data-ptab="reposts"><svg fill="none" stroke="currentColor"><use href="#i-repeat"/></svg> Reposts</button>
         <button data-ptab="events"><svg fill="none" stroke="currentColor"><use href="#i-calendar"/></svg> Eventos</button>
-        <button data-ptab="shop"><svg fill="none" stroke="currentColor"><use href="#i-cart"/></svg> Tienda</button>
+        ${SHOP_ENABLED ? '<button data-ptab="shop"><svg fill="none" stroke="currentColor"><use href="#i-cart"/></svg> Tienda</button>' : ''}
       </div>
       <div id="profTop" class="prof-top-wrap"></div>
       <div id="feedList" class="feed-list"></div>

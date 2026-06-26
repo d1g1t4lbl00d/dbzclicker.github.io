@@ -3373,3 +3373,11 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
 .buy-ticket-code { font-size: 24px; font-weight: 900; letter-spacing: 2px; color: var(--accent); font-variant-numeric: tabular-nums; }
 .buy-ticket-meta { font-size: 12.5px; color: var(--ink); font-weight: 600; }
 .buy-ticket-hint { font-size: 11.5px; color: var(--ink-soft); margin-top: 4px; }
+.ticket-qr { margin: 4px 0 8px; }
+.ticket-qr img { display: block; border-radius: 8px; background: #fff; padding: 6px; }
+.val-res { display: flex; align-items: center; gap: 12px; padding: 14px; border-radius: 14px; }
+.val-res .val-ic { font-size: 30px; line-height: 1; }
+.val-res b { display: block; font-size: 16px; }
+.val-res span { display: block; font-size: 12.5px; opacity: .85; margin-top: 2px; }
+.val-res.ok { background: rgba(31,157,87,.14); border: 1px solid rgba(31,157,87,.4); color: #157a43; }
+.val-res.bad { background: rgba(216,40,60,.12); border: 1px solid rgba(216,40,60,.4); color: #c0303f; }

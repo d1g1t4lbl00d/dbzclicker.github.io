@@ -11,7 +11,7 @@ module.exports = async (req, res) => {
     const o = rows && rows[0];
     if (!o) return json(res, 404, { error: 'no_order' });
     if (o.status !== 'paid') return json(res, 200, { status: o.status });
-    const pr = await sbAdmin(`shop_products?id=eq.${o.product_id}&select=file_url,event_date,event_place,title`);
+    const pr = await sbAdmin(`shop_products?id=eq.${o.product_id}&select=file_url,event_date,event_place,event_online,event_url,title`);
     const p = (pr && pr[0]) || {};
     return json(res, 200, {
       status: 'paid',
@@ -23,6 +23,8 @@ module.exports = async (req, res) => {
       ticket_code: o.ticket_code || null,
       event_date: p.event_date || null,
       event_place: p.event_place || null,
+      event_online: !!p.event_online,
+      event_url: p.event_url || null,
     });
   } catch (e) {
     return json(res, 500, { error: e.message || 'error' });
