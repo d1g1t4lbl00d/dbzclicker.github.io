@@ -1021,7 +1021,7 @@ function startFeedAutoRefresh() {
       if (main && main.scrollTop > 120) return;             // no interrumpir si está leyendo más abajo
       state.tracks = tracks; renderFeed(spec.head, tracks, state.view);
     }).catch(() => {});
-  }, 20000);   // recalcula el ranking cada 20s → el Top se reordena casi al momento
+  }, 300000);  // refresco de fondo cada 5 min (economiza recursos); además se refresca al instante al abrir el Trending o volver a la app
   // al volver a la app, refresca de inmediato la pantalla de feed visible
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
