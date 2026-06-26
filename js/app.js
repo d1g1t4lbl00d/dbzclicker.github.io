@@ -406,7 +406,7 @@ function renderSiteConfig(cfg) {
   // MARCA: logo / nombre / eslogan
   if (cfg.logo) {
     const src = String(cfg.logo).replace(/["\\]/g, '');
-    document.querySelectorAll('.logo').forEach((l) => { l.innerHTML = `<img src="${src}" alt="${(cfg.name || 'logo')}" style="height:1.15em;width:auto;vertical-align:middle;display:inline-block">`; });
+    document.querySelectorAll('.logo').forEach((l) => { l.innerHTML = `<img decoding="async" src="${src}" alt="${(cfg.name || 'logo')}" style="height:1.15em;width:auto;vertical-align:middle;display:inline-block">`; });
   } else if (cfg.name) {
     document.querySelectorAll('.logo').forEach((l) => { l.textContent = cfg.name; });
   }
@@ -2324,7 +2324,7 @@ function openEditTrack(t, card) {
     <div class="modal-body">
       <div class="field"><label>Portada</label>
         <div class="cover-pick" id="dzCover">
-          <div class="cover-prev" id="coverPrev">${t.cover_url ? `<img src="${esc(t.cover_url)}" alt="" />` : `<svg width="24" height="24" fill="none" stroke="currentColor"><use href="#i-image"/></svg>`}</div>
+          <div class="cover-prev" id="coverPrev">${t.cover_url ? `<img decoding="async" src="${esc(t.cover_url)}" alt="" />` : `<svg width="24" height="24" fill="none" stroke="currentColor"><use href="#i-image"/></svg>`}</div>
           <div class="cover-pick-txt"><b id="coverName">Cambiar portada</b><span>Imagen cuadrada · JPG, PNG o WebP</span></div>
         </div>
         <input type="file" id="fCover" accept="image/*" hidden />
@@ -2348,7 +2348,7 @@ function openEditTrack(t, card) {
   let coverFile = null;
   const fC = m.querySelector('#fCover');
   m.querySelector('#dzCover').onclick = () => fC.click();
-  const setCover = (f) => { if (!f || !f.type.startsWith('image')) { toast('Selecciona una imagen'); return; } coverFile = f; m.querySelector('#coverName').textContent = f.name; m.querySelector('#coverPrev').innerHTML = `<img src="${URL.createObjectURL(f)}" alt="" />`; };
+  const setCover = (f) => { if (!f || !f.type.startsWith('image')) { toast('Selecciona una imagen'); return; } coverFile = f; m.querySelector('#coverName').textContent = f.name; m.querySelector('#coverPrev').innerHTML = `<img decoding="async" src="${URL.createObjectURL(f)}" alt="" />`; };
   fC.onchange = () => { if (fC.files[0]) setCover(fC.files[0]); };
   m.querySelector('#eIsBeat').onchange = (e) => m.querySelector('#eBeatRow').classList.toggle('hidden', !e.target.checked);
   const collab = mountCollab(m, t.collaborators || []);
@@ -2478,7 +2478,7 @@ function shareTrack(t) {
     <div class="modal-body">
       <div class="share-hero">
         ${t.cover_url ? `<div class="share-hero-bg" style="background-image:url('${esc(czUrl(t.cover_url))}')"></div>` : ''}
-        <div class="share-hero-cover">${t.cover_url ? `<img src="${esc(czUrl(t.cover_url))}" alt="">` : '<svg fill="none" stroke="#fff"><use href="#i-music"/></svg>'}</div>
+        <div class="share-hero-cover">${t.cover_url ? `<img decoding="async" src="${esc(czUrl(t.cover_url))}" alt="">` : '<svg fill="none" stroke="#fff"><use href="#i-music"/></svg>'}</div>
         <div class="share-hero-meta"><b>${esc(t.title)}</b><span><svg viewBox="0 0 24 24" width="13" height="13" style="fill:currentColor"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg> ${esc(who)}</span></div>
       </div>
       <button class="btn btn-ig share-big" id="shareStory">
@@ -2698,7 +2698,7 @@ async function openTrackStoryPicker(t) {
   const who = trackWho(t);
   const m = openModal(`<div class="modal-head"><h3>Historia para Instagram</h3><button class="close">&times;</button></div>
     <div class="modal-body">
-      <div class="st-head"><div class="st-cover">${t.cover_url ? `<img src="${esc(czUrl(t.cover_url))}" alt="">` : '<svg fill="none" stroke="#fff"><use href="#i-music"/></svg>'}</div><div class="st-meta"><b>${esc(t.title)}</b><span>${esc(who)}</span></div></div>
+      <div class="st-head"><div class="st-cover">${t.cover_url ? `<img decoding="async" src="${esc(czUrl(t.cover_url))}" alt="">` : '<svg fill="none" stroke="#fff"><use href="#i-music"/></svg>'}</div><div class="st-meta"><b>${esc(t.title)}</b><span>${esc(who)}</span></div></div>
       <p class="eco-hint">${canVideo ? 'Arrastra sobre la onda para elegir los 10 s que sonarán 🔊' : 'Tu navegador no permite vídeo con sonido; comparte como imagen.'}</p>
       <div id="stStatus" class="eco-hint">${canVideo ? 'Cargando audio…' : ''}</div>
       <div id="stCtrls" style="display:none">
@@ -2797,7 +2797,7 @@ function sharePost(p) {
     <div class="modal-body">
       <div class="share-hero share-hero-photo">
         <div class="share-hero-bg" style="background-image:url('${esc(p.image_url)}')"></div>
-        <div class="share-hero-cover"><img src="${esc(p.image_url)}" alt=""></div>
+        <div class="share-hero-cover"><img decoding="async" src="${esc(p.image_url)}" alt=""></div>
         <div class="share-hero-meta"><b>Foto</b><span>${esc(who)}</span></div>
       </div>
       <button class="btn btn-ig share-big" id="sharePhotoStory">
@@ -3285,7 +3285,7 @@ function syncNowPlaying() {
   const t = state.current; if (!t) return;
   $('npTitle').textContent = t.title;
   $('npArtist').textContent = t.profiles?.display_name || t.profiles?.username || t.artist || '';
-  $('npCover').innerHTML = t.cover_url ? `<img src="${esc(t.cover_url)}" alt="" />` : `<svg fill="none" stroke="#fff"><use href="#i-music"/></svg>`;
+  $('npCover').innerHTML = t.cover_url ? `<img decoding="async" src="${esc(t.cover_url)}" alt="" />` : `<svg fill="none" stroke="#fff"><use href="#i-music"/></svg>`;
   $('npBg').style.backgroundImage = t.cover_url ? `url('${czUrl(t.cover_url)}')` : 'none';
   const rawPeaks = Array.isArray(t.waveform) && t.waveform.length ? t.waveform : waveBars(t.id, 80);
   const npPeaks = resamplePeaks(rawPeaks, 80); // nº fijo de barras → siempre cabe y queda centrada
@@ -3340,7 +3340,7 @@ async function playTrack(t) {
   document.body.classList.add('has-player');
   $('pTitle').textContent = t.title;
   $('pArtist').textContent = (t.profiles?.display_name || t.profiles?.username || t.artist || '');
-  $('pCover').innerHTML = t.cover_url ? `<img src="${esc(t.cover_url)}" alt="" />` : `<svg width="22" height="22" fill="none" stroke="#fff" style="margin:15px"><use href="#i-music"/></svg>`;
+  $('pCover').innerHTML = t.cover_url ? `<img decoding="async" src="${esc(t.cover_url)}" alt="" />` : `<svg width="22" height="22" fill="none" stroke="#fff" style="margin:15px"><use href="#i-music"/></svg>`;
   updateMediaSession();
   if (npIsOpen()) syncNowPlaying();
   audio.src = t.audio_url;
@@ -3769,7 +3769,7 @@ function openUploadModal(prefill) {
     if (!f || !f.type.startsWith('image')) { toast('Selecciona una imagen'); return; }
     coverFile = f;
     m.querySelector('#coverName').textContent = f.name;
-    m.querySelector('#coverPrev').innerHTML = `<img src="${URL.createObjectURL(f)}" alt="" />`;
+    m.querySelector('#coverPrev').innerHTML = `<img decoding="async" src="${URL.createObjectURL(f)}" alt="" />`;
   };
   fC.onchange = () => { if (fC.files[0]) setCover(fC.files[0]); };
   ['dragover','dragleave','drop'].forEach(ev => dzC.addEventListener(ev, (e) => {
@@ -3969,7 +3969,7 @@ function openPhotoUploadModal() {
     if (!f || !f.type.startsWith('image')) { toast('Selecciona una imagen'); return; }
     if (f.size > 10 * 1024 * 1024) { toast('La imagen no puede superar los 10 MB'); return; }
     photoFile = f;
-    prev.innerHTML = `<img src="${URL.createObjectURL(f)}" alt="" />`;
+    prev.innerHTML = `<img decoding="async" src="${URL.createObjectURL(f)}" alt="" />`;
     prev.classList.remove('hidden');
     m.querySelector('#photoName').textContent = f.name;
   };
@@ -4113,7 +4113,7 @@ function openEditPost(p, card) {
   const m = openModal(`
     <div class="modal-head"><h3>Editar publicación</h3><button class="close">&times;</button></div>
     <div class="modal-body">
-      <div class="post-photo-prev" style="margin-top:0"><img src="${esc(p.image_url)}" alt="" /></div>
+      <div class="post-photo-prev" style="margin-top:0"><img decoding="async" src="${esc(p.image_url)}" alt="" /></div>
       <div class="field" style="margin-top:12px"><label>Pie de foto</label><textarea id="epCaption" maxlength="600" placeholder="Escribe algo sobre tu foto…">${esc(p.caption || '')}</textarea></div>
       <button class="btn primary" id="epSave">Guardar cambios</button>
       <div class="auth-msg" id="epMsg"></div>
@@ -4350,7 +4350,7 @@ async function renderQR(container, text) {
   try {
     await loadQRLib();
     const url = await window.QRCode.toDataURL(text, { width: 180, margin: 1 });
-    container.innerHTML = `<img src="${url}" width="180" height="180" alt="QR entrada">`;
+    container.innerHTML = `<img decoding="async" src="${url}" width="180" height="180" alt="QR entrada">`;
   } catch (_) { /* si falla, el código de texto basta */ }
 }
 
@@ -4631,7 +4631,7 @@ async function openShopEdit(p, userId, onSaved) {
         <select id="shCat" class="pk-select"></select>
       </div>
       <div class="field"><label>Imagen</label>
-        <div class="cover-pick" id="shDz"><div class="cover-prev" id="shPrev">${p.image_url ? `<img src="${esc(czUrl(p.image_url))}" alt="">` : `<svg width="24" height="24" fill="none" stroke="currentColor"><use href="#i-image"/></svg>`}</div><div class="cover-pick-txt"><b>Foto del producto</b><span>cuadrada, JPG/PNG/WebP</span></div></div>
+        <div class="cover-pick" id="shDz"><div class="cover-prev" id="shPrev">${p.image_url ? `<img decoding="async" src="${esc(czUrl(p.image_url))}" alt="">` : `<svg width="24" height="24" fill="none" stroke="currentColor"><use href="#i-image"/></svg>`}</div><div class="cover-pick-txt"><b>Foto del producto</b><span>cuadrada, JPG/PNG/WebP</span></div></div>
         <input type="file" id="shImg" accept="image/*" hidden />
       </div>
       <div class="field"><label>Título</label><input type="text" id="shTitle" maxlength="80" value="${esc(p.title || '')}" placeholder="Ej: Pack de beats Vol.1" /></div>
@@ -4695,7 +4695,7 @@ async function openShopEdit(p, userId, onSaved) {
   syncRows();
   fetchSellerStatus().then(() => syncRows()); // refresca el aviso de “crear tienda”
   m.querySelector('#shDz').onclick = () => m.querySelector('#shImg').click();
-  m.querySelector('#shImg').onchange = (e) => { const f = e.target.files[0]; if (!f) return; imgFile = f; m.querySelector('#shPrev').innerHTML = `<img src="${URL.createObjectURL(f)}" alt="">`; };
+  m.querySelector('#shImg').onchange = (e) => { const f = e.target.files[0]; if (!f) return; imgFile = f; m.querySelector('#shPrev').innerHTML = `<img decoding="async" src="${URL.createObjectURL(f)}" alt="">`; };
   m.querySelector('#shFileDz').onclick = () => m.querySelector('#shFile').click();
   m.querySelector('#shFile').onchange = (e) => { const f = e.target.files[0]; if (!f) return; dataFile = f; m.querySelector('#shFileName').textContent = f.name; };
   if (edit) m.querySelector('#shDel').onclick = async () => { if (!confirm('¿Eliminar este producto?')) return; await sb.from('shop_products').delete().eq('id', p.id); m.remove(); toast('Producto eliminado'); onSaved && onSaved(); };
@@ -4875,7 +4875,7 @@ function openFramePicker(imgUrl, mode, initial, onSave) {
     <div class="modal-head"><h3>Ajustar encuadre</h3><button class="close">&times;</button></div>
     <div class="modal-body">
       <p class="dash-note" style="margin-bottom:12px">Arrastra para mover · usa el control para acercar.</p>
-      <div class="frame-pick ${mode === 'avatar' ? 'is-avatar' : 'is-banner'}" id="framePick"><img id="frameImg" src="${imgUrl}" alt="" /></div>
+      <div class="frame-pick ${mode === 'avatar' ? 'is-avatar' : 'is-banner'}" id="framePick"><img decoding="async" id="frameImg" src="${imgUrl}" alt="" /></div>
       <div class="frame-zoom"><svg fill="none" stroke="currentColor"><use href="#i-search"/></svg><input type="range" id="frameZoom" min="1" max="3" step="0.01" value="${zoom}" /></div>
       <button class="btn primary" id="frameSave" style="width:100%;margin-top:12px">Usar este encuadre</button>
     </div>`);
@@ -4998,7 +4998,7 @@ function openProfileCustomizer() {
       </div>
       <div class="field"><label>Banner (cabecera)</label>
         <div class="cover-pick" id="bannerPick">
-          <div class="cover-prev cz-banner" id="bannerPrev">${t.banner ? `<img src="${esc(t.banner)}" alt="" ${czPos(t.bannerPos) ? `style="object-position:${czPos(t.bannerPos)}"` : ''} />` : `<svg width="22" height="22" fill="none" stroke="currentColor"><use href="#i-image"/></svg>`}</div>
+          <div class="cover-prev cz-banner" id="bannerPrev">${t.banner ? `<img decoding="async" src="${esc(t.banner)}" alt="" ${czPos(t.bannerPos) ? `style="object-position:${czPos(t.bannerPos)}"` : ''} />` : `<svg width="22" height="22" fill="none" stroke="currentColor"><use href="#i-image"/></svg>`}</div>
           <div class="cover-pick-txt"><b id="bannerName">Subir banner</b><span>Imagen ancha (16:9)</span></div>
         </div>
         <input type="file" id="bannerFile" accept="image/*" hidden />
@@ -5016,7 +5016,7 @@ function openProfileCustomizer() {
         <div class="bg-row" id="bgColors"><input type="color" id="bgC1" value="${czColor(t.bg.c1) || '#eef3fb'}"><input type="color" id="bgC2" value="${czColor(t.bg.c2) || '#e2e8f5'}"></div>
         <label id="bgAnimRow" style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:12.5px"><input type="checkbox" id="bgAnim" style="width:auto" /> Degradado animado</label>
         <div class="cover-pick" id="bgPick" style="margin-top:8px;display:none">
-          <div class="cover-prev" id="bgPrev">${czUrl(t.bg.image) ? `<img src="${esc(t.bg.image)}" alt="" />` : `<svg width="22" height="22" fill="none" stroke="currentColor"><use href="#i-image"/></svg>`}</div>
+          <div class="cover-prev" id="bgPrev">${czUrl(t.bg.image) ? `<img decoding="async" src="${esc(t.bg.image)}" alt="" />` : `<svg width="22" height="22" fill="none" stroke="currentColor"><use href="#i-image"/></svg>`}</div>
           <div class="cover-pick-txt"><b id="bgName">Subir imagen de fondo</b></div>
         </div>
         <input type="file" id="bgFile" accept="image/*" hidden />
@@ -5042,14 +5042,14 @@ function openProfileCustomizer() {
   let bannerFile = null, bgFile = null, bannerPos = czPos(t.bannerPos) || '', bannerZoom = czZoom(t.bannerZoom);
   const bannerInput = m.querySelector('#bannerFile'), bgInput = m.querySelector('#bgFile');
   m.querySelector('#bannerPick').onclick = () => bannerInput.click();
-  bannerInput.onchange = () => { const f = bannerInput.files[0]; if (!f || !f.type.startsWith('image')) return; bannerFile = f; bannerPos = ''; bannerZoom = 1; m.querySelector('#bannerPrev').innerHTML = `<img src="${URL.createObjectURL(f)}" alt="" />`; m.querySelector('#bannerName').textContent = f.name; };
+  bannerInput.onchange = () => { const f = bannerInput.files[0]; if (!f || !f.type.startsWith('image')) return; bannerFile = f; bannerPos = ''; bannerZoom = 1; m.querySelector('#bannerPrev').innerHTML = `<img decoding="async" src="${URL.createObjectURL(f)}" alt="" />`; m.querySelector('#bannerName').textContent = f.name; };
   m.querySelector('#bannerFrame').onclick = () => {
     const imgUrl = bannerFile ? URL.createObjectURL(bannerFile) : (t.banner ? czUrl(t.banner) : '');
     if (!imgUrl) { toast('Sube primero un banner'); return; }
     openFramePicker(imgUrl, 'banner', { pos: bannerPos || '50% 50%', zoom: bannerZoom }, ({ pos, zoom }) => { bannerPos = pos; bannerZoom = zoom; const img = m.querySelector('#bannerPrev img'); if (img) { img.style.objectPosition = pos; img.style.transform = `scale(${zoom})`; } });
   };
   m.querySelector('#bgPick').onclick = () => bgInput.click();
-  bgInput.onchange = () => { const f = bgInput.files[0]; if (!f || !f.type.startsWith('image')) return; bgFile = f; m.querySelector('#bgPrev').innerHTML = `<img src="${URL.createObjectURL(f)}" alt="" />`; m.querySelector('#bgName').textContent = f.name; };
+  bgInput.onchange = () => { const f = bgInput.files[0]; if (!f || !f.type.startsWith('image')) return; bgFile = f; m.querySelector('#bgPrev').innerHTML = `<img decoding="async" src="${URL.createObjectURL(f)}" alt="" />`; m.querySelector('#bgName').textContent = f.name; };
 
   const bgType = m.querySelector('#bgType');
   bgType.value = t.bg.type || 'gradient';
@@ -5204,7 +5204,7 @@ async function openProfile(userId) {
   main.innerHTML = `
     <div class="profile-view ${glowCls} ${cardsCls} ${animCls}" style="--accent:${accent};${fontVar}${bgStyle(theme)}">
       <button class="profile-back" id="profileBack"><svg fill="none" stroke="currentColor"><use href="#i-chevron-left"/></svg> Volver</button>
-      ${banner ? `<div class="profile-cover ${bannerHCls}"><img class="cover-img" src="${banner}" alt="" style="object-position:${bannerPos};transform:scale(${bannerZoom})" /></div>` : `<div class="profile-cover profile-cover-grad ${bannerHCls}"></div>`}
+      ${banner ? `<div class="profile-cover ${bannerHCls}"><img decoding="async" class="cover-img" src="${banner}" alt="" style="object-position:${bannerPos};transform:scale(${bannerZoom})" /></div>` : `<div class="profile-cover profile-cover-grad ${bannerHCls}"></div>`}
       <div class="profile-head ${banner ? 'has-banner' : ''}">
         <div class="ph-avatar ${ringCls}">${avatarHTML(prof)}</div>
         <h2 class="accent-name ${nameCls}" data-name="${esc(prof.display_name || prof.username)}">${esc(prof.display_name || prof.username)}${verifiedBadge(prof)}${displayBadgeHtml(prof)} ${prof.is_admin?'<span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c;vertical-align:middle">MOD</span>':''} ${prof.banned?'<span class="t-genre" style="background:#fae3e0;border-color:#f0c2bc;color:#c0533f;vertical-align:middle">baneado</span>':''}</h2>
@@ -5263,7 +5263,7 @@ async function openProfile(userId) {
     topEl.innerHTML = `<div class="prof-top-h">Destacadas</div>` + topTracks.map((t, i) => `
       <button class="ptop-row" data-tid="${esc(t.id)}">
         <span class="ptop-rank">${i + 1}</span>
-        <span class="ptop-cover">${t.cover_url ? `<img src="${esc(czUrl(t.cover_url))}" alt="">` : (prof.avatar_url ? `<img src="${esc(czUrl(prof.avatar_url))}" alt="">` : `<svg fill="none" stroke="currentColor"><use href="#i-music"/></svg>`)}</span>
+        <span class="ptop-cover">${t.cover_url ? `<img decoding="async" src="${esc(czUrl(t.cover_url))}" alt="">` : (prof.avatar_url ? `<img decoding="async" src="${esc(czUrl(prof.avatar_url))}" alt="">` : `<svg fill="none" stroke="currentColor"><use href="#i-music"/></svg>`)}</span>
         <span class="ptop-main">
           <span class="ptop-title">${esc(t.title)}</span>
           <span class="ptop-sub"><svg fill="none" stroke="currentColor"><use href="#i-headphones"/></svg>${t.plays || 0}<span class="ptop-dot">·</span><svg fill="currentColor" stroke="none"><use href="#i-heart"/></svg>${t.likes_count || 0}${t.genre ? `<span class="ptop-dot">·</span>${esc(t.genre)}` : ''}</span>
@@ -5698,7 +5698,7 @@ function openAddStory() {
   fileInput.onchange = () => {
     const f = fileInput.files[0]; if (!f) return;
     imgFile = f;
-    prev.innerHTML = `<img src="${URL.createObjectURL(f)}" alt="" />`;
+    prev.innerHTML = `<img decoding="async" src="${URL.createObjectURL(f)}" alt="" />`;
     m.querySelector('#stPickTxt').textContent = 'Cambiar foto';
     publish.disabled = false;
   };
@@ -5834,7 +5834,7 @@ function openStoryViewer(groups, gIdx = 0, startIdx = 0) {
         <button class="sv-mute hidden" type="button" aria-label="Silenciar"><svg fill="none" stroke="#fff"><use href="#i-vol"/></svg></button>
         <button class="sv-x" type="button" aria-label="Cerrar">&times;</button>
       </div>
-      <div class="sv-stage"><img class="sv-img" alt="" /></div>
+      <div class="sv-stage"><img decoding="async" class="sv-img" alt="" /></div>
       <div class="sv-music"></div>
       <div class="sv-links"></div>
       <div class="sv-foot"></div>
@@ -6035,7 +6035,7 @@ async function openTrackStats(t) {
   const isMine = t.user_id === state.user.id;
   const m = openModal(`<div class="modal-head"><h3>Estadísticas</h3><button class="close">&times;</button></div>
     <div class="modal-body">
-      <div class="ts-track">${t.cover_url ? `<img src="${esc(czUrl(t.cover_url))}" alt="">` : `<div class="ts-ph"><svg fill="none" stroke="currentColor"><use href="#i-music"/></svg></div>`}<div><b>${esc(t.title)}</b><span>${esc(t.profiles?.display_name || t.profiles?.username || t.artist || '')}</span></div></div>
+      <div class="ts-track">${t.cover_url ? `<img decoding="async" src="${esc(czUrl(t.cover_url))}" alt="">` : `<div class="ts-ph"><svg fill="none" stroke="currentColor"><use href="#i-music"/></svg></div>`}<div><b>${esc(t.title)}</b><span>${esc(t.profiles?.display_name || t.profiles?.username || t.artist || '')}</span></div></div>
       <div class="ts-grid">${card(plays, 'Reproducciones', 'headphones')}${card(likes, 'Me gusta', 'heart')}${card(reposts, 'Resubidas', 'repeat')}${card(comments, 'Comentarios', 'comment')}</div>
       ${isMine ? '<div id="tsAudience"></div>' : ''}
       <div class="ts-rows">
@@ -7969,7 +7969,7 @@ async function openEvent(id) {
   const who = ev.profiles?.display_name || ev.profiles?.username || '';
   body.innerHTML = `
     <div class="ev-detail" data-id="${ev.id}">
-      ${ev.flyer_url ? `<div class="ev-detail-flyer"><img src="${esc(ev.flyer_url)}" alt="" /></div>` : ''}
+      ${ev.flyer_url ? `<div class="ev-detail-flyer"><img decoding="async" src="${esc(ev.flyer_url)}" alt="" /></div>` : ''}
       <h2 class="ev-detail-title">${esc(ev.title)}</h2>
       <div class="ev-detail-row"><svg fill="none" stroke="currentColor"><use href="#i-clock"/></svg> ${esc(fmtEventFull(ev.starts_at))}${ev.ends_at ? ' → ' + esc(fmtEventFull(ev.ends_at)) : ''}</div>
       ${ev.location ? `<div class="ev-detail-row"><svg fill="none" stroke="currentColor"><use href="#i-pin"/></svg> ${esc(ev.location)}</div>` : ''}
@@ -8002,7 +8002,7 @@ function createEventModal(existing) {
     <div class="modal-head"><h3>${editing ? 'Editar evento' : 'Nuevo evento'}</h3><button class="close">&times;</button></div>
     <div class="modal-body">
       <div class="cover-pick" id="evDz">
-        <div class="cover-prev" id="evPrev">${existing?.flyer_url ? `<img src="${esc(existing.flyer_url)}" alt="" />` : `<svg width="24" height="24" fill="none" stroke="currentColor"><use href="#i-image"/></svg>`}</div>
+        <div class="cover-prev" id="evPrev">${existing?.flyer_url ? `<img decoding="async" src="${esc(existing.flyer_url)}" alt="" />` : `<svg width="24" height="24" fill="none" stroke="currentColor"><use href="#i-image"/></svg>`}</div>
         <div class="cover-pick-txt"><b id="evPickTxt">${existing?.flyer_url ? 'Cambiar flyer' : 'Sube el flyer'}</b><span>Cartel del evento (imagen)</span></div>
       </div>
       <input type="file" id="evFile" accept="image/*" hidden />
@@ -8020,7 +8020,7 @@ function createEventModal(existing) {
   fileInput.onchange = () => {
     const f = fileInput.files[0]; if (!f) return;
     flyerFile = f;
-    m.querySelector('#evPrev').innerHTML = `<img src="${URL.createObjectURL(f)}" alt="" />`;
+    m.querySelector('#evPrev').innerHTML = `<img decoding="async" src="${URL.createObjectURL(f)}" alt="" />`;
     m.querySelector('#evPickTxt').textContent = 'Cambiar flyer';
   };
   m.querySelector('#evPublish').onclick = async () => {
@@ -8195,7 +8195,7 @@ async function loadAdminContent(kind) {
       const { data } = await sb.from('posts').select('id,caption,image_url,created_at,profiles!posts_user_id_fkey(username,display_name)').order('created_at', { ascending: false }).limit(20);
       box.innerHTML = ''; if (!data || !data.length) { box.innerHTML = '<div class="sub">Sin fotos.</div>'; return; }
       data.forEach((p) => {
-        const r = el(`<div class="adm-row"><span class="adm-av"><img src="${esc(czUrl(p.image_url))}" alt=""></span><div class="adm-row-main"><b>${esc((p.caption || '(sin texto)').slice(0, 42))}</b><span>${esc(p.profiles?.display_name || p.profiles?.username || '')} · ${timeAgo(p.created_at)}</span></div><div class="adm-row-acts"><button class="btn sm danger" data-del>Borrar</button></div></div>`);
+        const r = el(`<div class="adm-row"><span class="adm-av"><img decoding="async" src="${esc(czUrl(p.image_url))}" alt=""></span><div class="adm-row-main"><b>${esc((p.caption || '(sin texto)').slice(0, 42))}</b><span>${esc(p.profiles?.display_name || p.profiles?.username || '')} · ${timeAgo(p.created_at)}</span></div><div class="adm-row-acts"><button class="btn sm danger" data-del>Borrar</button></div></div>`);
         r.querySelector('[data-del]').onclick = async () => { if (!confirm('¿Borrar esta foto?')) return; const { error } = await sb.from('posts').delete().eq('id', p.id); if (error) { toast('No se pudo'); return; } invalidatePosts(); r.remove(); toast('Foto borrada'); };
         box.appendChild(r);
       });
@@ -8374,7 +8374,7 @@ function renderSettings() {
   applyAvatarPos();
   avatarFile.onchange = () => {
     newAvatarFile = avatarFile.files[0];
-    if (newAvatarFile) { avatarPos = ''; avatarZoom = 1; const url = URL.createObjectURL(newAvatarFile); $('setAvatar').innerHTML = `<div class="avatar" style="width:72px;height:72px"><img src="${url}"/></div>`; }
+    if (newAvatarFile) { avatarPos = ''; avatarZoom = 1; const url = URL.createObjectURL(newAvatarFile); $('setAvatar').innerHTML = `<div class="avatar" style="width:72px;height:72px"><img decoding="async" src="${url}"/></div>`; }
   };
   $('avatarFrame').onclick = () => {
     const imgUrl = newAvatarFile ? URL.createObjectURL(newAvatarFile) : (state.profile.avatar_url ? czUrl(state.profile.avatar_url) : '');
@@ -9722,7 +9722,7 @@ function dmToggleVoice(box) {
   a.play();
 }
 function openImageViewer(url) {
-  const v = el(`<div class="img-viewer"><img src="${esc(url)}" alt="" /></div>`);
+  const v = el(`<div class="img-viewer"><img decoding="async" src="${esc(url)}" alt="" /></div>`);
   v.onclick = () => v.remove();
   document.body.appendChild(v);
 }
@@ -9733,7 +9733,7 @@ function setDmPending(file) {
   state.dmPendingFile = file;
   const prev = $('dmAttachPreview');
   const isImg = file.type.startsWith('image');
-  prev.innerHTML = `${isImg ? `<img src="${URL.createObjectURL(file)}" alt="" />` : `<svg width="34" height="34" fill="none" stroke="var(--ink-soft)"><use href="#i-file"/></svg>`}<span class="ap-name">${esc(file.name)}</span><button type="button" class="ap-x" id="dmApX">&times;</button>`;
+  prev.innerHTML = `${isImg ? `<img decoding="async" src="${URL.createObjectURL(file)}" alt="" />` : `<svg width="34" height="34" fill="none" stroke="var(--ink-soft)"><use href="#i-file"/></svg>`}<span class="ap-name">${esc(file.name)}</span><button type="button" class="ap-x" id="dmApX">&times;</button>`;
   prev.classList.remove('hidden');
   $('dmApX').onclick = clearDmPending;
 }
@@ -10149,7 +10149,7 @@ async function openDM(other) {
    GRUPOS DE CHAT  (reutilizan la pantalla y las burbujas de los DM)
    ======================================================================= */
 function groupAvatarHTML(conv) {
-  if (conv && conv.avatar_url) return `<div class="avatar group-av"><img src="${esc(czUrl(conv.avatar_url))}" alt="" /></div>`;
+  if (conv && conv.avatar_url) return `<div class="avatar group-av"><img decoding="async" src="${esc(czUrl(conv.avatar_url))}" alt="" /></div>`;
   return `<div class="avatar group-av group-av-empty"><svg width="20" height="20" fill="none" stroke="#fff"><use href="#i-people"/></svg></div>`;
 }
 function markGroupRead(convId) {
