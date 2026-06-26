@@ -2,6 +2,9 @@
    No cachea assets a propósito, para no interferir con el sistema de versiones. */
 self.addEventListener('install', () => self.skipWaiting());
 self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
+// Handler 'fetch' (passthrough) requerido por Chrome para que la web sea INSTALABLE
+// (dispara beforeinstallprompt → instalador nativo). No interceptamos nada.
+self.addEventListener('fetch', () => {});
 
 self.addEventListener('push', (event) => {
   let d = {};

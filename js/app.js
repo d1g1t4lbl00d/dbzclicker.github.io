@@ -497,6 +497,14 @@ function applyOrderHide(containerSel, itemSel, dataKey, conf) {
 // ------------------------------------------------------- onboarding / guía
 let ubInstallPrompt = null;
 window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); ubInstallPrompt = e; });
+// Registrar el service worker cuanto antes → la web es INSTALABLE (instalador nativo en
+// Android) para todos los visitantes, también sin sesión / en la landing.
+if ('serviceWorker' in navigator) {
+  const _reg = () => navigator.serviceWorker.register('/sw.js').catch(() => {});
+  if (document.readyState === 'complete') _reg(); else window.addEventListener('load', _reg);
+}
+// Si la app se instala, cerramos cualquier popup de instalación.
+window.addEventListener('appinstalled', () => { try { localStorage.setItem('ub_install_dismissed', String(Date.now())); } catch (_) {} const p = document.getElementById('installPop'); if (p) p.hidden = true; });
 
 const TOUR_STEPS = [
   { t: ['#feedTabs'], title: 'Tu feed 🎧', text: 'Cambia entre <b>Following</b>, <b>Trending</b> y <b>New</b> para descubrir música de la comunidad.' },
@@ -612,6 +620,12 @@ function maybeShowInstallPop() {
   let last = 0; try { last = +localStorage.getItem('ub_install_dismissed') || 0; } catch (_) {}
   if (Date.now() - last < 7 * 864e5) return;   // no repetir en 7 días
   const hide = (remember) => { pop.classList.remove('show'); setTimeout(() => { pop.hidden = true; }, 320); if (remember) { try { localStorage.setItem('ub_install_dismissed', String(Date.now())); } catch (_) {} } };
+  // En iPhone no se puede instalar por código (limitación de Apple): el botón abre las instrucciones.
+  const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent || '') || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  if (isIOS) {
+    const b = pop.querySelector('#ipInstall'); if (b) b.innerHTML = '<svg fill="none" stroke="#fff"><use href="#i-upload"/></svg> Cómo instalar';
+    const s = pop.querySelector('.ip-txt span'); if (s) s.textContent = 'Añádela a tu pantalla de inicio: pulsa Compartir y “Añadir a inicio”.';
+  }
   pop.hidden = false; requestAnimationFrame(() => pop.classList.add('show'));
   pop.querySelector('#ipClose').onclick = () => hide(true);
   pop.querySelector('#ipLater') && (pop.querySelector('#ipLater').onclick = () => hide(true));
