@@ -3648,3 +3648,11 @@ select:focus-visible, button:focus-visible, a:focus-visible { outline: none; box
 /* la rejilla de fotos salta el pintado de lo que está fuera de pantalla → scroll más fluido */
 .pg-item { content-visibility: auto; contain-intrinsic-size: auto 200px; }
 img { -webkit-user-drag: none; user-select: none; }
+
+/* ---- login/registro: botón principal con degradado de marca (coherente con la landing) ---- */
+.auth-screen .auth-body .btn.primary { background: var(--accent-grad); color: #fff; border: none;
+  box-shadow: 0 10px 26px rgba(62,87,252,.42); font-weight: 800; font-size: 15px; padding: 14px; border-radius: 14px;
+  transition: transform .15s var(--ease-spring), filter .2s, box-shadow .2s; }
+.auth-screen .auth-body .btn.primary:hover { transform: translateY(-1px); filter: brightness(1.04); box-shadow: 0 14px 32px rgba(62,87,252,.5); }
+.auth-screen .auth-body .btn.primary:active { transform: scale(.985); }
+.auth-screen .auth-body .btn.primary svg { stroke: #fff; }
