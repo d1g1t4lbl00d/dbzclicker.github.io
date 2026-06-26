@@ -601,6 +601,21 @@ async function init() {
     // vuelta de un login OAuth (Google): arranca la app si aún no lo hizo
     if (sess && !bootDone) { state.user = sess.user; await onAuthenticated(); }
   });
+  setTimeout(maybeShowInstallPop, 3200);   // popup para instalar UnderBro como app
+}
+
+// Popup para instalar UnderBro como app (PWA). Android: instalador nativo. iPhone: instrucciones.
+function maybeShowInstallPop() {
+  const pop = document.getElementById('installPop'); if (!pop) return;
+  const standalone = matchMedia('(display-mode: standalone)').matches || matchMedia('(display-mode: fullscreen)').matches || navigator.standalone === true;
+  if (standalone) return;   // ya está instalada
+  let last = 0; try { last = +localStorage.getItem('ub_install_dismissed') || 0; } catch (_) {}
+  if (Date.now() - last < 7 * 864e5) return;   // no repetir en 7 días
+  const hide = (remember) => { pop.classList.remove('show'); setTimeout(() => { pop.hidden = true; }, 320); if (remember) { try { localStorage.setItem('ub_install_dismissed', String(Date.now())); } catch (_) {} } };
+  pop.hidden = false; requestAnimationFrame(() => pop.classList.add('show'));
+  pop.querySelector('#ipClose').onclick = () => hide(true);
+  pop.querySelector('#ipLater') && (pop.querySelector('#ipLater').onclick = () => hide(true));
+  pop.querySelector('#ipInstall').onclick = async () => { try { await promptInstall(); } catch (_) {} hide(true); };
 }
 
 async function onAuthenticated() {

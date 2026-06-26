@@ -3614,3 +3614,22 @@ img.lpm-np-cov { width: 34px; height: 34px; border-radius: 9px; object-fit: cove
   .lp-bg::before, .lp-bg::after, .lp-hero-copy > *, .lp-hero-art, .landing .btn.primary.lp-big::after { animation: none; }
   .landing .reveal { opacity: 1; transform: none; transition: none; }
 }
+
+/* ===================== POPUP INSTALAR APP (PWA) ===================== */
+.install-pop { position: fixed; left: 50%; bottom: 0; transform: translate(-50%, 130%); z-index: 9000;
+  width: min(440px, calc(100vw - 22px)); background: var(--panel); color: var(--ink);
+  border: 1px solid var(--line); border-radius: 22px; box-shadow: 0 18px 50px rgba(0,0,0,.4), 0 4px 14px rgba(0,0,0,.25);
+  padding: 18px 18px 16px; margin-bottom: calc(14px + env(safe-area-inset-bottom));
+  transition: transform .36s var(--ease-spring), opacity .3s ease; opacity: 0; }
+.install-pop.show { transform: translate(-50%, 0); opacity: 1; }
+.install-pop[hidden] { display: none; }
+.ip-x { position: absolute; right: 9px; top: 7px; width: 30px; height: 30px; border: none; background: none; color: var(--ink-soft); font-size: 22px; line-height: 1; cursor: pointer; }
+.ip-head { display: flex; align-items: center; gap: 14px; padding-right: 22px; }
+.ip-logo { width: 52px; height: 52px; border-radius: 13px; flex: none; box-shadow: 0 6px 16px rgba(62,87,252,.3); }
+.ip-txt b { display: block; font-size: 16.5px; font-weight: 800; color: var(--ink); }
+.ip-txt span { display: block; font-size: 12.8px; line-height: 1.42; color: var(--ink-soft); margin-top: 3px; }
+.ip-actions { display: flex; align-items: center; gap: 10px; margin-top: 16px; }
+.ip-later { flex: none; border: none; background: none; color: var(--ink-soft); font-weight: 700; font-size: 14px; cursor: pointer; padding: 8px; }
+.ip-btn { flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 8px; border: none; cursor: pointer;
+  background: var(--accent-grad); color: #fff; font-weight: 800; font-size: 15px; padding: 13px 18px; border-radius: 14px; box-shadow: 0 8px 20px rgba(62,87,252,.4); }
+.ip-btn svg { width: 18px; height: 18px; }
