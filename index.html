@@ -29,7 +29,7 @@
 <link rel="manifest" href="/manifest.json?v=20260605l" />
 <meta name="theme-color" content="#0a0d18" />
 <link rel="apple-touch-icon" href="/icon-192.png?v=20260605l" />
-<link rel="stylesheet" href="css/styles.css?v=20260625k" />
+<link rel="stylesheet" href="css/styles.css?v=20260625l" />
 <script>(function(){try{var t=localStorage.getItem('ub_theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}try{if(sessionStorage.getItem('ub_splash'))document.documentElement.classList.add('no-splash');}catch(e){}})();</script>
 <!-- Vercel Web Analytics -->
 <script>
@@ -152,13 +152,17 @@ html.no-splash #splash{display:none}
   <section class="lp-hero">
     <div class="lp-hero-copy">
       <span class="lp-eyebrow"><span class="lp-dot"></span> La escena underground, en tu bolsillo</span>
-      <h1 class="lp-title">Sube tu música.<br>Crea tu <span>escena</span>.</h1>
-      <p class="lp-sub">La red social donde los artistas underground suben sus pistas, conectan con su gente y ven en directo lo que está pegando.</p>
+      <h1 class="lp-title">Todo para tu carrera.<br>En un <span>solo sitio</span>.</h1>
+      <p class="lp-sub">Sube tu música, habla con tu gente y usa herramientas de profesional —llamadas, ecosistemas, press kits y más— que en otras webs cuestan dinero. Aquí, gratis.</p>
       <div class="lp-cta">
         <button class="btn primary lp-big" id="lpRegister2">Crear cuenta gratis</button>
         <button class="lp-ghost lp-big" id="lpLogin2">Ya tengo cuenta</button>
       </div>
-      <div class="lp-trust"><svg viewBox="0 0 24 24"><use href="#i-check"/></svg> Gratis · sin anuncios · hecho por y para artistas</div>
+      <div class="lp-stats">
+        <div class="lp-stat"><b>41</b><span>artistas</span></div>
+        <div class="lp-stat"><b>91</b><span>pistas</span></div>
+        <div class="lp-stat"><b>2.1k+</b><span>reproducciones</span></div>
+      </div>
     </div>
 
     <div class="lp-hero-art">
@@ -166,29 +170,42 @@ html.no-splash #splash{display:none}
       <div class="lp-phone">
         <div class="lp-phone-scr">
           <div class="lpm-top"><img src="/assets/logo-mark.png?v=20260605b" alt=""/><div class="lpm-pills"><span class="on">Trending</span><span>Nuevo</span></div></div>
-          <div class="lpm-card feat" id="lpmFeatCard">
+          <div class="lpm-feat">
+            <img class="lpm-feat-img" src="/assets/landing/lc1.jpg" alt="" loading="lazy" />
             <span class="lpm-top1">TOP 1</span>
-            <div class="lpm-c-head"><div class="lpm-c-titles"><div class="lpm-t" id="lpmFeatTitle">Medianoche</div><div class="lpm-a" id="lpmFeatArtist">por NOVA</div></div><span class="lpm-genre" id="lpmFeatGenre">Trap</span></div>
-            <div class="lpm-wave"><span class="lpm-play"><svg viewBox="0 0 24 24"><use href="#i-play"/></svg></span><div class="lpm-bars"><i style="height:30%"></i><i style="height:55%"></i><i style="height:42%"></i><i style="height:72%"></i><i style="height:90%"></i><i style="height:64%"></i><i style="height:40%"></i><i style="height:78%"></i><i style="height:96%"></i><i style="height:60%"></i><i style="height:34%"></i><i style="height:52%"></i><i style="height:84%"></i><i style="height:46%"></i><i style="height:68%"></i><i style="height:38%"></i><i style="height:58%"></i><i style="height:88%"></i><i style="height:50%"></i><i style="height:30%"></i><i style="height:62%"></i><i style="height:44%"></i></div></div>
+            <div class="lpm-feat-info"><div class="lpm-feat-t">tevoyasacardelaciudad</div><div class="lpm-feat-a">Jetea</div></div>
+            <span class="lpm-feat-play"><svg viewBox="0 0 24 24"><use href="#i-play"/></svg></span>
           </div>
-          <div class="lpm-row"><div class="lpm-cov" id="lpmRow1Cov"></div><div class="lpm-rmeta"><div class="lpm-t" id="lpmRow1Title">Sin Filtro</div><div class="lpm-a" id="lpmRow1Sub">por KEZO · 1.2k plays</div></div><span class="lpm-mini"><svg viewBox="0 0 24 24"><use href="#i-play"/></svg></span></div>
-          <div class="lpm-row"><div class="lpm-cov v2" id="lpmRow2Cov"></div><div class="lpm-rmeta"><div class="lpm-t" id="lpmRow2Title">Brillo</div><div class="lpm-a" id="lpmRow2Sub">por LUA · 980 plays</div></div><span class="lpm-mini"><svg viewBox="0 0 24 24"><use href="#i-play"/></svg></span></div>
-          <div class="lpm-np"><div class="lpm-np-cov" id="lpmNpCov"></div><div class="lpm-np-meta"><b id="lpmNpTitle">Medianoche</b><span id="lpmNpArtist">NOVA</span></div><span class="lpm-np-btn"><svg viewBox="0 0 24 24"><use href="#i-pause"/></svg></span></div>
+          <div class="lpm-row"><img class="lpm-cov" src="/assets/landing/lc2.jpg" alt="" loading="lazy"/><div class="lpm-rmeta"><div class="lpm-t">STEVE-O</div><div class="lpm-a">akuma · 65 plays</div></div><span class="lpm-mini"><svg viewBox="0 0 24 24"><use href="#i-play"/></svg></span></div>
+          <div class="lpm-row"><img class="lpm-cov" src="/assets/landing/lc3.jpg" alt="" loading="lazy"/><div class="lpm-rmeta"><div class="lpm-t">Maikol jackson</div><div class="lpm-a">ruhh · 64 plays</div></div><span class="lpm-mini"><svg viewBox="0 0 24 24"><use href="#i-play"/></svg></span></div>
+          <div class="lpm-row"><img class="lpm-cov" src="/assets/landing/lc4.jpg" alt="" loading="lazy"/><div class="lpm-rmeta"><div class="lpm-t">RockstarSlut</div><div class="lpm-a">prod.i2zp · 55 plays</div></div><span class="lpm-mini"><svg viewBox="0 0 24 24"><use href="#i-play"/></svg></span></div>
+          <div class="lpm-np"><img class="lpm-np-cov" src="/assets/landing/lc1.jpg" alt="" loading="lazy"/><div class="lpm-np-meta"><b>tevoyasacardelaciudad</b><span>Jetea</span></div><span class="lpm-np-btn"><svg viewBox="0 0 24 24"><use href="#i-pause"/></svg></span></div>
         </div>
       </div>
     </div>
   </section>
 
+  <!-- marquee de portadas reales -->
+  <section class="lp-marquee" aria-hidden="true">
+    <div class="lp-marquee-row">
+      <img src="/assets/landing/lc1.jpg" alt=""/><img src="/assets/landing/lc2.jpg" alt=""/><img src="/assets/landing/lc3.jpg" alt=""/><img src="/assets/landing/lc4.jpg" alt=""/><img src="/assets/landing/lc5.jpg" alt=""/><img src="/assets/landing/lc6.jpg" alt=""/><img src="/assets/landing/lc7.jpg" alt=""/><img src="/assets/landing/lc8.jpg" alt=""/><img src="/assets/landing/lc9.jpg" alt=""/><img src="/assets/landing/lc10.jpg" alt=""/><img src="/assets/landing/lc11.jpg" alt=""/><img src="/assets/landing/lc1.jpg" alt=""/><img src="/assets/landing/lc2.jpg" alt=""/><img src="/assets/landing/lc3.jpg" alt=""/><img src="/assets/landing/lc4.jpg" alt=""/><img src="/assets/landing/lc5.jpg" alt=""/><img src="/assets/landing/lc6.jpg" alt=""/><img src="/assets/landing/lc7.jpg" alt=""/><img src="/assets/landing/lc8.jpg" alt=""/><img src="/assets/landing/lc9.jpg" alt=""/><img src="/assets/landing/lc10.jpg" alt=""/><img src="/assets/landing/lc11.jpg" alt=""/>
+    </div>
+  </section>
+
   <section class="lp-section">
-    <h2 class="lp-h2">Todo lo que necesitas para <span>hacer ruido</span></h2>
-    <p class="lp-h2-sub">Una plataforma pensada para artistas, no para algoritmos.</p>
+    <h2 class="lp-h2">Herramientas de pro. <span>Gratis</span>.</h2>
+    <p class="lp-h2-sub">Lo que en otras plataformas cuesta dinero, en UnderBro está incluido. Todo lo que un artista necesita, en un solo sitio.</p>
     <div class="lp-features">
-      <div class="lp-feat"><div class="lp-fic"><svg viewBox="0 0 24 24"><use href="#i-upload"/></svg></div><h3>Sube tu música</h3><p>Pistas, beats y packs con reproductor de onda y descargas. Tu catálogo, tu sitio.</p></div>
-      <div class="lp-feat"><div class="lp-fic"><svg viewBox="0 0 24 24"><use href="#i-feed"/></svg></div><h3>Trending en vivo</h3><p>Un ranking que se mueve solo con lo que la gente escucha de verdad. Sin enchufes.</p></div>
-      <div class="lp-feat"><div class="lp-fic"><svg viewBox="0 0 24 24"><use href="#i-people"/></svg></div><h3>Construye comunidad</h3><p>Sigue a otros artistas, comenta, repostea y haz crecer tu base de fans.</p></div>
-      <div class="lp-feat"><div class="lp-fic"><svg viewBox="0 0 24 24"><use href="#i-comment"/></svg></div><h3>Chat en directo</h3><p>Mensajes y salas en tiempo real. Habla con tu gente sin salir de la app.</p></div>
-      <div class="lp-feat"><div class="lp-fic"><svg viewBox="0 0 24 24"><use href="#i-camera"/></svg></div><h3>Comparte tu mundo</h3><p>Fotos, historias para Instagram y un perfil totalmente personalizable.</p></div>
-      <div class="lp-feat"><div class="lp-fic"><svg viewBox="0 0 24 24"><use href="#i-chart"/></svg></div><h3>Mide y crece</h3><p>Estadísticas reales de audiencia y herramientas hechas para artistas.</p></div>
+      <div class="lp-feat"><div class="lp-fic"><svg viewBox="0 0 24 24"><use href="#i-phone"/></svg></div><h3>Llamadas de voz y vídeo</h3><p>Llama o haz videollamada con otros artistas dentro de la app. Coordina sesiones y colabos en directo, sin pagar.</p></div>
+      <div class="lp-feat"><div class="lp-fic"><svg viewBox="0 0 24 24"><use href="#i-tools"/></svg></div><h3>Ecosistema de herramientas</h3><p>Press kit / EPK, smart links, split sheets y analizador de audio (tono, BPM, clipping). Herramientas de pago en otros sitios, aquí gratis.</p></div>
+      <div class="lp-feat"><div class="lp-fic"><svg viewBox="0 0 24 24"><use href="#i-people"/></svg></div><h3>Tu propio feed y comunidad</h3><p>Sigue a los artistas que te molan y arma tu feed a medida. Tu escena, tu sonido, tu gente.</p></div>
+      <div class="lp-feat"><div class="lp-fic"><svg viewBox="0 0 24 24"><use href="#i-comment"/></svg></div><h3>Mensajes y salas en directo</h3><p>Chat privado y en grupo, en tiempo real. Habla, comparte y cierra colaboraciones al momento.</p></div>
+      <div class="lp-feat"><div class="lp-fic"><svg viewBox="0 0 24 24"><use href="#i-search"/></svg></div><h3>Explora y descarga beats</h3><p>Descubre artistas, géneros y productores. Beats gratis listos para tus maquetas.</p></div>
+      <div class="lp-feat"><div class="lp-fic"><svg viewBox="0 0 24 24"><use href="#i-chart"/></svg></div><h3>Estadísticas reales</h3><p>Mira quién te escucha y qué está pegando. Datos para crecer de verdad, no para presumir.</p></div>
+    </div>
+    <div class="lp-soon">
+      <div class="lp-soon-ic"><svg viewBox="0 0 24 24"><use href="#i-cart"/></svg></div>
+      <div class="lp-soon-txt"><span class="lp-soon-tag">Muy pronto</span><h3>Tu propia tienda</h3><p>Vende beats, colaboraciones, packs y entradas directamente a tu audiencia, con cobro seguro dentro de la app.</p></div>
     </div>
   </section>
 
@@ -498,7 +515,7 @@ html.no-splash #splash{display:none}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
-<script src="js/config.js?v=20260625k"></script>
-<script src="js/app.js?v=20260625k"></script>
+<script src="js/config.js?v=20260625l"></script>
+<script src="js/app.js?v=20260625l"></script>
 </body>
 </html>

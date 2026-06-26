@@ -230,43 +230,6 @@ function initLanding() {
   ['lpLogin', 'lpLogin2'].forEach(id => { const b = $(id); if (b) b.onclick = () => showAuth('login'); });
   ['lpRegister', 'lpRegister2', 'lpRegister3'].forEach(id => { const b = $(id); if (b) b.onclick = () => showAuth('register'); });
   const back = $('authBack'); if (back) back.onclick = () => { $('authScreen')?.classList.add('hidden'); lp.classList.remove('hidden'); try { window.scrollTo(0, 0); } catch (_) {} };
-  fillLandingMockup();   // mete pistas reales de la app en el mockup
-}
-// Carga las pistas reales más escuchadas en el mockup del teléfono de la landing
-async function fillLandingMockup() {
-  let rows = [];
-  try {
-    const { data } = await sb.from('tracks')
-      .select('title, artist, plays, cover_url, genre, profiles!tracks_user_id_fkey(username, display_name, avatar_url)')
-      .order('plays', { ascending: false }).limit(14);
-    rows = (data || []).filter(t => t && t.title);
-  } catch (_) {}
-  if (!rows.length) return;   // si falla, se queda el mockup de ejemplo
-  // variedad: máx. 2 pistas por artista para los 3 huecos
-  const nmOf = t => (t.profiles && (t.profiles.display_name || t.profiles.username)) || t.artist || 'artista';
-  const pick = []; const per = {};
-  for (const t of rows) { const k = nmOf(t); if ((per[k] || 0) >= 2) continue; per[k] = (per[k] || 0) + 1; pick.push(t); if (pick.length >= 3) break; }
-  while (pick.length < 3 && pick.length < rows.length) pick.push(rows[pick.length]);
-  const covOf = t => t.cover_url ? czUrl(t.cover_url) : ((t.profiles && t.profiles.avatar_url) ? czUrl(t.profiles.avatar_url) : '');
-  const playsOf = t => (typeof nfmt === 'function' ? nfmt(t.plays || 0) : (t.plays || 0));
-  const set = (id, fn) => { const e = $(id); if (e) fn(e); };
-  const t0 = pick[0];
-  if (t0) {
-    set('lpmFeatTitle', e => e.textContent = t0.title);
-    set('lpmFeatArtist', e => e.textContent = 'por ' + nmOf(t0));
-    set('lpmFeatGenre', e => { if (t0.genre) e.textContent = t0.genre; else e.style.display = 'none'; });
-    const c0 = covOf(t0);
-    set('lpmFeatCard', e => { if (c0) { e.classList.add('has-cover'); e.style.backgroundImage = `linear-gradient(180deg, rgba(6,8,16,.55) 0%, rgba(6,8,16,.28) 38%, rgba(6,8,16,.86) 100%), url('${c0}')`; } });
-    set('lpmNpTitle', e => e.textContent = t0.title);
-    set('lpmNpArtist', e => e.textContent = nmOf(t0));
-    set('lpmNpCov', e => { if (c0) e.style.backgroundImage = `url('${c0}')`; });
-  }
-  [1, 2].forEach(i => {
-    const t = pick[i]; if (!t) return;
-    set('lpmRow' + i + 'Title', e => e.textContent = t.title);
-    set('lpmRow' + i + 'Sub', e => e.textContent = 'por ' + nmOf(t) + ' · ' + playsOf(t) + ' plays');
-    set('lpmRow' + i + 'Cov', e => { const c = covOf(t); if (c) { e.classList.remove('v2'); e.style.backgroundImage = `url('${c}')`; } });
-  });
 }
 $('authPolicyLink').onclick = (e) => { e.preventDefault(); showPrivacyPolicy(); };
 $('authPolicyFooter').onclick = (e) => { e.preventDefault(); showPrivacyPolicy(); };
