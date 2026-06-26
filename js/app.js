@@ -4206,7 +4206,7 @@ async function buyInApp(p, btn) {
     const r = await fetch('/api/pay/checkout', { method: 'POST', headers: h, body: JSON.stringify({ product_id: p.id }) });
     const d = await r.json();
     if (d && d.url) { location.href = d.url; return; }
-    const map = { seller_not_ready: 'El vendedor aún no tiene los cobros activados.', own_product: 'No puedes comprar tu propio producto.', not_payable: 'Producto no disponible para compra.', sold_out: 'Producto agotado.' };
+    const map = { seller_not_ready: 'El vendedor aún no tiene los cobros activados.', own_product: 'No puedes comprar tu propio producto.', not_payable: 'Producto no disponible para compra.', sold_out: 'Producto agotado.', physical_disabled: 'Las ventas físicas están desactivadas por ahora.' };
     toast(map[d.error] || 'No se pudo iniciar el pago.');
   } catch (e) { toast('Error de conexión'); }
   if (btn) { btn.disabled = false; btn.innerHTML = btn.dataset.t || 'Comprar'; }
@@ -4269,20 +4269,19 @@ async function loadProfileShop(userId, container, isMe) {
       actions.querySelector('#shopBuys').onclick = () => openMyPurchases();
       container.appendChild(actions);
     }
-    if (!items.length) {
-      container.appendChild(el(`<div class="empty"><svg fill="none"><use href="#i-cart"/></svg><p>${isMe ? 'Tu tienda está vacía. Añade productos digitales (beats, packs, servicios, entradas) o físicos (merch).' : 'Este artista aún no tiene tienda.'}</p></div>`));
+    // ventas físicas desactivadas: solo se muestran productos digitales
+    const digitalItems = items.filter(p => shopKindOf(p) === 'digital');
+    const physicalCount = items.length - digitalItems.length;
+    if (!digitalItems.length) {
+      container.appendChild(el(`<div class="empty"><svg fill="none"><use href="#i-cart"/></svg><p>${isMe ? 'Tu tienda está vacía. Añade beats, packs, servicios o entradas (productos digitales).' : 'Este artista aún no tiene tienda.'}</p></div>`));
+      if (isMe && physicalCount) container.appendChild(el(`<div class="pk-warn" style="margin-top:10px">Tienes ${physicalCount} producto${physicalCount === 1 ? '' : 's'} físico${physicalCount === 1 ? '' : 's'} oculto${physicalCount === 1 ? '' : 's'}: las ventas físicas están desactivadas por ahora.</div>`));
       return;
     }
     const refresh = () => loadProfileShop(userId, container, isMe);
-    ['digital', 'physical'].forEach(kind => {
-      const list = items.filter(p => shopKindOf(p) === kind);
-      if (!list.length) return;
-      const k = SHOP_KINDS[kind];
-      container.appendChild(el(`<div class="shop-section-h"><span>${k.emoji} ${k.label}</span></div>`));
-      const grid = el(`<div class="shop-grid"></div>`);
-      list.forEach(p => grid.appendChild(shopProductCard(p, isMe, refresh, soldMap[p.id] || 0)));
-      container.appendChild(grid);
-    });
+    const grid = el(`<div class="shop-grid"></div>`);
+    digitalItems.forEach(p => grid.appendChild(shopProductCard(p, isMe, refresh, soldMap[p.id] || 0)));
+    container.appendChild(grid);
+    if (isMe && physicalCount) container.appendChild(el(`<div class="pk-warn" style="margin-top:12px">Tienes ${physicalCount} producto${physicalCount === 1 ? '' : 's'} físico${physicalCount === 1 ? '' : 's'} oculto${physicalCount === 1 ? '' : 's'}: las ventas físicas están desactivadas por ahora.</div>`));
   };
   // recuento de ventas por producto (solo para el dueño, para mostrar “N vendidos”)
   let soldMap = {};
@@ -4343,7 +4342,7 @@ function shopPayBar(userId, refresh) {
     const net = (sales || []).reduce((s, o) => s + (o.amount_cents || 0) + (o.ship_cents || 0), 0);
     const count = (sales || []).length;
     if (!st.connected) {
-      bar.innerHTML = `<div class="spb-line"><span class="spb-ic">🛍️</span><div class="spb-body"><b>Crea tu tienda en UnderBro</b><span>Vende beats, packs, servicios, merch y entradas con cobro seguro con tarjeta.</span></div></div><button class="btn sm primary" id="spbConnect">Crear tienda</button>`;
+      bar.innerHTML = `<div class="spb-line"><span class="spb-ic">🛍️</span><div class="spb-body"><b>Crea tu tienda en UnderBro</b><span>Vende beats, packs, servicios y entradas con cobro seguro y descarga directa.</span></div></div><button class="btn sm primary" id="spbConnect">Crear tienda</button>`;
     } else if (!st.ready) {
       bar.innerHTML = `<div class="spb-line"><span class="spb-ic">⏳</span><div class="spb-body"><b>Verificación en curso</b><span>Stripe está revisando tus datos. Completa el alta si quedó algo pendiente.</span></div></div><button class="btn sm ghost" id="spbConnect">Continuar alta</button>`;
     } else {
@@ -4461,10 +4460,12 @@ async function openShopEdit(p, userId, onSaved) {
   const m = openModal(`
     <div class="modal-head"><h3>${edit ? 'Editar producto' : 'Nuevo producto'}</h3><button class="close">&times;</button></div>
     <div class="modal-body">
-      <label class="pk-l">¿Qué vendes?</label>
-      <div class="seg seg-kind" id="shKind">
-        <button data-kind="digital">💿 Digital<small>pagas y descargas</small></button>
-        <button data-kind="physical">📦 Físico<small>con envío a casa</small></button>
+      <div id="shKindWrap" style="display:none">
+        <label class="pk-l">¿Qué vendes?</label>
+        <div class="seg seg-kind" id="shKind">
+          <button data-kind="digital">💿 Digital<small>pagas y descargas</small></button>
+          <button data-kind="physical">📦 Físico<small>con envío a casa</small></button>
+        </div>
       </div>
       <div class="field"><label>Categoría</label>
         <select id="shCat" class="pk-select"></select>
@@ -4492,7 +4493,7 @@ async function openShopEdit(p, userId, onSaved) {
       ${edit ? '<button class="btn danger-btn" id="shDel"><svg fill="none" stroke="#fff"><use href="#i-trash"/></svg> Eliminar</button>' : ''}
       <div class="auth-msg" id="shMsg"></div>
     </div>`);
-  let kind = shopKindOf(p), type = p.type || 'beat', imgFile = null, dataFile = null;
+  let kind = 'digital', type = p.type || 'beat', imgFile = null, dataFile = null;  // ventas físicas desactivadas → solo digital
   const catSel = m.querySelector('#shCat');
   const fillCats = () => {
     const cats = SHOP_KINDS[kind].cats;

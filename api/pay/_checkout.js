@@ -17,6 +17,7 @@ module.exports = async (req, res) => {
     if (p.is_free) return json(res, 400, { error: 'free' });
     if (!p.pay_inapp || !p.price_cents || p.price_cents < 50) return json(res, 400, { error: 'not_payable' });
     if (p.user_id === user.id) return json(res, 400, { error: 'own_product' });
+    if (p.needs_shipping) return json(res, 400, { error: 'physical_disabled' });
     if (p.stock != null && p.stock <= 0) return json(res, 400, { error: 'sold_out' });
 
     const sRows = await sbAdmin(`profiles?id=eq.${p.user_id}&select=stripe_account_id,stripe_ready,username,display_name`);
