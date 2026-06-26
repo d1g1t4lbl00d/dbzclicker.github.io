@@ -3660,3 +3660,10 @@ img { -webkit-user-drag: none; user-select: none; }
 /* ---- ergonomía/velocidad: taps sin retardo de doble-toque ---- */
 button, a, .btn, .icon-btn, .nav-item, .bottom-nav button, .tabs button,
 .profile-tabs button, [role="button"] { touch-action: manipulation; }
+
+/* buscador de la pantalla Bro's */
+.people-search { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; padding: 0 14px;
+  border: 1px solid var(--line); background: var(--panel); border-radius: 14px; box-shadow: var(--sh-1); }
+.people-search svg { width: 18px; height: 18px; color: var(--ink-soft); flex: none; }
+.people-search input { flex: 1; border: none; background: none; outline: none; padding: 13px 0; font-size: 15px; color: var(--ink); }
+.people-search input::placeholder { color: var(--ink-faint); }

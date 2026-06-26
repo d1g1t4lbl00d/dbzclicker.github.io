@@ -5356,13 +5356,39 @@ async function openProfile(userId) {
 async function renderPeople() {
   setActiveNav('people');
   const main = $('main');
-  main.innerHTML = `<div class="main-head"><div><h2>Bro's</h2><div class="sub">Descubre a otros creadores</div></div></div><div id="peopleList" class="loading"><div class="spinner"></div></div>`;
-  const { data } = await sb.from('profiles').select('*').order('created_at', { ascending: false }).limit(60);
-  const list = $('peopleList'); list.className = 'feed-list';
-  const people = (data||[]).filter(p => p.id !== state.user.id && !isHidden(p.id));
-  if (!people.length) { list.innerHTML = '<div class="empty"><p>Aún no hay nadie más por aquí.</p></div>'; return; }
-  list.innerHTML = '';
-  people.forEach(p => {
+  main.innerHTML = `<div class="main-head"><div><h2>Bro's</h2><div class="sub">Descubre a otros creadores</div></div></div>
+    <div class="people-search"><svg fill="none" stroke="currentColor"><use href="#i-search"/></svg><input id="peopleSearch" type="text" autocomplete="off" placeholder="Buscar bros por nombre o @usuario…" /></div>
+    <div id="peopleList" class="feed-list"><div class="loading" style="padding:24px"><div class="spinner"></div></div></div>`;
+  const list = $('peopleList');
+  const renderRows = (arr) => {
+    const people = (arr || []).filter(p => p.id !== state.user.id && !isHidden(p.id));
+    if (!people.length) { list.innerHTML = '<div class="empty"><p>Sin resultados.</p></div>'; return; }
+    list.innerHTML = '';
+    people.forEach(p => list.appendChild(personRow(p)));
+  };
+  let base = [];
+  try { const { data } = await sb.from('profiles').select('*').order('created_at', { ascending: false }).limit(60); base = data || []; } catch (_) {}
+  renderRows(base);
+  // buscador: filtro local instantáneo + búsqueda en servidor (debounce) para encontrar a cualquiera
+  const input = $('peopleSearch'); let t;
+  if (input) input.oninput = () => {
+    const term = input.value.trim(); clearTimeout(t);
+    if (!term) { renderRows(base); return; }
+    const lo = term.toLowerCase();
+    renderRows(base.filter(p => ((p.display_name || '') + ' ' + (p.username || '')).toLowerCase().includes(lo)));
+    t = setTimeout(async () => {
+      const q = (typeof sanitizeTerm === 'function' ? sanitizeTerm(term.replace('@', '')) : term.replace('@', ''));
+      if (!q) return;
+      try {
+        const { data: res } = await sb.from('profiles').select('*').or(`username.ilike.%${q}%,display_name.ilike.%${q}%`).limit(40);
+        if (input.value.trim() === term && res) renderRows(res);
+      } catch (_) {}
+    }, 280);
+  };
+}
+// Fila de persona para la pantalla Bro's (y reutilizable)
+function personRow(p) {
+  {
     const f = state.follows.has(p.id);
     const row = el(`
       <div class="person">
@@ -5399,8 +5425,8 @@ async function renderPeople() {
       toast(newVal ? `${p.username} baneado` : `${p.username} desbaneado`);
     };
     followBtn.onclick = () => toggleFollow(p.id, followBtn);
-    list.appendChild(row);
-  });
+    return row;
+  }
 }
 
 // Lista de seguidores / seguidos de un perfil (en modal)
