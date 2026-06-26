@@ -855,6 +855,9 @@ function bindUI() {
   document.querySelectorAll('#feedTabs button').forEach(b => {
     b.onclick = () => {
       if (b.classList.contains('active') && state.view === 'feed') return; // ya está, no recargues
+      const order = ['following', 'trending', 'new'];
+      const oi = order.indexOf(state.tab), ni = order.indexOf(b.dataset.tab);
+      _swapDir = (oi >= 0 && ni >= 0 && oi !== ni) ? (ni > oi ? 'fwd' : 'back') : '';
       state.tab = b.dataset.tab;
       document.querySelectorAll('#feedTabs button').forEach(x => x.classList.toggle('active', x===b));
       // pinta YA el estado activo del botón; el render pesado va en el siguiente frame
@@ -955,12 +958,14 @@ let ubSwiping = false, _afterSwipeQ = [];
 // para no bloquear la animación con renders pesados
 function afterSwipe(fn) { if (ubSwiping) _afterSwipeQ.push(fn); else fn(); }
 function flushAfterSwipe() { const q = _afterSwipeQ; _afterSwipeQ = []; q.forEach((f) => { try { f(); } catch (_) {} }); }
+let _swapDir = '';   // dirección de la transición al cambiar de pestaña del feed ('fwd' | 'back')
 async function switchView(view) {
   ubRecord({ kind: 'view', view });
   state.view = view;
   const main = $('main');
   $('feedTabs')?.classList.toggle('hidden', view !== 'feed');
-  if (!ubSwiping) { main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap'); }
+  if (!ubSwiping) { main.classList.remove('swap', 'swap-fwd', 'swap-back'); void main.offsetWidth; main.classList.add(_swapDir ? ('swap-' + _swapDir) : 'swap'); }
+  _swapDir = '';
   if (['feed','feed-trending','all','favorites','mytracks','downloads','search'].includes(view)) setActiveNav(view === 'search' ? '' : view);
   else setActiveNav(view);
 
@@ -2134,22 +2139,31 @@ function renderFeed(head, tracks, view) {
     const c = feedDomCache.get(cacheKey);
     if (c && c.sig === sig && c.node) { list.replaceWith(c.node); if (state.current && audio && !audio.paused) markPlayingCard(); return; }
   }
-  const frag = document.createDocumentFragment();
-  let artsInserted = false;
-  const insertArtists = () => {
-    if (artsInserted || !arts.length) return;
-    artsInserted = true;
-    frag.appendChild(el('<div class="feed-section-head">Artistas en tendencia</div>'));
-    arts.forEach(a => frag.appendChild(artistCard(a)));
+  // Pintado por trozos (8 elementos por frame): construir y adjuntar las tarjetas
+  // poco a poco para no bloquear el hilo al cargar ~50 (cada una con su waveform).
+  // Las primeras aparecen al instante; el resto, en los siguientes frames → fluido.
+  const items = [];
+  tracks.forEach((t, i) => { items.push({ t, i }); if (isTrending && arts.length && i === 2) items.push({ artists: true }); });
+  if (isTrending && arts.length && tracks.length < 3) items.push({ artists: true });
+  const myView = view, myTab = state.tab;
+  const stillThere = () => state.view === myView && (myView !== 'feed' || state.tab === myTab);
+  let idx = 0; const CHUNK = 8;
+  const step = () => {
+    if (!stillThere()) return;                 // el usuario cambió de pantalla mientras se pintaba
+    const frag = document.createDocumentFragment();
+    for (let k = 0; k < CHUNK && idx < items.length; k++, idx++) {
+      const it = items[idx];
+      if (it.artists) { frag.appendChild(el('<div class="feed-section-head">Artistas en tendencia</div>')); arts.forEach(a => frag.appendChild(artistCard(a))); }
+      else frag.appendChild(trackCard(it.t, { featured: isTrending && it.i === 0 }));
+    }
+    list.appendChild(frag);
+    if (idx < items.length) requestAnimationFrame(step);
+    else {
+      if (cacheKey) feedDomCache.set(cacheKey, { sig, node: list });
+      if (state.current && audio && !audio.paused) markPlayingCard();
+    }
   };
-  tracks.forEach((t, i) => {
-    frag.appendChild(trackCard(t, { featured: isTrending && i === 0 }));
-    if (isTrending && i === 2) insertArtists(); // tras las 3 primeras pistas
-  });
-  if (isTrending) insertArtists(); // por si hay menos de 3 pistas
-  list.appendChild(frag);   // un solo reflow en vez de uno por tarjeta
-  if (cacheKey) feedDomCache.set(cacheKey, { sig, node: list });
-  if (state.current && audio && !audio.paused) markPlayingCard();
+  step();
 }
 
 /* =======================================================================
