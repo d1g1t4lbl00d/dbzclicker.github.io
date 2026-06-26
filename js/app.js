@@ -4080,7 +4080,7 @@ function postCard(p, liked) {
           ${(mine || state.profile.is_admin) ? `<button class="post-tool danger" data-act="delete" title="Borrar publicación"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg></button>` : ''}
         </div>
       </div>
-      <div class="post-img"><img src="${esc(p.image_url)}" alt="" loading="lazy" data-act="zoom" /></div>
+      <div class="post-img"><img src="${esc(p.image_url)}" alt="" loading="lazy" decoding="async" data-act="zoom" /></div>
       ${p.caption ? `<div class="post-caption"><b data-act="profile">@${esc(prof.username || '')}</b> ${linkifyMentions(p.caption)}</div>` : ''}
       <div class="t-foot">
         <span class="time"><svg style="width:12px;height:12px;vertical-align:-2px" fill="currentColor" stroke="none"><use href="#i-heart"/></svg> <span class="likecount">${p.likes_count || 0}</span></span>
@@ -4762,7 +4762,7 @@ async function loadProfilePosts(userId, grid) {
   posts.forEach(p => {
     const item = el(`
       <div class="pg-item" data-id="${p.id}">
-        <img src="${esc(p.image_url)}" alt="" loading="lazy" />
+        <img src="${esc(p.image_url)}" alt="" loading="lazy" decoding="async" />
         <div class="pg-stats"><span><svg viewBox="0 0 24 24"><use href="#i-heart"/></svg> ${p.likes_count || 0}</span></div>
       </div>`);
     item.onclick = () => openPostModal(p);
@@ -8626,7 +8626,7 @@ function initDM() {
   $('dmSearchInput').addEventListener('input', (e) => dmRunSearch(e.target.value));
   $('dmMenuBtn').onclick = dmHeaderMenu;
   $('dmScrollFab').onclick = () => dmScrollBottom();
-  $('dmThread').addEventListener('scroll', dmOnThreadScroll);
+  $('dmThread').addEventListener('scroll', dmOnThreadScroll, { passive: true });
   $('dmInput').addEventListener('input', dmTypingPing);
   dmBuildEmojiPanel();
 
@@ -8801,7 +8801,7 @@ async function startCall(video) {
   try {
     const offer = await state.call.pc.createOffer();
     await state.call.pc.setLocalDescription(offer);
-    console.log('[call] oferta enviada', id);
+    false && console.log('[call] oferta enviada', id);
     sendSignal(state.call, 'offer', { sdp: { type: offer.type, sdp: offer.sdp }, video, ts: Date.now() });
   } catch (e) { console.error('[call] createOffer', e); toast('No se pudo iniciar la llamada'); cleanupCall(); return; }
   createCallLog();           // inserta la fila de llamada → dispara la push al receptor
@@ -8821,7 +8821,7 @@ async function getCallStream(video) {
     });
     return { stream, camOk: true };
   } catch (e) {
-    console.warn('[call] cámara no disponible, sigo con audio', e && e.name);
+    false && console.warn('[call] cámara no disponible, sigo con audio', e && e.name);
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });  // si esto también falla, lanza
     return { stream, camOk: false };
   }
@@ -8886,7 +8886,7 @@ async function fetchTurnServers() {
     try {
       const { data, error } = await sb.rpc('get_turn_credentials');
       const ice = !error && data && data.iceServers;
-      if (ice) { console.log('[call] TURN: Cloudflare (RPC)'); return Array.isArray(ice) ? ice : [ice]; }
+      if (ice) { false && console.log('[call] TURN: Cloudflare (RPC)'); return Array.isArray(ice) ? ice : [ice]; }
     } catch (_) {}
     // 2) función serverless en la propia web (con timeout para no colgar)
     try {
@@ -8897,7 +8897,7 @@ async function fetchTurnServers() {
       if (r.ok) {
         const d = await r.json();
         const ice = d && d.iceServers;
-        if (ice) { console.log('[call] TURN: Cloudflare (/api/turn)'); return Array.isArray(ice) ? ice : [ice]; }
+        if (ice) { false && console.log('[call] TURN: Cloudflare (/api/turn)'); return Array.isArray(ice) ? ice : [ice]; }
       }
     } catch (_) {}
   }
@@ -8908,7 +8908,7 @@ async function getCallIceServers() {
   if (callTurnCache && Date.now() < callTurnCache.exp) return [...base, ...callTurnCache.servers];
   const servers = await fetchTurnServers();
   if (servers) { callTurnCache = { servers, exp: Date.now() + 12 * 3600000 }; return [...base, ...servers]; }
-  console.warn('[call] TURN Cloudflare no disponible, uso respaldo público');
+  false && console.warn('[call] TURN Cloudflare no disponible, uso respaldo público');
   return [...base, ...CALL_ICE_SERVERS.slice(1)];
 }
 
@@ -8917,16 +8917,16 @@ function buildCallPc() {
   const pc = new RTCPeerConnection({ iceServers: c.iceServers || CALL_ICE_SERVERS, iceCandidatePoolSize: 4 });
   c.pc = pc; c.remoteStream = new MediaStream(); c.gotRelay = false; c.gotRemoteCand = false;
   pc.onicecandidate = (e) => {
-    if (!e.candidate) { console.log('[call] gathering ICE completo'); return; }
+    if (!e.candidate) { false && console.log('[call] gathering ICE completo'); return; }
     const cand = e.candidate.toJSON ? e.candidate.toJSON() : e.candidate;
     const ty = candType(cand.candidate);
     if (ty === 'relay') c.gotRelay = true;
-    console.log('[call] candidato local:', ty);
+    false && console.log('[call] candidato local:', ty);
     sendSignal(c, 'ice', { candidate: cand });
   };
   // usar el stream del evento (Safari no renderiza pistas añadidas a un srcObject ya asignado)
   pc.ontrack = (e) => {
-    console.log('[call] ontrack', e.track && e.track.kind);
+    false && console.log('[call] ontrack', e.track && e.track.kind);
     if (e.streams && e.streams[0]) c.remoteStream = e.streams[0];
     else { try { c.remoteStream.addTrack(e.track); } catch (_) {} }
     // cuando empiezan a llegar frames de verdad (iOS los marca muted al inicio)
@@ -8947,8 +8947,8 @@ function buildCallPc() {
       tryRecoverCall(c);   // re-negociar ICE en vez de colgar a la primera
     }
   };
-  pc.oniceconnectionstatechange = () => { console.log('[call] iceConnectionState:', pc.iceConnectionState); onState(pc.iceConnectionState); };
-  pc.onconnectionstatechange = () => { console.log('[call] connectionState:', pc.connectionState); onState(pc.connectionState); };
+  pc.oniceconnectionstatechange = () => { false && console.log('[call] iceConnectionState:', pc.iceConnectionState); onState(pc.iceConnectionState); };
+  pc.onconnectionstatechange = () => { false && console.log('[call] connectionState:', pc.connectionState); onState(pc.connectionState); };
 }
 // recuperación automática: re-negocia la ruta (ICE restart) sin cortar la llamada.
 // Solo el que llamó crea la nueva oferta; el receptor pide reinicio al que llamó.
@@ -8961,7 +8961,7 @@ async function tryRecoverCall(c) {
     callHangupBtn();
     return;
   }
-  console.log('[call] recuperando conexión (intento ' + c.recoverN + ')');
+  false && console.log('[call] recuperando conexión (intento ' + c.recoverN + ')');
   c.recovering = true;
   setTimeout(() => { if (state.call === c) c.recovering = false; }, 7000);
   if (c.role === 'caller') {
@@ -8995,7 +8995,7 @@ async function callDiagnose(c) {
       if (r.type === 'candidate-pair' && (r.state === 'succeeded' || r.nominated)) pairOk = true;
     });
   } catch (_) {}
-  console.warn('[call] DIAGNÓSTICO →', { relayLocal: c.gotRelay, recibioCandidatosRemotos: hadRemote, parejaOk: pairOk });
+  false && console.warn('[call] DIAGNÓSTICO →', { relayLocal: c.gotRelay, recibioCandidatosRemotos: hadRemote, parejaOk: pairOk });
   let msg;
   if (pairOk) msg = 'Conexión establecida pero sin medios. Reinténtalo.';
   else if (!hadRemote) msg = 'No llegaron las rutas de red del otro usuario (señalización).';
@@ -9007,7 +9007,7 @@ async function callDiagnose(c) {
 function onCallConnected() {
   const c = state.call; if (!c || c.everConnected) return;
   c.everConnected = true; c.status = 'connected'; c.startedAt = Date.now();
-  console.log('[call] conectada');
+  false && console.log('[call] conectada');
   stopRing(); clearTimeout(c.noAnswerTO); clearTimeout(c.connectTO);
   attachCallRemote();
   $('callStatus').textContent = '0:00';
@@ -9027,7 +9027,7 @@ async function onCallSignal(p) {
     callSeenSigs.add(p.sig);
     if (callSeenSigs.size > 800) callSeenSigs.clear();
   }
-  console.log('[call] señal recibida:', p.kind);
+  false && console.log('[call] señal recibida:', p.kind);
   if (p.kind === 'offer') {
     if (p.ts && Date.now() - p.ts > 40000) return; // oferta caducada (llamada ya terminada)
     if (state.call) {
@@ -9132,7 +9132,7 @@ async function acceptCall() {
     flushPendingIce();
     const answer = await c.pc.createAnswer();
     await c.pc.setLocalDescription(answer);
-    console.log('[call] respuesta enviada');
+    false && console.log('[call] respuesta enviada');
     sendSignal(c, 'answer', { sdp: { type: answer.type, sdp: answer.sdp } });
   } catch (e) { console.error('[call] acceptCall', e); toast('No se pudo conectar la llamada'); callHangupBtn(); return; }
   showCallScreen('active'); $('callStatus').textContent = 'Conectando…'; attachCallLocal(); armConnectWatchdog();
@@ -9411,7 +9411,7 @@ function mediaHTML(msg) {
   }
   if (!msg.attachment_url) return '';
   const t = msg.attachment_type;
-  if (t === 'image') return `<img class="dm-img" src="${esc(msg.attachment_url)}" alt="" data-full="${esc(msg.attachment_url)}" />`;
+  if (t === 'image') return `<img class="dm-img" loading="lazy" decoding="async" src="${esc(msg.attachment_url)}" alt="" data-full="${esc(msg.attachment_url)}" />`;
   if (t === 'video') return `<video class="dm-video" src="${esc(msg.attachment_url)}" controls playsinline preload="metadata"></video>`;
   if (t === 'audio') {
     let info = {}; try { info = JSON.parse(msg.attachment_name || '{}'); } catch (_) {}
