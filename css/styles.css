@@ -10,7 +10,7 @@
   --blue-deep:   #2a4fd6;
   --aqua:        #27a9ff;
   --violet:      #6e2df5;
-  --accent:      var(--accent);
+  --accent:      #3e57fc;
   --accent-grad: linear-gradient(120deg, #27a9ff 0%, #4060f5 52%, #6e2df5 100%);
   --aqua-grad:   linear-gradient(120deg, #27a9ff, #4060f5 55%, #6e2df5);
   --cover-grad:  linear-gradient(135deg, #27a9ff 0%, #4f5cf2 48%, #6e2df5 100%);
