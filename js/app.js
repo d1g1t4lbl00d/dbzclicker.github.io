@@ -228,7 +228,7 @@ function initLanding() {
   lp.classList.remove('hidden');
   $('authScreen')?.classList.add('hidden');
   ['lpLogin', 'lpLogin2'].forEach(id => { const b = $(id); if (b) b.onclick = () => showAuth('login'); });
-  ['lpRegister', 'lpRegister2'].forEach(id => { const b = $(id); if (b) b.onclick = () => showAuth('register'); });
+  ['lpRegister', 'lpRegister2', 'lpRegister3'].forEach(id => { const b = $(id); if (b) b.onclick = () => showAuth('register'); });
   const back = $('authBack'); if (back) back.onclick = () => { $('authScreen')?.classList.add('hidden'); lp.classList.remove('hidden'); try { window.scrollTo(0, 0); } catch (_) {} };
 }
 $('authPolicyLink').onclick = (e) => { e.preventDefault(); showPrivacyPolicy(); };

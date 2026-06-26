@@ -29,7 +29,7 @@
 <link rel="manifest" href="/manifest.json?v=20260605l" />
 <meta name="theme-color" content="#0a0d18" />
 <link rel="apple-touch-icon" href="/icon-192.png?v=20260605l" />
-<link rel="stylesheet" href="css/styles.css?v=20260625i" />
+<link rel="stylesheet" href="css/styles.css?v=20260625j" />
 <script>(function(){try{var t=localStorage.getItem('ub_theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}try{if(sessionStorage.getItem('ub_splash'))document.documentElement.classList.add('no-splash');}catch(e){}})();</script>
 <!-- Vercel Web Analytics -->
 <script>
@@ -139,33 +139,71 @@ html.no-splash #splash{display:none}
 <!-- ===================== AUTH SCREEN ===================== -->
 <!-- ===================== LANDING (presentación, antes del login) ===================== -->
 <div class="landing hidden" id="landing">
+  <div class="lp-bg" aria-hidden="true"></div>
+
   <header class="lp-nav">
-    <img class="lp-logo" src="/assets/logo-full.png?v=20260605b" alt="UnderBro" />
-    <button class="btn sm primary" id="lpLogin">Iniciar sesión</button>
+    <img class="lp-logo" src="/assets/logo-text.png?v=20260605b" alt="UnderBro" />
+    <div class="lp-nav-actions">
+      <button class="lp-nav-login" id="lpLogin">Iniciar sesión</button>
+      <button class="lp-nav-cta" id="lpRegister">Crear cuenta</button>
+    </div>
   </header>
+
   <section class="lp-hero">
-    <div class="lp-hero-glow"></div>
-    <h1 class="lp-title">La red social de la<br><span>música underground</span></h1>
-    <p class="lp-sub">Sube tus pistas, conecta con artistas y descubre lo que está pegando. Tu música, tu comunidad, tu escena.</p>
-    <div class="lp-cta">
-      <button class="btn primary lp-big" id="lpRegister">Crear cuenta gratis</button>
-      <button class="btn lp-big" id="lpLogin2">Ya tengo cuenta</button>
+    <div class="lp-hero-copy">
+      <span class="lp-eyebrow"><span class="lp-dot"></span> La escena underground, en tu bolsillo</span>
+      <h1 class="lp-title">Sube tu música.<br>Crea tu <span>escena</span>.</h1>
+      <p class="lp-sub">La red social donde los artistas underground suben sus pistas, conectan con su gente y ven en directo lo que está pegando.</p>
+      <div class="lp-cta">
+        <button class="btn primary lp-big" id="lpRegister2">Crear cuenta gratis</button>
+        <button class="lp-ghost lp-big" id="lpLogin2">Ya tengo cuenta</button>
+      </div>
+      <div class="lp-trust"><svg viewBox="0 0 24 24"><use href="#i-check"/></svg> Gratis · sin anuncios · hecho por y para artistas</div>
+    </div>
+
+    <div class="lp-hero-art">
+      <div class="lp-art-glow" aria-hidden="true"></div>
+      <div class="lp-phone">
+        <div class="lp-phone-scr">
+          <div class="lpm-top"><img src="/assets/logo-mark.png?v=20260605b" alt=""/><div class="lpm-pills"><span class="on">Trending</span><span>Nuevo</span></div></div>
+          <div class="lpm-card feat">
+            <span class="lpm-top1">TOP 1</span>
+            <div class="lpm-c-head"><div><div class="lpm-t">Medianoche</div><div class="lpm-a">por NOVA</div></div><span class="lpm-genre">Trap</span></div>
+            <div class="lpm-wave"><span class="lpm-play"><svg viewBox="0 0 24 24"><use href="#i-play"/></svg></span><div class="lpm-bars"><i style="height:30%"></i><i style="height:55%"></i><i style="height:42%"></i><i style="height:72%"></i><i style="height:90%"></i><i style="height:64%"></i><i style="height:40%"></i><i style="height:78%"></i><i style="height:96%"></i><i style="height:60%"></i><i style="height:34%"></i><i style="height:52%"></i><i style="height:84%"></i><i style="height:46%"></i><i style="height:68%"></i><i style="height:38%"></i><i style="height:58%"></i><i style="height:88%"></i><i style="height:50%"></i><i style="height:30%"></i><i style="height:62%"></i><i style="height:44%"></i></div></div>
+          </div>
+          <div class="lpm-row"><div class="lpm-cov"></div><div class="lpm-rmeta"><div class="lpm-t">Sin Filtro</div><div class="lpm-a">por KEZO · 1.2k plays</div></div><span class="lpm-mini"><svg viewBox="0 0 24 24"><use href="#i-play"/></svg></span></div>
+          <div class="lpm-row"><div class="lpm-cov v2"></div><div class="lpm-rmeta"><div class="lpm-t">Brillo</div><div class="lpm-a">por LUA · 980 plays</div></div><span class="lpm-mini"><svg viewBox="0 0 24 24"><use href="#i-play"/></svg></span></div>
+          <div class="lpm-np"><div class="lpm-np-cov"></div><div class="lpm-np-meta"><b>Medianoche</b><span>NOVA</span></div><span class="lpm-np-btn"><svg viewBox="0 0 24 24"><use href="#i-pause"/></svg></span></div>
+        </div>
+      </div>
     </div>
   </section>
-  <section class="lp-features">
-    <div class="lp-feat"><div class="lp-ic">🎵</div><h3>Sube tu música</h3><p>Comparte beats, pistas y packs. Reproductor con waveform y descargas.</p></div>
-    <div class="lp-feat"><div class="lp-ic">🔥</div><h3>Trending en vivo</h3><p>Un ranking que se mueve solo con lo que de verdad escucha la gente.</p></div>
-    <div class="lp-feat"><div class="lp-ic">🤝</div><h3>Conecta</h3><p>Sigue artistas, comenta, repostea y chatea en directo.</p></div>
-    <div class="lp-feat"><div class="lp-ic">🎮</div><h3>Juega</h3><p>Reta a duelos 1v1 y compite con la comunidad.</p></div>
-    <div class="lp-feat"><div class="lp-ic">📸</div><h3>Comparte tu mundo</h3><p>Fotos, historias para Instagram y un perfil totalmente personalizable.</p></div>
-    <div class="lp-feat"><div class="lp-ic">📈</div><h3>Crece</h3><p>Estadísticas de audiencia y herramientas pensadas para artistas.</p></div>
+
+  <section class="lp-section">
+    <h2 class="lp-h2">Todo lo que necesitas para <span>hacer ruido</span></h2>
+    <p class="lp-h2-sub">Una plataforma pensada para artistas, no para algoritmos.</p>
+    <div class="lp-features">
+      <div class="lp-feat"><div class="lp-fic"><svg viewBox="0 0 24 24"><use href="#i-upload"/></svg></div><h3>Sube tu música</h3><p>Pistas, beats y packs con reproductor de onda y descargas. Tu catálogo, tu sitio.</p></div>
+      <div class="lp-feat"><div class="lp-fic"><svg viewBox="0 0 24 24"><use href="#i-feed"/></svg></div><h3>Trending en vivo</h3><p>Un ranking que se mueve solo con lo que la gente escucha de verdad. Sin enchufes.</p></div>
+      <div class="lp-feat"><div class="lp-fic"><svg viewBox="0 0 24 24"><use href="#i-people"/></svg></div><h3>Construye comunidad</h3><p>Sigue a otros artistas, comenta, repostea y haz crecer tu base de fans.</p></div>
+      <div class="lp-feat"><div class="lp-fic"><svg viewBox="0 0 24 24"><use href="#i-comment"/></svg></div><h3>Chat en directo</h3><p>Mensajes y salas en tiempo real. Habla con tu gente sin salir de la app.</p></div>
+      <div class="lp-feat"><div class="lp-fic"><svg viewBox="0 0 24 24"><use href="#i-camera"/></svg></div><h3>Comparte tu mundo</h3><p>Fotos, historias para Instagram y un perfil totalmente personalizable.</p></div>
+      <div class="lp-feat"><div class="lp-fic"><svg viewBox="0 0 24 24"><use href="#i-chart"/></svg></div><h3>Mide y crece</h3><p>Estadísticas reales de audiencia y herramientas hechas para artistas.</p></div>
+    </div>
   </section>
+
   <section class="lp-final">
-    <h2>Súbete a UnderBro</h2>
-    <p>Gratis. Sin postureo. Solo música.</p>
-    <button class="btn primary lp-big" id="lpRegister2">Crear cuenta gratis</button>
+    <div class="lp-final-inner">
+      <h2>Tu próxima pista merece escucharse.</h2>
+      <p>Únete a la comunidad de música underground.</p>
+      <button class="btn primary lp-big" id="lpRegister3">Crear cuenta gratis</button>
+    </div>
   </section>
-  <footer class="lp-foot">© UnderBro · upload. share. connect.</footer>
+
+  <footer class="lp-foot">
+    <img src="/assets/logo-mark.png?v=20260605b" alt="UnderBro" />
+    <span>© UnderBro · upload. share. connect.</span>
+  </footer>
 </div>
 
 <div class="auth-screen hidden" id="authScreen">
@@ -460,7 +498,7 @@ html.no-splash #splash{display:none}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
-<script src="js/config.js?v=20260625i"></script>
-<script src="js/app.js?v=20260625i"></script>
+<script src="js/config.js?v=20260625j"></script>
+<script src="js/app.js?v=20260625j"></script>
 </body>
 </html>
