@@ -215,6 +215,22 @@ function setAuthMode(mode) {
 }
 $('tabLogin').onclick = () => setAuthMode('login');
 $('tabRegister').onclick = () => setAuthMode('register');
+
+// Landing de presentación (antes del login) para usuarios sin sesión
+function showAuth(mode) {
+  $('landing')?.classList.add('hidden');
+  $('authScreen')?.classList.remove('hidden');
+  setAuthMode(mode === 'register' ? 'register' : 'login');
+  try { window.scrollTo(0, 0); } catch (_) {}
+}
+function initLanding() {
+  const lp = $('landing'); if (!lp) return;
+  lp.classList.remove('hidden');
+  $('authScreen')?.classList.add('hidden');
+  ['lpLogin', 'lpLogin2'].forEach(id => { const b = $(id); if (b) b.onclick = () => showAuth('login'); });
+  ['lpRegister', 'lpRegister2'].forEach(id => { const b = $(id); if (b) b.onclick = () => showAuth('register'); });
+  const back = $('authBack'); if (back) back.onclick = () => { $('authScreen')?.classList.add('hidden'); lp.classList.remove('hidden'); try { window.scrollTo(0, 0); } catch (_) {} };
+}
 $('authPolicyLink').onclick = (e) => { e.preventDefault(); showPrivacyPolicy(); };
 $('authPolicyFooter').onclick = (e) => { e.preventDefault(); showPrivacyPolicy(); };
 $('googleBtn').onclick = signInWithGoogle;
@@ -568,6 +584,7 @@ async function init() {
   if (linkSlug) { renderPublicSmartLink(linkSlug); return; }
   const { data: { session } } = await sb.auth.getSession();
   if (session) { state.user = session.user; await onAuthenticated(); }
+  else initLanding();
   sb.auth.onAuthStateChange(async (event, sess) => {
     if (event === 'SIGNED_OUT') { if (state.user) location.reload(); return; }
     // vuelta de un login OAuth (Google): arranca la app si aún no lo hizo
@@ -584,6 +601,7 @@ async function onAuthenticated() {
   // cargar / asegurar perfil
   await ensureProfile();
   applyReferral();
+  $('landing')?.classList.add('hidden');
   $('authScreen').classList.add('hidden');
   $('app').classList.remove('hidden');
   renderMe();

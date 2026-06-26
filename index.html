@@ -29,7 +29,7 @@
 <link rel="manifest" href="/manifest.json?v=20260605l" />
 <meta name="theme-color" content="#0a0d18" />
 <link rel="apple-touch-icon" href="/icon-192.png?v=20260605l" />
-<link rel="stylesheet" href="css/styles.css?v=20260625h" />
+<link rel="stylesheet" href="css/styles.css?v=20260625i" />
 <script>(function(){try{var t=localStorage.getItem('ub_theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}try{if(sessionStorage.getItem('ub_splash'))document.documentElement.classList.add('no-splash');}catch(e){}})();</script>
 <!-- Vercel Web Analytics -->
 <script>
@@ -137,8 +137,40 @@ html.no-splash #splash{display:none}
 </svg>
 
 <!-- ===================== AUTH SCREEN ===================== -->
-<div class="auth-screen" id="authScreen">
+<!-- ===================== LANDING (presentación, antes del login) ===================== -->
+<div class="landing hidden" id="landing">
+  <header class="lp-nav">
+    <img class="lp-logo" src="/assets/logo-full.png?v=20260605b" alt="UnderBro" />
+    <button class="btn sm primary" id="lpLogin">Iniciar sesión</button>
+  </header>
+  <section class="lp-hero">
+    <div class="lp-hero-glow"></div>
+    <h1 class="lp-title">La red social de la<br><span>música underground</span></h1>
+    <p class="lp-sub">Sube tus pistas, conecta con artistas y descubre lo que está pegando. Tu música, tu comunidad, tu escena.</p>
+    <div class="lp-cta">
+      <button class="btn primary lp-big" id="lpRegister">Crear cuenta gratis</button>
+      <button class="btn lp-big" id="lpLogin2">Ya tengo cuenta</button>
+    </div>
+  </section>
+  <section class="lp-features">
+    <div class="lp-feat"><div class="lp-ic">🎵</div><h3>Sube tu música</h3><p>Comparte beats, pistas y packs. Reproductor con waveform y descargas.</p></div>
+    <div class="lp-feat"><div class="lp-ic">🔥</div><h3>Trending en vivo</h3><p>Un ranking que se mueve solo con lo que de verdad escucha la gente.</p></div>
+    <div class="lp-feat"><div class="lp-ic">🤝</div><h3>Conecta</h3><p>Sigue artistas, comenta, repostea y chatea en directo.</p></div>
+    <div class="lp-feat"><div class="lp-ic">🎮</div><h3>Juega</h3><p>Reta a duelos 1v1 y compite con la comunidad.</p></div>
+    <div class="lp-feat"><div class="lp-ic">📸</div><h3>Comparte tu mundo</h3><p>Fotos, historias para Instagram y un perfil totalmente personalizable.</p></div>
+    <div class="lp-feat"><div class="lp-ic">📈</div><h3>Crece</h3><p>Estadísticas de audiencia y herramientas pensadas para artistas.</p></div>
+  </section>
+  <section class="lp-final">
+    <h2>Súbete a UnderBro</h2>
+    <p>Gratis. Sin postureo. Solo música.</p>
+    <button class="btn primary lp-big" id="lpRegister2">Crear cuenta gratis</button>
+  </section>
+  <footer class="lp-foot">© UnderBro · upload. share. connect.</footer>
+</div>
+
+<div class="auth-screen hidden" id="authScreen">
   <div class="auth-card">
+    <button type="button" class="auth-back" id="authBack">← Volver</button>
     <div class="auth-head">
       <img class="auth-logo" src="/assets/logo-full.png?v=20260605b" alt="UnderBro" />
       <p>upload. share. connect.</p>
@@ -428,7 +460,7 @@ html.no-splash #splash{display:none}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
-<script src="js/config.js?v=20260625h"></script>
-<script src="js/app.js?v=20260625h"></script>
+<script src="js/config.js?v=20260625i"></script>
+<script src="js/app.js?v=20260625i"></script>
 </body>
 </html>
