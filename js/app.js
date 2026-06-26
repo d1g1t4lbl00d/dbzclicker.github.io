@@ -3290,8 +3290,13 @@ async function playTrack(t) {
   try { await audio.play(); } catch {}
   // contar reproducción
   sb.rpc('increment_plays', { track: t.id }).then(() => { t.plays = (t.plays||0)+1; }).catch(() => {});
-  // registrar evento para insights de audiencia (una vez por pista y sesión)
-  if (!playLogged.has(t.id)) { playLogged.add(t.id); sb.from('track_plays').insert({ track_id: t.id, user_id: state.user.id }).catch(() => {}); }
+  // registrar evento para insights de audiencia y Trending (una vez por pista y sesión)
+  if (state.user && state.user.id && !playLogged.has(t.id)) {
+    playLogged.add(t.id);
+    sb.from('track_plays').insert({ track_id: t.id, user_id: state.user.id })
+      .then(({ error }) => { if (error) playLogged.delete(t.id); })   // reintentar en la próxima escucha si falló
+      .catch(() => playLogged.delete(t.id));
+  }
   // si no está en la cola actual, crear cola con la vista
   if (!state.queue.includes(t.id)) state.queue = [t.id];
   if ($('npQueuePanel')?.classList.contains('open')) renderQueuePanel();
