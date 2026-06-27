@@ -2098,6 +2098,16 @@ async function renderSearch() {
 }
 
 // alterna seguir/dejar de seguir con actualización optimista y reversión si falla
+// Aviso push al dueño cuando hay interacción social (seguir/like/comentario/repost).
+// Servidor (Edge Function notify-social) valida al emisor por JWT y plantilla el texto;
+// fire-and-forget: nunca rompe el flujo si falla.
+function notifySocial(type, targetId, opts) {
+  try {
+    if (!targetId || targetId === state.user?.id) return;
+    sb.functions.invoke('notify-social', { body: Object.assign({ type, target_id: targetId }, opts || {}) }).catch(() => {});
+  } catch (_) {}
+}
+
 async function toggleFollow(userId, btn) {
   const was = state.follows.has(userId);
   const paint = (following) => {
@@ -2114,6 +2124,8 @@ async function toggleFollow(userId, btn) {
     if (was) state.follows.add(userId); else state.follows.delete(userId);
     paint(was);
     toast('No se pudo actualizar el seguimiento');
+  } else if (!was) {
+    notifySocial('follow', userId);
   }
 }
 
@@ -2935,6 +2947,7 @@ async function toggleLike(t, card) {
       t.likes_count = (t.likes_count || 0) + 1;
       btn?.classList.add('on'); setLn('Te gusta');
       await sb.from('likes').insert({ track_id: t.id, user_id: state.user.id });
+      notifySocial('like', t.user_id, { track_id: t.id });
     }
     if (cntEl) cntEl.textContent = t.likes_count;
     updateCounts();
@@ -2962,6 +2975,7 @@ async function toggleRepost(t, card) {
     t.reposts_count = (t.reposts_count || 0) + 1;
     if (btn) { btn.classList.add('on'); const r = btn.querySelector('.rn'); if (r) r.textContent = 'Reposteado'; }
     await sb.from('reposts').insert({ track_id: t.id, user_id: state.user.id });
+    notifySocial('repost', t.user_id, { track_id: t.id });
     toast('🔁 Reposteado a tus seguidores');
   }
   // actualizar el contador en todas las copias de la pista
@@ -3120,6 +3134,7 @@ function renderComments(box, t, comments) {
     input.value = '';
     const { data, error } = await sb.from('comments').insert({ track_id: t.id, user_id: state.user.id, body }).select('*, profiles(*)').single();
     if (error) { toast('No se pudo comentar'); return; }
+    notifySocial('comment', t.user_id, { track_id: t.id, comment: body });
     renderComments(box, t, [...comments, data]);
   });
   box.appendChild(form);
@@ -4207,6 +4222,7 @@ async function togglePostLike(p, card) {
       p.likes_count = (p.likes_count || 0) + 1;
       btn?.classList.add('on'); setLn('Te gusta');
       await sb.from('post_likes').insert({ post_id: p.id, user_id: state.user.id });
+      notifySocial('post_like', p.user_id);
     }
     if (cntEl) cntEl.textContent = p.likes_count;
   } finally { busy.delete(p.id); }
@@ -4901,6 +4917,7 @@ function renderPostComments(box, p, comments) {
     input.value = '';
     const { data, error } = await sb.from('post_comments').insert({ post_id: p.id, user_id: state.user.id, body }).select('*, profiles!post_comments_user_id_fkey(*)').single();
     if (error) { toast('No se pudo comentar'); return; }
+    notifySocial('post_comment', p.user_id, { comment: body });
     renderPostComments(box, p, [...comments, data]);
   });
   box.appendChild(form);
