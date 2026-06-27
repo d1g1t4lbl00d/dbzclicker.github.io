@@ -3388,14 +3388,11 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
 .landing { position: fixed; inset: 0; z-index: 50; overflow-y: auto; -webkit-overflow-scrolling: touch; color: #eaf0fb; font-family: var(--font); background: #05060e; }
 .landing.hidden { display: none; }
 .landing *, .landing *::before, .landing *::after { box-sizing: border-box; }
-.lp-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none;
+.lp-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
   background:
-    url(/assets/landing/ub-pattern.png?v=20260627f),
-    radial-gradient(78% 48% at 78% -6%, rgba(110,45,245,.32), transparent 60%),
-    radial-gradient(64% 42% at 6% 6%, rgba(39,169,255,.20), transparent 58%),
-    linear-gradient(180deg, #080a14 0%, #05060e 60%, #04050b 100%);
-  background-repeat: repeat, no-repeat, no-repeat, no-repeat;
-  background-size: 168px 160px, auto, auto, auto; }
+    radial-gradient(80% 50% at 82% -8%, rgba(110,45,245,.22), transparent 60%),
+    radial-gradient(60% 42% at 4% 4%, rgba(39,169,255,.14), transparent 58%),
+    linear-gradient(180deg, #090b16 0%, #06070f 58%, #04050b 100%); }
 .landing > *:not(.lp-bg) { position: relative; z-index: 1; }
 
 /* nav */
@@ -3512,12 +3509,12 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
   border: 1px solid rgba(255,255,255,.08); border-radius: 20px; padding: 26px 24px;
   box-shadow: inset 0 1px 0 rgba(255,255,255,.05);
   transition: transform .26s var(--ease-spring), border-color .22s, background .22s, box-shadow .22s; }
-.lp-feat::before { content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; opacity: 0;
+.lp-feat::after { content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; opacity: 0;
   background: radial-gradient(70% 60% at 50% 0%, rgba(110,130,255,.22), transparent 70%); transition: opacity .3s; }
 .lp-feat > * { position: relative; z-index: 1; }
 .lp-feat:hover { transform: translateY(-5px); border-color: rgba(110,130,255,.45); background: rgba(255,255,255,.055);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 22px 48px -22px rgba(40,40,120,.6); }
-.lp-feat:hover::before { opacity: 1; }
+.lp-feat:hover::after { opacity: 1; }
 .lp-fic { width: 50px; height: 50px; border-radius: 15px; display: grid; place-items: center; margin-bottom: 17px;
   background: linear-gradient(135deg, rgba(39,169,255,.2), rgba(110,45,245,.3)); border: 1px solid rgba(120,140,255,.32);
   box-shadow: 0 8px 22px -8px rgba(70,90,255,.55), inset 0 1px 0 rgba(255,255,255,.14);
@@ -3623,12 +3620,25 @@ img.lpm-np-cov { width: 34px; height: 34px; border-radius: 9px; object-fit: cove
 @media (max-width: 560px) { .lp-soon { flex-direction: column; text-align: center; align-items: center; } }
 
 /* ---- landing v3: pulido estético (animaciones sutiles, aurora, glow) ---- */
-/* fondo con aurora en movimiento */
-.lp-bg::before, .lp-bg::after { content: ""; position: absolute; border-radius: 50%; filter: blur(55px); will-change: transform; }
-.lp-bg::before { width: 62vmax; height: 62vmax; top: -16%; right: -12%; background: radial-gradient(circle, rgba(110,45,245,.42), transparent 64%); animation: lpDrift1 24s ease-in-out infinite alternate; }
-.lp-bg::after  { width: 52vmax; height: 52vmax; bottom: -14%; left: -14%; background: radial-gradient(circle, rgba(39,169,255,.32), transparent 64%); animation: lpDrift2 28s ease-in-out infinite alternate; }
-@keyframes lpDrift1 { from { transform: translate(0,0) scale(1); } to { transform: translate(-6%,9%) scale(1.16); } }
-@keyframes lpDrift2 { from { transform: translate(0,0) scale(1); } to { transform: translate(9%,-7%) scale(1.13); } }
+/* fondo con aurora viva: orbes de gradiente a la deriva + grano sutil */
+.lp-orb { position: absolute; border-radius: 50%; filter: blur(64px); will-change: transform, opacity; mix-blend-mode: screen; }
+.lp-orb.o1 { width: 58vmax; height: 58vmax; top: -20%; right: -14%;
+  background: radial-gradient(circle, rgba(120,60,255,.5), rgba(120,60,255,0) 66%);
+  animation: lpDrift1 26s ease-in-out infinite alternate, lpPulse 14s ease-in-out infinite; }
+.lp-orb.o2 { width: 50vmax; height: 50vmax; bottom: -18%; left: -16%;
+  background: radial-gradient(circle, rgba(39,150,255,.42), rgba(39,150,255,0) 66%);
+  animation: lpDrift2 32s ease-in-out infinite alternate, lpPulse 18s ease-in-out infinite 2s; }
+.lp-orb.o3 { width: 42vmax; height: 42vmax; top: 32%; left: 38%;
+  background: radial-gradient(circle, rgba(45,205,255,.26), rgba(45,205,255,0) 68%);
+  animation: lpDrift3 38s ease-in-out infinite alternate, lpPulse 16s ease-in-out infinite 1s; }
+.lp-grain { position: absolute; inset: -50%; pointer-events: none; opacity: .04; mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  animation: lpGrain 8s steps(6) infinite; }
+@keyframes lpDrift1 { from { transform: translate(0,0) scale(1); } to { transform: translate(-7%,10%) scale(1.18); } }
+@keyframes lpDrift2 { from { transform: translate(0,0) scale(1); } to { transform: translate(10%,-8%) scale(1.14); } }
+@keyframes lpDrift3 { from { transform: translate(0,0) scale(.95); } to { transform: translate(-9%,-6%) scale(1.2); } }
+@keyframes lpPulse { 0%,100% { opacity: .85; } 50% { opacity: 1; } }
+@keyframes lpGrain { 0%{transform:translate(0,0)} 25%{transform:translate(-4%,3%)} 50%{transform:translate(3%,-4%)} 75%{transform:translate(-3%,-2%)} 100%{transform:translate(2%,3%)} }
 
 /* entrada del hero (escalonada) */
 @keyframes lpUp { from { opacity: 0; transform: translateY(22px); } to { opacity: 1; transform: none; } }
@@ -3671,8 +3681,26 @@ img.lpm-np-cov { width: 34px; height: 34px; border-radius: 9px; object-fit: cove
 .lp-section::before { content: ""; position: absolute; top: 0; left: 12%; right: 12%; height: 1px;
   background: linear-gradient(90deg, transparent, rgba(255,255,255,.12), transparent); }
 
+/* ---- homogeneidad: cristal esmerilado y detalles coherentes ---- */
+.lp-feat, .lp-soon, .lp-final-inner, .lp-eyebrow, .lp-ghost {
+  -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px); }
+.lp-feat { background: rgba(255,255,255,.04); }
+/* punto del eyebrow con latido suave */
+.lp-dot { position: relative; }
+.lp-dot::after { content: ""; position: absolute; inset: -4px; border-radius: 50%;
+  border: 1px solid rgba(45,255,166,.55); animation: lpDotPulse 2.4s ease-out infinite; }
+@keyframes lpDotPulse { 0% { transform: scale(.6); opacity: .9; } 100% { transform: scale(1.9); opacity: 0; } }
+/* subrayado degradado animado en las palabras destacadas de los títulos */
+.lp-title span, .lp-h2 span { background-size: 200% 100%; animation: lpGradShift 7s ease-in-out infinite; }
+@keyframes lpGradShift { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
+/* tarjeta "muy pronto": anillo degradado coherente con las features */
+.lp-soon { position: relative; overflow: hidden; }
+.lp-soon::after { content: ""; position: absolute; inset: 0; border-radius: inherit; padding: 1px; pointer-events: none;
+  background: linear-gradient(135deg, rgba(150,60,255,.6), rgba(39,169,255,.35) 60%, transparent);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
+
 @media (prefers-reduced-motion: reduce) {
-  .lp-bg::before, .lp-bg::after, .lp-hero-copy > *, .lp-hero-art, .landing .btn.primary.lp-big::after { animation: none; }
+  .lp-orb, .lp-grain, .lp-hero-copy > *, .lp-hero-art, .landing .btn.primary.lp-big::after, .lp-final-logo { animation: none; }
   .landing .reveal { opacity: 1; transform: none; transition: none; }
 }
 
