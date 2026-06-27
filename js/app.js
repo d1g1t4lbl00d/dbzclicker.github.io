@@ -241,6 +241,20 @@ function initLandingReveal(root) {
     ents.forEach(en => { if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); } });
   }, { root, rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
   els.forEach(e => io.observe(e));
+  // Parallax sutil de los teléfonos del hero al hacer scroll
+  const art = root.querySelector('.lp-hero-art');
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (art && !reduce) {
+    let raf = 0;
+    const apply = () => {
+      raf = 0;
+      const st = root.scrollTop || 0;
+      const y = Math.max(-46, -st * 0.07);
+      art.style.transform = 'translateY(' + y.toFixed(1) + 'px)';
+    };
+    root.addEventListener('scroll', () => { if (!raf) raf = requestAnimationFrame(apply); }, { passive: true });
+    apply();
+  }
 }
 $('authPolicyLink').onclick = (e) => { e.preventDefault(); showPrivacyPolicy(); };
 $('authPolicyFooter').onclick = (e) => { e.preventDefault(); showPrivacyPolicy(); };
