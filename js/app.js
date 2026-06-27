@@ -2442,8 +2442,8 @@ function resamplePeaks(peaks, n) {
   return out;
 }
 function waveHTML(t) {
-  let peaks = Array.isArray(t.waveform) && t.waveform.length ? t.waveform : waveBars(t.id, 100);
-  peaks = resamplePeaks(peaks, 100);
+  let peaks = Array.isArray(t.waveform) && t.waveform.length ? t.waveform : waveBars(t.id, 140);
+  peaks = resamplePeaks(peaks, 140);
   const bars = peaks.map((h, i) => `<div class="bar" data-i="${i}" style="--h:${czNum(h)}%;--d:${((i * 37) % 23) * 0.045}s"></div>`).join('');
   return `<div class="wave" data-act="seekwave">${bars}</div>`;
 }
