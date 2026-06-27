@@ -965,6 +965,7 @@ let ubSwiping = false, _afterSwipeQ = [];
 function afterSwipe(fn) { if (ubSwiping) _afterSwipeQ.push(fn); else fn(); }
 function flushAfterSwipe() { const q = _afterSwipeQ; _afterSwipeQ = []; q.forEach((f) => { try { f(); } catch (_) {} }); }
 let _swapDir = '';   // dirección de la transición al cambiar de pestaña del feed ('fwd' | 'back')
+let _pendingScrollTop = false;   // resetear el scroll del feed arriba en el próximo render (solo al cambiar de pestaña/pantalla)
 async function switchView(view) {
   ubRecord({ kind: 'view', view });
   state.view = view;
@@ -1044,6 +1045,7 @@ function feedChanged(a, b) {
 async function loadFeedView(view) {
   const spec = feedSpec(view, state.tab);
   if (!spec) return;
+  _pendingScrollTop = true;   // al cambiar de pestaña/pantalla, el render llevará el feed arriba del todo
   const cached = feedCache.get(spec.key);
   // Si venimos de un deslizamiento, pintar 50 tarjetas de golpe bloquea la
   // animación. Mostramos skeleton ligero durante el slide y pintamos las
@@ -2122,6 +2124,7 @@ function renderFeed(head, tracks, view) {
   const main = $('main');
   const showStories = view === 'feed';
   main.innerHTML = `<div class="main-head"><div><h2>${esc(head.title)}</h2><div class="sub">${esc(head.sub)}</div></div></div>${showStories ? '<div id="storiesBar" class="stories-bar"></div>' : ''}<div id="feedList" class="feed-list compact"></div>`;
+  if (_pendingScrollTop) { _pendingScrollTop = false; try { main.scrollTo({ top: 0, behavior: 'instant' }); } catch (_) { main.scrollTop = 0; } }
   if (showStories) loadStoriesBar();
   const list = $('feedList');
   if (!tracks.length) {
