@@ -860,7 +860,8 @@ function bindUI() {
   });
   document.querySelectorAll('#feedTabs button').forEach(b => {
     b.onclick = () => {
-      if (b.classList.contains('active') && state.view === 'feed') return; // ya está, no recargues
+      // si ya estás en esa pestaña, vuelve arriba del feed (suave)
+      if (b.classList.contains('active') && state.view === 'feed') { try { $('main').scrollTo({ top: 0, behavior: 'smooth' }); } catch (_) { const m = $('main'); if (m) m.scrollTop = 0; } return; }
       const order = ['following', 'trending', 'new'];
       const oi = order.indexOf(state.tab), ni = order.indexOf(b.dataset.tab);
       _swapDir = (oi >= 0 && ni >= 0 && oi !== ni) ? (ni > oi ? 'fwd' : 'back') : '';
