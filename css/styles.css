@@ -3538,6 +3538,10 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
 .lp-final-inner { max-width: 880px; margin: 0 auto; text-align: center; border-radius: 28px; padding: clamp(38px,6vw,62px) 24px;
   background: radial-gradient(120% 140% at 50% -25%, rgba(110,45,245,.5), rgba(39,169,255,.16) 58%, transparent 78%), rgba(255,255,255,.03);
   border: 1px solid rgba(255,255,255,.1); box-shadow: 0 34px 90px rgba(40,30,120,.42); }
+.lp-final-logo { width: 72px; height: auto; margin: 0 auto 18px; display: block;
+  filter: drop-shadow(0 10px 26px rgba(62,87,252,.55)); animation: lpLogoFloat 5.5s ease-in-out infinite; }
+@keyframes lpLogoFloat { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
+@media (prefers-reduced-motion: reduce) { .lp-final-logo { animation: none; } }
 .lp-final-inner h2 { font-size: clamp(24px,4.4vw,38px); font-weight: 900; letter-spacing: -.024em; color: #fff; margin: 0 0 8px; }
 .lp-final-inner p { color: #bbc8e6; margin: 0 0 24px; font-size: 15.5px; }
 
