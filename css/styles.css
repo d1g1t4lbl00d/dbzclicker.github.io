@@ -3674,3 +3674,9 @@ button, a, .btn, .icon-btn, .nav-item, .bottom-nav button, .tabs button,
 .main.swap-fwd  { animation: swapFwd  .26s var(--ease); }
 .main.swap-back { animation: swapBack .26s var(--ease); }
 @media (prefers-reduced-motion: reduce) { .main.swap-fwd, .main.swap-back { animation: none !important; } }
+
+/* off-screen no se pinta → scroll de listas largas mucho más ligero (mismo aspecto) */
+.track { content-visibility: auto; contain-intrinsic-size: auto 280px; }
+.person { content-visibility: auto; contain-intrinsic-size: auto 110px; }
+.convo { content-visibility: auto; contain-intrinsic-size: auto 74px; }
+.notif-item { content-visibility: auto; contain-intrinsic-size: auto 66px; }
