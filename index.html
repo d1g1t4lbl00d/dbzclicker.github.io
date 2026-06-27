@@ -29,7 +29,7 @@
 <link rel="manifest" href="/manifest.json?v=20260605l" />
 <meta name="theme-color" content="#0a0d18" />
 <link rel="apple-touch-icon" href="/icon-192.png?v=20260605l" />
-<link rel="stylesheet" href="css/styles.css?v=20260627g" />
+<link rel="stylesheet" href="css/styles.css?v=20260627h" />
 <script>(function(){try{var t=localStorage.getItem('ub_theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}try{if(sessionStorage.getItem('ub_splash'))document.documentElement.classList.add('no-splash');}catch(e){}})();</script>
 <!-- Vercel Web Analytics -->
 <script>
@@ -69,6 +69,9 @@ html.no-splash #splash{display:none}
 <!-- ===================== ICON SPRITE ===================== -->
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
   <defs>
+    <linearGradient id="ubg-blue1" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8fc0ff"/><stop offset="1" stop-color="#3457fc"/></linearGradient>
+    <linearGradient id="ubg-blue2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#74e0ff"/><stop offset="1" stop-color="#3b6cff"/></linearGradient>
+    <linearGradient id="ubg-blue3" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7e9bff"/><stop offset="1" stop-color="#5b3df5"/></linearGradient>
     <symbol id="i-upload" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></symbol>
     <symbol id="i-stream" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"/></symbol>
     <symbol id="i-people" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
@@ -143,6 +146,7 @@ html.no-splash #splash{display:none}
     <span class="lp-orb o1"></span>
     <span class="lp-orb o2"></span>
     <span class="lp-orb o3"></span>
+    <span class="lp-watermark"></span>
     <span class="lp-grain"></span>
   </div>
 
@@ -156,7 +160,6 @@ html.no-splash #splash{display:none}
 
   <section class="lp-hero">
     <div class="lp-hero-copy">
-      <span class="lp-eyebrow"><span class="lp-dot"></span> La escena underground, en tu bolsillo</span>
       <h1 class="lp-title">Todo para tu carrera.<br>En un <span>solo sitio</span>.</h1>
       <p class="lp-sub">Comparte tu música, conecta con tu escena y trabaja con herramientas de profesional. Todo en una app. Gratis.</p>
       <div class="lp-cta">
@@ -534,7 +537,7 @@ html.no-splash #splash{display:none}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
-<script src="js/config.js?v=20260627g"></script>
-<script src="js/app.js?v=20260627g"></script>
+<script src="js/config.js?v=20260627h"></script>
+<script src="js/app.js?v=20260627h"></script>
 </body>
 </html>

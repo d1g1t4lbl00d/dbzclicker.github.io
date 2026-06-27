@@ -3515,21 +3515,15 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
 .lp-feat:hover { transform: translateY(-5px); border-color: rgba(110,130,255,.45); background: rgba(255,255,255,.055);
   box-shadow: inset 0 1px 0 rgba(255,255,255,.08), 0 22px 48px -22px rgba(40,40,120,.6); }
 .lp-feat:hover::after { opacity: 1; }
-.lp-fic { width: 50px; height: 50px; border-radius: 15px; display: grid; place-items: center; margin-bottom: 17px;
-  background: linear-gradient(135deg, rgba(39,169,255,.2), rgba(110,45,245,.3)); border: 1px solid rgba(120,140,255,.32);
-  box-shadow: 0 8px 22px -8px rgba(70,90,255,.55), inset 0 1px 0 rgba(255,255,255,.14);
-  transition: transform .26s var(--ease-spring); }
-.lp-feat:hover .lp-fic { transform: translateY(-2px) scale(1.05); }
-.lp-fic svg { width: 24px; height: 24px; fill: none; stroke: #aac4ff; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-/* matices distintos por tarjeta */
-.lp-feat:nth-child(2) .lp-fic { background: linear-gradient(135deg, rgba(45,255,166,.18), rgba(39,169,255,.28)); border-color: rgba(80,220,200,.34); }
-.lp-feat:nth-child(2) .lp-fic svg { stroke: #8ff0d2; }
-.lp-feat:nth-child(3) .lp-fic { background: linear-gradient(135deg, rgba(255,122,89,.2), rgba(224,69,125,.28)); border-color: rgba(255,140,160,.34); }
-.lp-feat:nth-child(3) .lp-fic svg { stroke: #ffb4a0; }
-.lp-feat:nth-child(5) .lp-fic { background: linear-gradient(135deg, rgba(255,216,77,.2), rgba(255,122,89,.26)); border-color: rgba(255,200,120,.34); }
-.lp-feat:nth-child(5) .lp-fic svg { stroke: #ffdf9a; }
-.lp-feat:nth-child(6) .lp-fic { background: linear-gradient(135deg, rgba(150,60,255,.24), rgba(39,169,255,.24)); border-color: rgba(170,140,255,.36); }
-.lp-feat:nth-child(6) .lp-fic svg { stroke: #c9b4ff; }
+/* iconos sueltos (sin recuadro), con trazo en gradiente azul */
+.lp-fic { width: auto; height: auto; margin-bottom: 16px; display: block;
+  background: none; border: none; box-shadow: none; transition: transform .26s var(--ease-spring); }
+.lp-feat:hover .lp-fic { transform: translateY(-2px) scale(1.06); }
+.lp-fic svg { width: 34px; height: 34px; fill: none; stroke: url(#ubg-blue1); stroke-width: 1.9; stroke-linecap: round; stroke-linejoin: round;
+  filter: drop-shadow(0 4px 12px rgba(58,108,255,.45)); }
+/* variación dentro de la gama azul */
+.lp-feat:nth-child(3n+2) .lp-fic svg { stroke: url(#ubg-blue2); }
+.lp-feat:nth-child(3n+3) .lp-fic svg { stroke: url(#ubg-blue3); }
 .lp-feat h3 { font-size: 18px; font-weight: 800; color: #fff; margin: 0 0 7px; letter-spacing: -.01em; }
 .lp-feat p { font-size: 14px; line-height: 1.55; color: #9aa6c2; margin: 0; }
 
@@ -3631,6 +3625,12 @@ img.lpm-np-cov { width: 34px; height: 34px; border-radius: 9px; object-fit: cove
 .lp-orb.o3 { width: 42vmax; height: 42vmax; top: 32%; left: 38%;
   background: radial-gradient(circle, rgba(45,205,255,.26), rgba(45,205,255,0) 68%);
   animation: lpDrift3 38s ease-in-out infinite alternate, lpPulse 16s ease-in-out infinite 1s; }
+/* marca de agua: patrón del emblema, muy sutil y con desvanecimiento */
+.lp-watermark { position: absolute; inset: 0; pointer-events: none; opacity: .05;
+  background-image: url(/assets/landing/ub-pattern.png?v=20260627h);
+  background-repeat: repeat; background-size: 150px 143px;
+  -webkit-mask-image: radial-gradient(130% 95% at 80% 0%, #000 0%, rgba(0,0,0,.5) 38%, transparent 72%);
+          mask-image: radial-gradient(130% 95% at 80% 0%, #000 0%, rgba(0,0,0,.5) 38%, transparent 72%); }
 .lp-grain { position: absolute; inset: -50%; pointer-events: none; opacity: .04; mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   animation: lpGrain 8s steps(6) infinite; }
@@ -3666,8 +3666,6 @@ img.lpm-np-cov { width: 34px; height: 34px; border-radius: 9px; object-fit: cove
   -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude;
   opacity: 0; transition: opacity .25s var(--ease); }
 .lp-feat:hover::before { opacity: 1; }
-.lp-fic { box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 6px 16px rgba(40,40,120,.25); transition: transform .25s var(--ease-spring); }
-.lp-feat:hover .lp-fic { transform: translateY(-2px) scale(1.05); }
 
 /* brillo que recorre el botón principal */
 .landing .btn.primary.lp-big { position: relative; overflow: hidden; }
@@ -3685,11 +3683,6 @@ img.lpm-np-cov { width: 34px; height: 34px; border-radius: 9px; object-fit: cove
 .lp-feat, .lp-soon, .lp-final-inner, .lp-eyebrow, .lp-ghost {
   -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px); }
 .lp-feat { background: rgba(255,255,255,.04); }
-/* punto del eyebrow con latido suave */
-.lp-dot { position: relative; }
-.lp-dot::after { content: ""; position: absolute; inset: -4px; border-radius: 50%;
-  border: 1px solid rgba(45,255,166,.55); animation: lpDotPulse 2.4s ease-out infinite; }
-@keyframes lpDotPulse { 0% { transform: scale(.6); opacity: .9; } 100% { transform: scale(1.9); opacity: 0; } }
 /* subrayado degradado animado en las palabras destacadas de los títulos */
 .lp-title span, .lp-h2 span { background-size: 200% 100%; animation: lpGradShift 7s ease-in-out infinite; }
 @keyframes lpGradShift { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
