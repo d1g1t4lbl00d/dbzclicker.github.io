@@ -3428,12 +3428,34 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
 
 /* hero art / phone mockup */
 .lp-hero-art { position: relative; display: flex; justify-content: center; align-items: center; }
-.lp-art-glow { position: absolute; width: 115%; height: 115%; left: -7%; top: -7%; z-index: 0;
-  background: radial-gradient(circle at 55% 42%, rgba(80,92,242,.5), transparent 60%); filter: blur(14px); pointer-events: none; }
-.lp-phone { position: relative; z-index: 1; width: min(300px, 76vw); border-radius: 42px; padding: 11px;
-  background: linear-gradient(165deg,#1b2233 0%, #0b0e19 70%); border: 1px solid rgba(255,255,255,.1);
-  box-shadow: 0 44px 100px rgba(0,0,0,.62), inset 0 1px 0 rgba(255,255,255,.08); transform: rotate(-2deg); }
-.lp-phone-scr { background: linear-gradient(180deg,#0a0d18,#0a1020); border-radius: 31px; padding: 15px 12px 13px; overflow: hidden; }
+.lp-art-glow { position: absolute; width: 124%; height: 118%; left: -12%; top: -9%; z-index: 0;
+  background: radial-gradient(60% 50% at 52% 40%, rgba(80,92,242,.55), transparent 62%),
+              radial-gradient(46% 38% at 70% 78%, rgba(150,60,255,.32), transparent 70%);
+  filter: blur(18px); pointer-events: none; }
+/* iPhone realista: marco de titanio, isla dinámica, brillo de pantalla */
+.lp-phone { position: relative; z-index: 1; width: min(298px, 74vw);
+  border-radius: 52px; padding: 10px; transform: rotate(-2.5deg);
+  background: linear-gradient(145deg, #5a6070 0%, #2b303c 16%, #14171f 40%, #0c0e14 60%, #23272f 82%, #4c515e 100%);
+  box-shadow:
+    inset 0 0 1px 1.5px rgba(255,255,255,.34),
+    inset 0 0 0 4px rgba(0,0,0,.55),
+    0 2px 5px rgba(255,255,255,.1),
+    0 60px 100px -34px rgba(0,0,0,.78),
+    0 30px 70px -40px rgba(62,87,252,.55); }
+.lp-phone-scr { position: relative; width: 100%; border-radius: 43px; overflow: hidden;
+  background: #05060e; box-shadow: inset 0 0 0 2px #000; line-height: 0; }
+.lp-phone-img { display: block; width: 100%; height: auto; }
+.lp-phone-island { position: absolute; z-index: 3; top: 3.1%; left: 50%; transform: translateX(-50%);
+  width: 30%; height: 3.1%; min-height: 22px; background: #000; border-radius: 999px;
+  box-shadow: inset 0 0 1px 1px rgba(255,255,255,.05); }
+.lp-phone-glare { position: absolute; inset: 0; z-index: 2; pointer-events: none; border-radius: 44px;
+  background: linear-gradient(133deg, rgba(255,255,255,.16) 0%, rgba(255,255,255,.04) 14%, transparent 34%, transparent 100%); }
+/* botones laterales */
+.lp-phone-pwr, .lp-phone-vol { position: absolute; z-index: 0; width: 3px; border-radius: 3px;
+  background: linear-gradient(180deg,#3a3f4b,#191c24); }
+.lp-phone-pwr { right: -3px; top: 30%; height: 11%; }
+.lp-phone-vol { left: -3px; top: 24%; height: 18%; }
+.lp-phone-scr--legacy { background: linear-gradient(180deg,#0a0d18,#0a1020); border-radius: 31px; padding: 15px 12px 13px; overflow: hidden; }
 .lpm-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 13px; }
 .lpm-top img { height: 22px; }
 .lpm-pills { display: flex; gap: 6px; }
@@ -3518,7 +3540,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
 .lpm-card.has-cover .lpm-t, .lpm-card.has-cover .lpm-a { text-shadow: 0 1px 6px rgba(0,0,0,.5); }
 .lpm-card.feat .lpm-t { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
 .lpm-rmeta .lpm-t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-@keyframes lpFloat { 0%,100% { transform: rotate(-2deg) translateY(0); } 50% { transform: rotate(-2deg) translateY(-9px); } }
+@keyframes lpFloat { 0%,100% { transform: rotate(-2.5deg) translateY(0); } 50% { transform: rotate(-2.5deg) translateY(-9px); } }
 @keyframes lpFloatM { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
 .lp-phone { animation: lpFloat 6.5s ease-in-out infinite; }
 @media (max-width: 880px) { .lp-phone { animation: lpFloatM 6.5s ease-in-out infinite; } }
@@ -3602,10 +3624,6 @@ img.lpm-np-cov { width: 34px; height: 34px; border-radius: 9px; object-fit: cove
   background: linear-gradient(100deg, transparent, rgba(255,255,255,.32), transparent); transform: skewX(-18deg); animation: lpSheen 5s ease-in-out infinite; }
 @keyframes lpSheen { 0%, 62% { left: -70%; } 84%, 100% { left: 140%; } }
 
-/* reflejo/cristal en la pantalla del teléfono */
-.lp-phone-scr { position: relative; }
-.lp-phone-scr::after { content: ""; position: absolute; inset: 0; z-index: 6; pointer-events: none; border-radius: 31px;
-  background: linear-gradient(125deg, rgba(255,255,255,.12) 0%, rgba(255,255,255,0) 36%); }
 
 /* hairline degradado entre secciones */
 .lp-section { position: relative; }
