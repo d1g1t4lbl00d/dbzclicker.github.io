@@ -10512,17 +10512,38 @@ async function setupPush() {
   if (!pushSupported()) return;
   try { swRegistration = await navigator.serviceWorker.register('/sw.js'); } catch (_) { return; }
   if (Notification.permission === 'granted') { try { await subscribeAndSave(); } catch (_) {} return; }
-  // pedir permiso una sola vez (clave para recibir llamadas/mensajes con la app cerrada)
-  if (Notification.permission === 'default' && !localStorage.getItem('ub_push_asked')) {
-    localStorage.setItem('ub_push_asked', '1');
-    setTimeout(async () => {
-      try {
-        const perm = await Notification.requestPermission();
-        if (perm === 'granted') { await subscribeAndSave(); toast('🔔 Avisos activados: recibirás llamadas y mensajes'); }
-      } catch (_) {}
-      renderPushButton();
-    }, 3000);
+  // Aviso suave propio (no el prompt nativo en frío): así no se "quema" el permiso
+  // y el "Ahora no" se puede volver a pedir pasados unos días.
+  if (Notification.permission === 'default') {
+    let snooze = 0; try { snooze = +localStorage.getItem('ub_push_snooze') || 0; } catch (_) {}
+    if (Date.now() - snooze < 4 * 864e5) return;   // re-preguntar a los 4 días
+    setTimeout(maybeSoftPushPrompt, 6000);
   }
+}
+// Pre-prompt amistoso: explica el valor antes de lanzar el permiso nativo (sube mucho el opt-in).
+function maybeSoftPushPrompt() {
+  if (!pushSupported() || typeof Notification === 'undefined' || Notification.permission !== 'default') return;
+  if (document.getElementById('pushPop')) return;
+  const ip = document.getElementById('installPop');
+  if (ip && !ip.hidden) { setTimeout(maybeSoftPushPrompt, 8000); return; }  // no chocar con el popup de instalar
+  const pop = document.createElement('div');
+  pop.className = 'install-pop'; pop.id = 'pushPop';
+  pop.innerHTML = `
+    <button class="ip-x" aria-label="Cerrar">&times;</button>
+    <div class="ip-head">
+      <img decoding="async" class="ip-logo" src="/assets/logo-mark.png?v=20260605b" alt="UnderBro" />
+      <div class="ip-txt"><b>Activa los avisos</b><span>Entérate al momento cuando te sigan, te den ♥, te comenten o te escriban.</span></div>
+    </div>
+    <div class="ip-actions">
+      <button class="ip-later">Ahora no</button>
+      <button class="ip-btn"><svg fill="none" stroke="#fff"><use href="#i-bell"/></svg> Activar avisos</button>
+    </div>`;
+  document.body.appendChild(pop);
+  requestAnimationFrame(() => pop.classList.add('show'));
+  const close = (snooze) => { pop.classList.remove('show'); setTimeout(() => pop.remove(), 320); if (snooze) { try { localStorage.setItem('ub_push_snooze', String(Date.now())); } catch (_) {} } };
+  pop.querySelector('.ip-x').onclick = () => close(true);
+  pop.querySelector('.ip-later').onclick = () => close(true);
+  pop.querySelector('.ip-btn').onclick = async () => { close(false); try { await enablePush(); } catch (_) {} };
 }
 async function subscribeAndSave() {
   if (!swRegistration) swRegistration = await navigator.serviceWorker.ready;
