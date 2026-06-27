@@ -3999,11 +3999,187 @@ function openCreateChooser() {
     <div class="modal-body">
       <div class="create-choices">
         <button class="create-choice" id="chTrack"><span class="cc-ic"><svg fill="none" stroke="#fff"><use href="#i-music"/></svg></span><b>Pista</b><span class="cc-sub">Sube una canción o beat</span></button>
+        <button class="create-choice" id="chAlbum"><span class="cc-ic"><svg fill="none" stroke="#fff"><use href="#i-headphones"/></svg></span><b>Álbum / EP</b><span class="cc-sub">Sube o agrupa varias pistas</span></button>
         <button class="create-choice" id="chPhoto"><span class="cc-ic"><svg fill="none" stroke="#fff"><use href="#i-camera"/></svg></span><b>Foto</b><span class="cc-sub">Publica una imagen</span></button>
       </div>
     </div>`);
   m.querySelector('#chTrack').onclick = () => { m.remove(); openUploadModal(); };
+  m.querySelector('#chAlbum').onclick = () => { m.remove(); openAlbumModal(); };
   m.querySelector('#chPhoto').onclick = () => { m.remove(); openPhotoUploadModal(); };
+}
+
+// Sube un audio suelto para un álbum (aislado del subidor principal para no tocar el core).
+// Reutiliza compresión y waveform si están disponibles.
+async function uploadAlbumTrack(file, opts, onProgress) {
+  const uid = state.user.id;
+  const stamp = Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+  const LIMIT = 50 * 1024 * 1024;
+  let uploadFile = file, duration = opts.duration || 0;
+  const tooBig = file.size > 45 * 1024 * 1024;
+  const worth = duration > 0 && file.size > duration * (160 * 1000 / 8) * 1.2;
+  if (window.lamejs && (tooBig || worth)) {
+    try {
+      uploadFile = await compressAudioToMp3(file, tooBig ? 192 : 160, (p) => onProgress && onProgress(p * 0.5));
+      if (uploadFile.size > LIMIT) uploadFile = await compressAudioToMp3(file, 128, () => {});
+    } catch (_) { uploadFile = file; }
+    if (!tooBig && uploadFile.size >= file.size && file.size <= LIMIT) uploadFile = file;
+  }
+  if (uploadFile.size > LIMIT) throw new Error('“' + file.name + '” es demasiado grande.');
+  const ext = (uploadFile.name.split('.').pop() || 'mp3').toLowerCase();
+  const AUDIO_MIME = { mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac', flac: 'audio/flac', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/opus', aif: 'audio/aiff', aiff: 'audio/aiff', wma: 'audio/x-ms-wma', alac: 'audio/mp4' };
+  const audioPath = `${uid}/${stamp}.${ext}`;
+  const up = await sb.storage.from('tracks').upload(audioPath, uploadFile, { contentType: uploadFile.type || AUDIO_MIME[ext] || 'audio/mpeg', upsert: false });
+  if (up.error) throw up.error;
+  const audioUrl = sb.storage.from('tracks').getPublicUrl(audioPath).data.publicUrl;
+  let waveform = null; try { waveform = await computeWaveformPeaks(uploadFile); } catch (_) {}
+  const payload = {
+    user_id: uid, title: opts.title, genre: opts.genre || null,
+    artist: state.profile.display_name || state.profile.username,
+    audio_url: audioUrl, cover_url: opts.coverUrl || null, duration: Math.round(duration),
+    waveform, album_id: opts.album_id, album_pos: opts.album_pos,
+  };
+  let { error } = await sb.from('tracks').insert(payload);
+  if (error && /album_id|album_pos|column/i.test(error.message || '')) { delete payload.album_id; delete payload.album_pos; ({ error } = await sb.from('tracks').insert(payload)); }
+  if (error) throw error;
+}
+
+function openAlbumModal() {
+  if (!requireNotBanned()) return;
+  const m = openModal(`
+    <div class="modal-head"><h3>Nuevo álbum / EP</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Título del álbum</label><input type="text" id="alTitle" maxlength="80" placeholder="Nombre del álbum o EP" /></div>
+      <div class="field"><label>Género <span style="color:var(--ink-faint);font-weight:400">(opcional)</span></label><input type="text" id="alGenre" placeholder="Trap, Drill, R&B…" /></div>
+      <div class="field"><label>Tipo</label>
+        <select id="alKind" class="up-select"><option value="album">Álbum</option><option value="ep">EP</option><option value="mixtape">Mixtape</option></select>
+      </div>
+      <div class="field">
+        <label>Portada <span style="color:var(--ink-faint);font-weight:400">(opcional)</span></label>
+        <div class="cover-pick" id="alDzCover"><div class="cover-prev" id="alCoverPrev"><svg width="24" height="24" fill="none" stroke="currentColor"><use href="#i-image"/></svg></div><div class="cover-pick-txt"><b id="alCoverName">Añadir portada</b><span>Imagen cuadrada</span></div></div>
+        <input type="file" id="alFCover" accept="image/*" hidden />
+      </div>
+      <div class="field">
+        <label>Subir audios nuevos <span style="color:var(--ink-faint);font-weight:400">(puedes elegir varios)</span></label>
+        <div class="dropzone" id="alDzAudio"><svg fill="none"><use href="#i-upload"/></svg><div>Arrastra tus MP3/WAV o haz clic</div><div class="fname" id="alAudioNames"></div></div>
+        <input type="file" id="alFAudio" accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.oga,.opus,.aif,.aiff,.wma,.alac" multiple hidden />
+      </div>
+      <div class="field" id="alExistingWrap">
+        <label>O añade pistas que ya tienes</label>
+        <div id="alExisting" class="al-existing"><div class="sub" style="padding:8px">Cargando tus pistas…</div></div>
+      </div>
+      <div class="progress-bar hidden" id="alBar"><div></div></div>
+      <button class="btn primary" id="alSubmit"><svg stroke="#fff"><use href="#i-headphones"/></svg> Crear álbum</button>
+      <div class="auth-msg" id="alMsg"></div>
+    </div>`);
+
+  let coverFile = null, audioFiles = [];
+  const fCover = m.querySelector('#alFCover'), dzCover = m.querySelector('#alDzCover');
+  dzCover.onclick = () => fCover.click();
+  fCover.onchange = () => { const f = fCover.files[0]; if (!f || !f.type.startsWith('image')) return; coverFile = f; m.querySelector('#alCoverName').textContent = f.name; m.querySelector('#alCoverPrev').innerHTML = `<img decoding="async" src="${URL.createObjectURL(f)}" alt="" />`; };
+  const fAudio = m.querySelector('#alFAudio'), dzAudio = m.querySelector('#alDzAudio');
+  dzAudio.onclick = () => fAudio.click();
+  const showNames = () => { m.querySelector('#alAudioNames').textContent = audioFiles.length ? audioFiles.map(f => f.name).join(', ') : ''; };
+  fAudio.onchange = () => { audioFiles = Array.from(fAudio.files || []); showNames(); };
+  ['dragover', 'dragleave', 'drop'].forEach(ev => dzAudio.addEventListener(ev, (e) => { e.preventDefault(); if (ev === 'dragover') dzAudio.classList.add('drag'); else dzAudio.classList.remove('drag'); if (ev === 'drop' && e.dataTransfer.files.length) { audioFiles = Array.from(e.dataTransfer.files).filter(f => /audio|\.(mp3|wav|m4a|aac|flac|ogg|oga|opus|aif|aiff|wma|alac)$/i.test(f.type + f.name)); showNames(); } }));
+
+  // pistas existentes (sin álbum) para opción A
+  (async () => {
+    const { data } = await sb.from('tracks').select('id,title,cover_url').eq('user_id', state.user.id).is('album_id', null).order('created_at', { ascending: false });
+    const box = m.querySelector('#alExisting');
+    if (!data || !data.length) { box.innerHTML = '<div class="sub" style="padding:8px">No tienes pistas sueltas para añadir.</div>'; return; }
+    box.innerHTML = data.map(t => `<label class="al-pick"><input type="checkbox" value="${t.id}" /><span class="al-pick-cov" style="${t.cover_url ? `background-image:url('${czUrl(t.cover_url)}')` : ''}"></span><span class="al-pick-t">${esc(t.title)}</span></label>`).join('');
+  })();
+
+  m.querySelector('#alSubmit').onclick = async () => {
+    const msg = m.querySelector('#alMsg'); msg.className = 'auth-msg';
+    const title = m.querySelector('#alTitle').value.trim();
+    const genre = m.querySelector('#alGenre').value.trim();
+    const kind = m.querySelector('#alKind').value;
+    const picked = Array.from(m.querySelectorAll('#alExisting input:checked')).map(c => c.value);
+    if (!title) { msg.className = 'auth-msg error'; msg.textContent = 'Ponle un título al álbum.'; return; }
+    if (!audioFiles.length && !picked.length) { msg.className = 'auth-msg error'; msg.textContent = 'Añade al menos una pista (sube audios o elige existentes).'; return; }
+    const btn = m.querySelector('#alSubmit'); btn.disabled = true;
+    const bar = m.querySelector('#alBar'); bar.classList.remove('hidden'); const fill = bar.firstElementChild; fill.style.width = '8%';
+    try {
+      const uid = state.user.id;
+      // portada del álbum
+      let coverUrl = null;
+      if (coverFile) {
+        const cext = (coverFile.name.split('.').pop() || 'jpg').toLowerCase();
+        const cu = await sb.storage.from('covers').upload(`${uid}/album-${Date.now()}.${cext}`, coverFile, { contentType: coverFile.type, upsert: false });
+        if (!cu.error) coverUrl = sb.storage.from('covers').getPublicUrl(cu.data.path).data.publicUrl;
+      }
+      // crea el álbum
+      const { data: alb, error: ae } = await sb.from('albums').insert({ user_id: uid, title, description: null, cover_url: coverUrl, kind }).select().single();
+      if (ae) throw ae;
+      let pos = 0;
+      // A) pistas existentes
+      if (picked.length) {
+        for (const id of picked) { await sb.from('tracks').update({ album_id: alb.id, album_pos: pos++ }).eq('id', id).eq('user_id', uid); }
+        fill.style.width = '30%';
+      }
+      // B) audios nuevos
+      for (let i = 0; i < audioFiles.length; i++) {
+        const f = audioFiles[i];
+        msg.className = 'auth-msg'; msg.textContent = `Subiendo ${i + 1}/${audioFiles.length}: ${f.name}`;
+        await uploadAlbumTrack(f, { title: f.name.replace(/\.[^.]+$/, ''), genre, coverUrl, album_id: alb.id, album_pos: pos++ }, (p) => { fill.style.width = (30 + ((i + p) / audioFiles.length) * 65) + '%'; });
+      }
+      // si el álbum no tiene portada, hereda la de su primera pista
+      if (!coverUrl) {
+        const { data: first } = await sb.from('tracks').select('cover_url').eq('album_id', alb.id).not('cover_url', 'is', null).order('album_pos').limit(1).maybeSingle();
+        if (first && first.cover_url) await sb.from('albums').update({ cover_url: first.cover_url }).eq('id', alb.id);
+      }
+      fill.style.width = '100%';
+      toast('¡Álbum creado! 🎶');
+      m.remove();
+      updateCounts();
+      openAlbum(alb.id);
+    } catch (err) {
+      console.error(err);
+      msg.className = 'auth-msg error'; msg.textContent = 'Error al crear el álbum: ' + (err.message || err);
+      btn.disabled = false;
+    }
+  };
+}
+
+async function openAlbum(albumId) {
+  const main = $('main');
+  main.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
+  const { data: alb } = await sb.from('albums').select('*, profiles:user_id(username,display_name)').eq('id', albumId).maybeSingle();
+  if (!alb) { toast('Álbum no encontrado'); switchView('feed'); return; }
+  const { data: trks } = await sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)').eq('album_id', albumId).order('album_pos');
+  const list = trks || [];
+  const mine = alb.user_id === state.user.id;
+  const artist = alb.profiles?.display_name || alb.profiles?.username || '';
+  const kindLabel = alb.kind === 'ep' ? 'EP' : alb.kind === 'mixtape' ? 'Mixtape' : 'Álbum';
+  main.innerHTML = `
+    <button class="profile-back" id="albBack"><svg fill="none" stroke="currentColor"><use href="#i-chevron-left"/></svg> Volver</button>
+    <div class="album-head">
+      <div class="album-head-cov" style="${alb.cover_url ? `background-image:url('${esc(czUrl(alb.cover_url))}')` : ''}">${alb.cover_url ? '' : '<svg fill="none" stroke="currentColor"><use href="#i-headphones"/></svg>'}</div>
+      <div class="album-head-meta">
+        <span class="album-kind">${kindLabel}</span>
+        <h2>${esc(alb.title)}</h2>
+        <div class="album-artist">${esc(artist)} · ${list.length} ${list.length === 1 ? 'pista' : 'pistas'}</div>
+        <div class="album-actions">
+          <button class="btn primary" id="albPlay"><svg fill="none" stroke="#fff"><use href="#i-play"/></svg> Reproducir</button>
+          ${mine ? '<button class="btn" id="albDelete"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg> Borrar álbum</button>' : ''}
+        </div>
+      </div>
+    </div>
+    <div id="albList" class="feed-list"></div>`;
+  $('albBack').onclick = () => openProfile(alb.user_id);
+  const lc = $('albList');
+  if (!list.length) lc.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-music"/></svg><p>Este álbum no tiene pistas.</p></div>`;
+  else list.forEach(t => lc.appendChild(trackCard(t)));
+  state.tracks = list; state.queue = list.map(t => t.id);
+  const playBtn = $('albPlay'); if (playBtn) playBtn.onclick = () => { if (list.length) { state.tracks = list; state.queue = list.map(t => t.id); playTrack(list[0]); } };
+  const delBtn = $('albDelete');
+  if (mine && delBtn) delBtn.onclick = async () => {
+    if (!confirm('¿Borrar el álbum? Las pistas NO se borran, solo se desagrupan.')) return;
+    await sb.from('tracks').update({ album_id: null, album_pos: 0 }).eq('album_id', albumId);
+    await sb.from('albums').delete().eq('id', albumId);
+    toast('Álbum borrado'); openProfile(alb.user_id);
+  };
 }
 
 function openPhotoUploadModal() {
@@ -5321,6 +5497,25 @@ async function openProfile(userId) {
   const list = $('feedList');
   if (!myTracks.length) list.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-music"/></svg><p>Sin pistas todavía.</p></div>`;
   else myTracks.forEach(t => list.appendChild(trackCard(t)));
+
+  // Álbumes y EPs del artista (encima de las pistas)
+  (async () => {
+    try {
+      const { data: albs } = await sb.from('albums').select('*').eq('user_id', userId).order('created_at', { ascending: false });
+      if (!albs || !albs.length) return;
+      const { data: atr } = await sb.from('tracks').select('album_id').eq('user_id', userId).not('album_id', 'is', null);
+      const counts = {}; (atr || []).forEach(r => { counts[r.album_id] = (counts[r.album_id] || 0) + 1; });
+      const kindL = (k) => k === 'ep' ? 'EP' : k === 'mixtape' ? 'Mixtape' : 'Álbum';
+      const strip = el(`<div class="album-strip"><div class="album-strip-h">Álbumes y EPs</div><div class="album-row">${albs.map(a => `
+        <button class="album-card" data-aid="${esc(a.id)}">
+          <span class="album-cov" style="${a.cover_url ? `background-image:url('${esc(czUrl(a.cover_url))}')` : ''}">${a.cover_url ? '' : '<svg fill="none" stroke="currentColor"><use href="#i-headphones"/></svg>'}</span>
+          <span class="album-t">${esc(a.title)}</span>
+          <span class="album-sub">${kindL(a.kind)} · ${counts[a.id] || 0}</span>
+        </button>`).join('')}</div></div>`);
+      strip.querySelectorAll('.album-card').forEach(c => c.onclick = () => openAlbum(c.dataset.aid));
+      list.prepend(strip);
+    } catch (_) {}
+  })();
 
   // Destacadas: top de canciones por reproducciones
   const topEl = $('profTop');
