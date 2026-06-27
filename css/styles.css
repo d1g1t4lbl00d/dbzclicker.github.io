@@ -3680,3 +3680,8 @@ button, a, .btn, .icon-btn, .nav-item, .bottom-nav button, .tabs button,
 .person { content-visibility: auto; contain-intrinsic-size: auto 110px; }
 .convo { content-visibility: auto; contain-intrinsic-size: auto 74px; }
 .notif-item { content-visibility: auto; contain-intrinsic-size: auto 66px; }
+
+/* fade-in suave de imágenes al cargar (sensación más pulida al hacer scroll) */
+@keyframes ubImgIn { from { opacity: 0; } to { opacity: 1; } }
+img.ub-imgin { animation: ubImgIn .4s ease; }
+@media (prefers-reduced-motion: reduce) { img.ub-imgin { animation: none; } }

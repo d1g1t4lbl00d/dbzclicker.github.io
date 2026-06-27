@@ -505,6 +505,12 @@ if ('serviceWorker' in navigator) {
 }
 // Si la app se instala, cerramos cualquier popup de instalación.
 window.addEventListener('appinstalled', () => { try { localStorage.setItem('ub_install_dismissed', String(Date.now())); } catch (_) {} const p = document.getElementById('installPop'); if (p) p.hidden = true; });
+// Fade-in suave de imágenes al cargar (delegado, fase de captura). Seguro: si una imagen
+// falla o no dispara load, simplemente se muestra normal (no se fuerza opacidad 0).
+document.addEventListener('load', (e) => {
+  const t = e.target;
+  if (t && t.tagName === 'IMG' && !t.dataset.ubin) { t.dataset.ubin = '1'; t.classList.add('ub-imgin'); }
+}, true);
 
 const TOUR_STEPS = [
   { t: ['#feedTabs'], title: 'Tu feed 🎧', text: 'Cambia entre <b>Following</b>, <b>Trending</b> y <b>New</b> para descubrir música de la comunidad.' },
@@ -3372,6 +3378,17 @@ async function playTrack(t) {
   // si no está en la cola actual, crear cola con la vista
   if (!state.queue.includes(t.id)) state.queue = [t.id];
   if ($('npQueuePanel')?.classList.contains('open')) renderQueuePanel();
+  preloadNextCover(t);   // precarga la portada del siguiente → cambio de canción sin parpadeo
+}
+// Precarga en caché la portada (y la del siguiente en cola) para que el reproductor no parpadee al cambiar
+function preloadNextCover(cur) {
+  try {
+    const i = state.queue.indexOf(cur.id);
+    const nextId = (i >= 0) ? state.queue[i + 1] : null;
+    if (!nextId) return;
+    const nx = state.tracks.find(x => x.id === nextId);
+    if (nx && nx.cover_url) { const im = new Image(); im.decoding = 'async'; im.src = czUrl(nx.cover_url); }
+  } catch (_) {}
 }
 
 /* ---- Cola visible: "a continuación", saltar y quitar pistas ---- */
