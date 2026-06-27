@@ -3390,9 +3390,12 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
 .landing *, .landing *::before, .landing *::after { box-sizing: border-box; }
 .lp-bg { position: fixed; inset: 0; z-index: 0; pointer-events: none;
   background:
+    url(/assets/landing/ub-pattern.png?v=20260627f),
     radial-gradient(78% 48% at 78% -6%, rgba(110,45,245,.32), transparent 60%),
     radial-gradient(64% 42% at 6% 6%, rgba(39,169,255,.20), transparent 58%),
-    linear-gradient(180deg, #080a14 0%, #05060e 60%, #04050b 100%); }
+    linear-gradient(180deg, #080a14 0%, #05060e 60%, #04050b 100%);
+  background-repeat: repeat, no-repeat, no-repeat, no-repeat;
+  background-size: 168px 160px, auto, auto, auto; }
 .landing > *:not(.lp-bg) { position: relative; z-index: 1; }
 
 /* nav */
