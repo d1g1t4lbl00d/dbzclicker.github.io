@@ -3434,7 +3434,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
   filter: blur(18px); pointer-events: none; }
 /* iPhone realista: marco de titanio, isla dinámica, brillo de pantalla */
 .lp-phone { position: relative; z-index: 1; width: min(298px, 74vw);
-  border-radius: 52px; padding: 10px; transform: rotate(-2.5deg);
+  border-radius: 52px; padding: 10px;
   background: linear-gradient(145deg, #5a6070 0%, #2b303c 16%, #14171f 40%, #0c0e14 60%, #23272f 82%, #4c515e 100%);
   box-shadow:
     inset 0 0 1px 1.5px rgba(255,255,255,.34),
@@ -3442,6 +3442,16 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
     0 2px 5px rgba(255,255,255,.1),
     0 60px 100px -34px rgba(0,0,0,.78),
     0 30px 70px -40px rgba(62,87,252,.55); }
+/* hero de dos teléfonos */
+.lp-hero-art--duo { min-height: 1px; }
+.lp-phone--front { z-index: 2; width: min(286px, 72vw); transform: rotate(-4deg) translateX(-9%); }
+.lp-phone--back { position: absolute; z-index: 1; width: min(232px, 57vw);
+  right: 6%; top: 9%; transform: rotate(8deg); filter: brightness(.84) saturate(.96);
+  box-shadow:
+    inset 0 0 1px 1.5px rgba(255,255,255,.28),
+    inset 0 0 0 4px rgba(0,0,0,.55),
+    0 50px 90px -34px rgba(0,0,0,.82),
+    0 24px 60px -40px rgba(150,60,255,.55); }
 .lp-phone-scr { position: relative; width: 100%; border-radius: 43px; overflow: hidden;
   background: #05060e; box-shadow: inset 0 0 0 2px #000; line-height: 0; }
 .lp-phone-img { display: block; width: 100%; height: auto; }
@@ -3540,11 +3550,16 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
 .lpm-card.has-cover .lpm-t, .lpm-card.has-cover .lpm-a { text-shadow: 0 1px 6px rgba(0,0,0,.5); }
 .lpm-card.feat .lpm-t { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
 .lpm-rmeta .lpm-t { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-@keyframes lpFloat { 0%,100% { transform: rotate(-2.5deg) translateY(0); } 50% { transform: rotate(-2.5deg) translateY(-9px); } }
+@keyframes lpFloatF { 0%,100% { transform: rotate(-4deg) translateX(-9%) translateY(0); } 50% { transform: rotate(-4deg) translateX(-9%) translateY(-9px); } }
+@keyframes lpFloatB { 0%,100% { transform: rotate(8deg) translateY(0); } 50% { transform: rotate(8deg) translateY(-13px); } }
 @keyframes lpFloatM { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
-.lp-phone { animation: lpFloat 6.5s ease-in-out infinite; }
-@media (max-width: 880px) { .lp-phone { animation: lpFloatM 6.5s ease-in-out infinite; } }
-@media (prefers-reduced-motion: reduce) { .lp-phone { animation: none; } }
+.lp-phone--front { animation: lpFloatF 6.5s ease-in-out infinite; }
+.lp-phone--back { animation: lpFloatB 7.5s ease-in-out infinite .4s; }
+@media (max-width: 880px) {
+  .lp-phone--back { display: none; }
+  .lp-phone--front { transform: none; width: min(300px, 78vw); animation: lpFloatM 6.5s ease-in-out infinite; }
+}
+@media (prefers-reduced-motion: reduce) { .lp-phone--front, .lp-phone--back { animation: none; } }
 .lpm-card.feat .lpm-genre { display: none; }
 .lpm-card.feat .lpm-c-head { padding-right: 44px; }
 

@@ -29,7 +29,7 @@
 <link rel="manifest" href="/manifest.json?v=20260605l" />
 <meta name="theme-color" content="#0a0d18" />
 <link rel="apple-touch-icon" href="/icon-192.png?v=20260605l" />
-<link rel="stylesheet" href="css/styles.css?v=20260627b" />
+<link rel="stylesheet" href="css/styles.css?v=20260627c" />
 <script>(function(){try{var t=localStorage.getItem('ub_theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}try{if(sessionStorage.getItem('ub_splash'))document.documentElement.classList.add('no-splash');}catch(e){}})();</script>
 <!-- Vercel Web Analytics -->
 <script>
@@ -161,9 +161,16 @@ html.no-splash #splash{display:none}
       <div class="lp-trust"><svg viewBox="0 0 24 24"><use href="#i-check"/></svg> Gratis para siempre · sin anuncios · hecho por y para artistas</div>
     </div>
 
-    <div class="lp-hero-art">
+    <div class="lp-hero-art lp-hero-art--duo">
       <div class="lp-art-glow" aria-hidden="true"></div>
-      <div class="lp-phone">
+      <div class="lp-phone lp-phone--back" aria-hidden="true">
+        <div class="lp-phone-scr">
+          <div class="lp-phone-island"></div>
+          <img class="lp-phone-img" src="/assets/landing/screen-player.jpg?v=20260627c" alt="" loading="lazy" decoding="async" />
+          <div class="lp-phone-glare"></div>
+        </div>
+      </div>
+      <div class="lp-phone lp-phone--front">
         <i class="lp-phone-vol" aria-hidden="true"></i>
         <i class="lp-phone-pwr" aria-hidden="true"></i>
         <div class="lp-phone-scr">
@@ -521,7 +528,7 @@ html.no-splash #splash{display:none}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
-<script src="js/config.js?v=20260627b"></script>
-<script src="js/app.js?v=20260627b"></script>
+<script src="js/config.js?v=20260627c"></script>
+<script src="js/app.js?v=20260627c"></script>
 </body>
 </html>
