@@ -4014,14 +4014,17 @@ async function uploadAlbumTrack(file, opts, onProgress) {
   const uid = state.user.id;
   const stamp = Date.now() + '-' + Math.random().toString(36).slice(2, 8);
   const LIMIT = 50 * 1024 * 1024;
-  let uploadFile = file, duration = opts.duration || 0;
+  let uploadFile = file;
+  const ext0 = (file.name.split('.').pop() || '').toLowerCase();
+  const lossless = /^(wav|flac|aiff|aif|alac)$/.test(ext0);   // formatos sin pérdida → siempre comprimir
+  const heavy = file.size > 16 * 1024 * 1024;                 // pesado (probable alta tasa o larga)
   const tooBig = file.size > 45 * 1024 * 1024;
-  const worth = duration > 0 && file.size > duration * (160 * 1000 / 8) * 1.2;
-  if (window.lamejs && (tooBig || worth)) {
+  if (window.lamejs && (tooBig || lossless || heavy)) {
     try {
       uploadFile = await compressAudioToMp3(file, tooBig ? 192 : 160, (p) => onProgress && onProgress(p * 0.5));
       if (uploadFile.size > LIMIT) uploadFile = await compressAudioToMp3(file, 128, () => {});
     } catch (_) { uploadFile = file; }
+    // si la versión MP3 no ahorró y el original cabía, conserva el original
     if (!tooBig && uploadFile.size >= file.size && file.size <= LIMIT) uploadFile = file;
   }
   if (uploadFile.size > LIMIT) throw new Error('“' + file.name + '” es demasiado grande.');
