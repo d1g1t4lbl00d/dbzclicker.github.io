@@ -4049,7 +4049,8 @@ function openAlbumModal() {
     <div class="modal-head"><h3>Nuevo álbum / EP</h3><button class="close">&times;</button></div>
     <div class="modal-body">
       <div class="field"><label>Título del álbum</label><input type="text" id="alTitle" maxlength="80" placeholder="Nombre del álbum o EP" /></div>
-      <div class="field"><label>Género <span style="color:var(--ink-faint);font-weight:400">(opcional)</span></label><input type="text" id="alGenre" placeholder="Trap, Drill, R&B…" /></div>
+      <div class="field"><label>Género <span style="color:var(--ink-faint);font-weight:400">(por defecto para las pistas)</span></label><input type="text" id="alGenre" placeholder="Trap, Drill, R&B…" /></div>
+      <div class="field"><label>Descripción <span style="color:var(--ink-faint);font-weight:400">(opcional)</span></label><textarea id="alDesc" maxlength="600" placeholder="Cuéntale a la gente de qué va este álbum…"></textarea></div>
       <div class="field"><label>Tipo</label>
         <select id="alKind" class="up-select"><option value="album">Álbum</option><option value="ep">EP</option><option value="mixtape">Mixtape</option></select>
       </div>
@@ -4060,8 +4061,9 @@ function openAlbumModal() {
       </div>
       <div class="field">
         <label>Subir audios nuevos <span style="color:var(--ink-faint);font-weight:400">(puedes elegir varios)</span></label>
-        <div class="dropzone" id="alDzAudio"><svg fill="none"><use href="#i-upload"/></svg><div>Arrastra tus MP3/WAV o haz clic</div><div class="fname" id="alAudioNames"></div></div>
+        <div class="dropzone" id="alDzAudio"><svg fill="none"><use href="#i-upload"/></svg><div>Arrastra tus MP3/WAV o haz clic</div></div>
         <input type="file" id="alFAudio" accept="audio/*,.mp3,.wav,.m4a,.aac,.flac,.ogg,.oga,.opus,.aif,.aiff,.wma,.alac" multiple hidden />
+        <div id="alTrackRows" class="al-trackrows"></div>
       </div>
       <div class="field" id="alExistingWrap">
         <label>O añade pistas que ya tienes</label>
@@ -4077,10 +4079,27 @@ function openAlbumModal() {
   dzCover.onclick = () => fCover.click();
   fCover.onchange = () => { const f = fCover.files[0]; if (!f || !f.type.startsWith('image')) return; coverFile = f; m.querySelector('#alCoverName').textContent = f.name; m.querySelector('#alCoverPrev').innerHTML = `<img decoding="async" src="${URL.createObjectURL(f)}" alt="" />`; };
   const fAudio = m.querySelector('#alFAudio'), dzAudio = m.querySelector('#alDzAudio');
+  const rowsBox = m.querySelector('#alTrackRows');
   dzAudio.onclick = () => fAudio.click();
-  const showNames = () => { m.querySelector('#alAudioNames').textContent = audioFiles.length ? audioFiles.map(f => f.name).join(', ') : ''; };
-  fAudio.onchange = () => { audioFiles = Array.from(fAudio.files || []); showNames(); };
-  ['dragover', 'dragleave', 'drop'].forEach(ev => dzAudio.addEventListener(ev, (e) => { e.preventDefault(); if (ev === 'dragover') dzAudio.classList.add('drag'); else dzAudio.classList.remove('drag'); if (ev === 'drop' && e.dataTransfer.files.length) { audioFiles = Array.from(e.dataTransfer.files).filter(f => /audio|\.(mp3|wav|m4a|aac|flac|ogg|oga|opus|aif|aiff|wma|alac)$/i.test(f.type + f.name)); showNames(); } }));
+  // Renderiza una fila editable por audio: título (autorrellenado) + género
+  const renderRows = () => {
+    rowsBox.innerHTML = audioFiles.map((f, i) => `
+      <div class="al-trow">
+        <span class="al-trow-i">${i + 1}</span>
+        <div class="al-trow-fields">
+          <input class="al-trow-title" data-i="${i}" maxlength="100" value="${esc(f.name.replace(/\.[^.]+$/, ''))}" placeholder="Título de la pista" />
+          <input class="al-trow-genre" data-i="${i}" maxlength="40" placeholder="Género (opcional)" />
+        </div>
+        <button type="button" class="al-trow-x" data-i="${i}" aria-label="Quitar">&times;</button>
+      </div>`).join('');
+    rowsBox.querySelectorAll('.al-trow-x').forEach(b => b.onclick = () => { audioFiles.splice(+b.dataset.i, 1); renderRows(); });
+  };
+  const addFiles = (files) => {
+    const ok = files.filter(f => /audio|\.(mp3|wav|m4a|aac|flac|ogg|oga|opus|aif|aiff|wma|alac)$/i.test((f.type || '') + f.name));
+    if (ok.length) { audioFiles = audioFiles.concat(ok); renderRows(); }
+  };
+  fAudio.onchange = () => { addFiles(Array.from(fAudio.files || [])); fAudio.value = ''; };
+  ['dragover', 'dragleave', 'drop'].forEach(ev => dzAudio.addEventListener(ev, (e) => { e.preventDefault(); if (ev === 'dragover') dzAudio.classList.add('drag'); else dzAudio.classList.remove('drag'); if (ev === 'drop' && e.dataTransfer.files.length) addFiles(Array.from(e.dataTransfer.files)); }));
 
   // pistas existentes (sin álbum) para opción A
   (async () => {
@@ -4094,8 +4113,12 @@ function openAlbumModal() {
     const msg = m.querySelector('#alMsg'); msg.className = 'auth-msg';
     const title = m.querySelector('#alTitle').value.trim();
     const genre = m.querySelector('#alGenre').value.trim();
+    const description = m.querySelector('#alDesc').value.trim();
     const kind = m.querySelector('#alKind').value;
     const picked = Array.from(m.querySelectorAll('#alExisting input:checked')).map(c => c.value);
+    // título/género por pista (lo que el usuario haya escrito en cada fila)
+    const rowTitles = Array.from(m.querySelectorAll('.al-trow-title')).map(i => i.value.trim());
+    const rowGenres = Array.from(m.querySelectorAll('.al-trow-genre')).map(i => i.value.trim());
     if (!title) { msg.className = 'auth-msg error'; msg.textContent = 'Ponle un título al álbum.'; return; }
     if (!audioFiles.length && !picked.length) { msg.className = 'auth-msg error'; msg.textContent = 'Añade al menos una pista (sube audios o elige existentes).'; return; }
     const btn = m.querySelector('#alSubmit'); btn.disabled = true;
@@ -4110,7 +4133,7 @@ function openAlbumModal() {
         if (!cu.error) coverUrl = sb.storage.from('covers').getPublicUrl(cu.data.path).data.publicUrl;
       }
       // crea el álbum
-      const { data: alb, error: ae } = await sb.from('albums').insert({ user_id: uid, title, description: null, cover_url: coverUrl, kind }).select().single();
+      const { data: alb, error: ae } = await sb.from('albums').insert({ user_id: uid, title, description: description || null, cover_url: coverUrl, kind }).select().single();
       if (ae) throw ae;
       let pos = 0;
       // A) pistas existentes
@@ -4121,8 +4144,10 @@ function openAlbumModal() {
       // B) audios nuevos
       for (let i = 0; i < audioFiles.length; i++) {
         const f = audioFiles[i];
-        msg.className = 'auth-msg'; msg.textContent = `Subiendo ${i + 1}/${audioFiles.length}: ${f.name}`;
-        await uploadAlbumTrack(f, { title: f.name.replace(/\.[^.]+$/, ''), genre, coverUrl, album_id: alb.id, album_pos: pos++ }, (p) => { fill.style.width = (30 + ((i + p) / audioFiles.length) * 65) + '%'; });
+        const tTitle = (rowTitles[i] || '').trim() || f.name.replace(/\.[^.]+$/, '');
+        const tGenre = (rowGenres[i] || '').trim() || genre;
+        msg.className = 'auth-msg'; msg.textContent = `Subiendo ${i + 1}/${audioFiles.length}: ${tTitle}`;
+        await uploadAlbumTrack(f, { title: tTitle, genre: tGenre, coverUrl, album_id: alb.id, album_pos: pos++ }, (p) => { fill.style.width = (30 + ((i + p) / audioFiles.length) * 65) + '%'; });
       }
       // si el álbum no tiene portada, hereda la de su primera pista
       if (!coverUrl) {
@@ -4160,6 +4185,7 @@ async function openAlbum(albumId) {
         <span class="album-kind">${kindLabel}</span>
         <h2>${esc(alb.title)}</h2>
         <div class="album-artist">${esc(artist)} · ${list.length} ${list.length === 1 ? 'pista' : 'pistas'}</div>
+        ${alb.description ? `<p class="album-desc">${esc(alb.description).replace(/\n/g, '<br>')}</p>` : ''}
         <div class="album-actions">
           <button class="btn primary" id="albPlay"><svg fill="none" stroke="#fff"><use href="#i-play"/></svg> Reproducir</button>
           ${mine ? '<button class="btn" id="albDelete"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg> Borrar álbum</button>' : ''}
