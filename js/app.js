@@ -6029,7 +6029,7 @@ async function renderPeople() {
     <div class="people-search"><svg fill="none" stroke="currentColor"><use href="#i-search"/></svg><input id="peopleSearch" type="text" autocomplete="off" placeholder="Buscar por nombre, @usuario o ciudad…" /></div>
     <div class="forum-cats" id="peopleRoles">
       <button data-r="all" class="on">Todos</button>
-      ${USER_ROLES.map(r => `<button data-r="${r.id}">${r.emoji} ${r.label}</button>`).join('')}
+      ${USER_ROLES.map(r => `<button data-r="${r.id}">${roleIcon(r.icon)} ${r.label}</button>`).join('')}
     </div>
     <div id="peopleList" class="feed-list"><div class="loading" style="padding:24px"><div class="spinner"></div></div></div>`;
   const list = $('peopleList');
@@ -9006,15 +9006,16 @@ async function deleteAccount() {
 }
 
 const USER_ROLES = [
-  { id: 'cantante', label: 'Cantante', emoji: '🎤' },
-  { id: 'productor', label: 'Productor', emoji: '🎹' },
-  { id: 'manager', label: 'Mánager', emoji: '💼' },
-  { id: 'sala', label: 'Sala', emoji: '🪩' },
+  { id: 'cantante', label: 'Cantante', icon: 'i-role-cantante' },
+  { id: 'productor', label: 'Productor', icon: 'i-role-productor' },
+  { id: 'manager', label: 'Mánager', icon: 'i-role-manager' },
+  { id: 'sala', label: 'Sala', icon: 'i-role-sala' },
 ];
 const roleDef = (id) => USER_ROLES.find(r => r.id === id);
+const roleIcon = (icon) => `<svg class="role-ic" fill="none" stroke="currentColor" viewBox="0 0 24 24"><use href="#${icon}"/></svg>`;
 function roleChipsHTML(roles) {
   if (!Array.isArray(roles) || !roles.length) return '';
-  return `<div class="role-chips">${roles.map(id => { const d = roleDef(id); return d ? `<span class="role-chip">${d.emoji} ${esc(d.label)}</span>` : ''; }).join('')}</div>`;
+  return `<div class="role-chips">${roles.map(id => { const d = roleDef(id); return d ? `<span class="role-chip">${roleIcon(d.icon)} ${esc(d.label)}</span>` : ''; }).join('')}</div>`;
 }
 
 function renderSettings() {
@@ -9034,7 +9035,7 @@ function renderSettings() {
       <div class="field"><label>Usuario</label><input type="text" id="setUser" value="${esc(p.username||'')}" /></div>
       <div class="field"><label>Ciudad / escena</label><input type="text" id="setCity" maxlength="60" value="${esc(p.city||'')}" placeholder="Ej: Madrid, Barcelona, Sevilla…" /></div>
       <div class="field"><label>¿Qué eres? <span style="color:var(--ink-faint);font-weight:400">(elige uno o varios)</span></label>
-        <div class="role-pick" id="setRoles">${USER_ROLES.map(r => `<button type="button" class="role-opt ${(p.roles||[]).includes(r.id) ? 'on' : ''}" data-r="${r.id}">${r.emoji} ${r.label}</button>`).join('')}</div>
+        <div class="role-pick" id="setRoles">${USER_ROLES.map(r => `<button type="button" class="role-opt ${(p.roles||[]).includes(r.id) ? 'on' : ''}" data-r="${r.id}">${roleIcon(r.icon)} ${r.label}</button>`).join('')}</div>
       </div>
       <div class="field"><label>Bio</label><textarea id="setBio" placeholder="Cuéntanos algo sobre ti…">${esc(p.bio||'')}</textarea></div>
       <button class="btn" id="openCustomize" style="width:100%;margin-bottom:12px"><svg fill="none" stroke="currentColor"><use href="#i-palette"/></svg> Personalizar perfil (banner, colores, enlaces)</button>
@@ -9240,7 +9241,7 @@ async function openOnboarding() {
     } else if (step === 2) {
       body.innerHTML = `
         <h4 class="onb-h">¿Qué eres? <span class="onb-opt">opcional</span></h4>
-        <div class="role-pick" id="onbRoles">${USER_ROLES.map(r => `<button type="button" class="role-opt" data-r="${r.id}">${r.emoji} ${r.label}</button>`).join('')}</div>
+        <div class="role-pick" id="onbRoles">${USER_ROLES.map(r => `<button type="button" class="role-opt" data-r="${r.id}">${roleIcon(r.icon)} ${r.label}</button>`).join('')}</div>
         <h4 class="onb-h" style="margin-top:18px">¿De qué ciudad / escena eres? <span class="onb-opt">opcional</span></h4>
         <input type="text" id="onbCity" maxlength="60" placeholder="Ej: Madrid, Barcelona, Sevilla…" class="onb-city" />
         <button class="btn primary" id="onbNext2" style="width:100%;margin-top:18px">Continuar</button>

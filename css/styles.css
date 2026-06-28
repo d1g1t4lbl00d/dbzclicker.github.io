@@ -3942,3 +3942,11 @@ img.ub-imgin { animation: ubImgIn .4s ease; }
 /* onboarding: paso de rol + ciudad */
 .onb-opt { color: var(--ink-faint); font-weight: 400; font-size: 13px; }
 .onb-city { width: 100%; }
+
+/* iconos propios de rol (sin emojis) */
+.role-ic { width: 16px; height: 16px; vertical-align: -3px; }
+.role-opt { display: inline-flex; align-items: center; gap: 7px; }
+.role-opt .role-ic { width: 17px; height: 17px; vertical-align: 0; }
+.role-chip .role-ic { width: 14px; height: 14px; vertical-align: 0; }
+#peopleRoles button { display: inline-flex; align-items: center; gap: 6px; }
+#peopleRoles .role-ic { width: 15px; height: 15px; vertical-align: 0; }
