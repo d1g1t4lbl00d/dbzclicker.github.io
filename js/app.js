@@ -779,7 +779,7 @@ async function unblockUser(userId, onDone) {
   if (onDone) onDone();
 }
 const REPORT_REASONS = ['Spam o engaño', 'Acoso o bullying', 'Contenido sexual', 'Violencia o amenazas', 'Discurso de odio', 'Suplantación de identidad', 'Propiedad intelectual', 'Otro'];
-const REPORT_LABEL = { user: 'usuario', track: 'pista', post: 'publicación', comment: 'comentario', message: 'mensaje', chat: 'mensaje del chat' };
+const REPORT_LABEL = { user: 'usuario', track: 'pista', post: 'publicación', comment: 'comentario', message: 'mensaje', chat: 'mensaje del chat', forum: 'tema del foro', forum_reply: 'respuesta del foro' };
 function openReportModal(targetType, targetId, targetOwner, label) {
   if (!requireNotBanned()) return;
   const chips = REPORT_REASONS.map(r => `<button type="button" class="rep-reason" data-r="${esc(r)}">${esc(r)}</button>`).join('');
@@ -995,6 +995,7 @@ async function switchView(view) {
   if (view === 'admin') return renderAdmin();
   if (view === 'notifications') return renderNotifications();
   if (view === 'people') return renderPeople();
+  if (view === 'forum') return renderForum();
   if (view === 'messages') return renderMessages();
   if (view === 'posts') return renderPosts();
   if (view === 'search') return renderSearch();
@@ -4209,6 +4210,199 @@ async function openAlbum(albumId) {
     await sb.from('albums').delete().eq('id', albumId);
     toast('Álbum borrado'); openProfile(alb.user_id);
   };
+}
+
+/* =======================================================================
+   FORO — temas abiertos: texto + archivos (imágenes, audio, vídeo, etc.)
+   ======================================================================= */
+function forumText(s) { return esc(s || '').replace(/\n/g, '<br>'); }
+
+async function renderForum() {
+  setActiveNav('forum');
+  const main = $('main'); main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
+  main.innerHTML = `
+    <div class="main-head"><div><h2>Foro</h2><div class="sub">Habla de lo que quieras con la comunidad</div></div>
+      <button class="btn primary" id="newThread"><svg fill="none" stroke="#fff"><use href="#i-plus"/></svg> Nuevo tema</button></div>
+    <div id="forumList" class="forum-list"><div class="loading"><div class="spinner"></div></div></div>`;
+  $('newThread').onclick = openNewThread;
+  const { data, error } = await sb.from('forum_threads')
+    .select('*, profiles:user_id(id,username,display_name,avatar_url,theme,verified)')
+    .order('pinned', { ascending: false }).order('last_activity_at', { ascending: false }).limit(80);
+  const box = $('forumList'); if (!box) return;
+  if (error) { box.innerHTML = `<div class="empty"><p>No se pudo cargar el foro.</p></div>`; return; }
+  if (!data || !data.length) { box.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-comment"/></svg><p>Aún no hay temas. ¡Abre el primero!</p></div>`; return; }
+  box.innerHTML = '';
+  data.forEach(t => box.appendChild(forumThreadRow(t)));
+}
+function forumThreadRow(t) {
+  const p = t.profiles || {};
+  const nAtt = Array.isArray(t.attachments) ? t.attachments.length : 0;
+  const row = el(`
+    <button class="forum-row" data-id="${esc(t.id)}">
+      ${t.pinned ? '<span class="forum-pin"><svg fill="none" stroke="currentColor"><use href="#i-pin"/></svg></span>' : ''}
+      <div class="forum-row-main">
+        <div class="forum-row-title">${esc(t.title)}</div>
+        <div class="forum-row-meta">${avatarHTML(p)}<span class="frm-name">${esc(p.display_name || p.username || 'usuario')}</span><span class="frm-dot">·</span><span>${timeAgo(t.last_activity_at)}</span></div>
+      </div>
+      <div class="forum-row-stats"><span><svg fill="none" stroke="currentColor"><use href="#i-comment"/></svg> ${t.reply_count || 0}</span>${nAtt ? `<span><svg fill="none" stroke="currentColor"><use href="#i-paperclip"/></svg> ${nAtt}</span>` : ''}</div>
+    </button>`);
+  row.onclick = () => openThread(t.id);
+  return row;
+}
+
+// sube archivos del foro al bucket público "tracks" (igual que la tienda)
+async function uploadForumFiles(files, onProgress) {
+  const uid = state.user.id; const out = [];
+  for (let i = 0; i < files.length; i++) {
+    const f = files[i];
+    if (f.size > 50 * 1024 * 1024) { toast(`"${f.name}" supera 50 MB y se omite`); continue; }
+    const ext = (f.name.split('.').pop() || 'bin').toLowerCase();
+    const path = `${uid}/forum-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const up = await sb.storage.from('tracks').upload(path, f, { contentType: f.type || 'application/octet-stream', upsert: false });
+    if (up.error) { toast('No se pudo subir ' + f.name); continue; }
+    out.push({ url: sb.storage.from('tracks').getPublicUrl(path).data.publicUrl, type: f.type || '', name: f.name, size: f.size });
+    if (onProgress) onProgress((i + 1) / files.length);
+  }
+  return out;
+}
+function attachmentHTML(a) {
+  const n = a.name || '';
+  if (/^image\//.test(a.type) || /\.(jpe?g|png|gif|webp|avif)$/i.test(n)) return `<a class="att-img" href="${esc(a.url)}" target="_blank" rel="noopener"><img loading="lazy" decoding="async" src="${esc(a.url)}" alt="${esc(n)}"></a>`;
+  if (/^audio\//.test(a.type) || /\.(mp3|wav|m4a|aac|flac|ogg|oga|opus)$/i.test(n)) return `<audio class="att-audio" controls preload="none" src="${esc(a.url)}"></audio>`;
+  if (/^video\//.test(a.type) || /\.(mp4|webm|mov|m4v)$/i.test(n)) return `<video class="att-video" controls preload="none" src="${esc(a.url)}"></video>`;
+  return `<a class="att-file" href="${esc(a.url)}" target="_blank" rel="noopener" download><svg fill="none" stroke="currentColor"><use href="#i-file"/></svg> <span>${esc(n || 'archivo')}</span></a>`;
+}
+function attachmentsHTML(arr) {
+  if (!Array.isArray(arr) || !arr.length) return '';
+  return `<div class="att-wrap">${arr.map(attachmentHTML).join('')}</div>`;
+}
+
+function openNewThread() {
+  if (!requireNotBanned()) return;
+  const m = openModal(`
+    <div class="modal-head"><h3>Nuevo tema</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Título</label><input type="text" id="ntTitle" maxlength="140" placeholder="¿De qué quieres hablar?" /></div>
+      <div class="field"><label>Mensaje</label><textarea id="ntBody" maxlength="5000" placeholder="Escribe lo que quieras… (opcional si adjuntas archivos)"></textarea></div>
+      <div class="field"><label>Archivos <span style="color:var(--ink-faint);font-weight:400">(imágenes, audio, vídeo, lo que sea)</span></label>
+        <div class="dropzone" id="ntDz"><svg fill="none"><use href="#i-paperclip"/></svg><div>Arrastra archivos o haz clic</div></div>
+        <input type="file" id="ntFiles" multiple hidden />
+        <div id="ntFileList" class="nt-files"></div>
+      </div>
+      <div class="progress-bar hidden" id="ntBar"><div></div></div>
+      <button class="btn primary" id="ntSubmit"><svg stroke="#fff"><use href="#i-send"/></svg> Publicar tema</button>
+      <div class="auth-msg" id="ntMsg"></div>
+    </div>`);
+  let files = [];
+  const dz = m.querySelector('#ntDz'), fi = m.querySelector('#ntFiles'), fl = m.querySelector('#ntFileList');
+  const render = () => { fl.innerHTML = files.map((f, i) => `<div class="nt-file"><span>${esc(f.name)}</span><button type="button" data-i="${i}" aria-label="Quitar">&times;</button></div>`).join(''); fl.querySelectorAll('button').forEach(b => b.onclick = () => { files.splice(+b.dataset.i, 1); render(); }); };
+  dz.onclick = () => fi.click();
+  fi.onchange = () => { files = files.concat(Array.from(fi.files || [])); fi.value = ''; render(); };
+  ['dragover', 'dragleave', 'drop'].forEach(ev => dz.addEventListener(ev, (e) => { e.preventDefault(); if (ev === 'dragover') dz.classList.add('drag'); else dz.classList.remove('drag'); if (ev === 'drop' && e.dataTransfer.files.length) { files = files.concat(Array.from(e.dataTransfer.files)); render(); } }));
+  m.querySelector('#ntSubmit').onclick = async () => {
+    const msg = m.querySelector('#ntMsg'); msg.className = 'auth-msg';
+    const title = m.querySelector('#ntTitle').value.trim();
+    const body = m.querySelector('#ntBody').value.trim();
+    if (!title) { msg.className = 'auth-msg error'; msg.textContent = 'Ponle un título.'; return; }
+    if (!body && !files.length) { msg.className = 'auth-msg error'; msg.textContent = 'Escribe algo o adjunta un archivo.'; return; }
+    const btn = m.querySelector('#ntSubmit'); btn.disabled = true;
+    const bar = m.querySelector('#ntBar'); bar.classList.remove('hidden'); const fill = bar.firstElementChild; fill.style.width = '10%';
+    try {
+      const attachments = files.length ? await uploadForumFiles(files, p => fill.style.width = (10 + p * 70) + '%') : [];
+      fill.style.width = '92%';
+      const { data, error } = await sb.from('forum_threads').insert({ user_id: state.user.id, title, body, attachments }).select().single();
+      if (error) throw error;
+      fill.style.width = '100%'; toast('Tema publicado 🎉'); m.remove(); openThread(data.id);
+    } catch (err) { console.error(err); msg.className = 'auth-msg error'; msg.textContent = 'Error: ' + (err.message || err); btn.disabled = false; }
+  };
+}
+
+async function openThread(id) {
+  const main = $('main'); main.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
+  const { data: t } = await sb.from('forum_threads').select('*, profiles:user_id(id,username,display_name,avatar_url,theme,verified)').eq('id', id).maybeSingle();
+  if (!t) { toast('Tema no encontrado'); switchView('forum'); return; }
+  const p = t.profiles || {};
+  const canMod = t.user_id === state.user.id || state.profile.is_admin;
+  main.innerHTML = `
+    <button class="profile-back" id="thBack"><svg fill="none" stroke="currentColor"><use href="#i-chevron-left"/></svg> Foro</button>
+    <article class="thread">
+      <h2 class="thread-title">${esc(t.title)}</h2>
+      <div class="thread-byline">${avatarHTML(p)}<button class="th-author">${esc(p.display_name || p.username || 'usuario')}${verifiedBadge(p)}</button><span class="frm-dot">·</span><span>${timeAgo(t.created_at)}</span></div>
+      ${t.body ? `<div class="thread-body">${forumText(t.body)}</div>` : ''}
+      ${attachmentsHTML(t.attachments)}
+      <div class="thread-tools">
+        ${t.user_id !== state.user.id ? `<button class="btn sm" id="thReport"><svg fill="none" stroke="currentColor"><use href="#i-bell"/></svg> Reportar</button>` : ''}
+        ${canMod ? `<button class="btn sm" id="thDelete"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg> Borrar</button>` : ''}
+      </div>
+    </article>
+    <div class="thread-replies-h" id="repCount"></div>
+    <div id="threadReplies" class="forum-replies"><div class="loading"><div class="spinner"></div></div></div>
+    ${t.locked ? `<div class="thread-locked">🔒 Tema cerrado a respuestas.</div>` : `
+    <form class="forum-reply-form" id="replyForm">
+      <textarea id="rpBody" maxlength="3000" placeholder="Escribe una respuesta…"></textarea>
+      <div class="frf-row">
+        <button type="button" class="btn sm" id="rpAttach"><svg fill="none" stroke="currentColor"><use href="#i-paperclip"/></svg> Adjuntar</button>
+        <input type="file" id="rpFiles" multiple hidden />
+        <span class="frf-names" id="rpNames"></span>
+        <button class="btn primary" id="rpSend" type="submit"><svg fill="none" stroke="#fff"><use href="#i-send"/></svg> Responder</button>
+      </div>
+      <div class="progress-bar hidden" id="rpBar"><div></div></div>
+    </form>`}`;
+  $('thBack').onclick = () => switchView('forum');
+  main.querySelector('.thread-byline .th-author').onclick = () => openProfile(t.user_id);
+  if ($('thReport')) $('thReport').onclick = () => openReportModal('forum', t.id, t.user_id, 'este tema del foro');
+  if ($('thDelete')) $('thDelete').onclick = async () => { if (!confirm('¿Borrar este tema y sus respuestas?')) return; const { error } = await sb.from('forum_threads').delete().eq('id', t.id); if (error) { toast('No se pudo borrar'); return; } toast('Tema borrado'); switchView('forum'); };
+
+  // respuestas
+  const box = $('threadReplies');
+  const { data: reps } = await sb.from('forum_replies').select('*, profiles:user_id(id,username,display_name,avatar_url,theme,verified)').eq('thread_id', t.id).order('created_at');
+  const rc = $('repCount'); if (rc) rc.textContent = (reps && reps.length) ? `${reps.length} ${reps.length === 1 ? 'respuesta' : 'respuestas'}` : 'Sé el primero en responder';
+  box.innerHTML = '';
+  (reps || []).forEach(r => box.appendChild(forumReplyRow(r)));
+
+  if (!t.locked) {
+    let rfiles = [];
+    const fi = $('rpFiles');
+    $('rpAttach').onclick = () => fi.click();
+    fi.onchange = () => { rfiles = rfiles.concat(Array.from(fi.files || [])); fi.value = ''; $('rpNames').textContent = rfiles.map(f => f.name).join(', '); };
+    $('replyForm').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (!requireNotBanned()) return;
+      const body = $('rpBody').value.trim();
+      if (!body && !rfiles.length) { toast('Escribe algo o adjunta un archivo'); return; }
+      const send = $('rpSend'); send.disabled = true;
+      const bar = $('rpBar'); bar.classList.remove('hidden'); const fill = bar.firstElementChild; fill.style.width = '12%';
+      try {
+        const attachments = rfiles.length ? await uploadForumFiles(rfiles, pr => fill.style.width = (12 + pr * 70) + '%') : [];
+        const { data, error } = await sb.from('forum_replies').insert({ thread_id: t.id, user_id: state.user.id, body, attachments }).select('*, profiles:user_id(id,username,display_name,avatar_url,theme,verified)').single();
+        if (error) throw error;
+        $('rpBody').value = ''; rfiles = []; $('rpNames').textContent = ''; bar.classList.add('hidden'); fill.style.width = '0%';
+        const empty = box.querySelector('.empty'); if (empty) box.innerHTML = '';
+        box.appendChild(forumReplyRow(data));
+        if (rc) rc.textContent = box.querySelectorAll('.forum-reply').length + ' respuestas';
+        if (t.user_id !== state.user.id) notifySocial('forum_reply', t.user_id, { thread_id: t.id });
+      } catch (err) { console.error(err); toast('Error al responder'); }
+      finally { send.disabled = false; }
+    });
+  }
+}
+function forumReplyRow(r) {
+  const p = r.profiles || {};
+  const canMod = r.user_id === state.user.id || state.profile.is_admin;
+  const row = el(`
+    <div class="forum-reply" data-id="${esc(r.id)}">
+      <div class="fr-head">${avatarHTML(p)}<button class="th-author">${esc(p.display_name || p.username || 'usuario')}${verifiedBadge(p)}</button><span class="frm-dot">·</span><span>${timeAgo(r.created_at)}</span></div>
+      ${r.body ? `<div class="fr-body">${forumText(r.body)}</div>` : ''}
+      ${attachmentsHTML(r.attachments)}
+      <div class="fr-tools">
+        ${r.user_id !== state.user.id ? `<button class="fr-tool" data-a="report">Reportar</button>` : ''}
+        ${canMod ? `<button class="fr-tool" data-a="del">Borrar</button>` : ''}
+      </div>
+    </div>`);
+  row.querySelector('.th-author').onclick = () => openProfile(r.user_id);
+  const rep = row.querySelector('[data-a="report"]'); if (rep) rep.onclick = () => openReportModal('forum_reply', r.id, r.user_id, 'esta respuesta del foro');
+  const del = row.querySelector('[data-a="del"]'); if (del) del.onclick = async () => { if (!confirm('¿Borrar esta respuesta?')) return; const { error } = await sb.from('forum_replies').delete().eq('id', r.id); if (error) { toast('No se pudo borrar'); return; } row.remove(); };
+  return row;
 }
 
 function openPhotoUploadModal() {
