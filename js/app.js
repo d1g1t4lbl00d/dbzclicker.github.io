@@ -4226,7 +4226,36 @@ const FORUM_CATS = [
 const forumCatLabel = (id) => (FORUM_CATS.find(c => c.id === id) || {}).label || 'General';
 const UPVOTE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 15 12 9 18 15"/></svg>';
 let _forumCat = 'all', _forumSort = 'recent', _forumQuery = '';
-function forumText(s) { return esc(s || '').replace(/\n/g, '<br>'); }
+function forumText(s) { return linkifyMentions(s || '').replace(/\n/g, '<br>'); }
+const FORUM_EMOJIS = ['👍', '❤️', '🔥', '😂', '😮', '🙏'];
+async function loadForumReactions(threadId, replyIds) {
+  const map = {};
+  const add = (rows) => (rows || []).forEach(r => { const k = r.target + ':' + r.target_id; (map[k] ||= {}); (map[k][r.emoji] ||= { count: 0, mine: false }); map[k][r.emoji].count++; if (r.user_id === state.user.id) map[k][r.emoji].mine = true; });
+  try {
+    const { data: tr } = await sb.from('forum_reactions').select('target,target_id,emoji,user_id').eq('target', 'thread').eq('target_id', threadId); add(tr);
+    if (replyIds && replyIds.length) { const { data: rr } = await sb.from('forum_reactions').select('target,target_id,emoji,user_id').eq('target', 'reply').in('target_id', replyIds); add(rr); }
+  } catch (_) {}
+  return map;
+}
+function reactionBarHTML(target, id, map) {
+  const m = (map && map[target + ':' + id]) || {};
+  return `<div class="fx-bar" data-fxt="${target}" data-fxid="${esc(id)}">${FORUM_EMOJIS.map(e => { const d = m[e]; const on = d && d.mine; const c = d ? d.count : 0; return `<button class="fx ${on ? 'on' : ''} ${c ? '' : 'fx-empty'}" data-e="${e}">${e}${c ? `<span>${c}</span>` : ''}</button>`; }).join('')}</div>`;
+}
+function wireReactions(scope) { scope.querySelectorAll('.fx-bar .fx').forEach(b => { b.onclick = () => toggleReaction(b); }); }
+async function toggleReaction(btn) {
+  if (btn._busy) return; btn._busy = true;
+  const bar = btn.closest('.fx-bar'); const target = bar.dataset.fxt, id = bar.dataset.fxid, emoji = btn.dataset.e;
+  const on = btn.classList.contains('on');
+  let span = btn.querySelector('span'); const c = span ? (parseInt(span.textContent, 10) || 0) : 0; const nc = on ? c - 1 : c + 1;
+  btn.classList.toggle('on', !on);
+  if (nc > 0) { if (!span) { span = document.createElement('span'); btn.appendChild(span); } span.textContent = nc; btn.classList.remove('fx-empty'); }
+  else { if (span) span.remove(); btn.classList.add('fx-empty'); }
+  try {
+    if (on) await sb.from('forum_reactions').delete().eq('user_id', state.user.id).eq('target', target).eq('target_id', id).eq('emoji', emoji);
+    else await sb.from('forum_reactions').insert({ user_id: state.user.id, target, target_id: id, emoji });
+  } catch (_) { btn.classList.toggle('on', on); }
+  finally { btn._busy = false; }
+}
 
 async function renderForum() {
   setActiveNav('forum');
@@ -4307,6 +4336,7 @@ function editThread(t) {
       <div class="field"><label>Mensaje</label><textarea id="etBody" maxlength="5000">${esc(t.body || '')}</textarea></div>
       <button class="btn primary" id="etSave">Guardar</button><div class="auth-msg" id="etMsg"></div>
     </div>`);
+  attachMentionAutocomplete(m.querySelector('#etBody'));
   m.querySelector('#etSave').onclick = async () => {
     const title = m.querySelector('#etTitle').value.trim(); if (!title) return;
     const { error } = await sb.from('forum_threads').update({ title, category: m.querySelector('#etCat').value, body: m.querySelector('#etBody').value.trim(), edited_at: new Date().toISOString() }).eq('id', t.id);
@@ -4318,6 +4348,7 @@ function editReply(r, row) {
   const m = openModal(`
     <div class="modal-head"><h3>Editar respuesta</h3><button class="close">&times;</button></div>
     <div class="modal-body"><div class="field"><textarea id="erBody" maxlength="3000">${esc(r.body || '')}</textarea></div><button class="btn primary" id="erSave">Guardar</button></div>`);
+  attachMentionAutocomplete(m.querySelector('#erBody'));
   m.querySelector('#erSave').onclick = async () => {
     const body = m.querySelector('#erBody').value.trim();
     const { error } = await sb.from('forum_replies').update({ body, edited_at: new Date().toISOString() }).eq('id', r.id);
@@ -4372,6 +4403,7 @@ function openNewThread() {
       <div class="auth-msg" id="ntMsg"></div>
     </div>`);
   let files = [];
+  attachMentionAutocomplete(m.querySelector('#ntBody'));
   const dz = m.querySelector('#ntDz'), fi = m.querySelector('#ntFiles'), fl = m.querySelector('#ntFileList');
   const render = () => { fl.innerHTML = files.map((f, i) => `<div class="nt-file"><span>${esc(f.name)}</span><button type="button" data-i="${i}" aria-label="Quitar">&times;</button></div>`).join(''); fl.querySelectorAll('button').forEach(b => b.onclick = () => { files.splice(+b.dataset.i, 1); render(); }); };
   dz.onclick = () => fi.click();
@@ -4410,13 +4442,14 @@ async function openThread(id) {
       <div class="thread-top">
         <button class="fvote big ${votedT ? 'on' : ''}" id="thVote" title="Votar">${UPVOTE_SVG}<b>${t.votes || 0}</b></button>
         <div class="thread-top-main">
-          <div class="thread-cat"><span class="forum-cat">${esc(forumCatLabel(t.category))}</span>${t.pinned ? '<span class="forum-cat pin">📌 Fijado</span>' : ''}${t.locked ? '<span class="forum-cat lock">🔒 Cerrado</span>' : ''}</div>
+          <div class="thread-cat"><span class="forum-cat">${esc(forumCatLabel(t.category))}</span>${t.solved_reply_id ? '<span class="forum-cat solved">✓ Resuelto</span>' : ''}${t.pinned ? '<span class="forum-cat pin">📌 Fijado</span>' : ''}${t.locked ? '<span class="forum-cat lock">🔒 Cerrado</span>' : ''}</div>
           <h2 class="thread-title">${esc(t.title)}</h2>
           <div class="thread-byline">${avatarHTML(p)}<button class="th-author">${esc(p.display_name || p.username || 'usuario')}${verifiedBadge(p)}</button><span class="frm-dot">·</span><span>${timeAgo(t.created_at)}${t.edited_at ? ' · editado' : ''}</span><span class="frm-dot">·</span><span>👁 ${t.views || 0}</span></div>
         </div>
       </div>
       ${t.body ? `<div class="thread-body">${forumText(t.body)}</div>` : ''}
       ${attachmentsHTML(t.attachments)}
+      <div class="thread-fx" id="thFx"></div>
       <div class="thread-tools">
         ${mineT ? `<button class="btn sm" id="thEdit"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg> Editar</button>` : ''}
         ${!mineT ? `<button class="btn sm" id="thReport"><svg fill="none" stroke="currentColor"><use href="#i-bell"/></svg> Reportar</button>` : ''}
@@ -4428,6 +4461,7 @@ async function openThread(id) {
     <div id="threadReplies" class="forum-replies"><div class="loading"><div class="spinner"></div></div></div>
     ${t.locked ? `<div class="thread-locked">🔒 Tema cerrado a respuestas.</div>` : `
     <form class="forum-reply-form" id="replyForm">
+      <div id="rpQuote" class="rp-quote hidden"></div>
       <textarea id="rpBody" maxlength="3000" placeholder="Escribe una respuesta…"></textarea>
       <div class="frf-row">
         <button type="button" class="btn sm" id="rpAttach"><svg fill="none" stroke="currentColor"><use href="#i-paperclip"/></svg> Adjuntar</button>
@@ -4446,18 +4480,55 @@ async function openThread(id) {
   if ($('thLock')) $('thLock').onclick = async () => { await sb.from('forum_threads').update({ locked: !t.locked }).eq('id', t.id); openThread(t.id); };
   if ($('thDelete')) $('thDelete').onclick = async () => { if (!confirm('¿Borrar este tema y sus respuestas?')) return; const { error } = await sb.from('forum_threads').delete().eq('id', t.id); if (error) { toast('No se pudo borrar'); return; } toast('Tema borrado'); switchView('forum'); };
 
+  // reacciones del tema
+  const reMap0 = await loadForumReactions(t.id, []);
+  const thFx = $('thFx'); if (thFx) { thFx.innerHTML = reactionBarHTML('thread', t.id, reMap0); wireReactions(thFx); }
+
   // respuestas
   const box = $('threadReplies');
-  const { data: reps } = await sb.from('forum_replies').select('*, profiles:user_id(id,username,display_name,avatar_url,theme,verified)').eq('thread_id', t.id).order('created_at');
-  let votedR = new Set();
-  try { if (reps && reps.length) { const { data: vs } = await sb.from('forum_votes').select('target_id').eq('user_id', state.user.id).eq('target', 'reply').in('target_id', reps.map(r => r.id)); votedR = new Set((vs || []).map(v => v.target_id)); } } catch (_) {}
-  const rc = $('repCount'); if (rc) rc.textContent = (reps && reps.length) ? `${reps.length} ${reps.length === 1 ? 'respuesta' : 'respuestas'}` : 'Sé el primero en responder';
-  box.innerHTML = '';
-  (reps || []).forEach(r => box.appendChild(forumReplyRow(r, votedR.has(r.id))));
+  const canSolve = mineT || isAdmin;   // quién puede marcar la solución
+  let replyTo = null;
+  const setReplyTo = (r) => {
+    replyTo = r; const q = $('rpQuote'); if (!q) return;
+    q.classList.remove('hidden');
+    q.innerHTML = `<span>Respondiendo a <b>@${esc(r.profiles?.username || '')}</b></span><button type="button" id="rpQuoteX" aria-label="Quitar">&times;</button>`;
+    q.querySelector('#rpQuoteX').onclick = () => { replyTo = null; q.classList.add('hidden'); q.innerHTML = ''; };
+    const ta = $('rpBody'); if (ta) { ta.focus(); ta.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+  };
+
+  async function renderReplies() {
+    const { data: reps } = await sb.from('forum_replies').select('*, profiles:user_id(id,username,display_name,avatar_url,theme,verified)').eq('thread_id', t.id).order('created_at');
+    const list = reps || [];
+    const byId = {}; list.forEach(r => byId[r.id] = r);
+    let voted = new Set(), reMap = {};
+    if (list.length) {
+      try { const { data: vs } = await sb.from('forum_votes').select('target_id').eq('user_id', state.user.id).eq('target', 'reply').in('target_id', list.map(r => r.id)); voted = new Set((vs || []).map(v => v.target_id)); } catch (_) {}
+      reMap = await loadForumReactions(t.id, list.map(r => r.id));
+    }
+    // solución primero
+    list.sort((a, b) => ((b.id === t.solved_reply_id) - (a.id === t.solved_reply_id)) || (new Date(a.created_at) - new Date(b.created_at)));
+    const rc = $('repCount'); if (rc) rc.textContent = list.length ? `${list.length} ${list.length === 1 ? 'respuesta' : 'respuestas'}` : 'Sé el primero en responder';
+    box.innerHTML = '';
+    if (!list.length) { box.innerHTML = `<div class="empty" style="padding:18px"><p>Sin respuestas aún.</p></div>`; }
+    list.forEach(r => box.appendChild(forumReplyRow(r, {
+      voted: voted.has(r.id), reMap, parent: r.parent_id ? byId[r.parent_id] : null,
+      solvedId: t.solved_reply_id, canSolve, setReplyTo,
+      onSolve: async () => {
+        const newVal = t.solved_reply_id === r.id ? null : r.id;
+        const { error } = await sb.from('forum_threads').update({ solved_reply_id: newVal }).eq('id', t.id);
+        if (error) { toast('No se pudo actualizar'); return; }
+        t.solved_reply_id = newVal; toast(newVal ? '✓ Marcada como solución' : 'Solución quitada');
+        const cat = main.querySelector('.thread-cat'); if (cat) { const ex = cat.querySelector('.solved'); if (newVal && !ex) cat.insertAdjacentHTML('beforeend', '<span class="forum-cat solved">✓ Resuelto</span>'); else if (!newVal && ex) ex.remove(); }
+        renderReplies();
+      },
+    })));
+  }
+  await renderReplies();
 
   if (!t.locked) {
     let rfiles = [];
     const fi = $('rpFiles');
+    attachMentionAutocomplete($('rpBody'));
     $('rpAttach').onclick = () => fi.click();
     fi.onchange = () => { rfiles = rfiles.concat(Array.from(fi.files || [])); fi.value = ''; $('rpNames').textContent = rfiles.map(f => f.name).join(', '); };
     $('replyForm').addEventListener('submit', async (e) => {
@@ -4469,35 +4540,49 @@ async function openThread(id) {
       const bar = $('rpBar'); bar.classList.remove('hidden'); const fill = bar.firstElementChild; fill.style.width = '12%';
       try {
         const attachments = rfiles.length ? await uploadForumFiles(rfiles, pr => fill.style.width = (12 + pr * 70) + '%') : [];
-        const { data, error } = await sb.from('forum_replies').insert({ thread_id: t.id, user_id: state.user.id, body, attachments }).select('*, profiles:user_id(id,username,display_name,avatar_url,theme,verified)').single();
+        const parent_id = replyTo ? replyTo.id : null;
+        const { error } = await sb.from('forum_replies').insert({ thread_id: t.id, user_id: state.user.id, body, attachments, parent_id });
         if (error) throw error;
         $('rpBody').value = ''; rfiles = []; $('rpNames').textContent = ''; bar.classList.add('hidden'); fill.style.width = '0%';
-        const empty = box.querySelector('.empty'); if (empty) box.innerHTML = '';
-        box.appendChild(forumReplyRow(data, false));
-        if (rc) rc.textContent = box.querySelectorAll('.forum-reply').length + ' respuestas';
-        if (t.user_id !== state.user.id) notifySocial('forum_reply', t.user_id, { thread_id: t.id });
+        const tgt = (replyTo && replyTo.user_id !== state.user.id) ? replyTo.user_id : (t.user_id !== state.user.id ? t.user_id : null);
+        if (tgt) notifySocial('forum_reply', tgt, { thread_id: t.id });
+        const q = $('rpQuote'); if (q) { q.classList.add('hidden'); q.innerHTML = ''; } replyTo = null;
+        await renderReplies();
       } catch (err) { console.error(err); toast('Error al responder'); }
       finally { send.disabled = false; }
     });
   }
 }
-function forumReplyRow(r, voted) {
+function forumReplyRow(r, ctx) {
+  ctx = ctx || {};
   const p = r.profiles || {};
   const mine = r.user_id === state.user.id, canMod = mine || state.profile.is_admin;
+  const isSolution = ctx.solvedId && ctx.solvedId === r.id;
+  const parent = ctx.parent;
+  const parentSnip = parent ? (parent.body ? esc(parent.body).slice(0, 90) : '📎 adjunto') : '';
   const row = el(`
-    <div class="forum-reply" data-id="${esc(r.id)}">
+    <div class="forum-reply${isSolution ? ' is-solution' : ''}" data-id="${esc(r.id)}">
+      ${isSolution ? '<div class="fr-solution">✓ Solución</div>' : ''}
+      ${parent ? `<button class="fr-quote" data-pid="${esc(parent.id)}">↳ <b>@${esc(parent.profiles?.username || '')}</b>: ${parentSnip}</button>` : ''}
       <div class="fr-head">${avatarHTML(p)}<button class="th-author">${esc(p.display_name || p.username || 'usuario')}${verifiedBadge(p)}</button><span class="frm-dot">·</span><span>${timeAgo(r.created_at)}${r.edited_at ? ' · editado' : ''}</span></div>
       ${r.body ? `<div class="fr-body">${forumText(r.body)}</div>` : ''}
       ${attachmentsHTML(r.attachments)}
+      ${reactionBarHTML('reply', r.id, ctx.reMap)}
       <div class="fr-tools">
-        <button class="fvote sm ${voted ? 'on' : ''}" data-a="vote" title="Votar">${UPVOTE_SVG}<b>${r.votes || 0}</b></button>
+        <button class="fvote sm ${ctx.voted ? 'on' : ''}" data-a="vote" title="Votar">${UPVOTE_SVG}<b>${r.votes || 0}</b></button>
+        <button class="fr-tool" data-a="reply">Responder</button>
+        ${ctx.canSolve ? `<button class="fr-tool ${isSolution ? 'on' : ''}" data-a="solve">${isSolution ? 'Quitar solución' : 'Marcar solución'}</button>` : ''}
         ${mine ? `<button class="fr-tool" data-a="edit">Editar</button>` : ''}
         ${!mine ? `<button class="fr-tool" data-a="report">Reportar</button>` : ''}
         ${canMod ? `<button class="fr-tool" data-a="del">Borrar</button>` : ''}
       </div>
     </div>`);
   row.querySelector('.th-author').onclick = () => openProfile(r.user_id);
+  wireReactions(row);
+  const pq = row.querySelector('.fr-quote'); if (pq) pq.onclick = () => { const el2 = document.querySelector(`.forum-reply[data-id="${CSS.escape(pq.dataset.pid)}"]`); if (el2) { el2.scrollIntoView({ block: 'center', behavior: 'smooth' }); el2.classList.add('fr-flash'); setTimeout(() => el2.classList.remove('fr-flash'), 1200); } };
   const vb = row.querySelector('[data-a="vote"]'); if (vb) vb.onclick = () => toggleForumVote('reply', r.id, vb);
+  const rb = row.querySelector('[data-a="reply"]'); if (rb && ctx.setReplyTo) rb.onclick = () => ctx.setReplyTo(r);
+  const sb2 = row.querySelector('[data-a="solve"]'); if (sb2 && ctx.onSolve) sb2.onclick = () => ctx.onSolve();
   const ed = row.querySelector('[data-a="edit"]'); if (ed) ed.onclick = () => editReply(r, row);
   const rep = row.querySelector('[data-a="report"]'); if (rep) rep.onclick = () => openReportModal('forum_reply', r.id, r.user_id, 'esta respuesta del foro');
   const del = row.querySelector('[data-a="del"]'); if (del) del.onclick = async () => { if (!confirm('¿Borrar esta respuesta?')) return; const { error } = await sb.from('forum_replies').delete().eq('id', r.id); if (error) { toast('No se pudo borrar'); return; } row.remove(); };
