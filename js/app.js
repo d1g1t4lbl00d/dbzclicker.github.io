@@ -4430,7 +4430,7 @@ function openNewThread() {
 
 async function openThread(id) {
   const main = $('main'); main.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
-  try { sb.rpc('forum_bump_views', { p_id: id }); } catch (_) {}
+  sb.rpc('forum_bump_views', { p_id: id }).then(() => {}, () => {});   // .then() es lo que dispara la petición (supabase-js es lazy)
   const { data: t } = await sb.from('forum_threads').select('*, profiles:user_id(id,username,display_name,avatar_url,theme,verified)').eq('id', id).maybeSingle();
   if (!t) { toast('Tema no encontrado'); switchView('forum'); return; }
   const p = t.profiles || {};
