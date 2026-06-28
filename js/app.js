@@ -9006,13 +9006,10 @@ async function deleteAccount() {
 }
 
 const USER_ROLES = [
-  { id: 'productor', label: 'Productor / Beatmaker', emoji: '🎹' },
   { id: 'cantante', label: 'Cantante', emoji: '🎤' },
-  { id: 'rapero', label: 'Rapero / MC', emoji: '🎙️' },
-  { id: 'dj', label: 'DJ', emoji: '🎧' },
-  { id: 'mezcla', label: 'Mezcla / Master', emoji: '🎚️' },
+  { id: 'productor', label: 'Productor', emoji: '🎹' },
   { id: 'manager', label: 'Mánager', emoji: '💼' },
-  { id: 'visual', label: 'Diseño / Visuals', emoji: '🎨' },
+  { id: 'sala', label: 'Sala', emoji: '🪩' },
 ];
 const roleDef = (id) => USER_ROLES.find(r => r.id === id);
 function roleChipsHTML(roles) {
