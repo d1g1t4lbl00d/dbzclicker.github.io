@@ -3929,3 +3929,12 @@ img.ub-imgin { animation: ubImgIn .4s ease; }
 .forum-reply.is-solution { border-color: color-mix(in srgb, #2dc878 55%, var(--line)); box-shadow: 0 0 0 1px color-mix(in srgb, #2dc878 35%, transparent); }
 .fr-solution { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 800; color: #1f9d57; background: rgba(45,200,120,.14); padding: 3px 10px; border-radius: 999px; margin-bottom: 8px; }
 .fr-tool.on { color: #1f9d57; }
+
+/* ===================== ROLES DE PERFIL ===================== */
+.role-pick { display: flex; flex-wrap: wrap; gap: 8px; }
+.role-opt { border: 1px solid var(--line); background: var(--panel); color: var(--ink-soft); font-size: 13px; font-weight: 700; padding: 8px 13px; border-radius: 999px; cursor: pointer; transition: border-color .14s, color .14s, background .14s; }
+.role-opt.on { border-color: transparent; background: var(--accent-grad); color: #fff; }
+.role-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.role-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 700; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent); padding: 3px 10px; border-radius: 999px; }
+.ph-handle + .role-chips { justify-content: center; margin-top: 8px; }
+.person-info .role-chips { margin-top: 5px; }

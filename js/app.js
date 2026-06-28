@@ -5858,6 +5858,7 @@ async function openProfile(userId) {
         <div class="ph-avatar ${ringCls}">${avatarHTML(prof)}</div>
         <h2 class="accent-name ${nameCls}" data-name="${esc(prof.display_name || prof.username)}">${esc(prof.display_name || prof.username)}${verifiedBadge(prof)}${displayBadgeHtml(prof)} ${prof.is_admin?'<span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c;vertical-align:middle">MOD</span>':''} ${prof.banned?'<span class="t-genre" style="background:#fae3e0;border-color:#f0c2bc;color:#c0533f;vertical-align:middle">baneado</span>':''}</h2>
         <div class="ph-handle">@${esc(prof.username)}${prof.city?` · <svg style="width:13px;height:13px;vertical-align:-2px" fill="none" stroke="currentColor"><use href="#i-pin"/></svg> ${esc(prof.city)}`:''}</div>
+        ${roleChipsHTML(prof.roles)}
         ${prof.show_badges ? profBadgesHtml : ''}
         ${tagline ? `<div class="profile-tagline">${esc(tagline)}</div>` : ''}
         ${prof.bio ? `<p class="ph-bio">${esc(prof.bio)}</p>` : ''}
@@ -6026,33 +6027,41 @@ async function renderPeople() {
   const main = $('main');
   main.innerHTML = `<div class="main-head"><div><h2>Bro's</h2><div class="sub">Descubre a otros creadores</div></div></div>
     <div class="people-search"><svg fill="none" stroke="currentColor"><use href="#i-search"/></svg><input id="peopleSearch" type="text" autocomplete="off" placeholder="Buscar por nombre, @usuario o ciudad…" /></div>
+    <div class="forum-cats" id="peopleRoles">
+      <button data-r="all" class="on">Todos</button>
+      ${USER_ROLES.map(r => `<button data-r="${r.id}">${r.emoji} ${r.label}</button>`).join('')}
+    </div>
     <div id="peopleList" class="feed-list"><div class="loading" style="padding:24px"><div class="spinner"></div></div></div>`;
   const list = $('peopleList');
+  let role = 'all', term = '';
   const renderRows = (arr) => {
     const people = (arr || []).filter(p => p.id !== state.user.id && !isHidden(p.id));
     if (!people.length) { list.innerHTML = '<div class="empty"><p>Sin resultados.</p></div>'; return; }
     list.innerHTML = '';
     people.forEach(p => list.appendChild(personRow(p)));
   };
+  const localFilter = (arr) => {
+    let r = arr || [];
+    if (role !== 'all') r = r.filter(p => Array.isArray(p.roles) && p.roles.includes(role));
+    if (term) { const lo = term.toLowerCase(); r = r.filter(p => ((p.display_name || '') + ' ' + (p.username || '') + ' ' + (p.city || '')).toLowerCase().includes(lo)); }
+    return r;
+  };
   let base = [];
   try { const { data } = await sb.from('profiles').select('*').order('created_at', { ascending: false }).limit(60); base = data || []; } catch (_) {}
   renderRows(base);
-  // buscador: filtro local instantáneo + búsqueda en servidor (debounce) para encontrar a cualquiera
-  const input = $('peopleSearch'); let t;
-  if (input) input.oninput = () => {
-    const term = input.value.trim(); clearTimeout(t);
-    if (!term) { renderRows(base); return; }
-    const lo = term.toLowerCase();
-    renderRows(base.filter(p => ((p.display_name || '') + ' ' + (p.username || '') + ' ' + (p.city || '')).toLowerCase().includes(lo)));
-    t = setTimeout(async () => {
-      const q = (typeof sanitizeTerm === 'function' ? sanitizeTerm(term.replace('@', '')) : term.replace('@', ''));
-      if (!q) return;
-      try {
-        const { data: res } = await sb.from('profiles').select('*').or(`username.ilike.%${q}%,display_name.ilike.%${q}%,city.ilike.%${q}%`).limit(40);
-        if (input.value.trim() === term && res) renderRows(res);
-      } catch (_) {}
-    }, 280);
+  const refresh = async () => {
+    renderRows(localFilter(base));
+    try {
+      let q = sb.from('profiles').select('*');
+      if (role !== 'all') q = q.contains('roles', [role]);
+      if (term) { const s = term.replace('@', '').replace(/[%,]/g, ' '); q = q.or(`username.ilike.%${s}%,display_name.ilike.%${s}%,city.ilike.%${s}%`); }
+      const { data: res } = await q.limit(60);
+      if (res) renderRows(localFilter(res));
+    } catch (_) {}
   };
+  $('peopleRoles').querySelectorAll('button').forEach(b => b.onclick = () => { role = b.dataset.r; $('peopleRoles').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); refresh(); });
+  const input = $('peopleSearch'); let t;
+  if (input) input.oninput = () => { term = input.value.trim(); clearTimeout(t); t = setTimeout(refresh, 250); };
 }
 // Fila de persona para la pantalla Bro's (y reutilizable)
 function personRow(p) {
@@ -6065,6 +6074,7 @@ function personRow(p) {
           <div class="person-info">
             <div class="person-name">${esc(p.display_name||p.username)}${verifiedBadge(p)}${displayBadgeHtml(p)}${p.is_admin?' <span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c">MOD</span>':''}${p.banned?' <span class="t-genre" style="background:#fae3e0;border-color:#f0c2bc;color:#c0533f">baneado</span>':''}</div>
             <div class="person-handle">@${esc(p.username)}${p.city?` · <svg style="width:12px;height:12px;vertical-align:-1px" fill="none" stroke="currentColor"><use href="#i-pin"/></svg> ${esc(p.city)}`:''}</div>
+            ${roleChipsHTML(p.roles)}
             ${p.bio?`<div class="person-bio">${esc(p.bio)}</div>`:''}
           </div>
         </div>
@@ -8995,6 +9005,21 @@ async function deleteAccount() {
   }
 }
 
+const USER_ROLES = [
+  { id: 'productor', label: 'Productor / Beatmaker', emoji: '🎹' },
+  { id: 'cantante', label: 'Cantante', emoji: '🎤' },
+  { id: 'rapero', label: 'Rapero / MC', emoji: '🎙️' },
+  { id: 'dj', label: 'DJ', emoji: '🎧' },
+  { id: 'mezcla', label: 'Mezcla / Master', emoji: '🎚️' },
+  { id: 'manager', label: 'Mánager', emoji: '💼' },
+  { id: 'visual', label: 'Diseño / Visuals', emoji: '🎨' },
+];
+const roleDef = (id) => USER_ROLES.find(r => r.id === id);
+function roleChipsHTML(roles) {
+  if (!Array.isArray(roles) || !roles.length) return '';
+  return `<div class="role-chips">${roles.map(id => { const d = roleDef(id); return d ? `<span class="role-chip">${d.emoji} ${esc(d.label)}</span>` : ''; }).join('')}</div>`;
+}
+
 function renderSettings() {
   setActiveNav('settings');
   const p = state.profile;
@@ -9011,6 +9036,9 @@ function renderSettings() {
       <div class="field"><label>Nombre para mostrar</label><input type="text" id="setName" value="${esc(p.display_name||'')}" /></div>
       <div class="field"><label>Usuario</label><input type="text" id="setUser" value="${esc(p.username||'')}" /></div>
       <div class="field"><label>Ciudad / escena</label><input type="text" id="setCity" maxlength="60" value="${esc(p.city||'')}" placeholder="Ej: Madrid, Barcelona, Sevilla…" /></div>
+      <div class="field"><label>¿Qué eres? <span style="color:var(--ink-faint);font-weight:400">(elige uno o varios)</span></label>
+        <div class="role-pick" id="setRoles">${USER_ROLES.map(r => `<button type="button" class="role-opt ${(p.roles||[]).includes(r.id) ? 'on' : ''}" data-r="${r.id}">${r.emoji} ${r.label}</button>`).join('')}</div>
+      </div>
       <div class="field"><label>Bio</label><textarea id="setBio" placeholder="Cuéntanos algo sobre ti…">${esc(p.bio||'')}</textarea></div>
       <button class="btn" id="openCustomize" style="width:100%;margin-bottom:12px"><svg fill="none" stroke="currentColor"><use href="#i-palette"/></svg> Personalizar perfil (banner, colores, enlaces)</button>
       <button class="btn primary" id="saveProfile">Guardar cambios</button>
@@ -9047,6 +9075,7 @@ function renderSettings() {
       <div style="text-align:center;margin-top:10px;font-size:12px;color:var(--ink-soft)">UnderBro · versión ${APP_VERSION} · <a id="checkUpdate" style="cursor:pointer;text-decoration:underline">Buscar actualizaciones</a></div>
     </div>`;
   $('quickStart').onclick = openSetupWizard;
+  $('setRoles')?.querySelectorAll('.role-opt').forEach(b => b.onclick = () => b.classList.toggle('on'));
   $('policyLink').onclick = showPrivacyPolicy;
   $('manageBlocks').onclick = openBlockedList;
   if ($('modReports')) $('modReports').onclick = openReportsAdmin;
@@ -9083,6 +9112,7 @@ function renderSettings() {
     const username = $('setUser').value.trim().toLowerCase().replace(/[^a-z0-9_]/g,'');
     const bio = $('setBio').value.trim();
     const city = $('setCity').value.trim();
+    const roles = Array.from($('setRoles')?.querySelectorAll('.role-opt.on') || []).map(b => b.dataset.r);
     if (username.length < 3) { msg.className='auth-msg error'; msg.textContent='El usuario debe tener al menos 3 caracteres.'; return; }
     const btn = $('saveProfile'); btn.disabled = true;
     try {
@@ -9095,7 +9125,7 @@ function renderSettings() {
         avatar_url = sb.storage.from('avatars').getPublicUrl(path).data.publicUrl;
       }
       const theme = { ...(state.profile.theme && typeof state.profile.theme === 'object' ? state.profile.theme : {}), avatarPos: avatarPos || null, avatarZoom: avatarZoom > 1 ? avatarZoom : null };
-      const { data, error } = await sb.from('profiles').update({ display_name, username, bio, city: city || null, avatar_url, theme }).eq('id', state.user.id).select().single();
+      const { data, error } = await sb.from('profiles').update({ display_name, username, bio, city: city || null, roles, avatar_url, theme }).eq('id', state.user.id).select().single();
       if (error) throw error;
       state.profile = data;
       renderMe();
