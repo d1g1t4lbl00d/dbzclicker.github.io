@@ -9237,6 +9237,22 @@ async function openOnboarding() {
       body.querySelectorAll('[data-g]').forEach(b => b.onclick = () => { const g = b.dataset.g; if (chosen.has(g)) { chosen.delete(g); b.classList.remove('on'); } else { chosen.add(g); b.classList.add('on'); } });
       body.querySelector('#onbNext').onclick = async () => { try { localStorage.setItem('ub_genres', JSON.stringify([...chosen])); } catch (_) {} step = 2; await render(); };
       body.querySelector('#onbSkip').onclick = finish;
+    } else if (step === 2) {
+      body.innerHTML = `
+        <h4 class="onb-h">¿Qué eres? <span class="onb-opt">opcional</span></h4>
+        <div class="role-pick" id="onbRoles">${USER_ROLES.map(r => `<button type="button" class="role-opt" data-r="${r.id}">${r.emoji} ${r.label}</button>`).join('')}</div>
+        <h4 class="onb-h" style="margin-top:18px">¿De qué ciudad / escena eres? <span class="onb-opt">opcional</span></h4>
+        <input type="text" id="onbCity" maxlength="60" placeholder="Ej: Madrid, Barcelona, Sevilla…" class="onb-city" />
+        <button class="btn primary" id="onbNext2" style="width:100%;margin-top:18px">Continuar</button>
+        <button class="btn" id="onbSkip2" style="width:100%;margin-top:8px">Saltar</button>`;
+      body.querySelectorAll('#onbRoles .role-opt').forEach(b => b.onclick = () => b.classList.toggle('on'));
+      const saveStep2 = async () => {
+        const roles = Array.from(body.querySelectorAll('#onbRoles .role-opt.on')).map(b => b.dataset.r);
+        const city = body.querySelector('#onbCity').value.trim();
+        if (roles.length || city) { try { const { data } = await sb.from('profiles').update({ roles, city: city || null }).eq('id', state.user.id).select().single(); if (data) state.profile = data; } catch (_) {} }
+      };
+      body.querySelector('#onbNext2').onclick = async () => { await saveStep2(); step = 3; await render(); };
+      body.querySelector('#onbSkip2').onclick = async () => { step = 3; await render(); };
     } else {
       body.innerHTML = `<h4 class="onb-h">Sigue a artistas para llenar tu feed</h4><div id="onbArtists"><div class="loading"><div class="spinner"></div></div></div>
         <button class="btn primary" id="onbDone" style="width:100%;margin-top:16px">Empezar a usar UnderBro</button>`;

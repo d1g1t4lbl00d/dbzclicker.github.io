@@ -3938,3 +3938,7 @@ img.ub-imgin { animation: ubImgIn .4s ease; }
 .role-chip { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 700; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 26%, transparent); padding: 3px 10px; border-radius: 999px; }
 .ph-handle + .role-chips { justify-content: center; margin-top: 8px; }
 .person-info .role-chips { margin-top: 5px; }
+
+/* onboarding: paso de rol + ciudad */
+.onb-opt { color: var(--ink-faint); font-weight: 400; font-size: 13px; }
+.onb-city { width: 100%; }
