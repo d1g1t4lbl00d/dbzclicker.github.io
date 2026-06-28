@@ -4215,6 +4215,17 @@ async function openAlbum(albumId) {
 /* =======================================================================
    FORO — temas abiertos: texto + archivos (imágenes, audio, vídeo, etc.)
    ======================================================================= */
+const FORUM_CATS = [
+  { id: 'general', label: 'General' },
+  { id: 'beats', label: 'Beats' },
+  { id: 'colabs', label: 'Colaboraciones' },
+  { id: 'ayuda', label: 'Ayuda' },
+  { id: 'feedback', label: 'Feedback' },
+  { id: 'offtopic', label: 'Off-topic' },
+];
+const forumCatLabel = (id) => (FORUM_CATS.find(c => c.id === id) || {}).label || 'General';
+const UPVOTE_SVG = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 15 12 9 18 15"/></svg>';
+let _forumCat = 'all', _forumSort = 'recent', _forumQuery = '';
 function forumText(s) { return esc(s || '').replace(/\n/g, '<br>'); }
 
 async function renderForum() {
@@ -4223,31 +4234,97 @@ async function renderForum() {
   main.innerHTML = `
     <div class="main-head"><div><h2>Foro</h2><div class="sub">Habla de lo que quieras con la comunidad</div></div>
       <button class="btn primary" id="newThread"><svg fill="none" stroke="#fff"><use href="#i-plus"/></svg> Nuevo tema</button></div>
+    <div class="forum-toolbar">
+      <div class="forum-search"><svg fill="none" stroke="currentColor"><use href="#i-search"/></svg><input id="forumSearch" type="text" placeholder="Buscar en el foro…" autocomplete="off" /></div>
+      <div class="forum-sort" id="forumSort">
+        <button data-s="recent" class="${_forumSort === 'recent' ? 'on' : ''}">Recientes</button>
+        <button data-s="top" class="${_forumSort === 'top' ? 'on' : ''}">Populares</button>
+        <button data-s="unanswered" class="${_forumSort === 'unanswered' ? 'on' : ''}">Sin responder</button>
+      </div>
+    </div>
+    <div class="forum-cats" id="forumCats">
+      <button data-c="all" class="${_forumCat === 'all' ? 'on' : ''}">Todo</button>
+      ${FORUM_CATS.map(c => `<button data-c="${c.id}" class="${_forumCat === c.id ? 'on' : ''}">${c.label}</button>`).join('')}
+    </div>
     <div id="forumList" class="forum-list"><div class="loading"><div class="spinner"></div></div></div>`;
   $('newThread').onclick = openNewThread;
-  const { data, error } = await sb.from('forum_threads')
-    .select('*, profiles:user_id(id,username,display_name,avatar_url,theme,verified)')
-    .order('pinned', { ascending: false }).order('last_activity_at', { ascending: false }).limit(80);
-  const box = $('forumList'); if (!box) return;
-  if (error) { box.innerHTML = `<div class="empty"><p>No se pudo cargar el foro.</p></div>`; return; }
-  if (!data || !data.length) { box.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-comment"/></svg><p>Aún no hay temas. ¡Abre el primero!</p></div>`; return; }
-  box.innerHTML = '';
-  data.forEach(t => box.appendChild(forumThreadRow(t)));
+  const si = $('forumSearch'); si.value = _forumQuery;
+  let t; si.oninput = () => { _forumQuery = si.value.trim(); clearTimeout(t); t = setTimeout(loadForumThreads, 250); };
+  $('forumSort').querySelectorAll('button').forEach(b => b.onclick = () => { _forumSort = b.dataset.s; $('forumSort').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); loadForumThreads(); });
+  $('forumCats').querySelectorAll('button').forEach(b => b.onclick = () => { _forumCat = b.dataset.c; $('forumCats').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); loadForumThreads(); });
+  loadForumThreads();
 }
-function forumThreadRow(t) {
+async function loadForumThreads() {
+  const box = $('forumList'); if (!box) return;
+  box.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
+  let q = sb.from('forum_threads').select('*, profiles:user_id(id,username,display_name,avatar_url,theme,verified)');
+  if (_forumCat !== 'all') q = q.eq('category', _forumCat);
+  if (_forumQuery) { const s = _forumQuery.replace(/[%,]/g, ' '); q = q.or(`title.ilike.%${s}%,body.ilike.%${s}%`); }
+  if (_forumSort === 'unanswered') q = q.eq('reply_count', 0).order('created_at', { ascending: false });
+  else if (_forumSort === 'top') q = q.order('pinned', { ascending: false }).order('votes', { ascending: false }).order('last_activity_at', { ascending: false });
+  else q = q.order('pinned', { ascending: false }).order('last_activity_at', { ascending: false });
+  const { data, error } = await q.limit(80);
+  if (error) { box.innerHTML = `<div class="empty"><p>No se pudo cargar el foro.</p></div>`; return; }
+  if (!data || !data.length) { box.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-comment"/></svg><p>No hay temas aquí todavía.</p></div>`; return; }
+  let voted = new Set();
+  try { const { data: vs } = await sb.from('forum_votes').select('target_id').eq('user_id', state.user.id).eq('target', 'thread').in('target_id', data.map(t => t.id)); voted = new Set((vs || []).map(v => v.target_id)); } catch (_) {}
+  box.innerHTML = '';
+  data.forEach(t => box.appendChild(forumThreadRow(t, voted.has(t.id))));
+}
+function forumThreadRow(t, voted) {
   const p = t.profiles || {};
   const nAtt = Array.isArray(t.attachments) ? t.attachments.length : 0;
   const row = el(`
-    <button class="forum-row" data-id="${esc(t.id)}">
-      ${t.pinned ? '<span class="forum-pin"><svg fill="none" stroke="currentColor"><use href="#i-pin"/></svg></span>' : ''}
+    <div class="forum-row" data-id="${esc(t.id)}">
+      <button class="fvote ${voted ? 'on' : ''}" title="Votar">${UPVOTE_SVG}<b>${t.votes || 0}</b></button>
       <div class="forum-row-main">
-        <div class="forum-row-title">${esc(t.title)}</div>
-        <div class="forum-row-meta">${avatarHTML(p)}<span class="frm-name">${esc(p.display_name || p.username || 'usuario')}</span><span class="frm-dot">·</span><span>${timeAgo(t.last_activity_at)}</span></div>
+        <div class="forum-row-title">${t.pinned ? '<span class="forum-pin"><svg fill="none" stroke="currentColor"><use href="#i-pin"/></svg></span>' : ''}${esc(t.title)}</div>
+        <div class="forum-row-meta"><span class="forum-cat">${esc(forumCatLabel(t.category))}</span><span class="frm-dot">·</span><span class="frm-name">${esc(p.display_name || p.username || 'usuario')}</span><span class="frm-dot">·</span><span>${timeAgo(t.last_activity_at)}</span></div>
       </div>
-      <div class="forum-row-stats"><span><svg fill="none" stroke="currentColor"><use href="#i-comment"/></svg> ${t.reply_count || 0}</span>${nAtt ? `<span><svg fill="none" stroke="currentColor"><use href="#i-paperclip"/></svg> ${nAtt}</span>` : ''}</div>
-    </button>`);
-  row.onclick = () => openThread(t.id);
+      <div class="forum-row-stats"><span><svg fill="none" stroke="currentColor"><use href="#i-comment"/></svg> ${t.reply_count || 0}</span><span title="Vistas">👁 ${t.views || 0}</span>${nAtt ? `<span><svg fill="none" stroke="currentColor"><use href="#i-paperclip"/></svg> ${nAtt}</span>` : ''}</div>
+    </div>`);
+  row.onclick = (e) => { if (e.target.closest('.fvote')) return; openThread(t.id); };
+  const vb = row.querySelector('.fvote'); vb.onclick = (e) => { e.stopPropagation(); toggleForumVote('thread', t.id, vb); };
   return row;
+}
+async function toggleForumVote(target, id, btn) {
+  if (btn._busy) return; btn._busy = true;
+  const voted = btn.classList.contains('on');
+  const b = btn.querySelector('b'); const n = parseInt(b.textContent, 10) || 0;
+  btn.classList.toggle('on', !voted); b.textContent = voted ? Math.max(0, n - 1) : n + 1;
+  try {
+    if (voted) await sb.from('forum_votes').delete().eq('user_id', state.user.id).eq('target', target).eq('target_id', id);
+    else await sb.from('forum_votes').insert({ user_id: state.user.id, target, target_id: id });
+  } catch (_) { btn.classList.toggle('on', voted); b.textContent = n; }
+  finally { btn._busy = false; }
+}
+function editThread(t) {
+  const m = openModal(`
+    <div class="modal-head"><h3>Editar tema</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Título</label><input type="text" id="etTitle" maxlength="140" value="${esc(t.title)}" /></div>
+      <div class="field"><label>Categoría</label><select id="etCat" class="up-select">${FORUM_CATS.map(c => `<option value="${c.id}" ${t.category === c.id ? 'selected' : ''}>${c.label}</option>`).join('')}</select></div>
+      <div class="field"><label>Mensaje</label><textarea id="etBody" maxlength="5000">${esc(t.body || '')}</textarea></div>
+      <button class="btn primary" id="etSave">Guardar</button><div class="auth-msg" id="etMsg"></div>
+    </div>`);
+  m.querySelector('#etSave').onclick = async () => {
+    const title = m.querySelector('#etTitle').value.trim(); if (!title) return;
+    const { error } = await sb.from('forum_threads').update({ title, category: m.querySelector('#etCat').value, body: m.querySelector('#etBody').value.trim(), edited_at: new Date().toISOString() }).eq('id', t.id);
+    if (error) { m.querySelector('#etMsg').className = 'auth-msg error'; m.querySelector('#etMsg').textContent = 'No se pudo guardar.'; return; }
+    m.remove(); toast('Tema actualizado'); openThread(t.id);
+  };
+}
+function editReply(r, row) {
+  const m = openModal(`
+    <div class="modal-head"><h3>Editar respuesta</h3><button class="close">&times;</button></div>
+    <div class="modal-body"><div class="field"><textarea id="erBody" maxlength="3000">${esc(r.body || '')}</textarea></div><button class="btn primary" id="erSave">Guardar</button></div>`);
+  m.querySelector('#erSave').onclick = async () => {
+    const body = m.querySelector('#erBody').value.trim();
+    const { error } = await sb.from('forum_replies').update({ body, edited_at: new Date().toISOString() }).eq('id', r.id);
+    if (error) { toast('No se pudo guardar'); return; }
+    r.body = body; const bodyEl = row.querySelector('.fr-body'); if (bodyEl) bodyEl.innerHTML = forumText(body); else if (body) row.querySelector('.fr-head').insertAdjacentHTML('afterend', `<div class="fr-body">${forumText(body)}</div>`);
+    m.remove(); toast('Respuesta actualizada');
+  };
 }
 
 // sube archivos del foro al bucket público "tracks" (igual que la tienda)
@@ -4283,6 +4360,7 @@ function openNewThread() {
     <div class="modal-head"><h3>Nuevo tema</h3><button class="close">&times;</button></div>
     <div class="modal-body">
       <div class="field"><label>Título</label><input type="text" id="ntTitle" maxlength="140" placeholder="¿De qué quieres hablar?" /></div>
+      <div class="field"><label>Categoría</label><select id="ntCat" class="up-select">${FORUM_CATS.map(c => `<option value="${c.id}">${c.label}</option>`).join('')}</select></div>
       <div class="field"><label>Mensaje</label><textarea id="ntBody" maxlength="5000" placeholder="Escribe lo que quieras… (opcional si adjuntas archivos)"></textarea></div>
       <div class="field"><label>Archivos <span style="color:var(--ink-faint);font-weight:400">(imágenes, audio, vídeo, lo que sea)</span></label>
         <div class="dropzone" id="ntDz"><svg fill="none"><use href="#i-paperclip"/></svg><div>Arrastra archivos o haz clic</div></div>
@@ -4310,7 +4388,8 @@ function openNewThread() {
     try {
       const attachments = files.length ? await uploadForumFiles(files, p => fill.style.width = (10 + p * 70) + '%') : [];
       fill.style.width = '92%';
-      const { data, error } = await sb.from('forum_threads').insert({ user_id: state.user.id, title, body, attachments }).select().single();
+      const category = m.querySelector('#ntCat').value || 'general';
+      const { data, error } = await sb.from('forum_threads').insert({ user_id: state.user.id, title, body, category, attachments }).select().single();
       if (error) throw error;
       fill.style.width = '100%'; toast('Tema publicado 🎉'); m.remove(); openThread(data.id);
     } catch (err) { console.error(err); msg.className = 'auth-msg error'; msg.textContent = 'Error: ' + (err.message || err); btn.disabled = false; }
@@ -4319,19 +4398,29 @@ function openNewThread() {
 
 async function openThread(id) {
   const main = $('main'); main.innerHTML = `<div class="loading"><div class="spinner"></div></div>`;
+  try { sb.rpc('forum_bump_views', { p_id: id }); } catch (_) {}
   const { data: t } = await sb.from('forum_threads').select('*, profiles:user_id(id,username,display_name,avatar_url,theme,verified)').eq('id', id).maybeSingle();
   if (!t) { toast('Tema no encontrado'); switchView('forum'); return; }
   const p = t.profiles || {};
-  const canMod = t.user_id === state.user.id || state.profile.is_admin;
+  const isAdmin = state.profile.is_admin, mineT = t.user_id === state.user.id, canMod = mineT || isAdmin;
+  let votedT = false; try { const { data: v } = await sb.from('forum_votes').select('target_id').eq('user_id', state.user.id).eq('target', 'thread').eq('target_id', id).maybeSingle(); votedT = !!v; } catch (_) {}
   main.innerHTML = `
     <button class="profile-back" id="thBack"><svg fill="none" stroke="currentColor"><use href="#i-chevron-left"/></svg> Foro</button>
     <article class="thread">
-      <h2 class="thread-title">${esc(t.title)}</h2>
-      <div class="thread-byline">${avatarHTML(p)}<button class="th-author">${esc(p.display_name || p.username || 'usuario')}${verifiedBadge(p)}</button><span class="frm-dot">·</span><span>${timeAgo(t.created_at)}</span></div>
+      <div class="thread-top">
+        <button class="fvote big ${votedT ? 'on' : ''}" id="thVote" title="Votar">${UPVOTE_SVG}<b>${t.votes || 0}</b></button>
+        <div class="thread-top-main">
+          <div class="thread-cat"><span class="forum-cat">${esc(forumCatLabel(t.category))}</span>${t.pinned ? '<span class="forum-cat pin">📌 Fijado</span>' : ''}${t.locked ? '<span class="forum-cat lock">🔒 Cerrado</span>' : ''}</div>
+          <h2 class="thread-title">${esc(t.title)}</h2>
+          <div class="thread-byline">${avatarHTML(p)}<button class="th-author">${esc(p.display_name || p.username || 'usuario')}${verifiedBadge(p)}</button><span class="frm-dot">·</span><span>${timeAgo(t.created_at)}${t.edited_at ? ' · editado' : ''}</span><span class="frm-dot">·</span><span>👁 ${t.views || 0}</span></div>
+        </div>
+      </div>
       ${t.body ? `<div class="thread-body">${forumText(t.body)}</div>` : ''}
       ${attachmentsHTML(t.attachments)}
       <div class="thread-tools">
-        ${t.user_id !== state.user.id ? `<button class="btn sm" id="thReport"><svg fill="none" stroke="currentColor"><use href="#i-bell"/></svg> Reportar</button>` : ''}
+        ${mineT ? `<button class="btn sm" id="thEdit"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg> Editar</button>` : ''}
+        ${!mineT ? `<button class="btn sm" id="thReport"><svg fill="none" stroke="currentColor"><use href="#i-bell"/></svg> Reportar</button>` : ''}
+        ${isAdmin ? `<button class="btn sm" id="thPin">${t.pinned ? 'Desfijar' : '📌 Fijar'}</button><button class="btn sm" id="thLock">${t.locked ? 'Reabrir' : '🔒 Cerrar'}</button>` : ''}
         ${canMod ? `<button class="btn sm" id="thDelete"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg> Borrar</button>` : ''}
       </div>
     </article>
@@ -4350,15 +4439,21 @@ async function openThread(id) {
     </form>`}`;
   $('thBack').onclick = () => switchView('forum');
   main.querySelector('.thread-byline .th-author').onclick = () => openProfile(t.user_id);
+  $('thVote').onclick = () => toggleForumVote('thread', t.id, $('thVote'));
+  if ($('thEdit')) $('thEdit').onclick = () => editThread(t);
   if ($('thReport')) $('thReport').onclick = () => openReportModal('forum', t.id, t.user_id, 'este tema del foro');
+  if ($('thPin')) $('thPin').onclick = async () => { await sb.from('forum_threads').update({ pinned: !t.pinned }).eq('id', t.id); openThread(t.id); };
+  if ($('thLock')) $('thLock').onclick = async () => { await sb.from('forum_threads').update({ locked: !t.locked }).eq('id', t.id); openThread(t.id); };
   if ($('thDelete')) $('thDelete').onclick = async () => { if (!confirm('¿Borrar este tema y sus respuestas?')) return; const { error } = await sb.from('forum_threads').delete().eq('id', t.id); if (error) { toast('No se pudo borrar'); return; } toast('Tema borrado'); switchView('forum'); };
 
   // respuestas
   const box = $('threadReplies');
   const { data: reps } = await sb.from('forum_replies').select('*, profiles:user_id(id,username,display_name,avatar_url,theme,verified)').eq('thread_id', t.id).order('created_at');
+  let votedR = new Set();
+  try { if (reps && reps.length) { const { data: vs } = await sb.from('forum_votes').select('target_id').eq('user_id', state.user.id).eq('target', 'reply').in('target_id', reps.map(r => r.id)); votedR = new Set((vs || []).map(v => v.target_id)); } } catch (_) {}
   const rc = $('repCount'); if (rc) rc.textContent = (reps && reps.length) ? `${reps.length} ${reps.length === 1 ? 'respuesta' : 'respuestas'}` : 'Sé el primero en responder';
   box.innerHTML = '';
-  (reps || []).forEach(r => box.appendChild(forumReplyRow(r)));
+  (reps || []).forEach(r => box.appendChild(forumReplyRow(r, votedR.has(r.id))));
 
   if (!t.locked) {
     let rfiles = [];
@@ -4378,7 +4473,7 @@ async function openThread(id) {
         if (error) throw error;
         $('rpBody').value = ''; rfiles = []; $('rpNames').textContent = ''; bar.classList.add('hidden'); fill.style.width = '0%';
         const empty = box.querySelector('.empty'); if (empty) box.innerHTML = '';
-        box.appendChild(forumReplyRow(data));
+        box.appendChild(forumReplyRow(data, false));
         if (rc) rc.textContent = box.querySelectorAll('.forum-reply').length + ' respuestas';
         if (t.user_id !== state.user.id) notifySocial('forum_reply', t.user_id, { thread_id: t.id });
       } catch (err) { console.error(err); toast('Error al responder'); }
@@ -4386,20 +4481,24 @@ async function openThread(id) {
     });
   }
 }
-function forumReplyRow(r) {
+function forumReplyRow(r, voted) {
   const p = r.profiles || {};
-  const canMod = r.user_id === state.user.id || state.profile.is_admin;
+  const mine = r.user_id === state.user.id, canMod = mine || state.profile.is_admin;
   const row = el(`
     <div class="forum-reply" data-id="${esc(r.id)}">
-      <div class="fr-head">${avatarHTML(p)}<button class="th-author">${esc(p.display_name || p.username || 'usuario')}${verifiedBadge(p)}</button><span class="frm-dot">·</span><span>${timeAgo(r.created_at)}</span></div>
+      <div class="fr-head">${avatarHTML(p)}<button class="th-author">${esc(p.display_name || p.username || 'usuario')}${verifiedBadge(p)}</button><span class="frm-dot">·</span><span>${timeAgo(r.created_at)}${r.edited_at ? ' · editado' : ''}</span></div>
       ${r.body ? `<div class="fr-body">${forumText(r.body)}</div>` : ''}
       ${attachmentsHTML(r.attachments)}
       <div class="fr-tools">
-        ${r.user_id !== state.user.id ? `<button class="fr-tool" data-a="report">Reportar</button>` : ''}
+        <button class="fvote sm ${voted ? 'on' : ''}" data-a="vote" title="Votar">${UPVOTE_SVG}<b>${r.votes || 0}</b></button>
+        ${mine ? `<button class="fr-tool" data-a="edit">Editar</button>` : ''}
+        ${!mine ? `<button class="fr-tool" data-a="report">Reportar</button>` : ''}
         ${canMod ? `<button class="fr-tool" data-a="del">Borrar</button>` : ''}
       </div>
     </div>`);
   row.querySelector('.th-author').onclick = () => openProfile(r.user_id);
+  const vb = row.querySelector('[data-a="vote"]'); if (vb) vb.onclick = () => toggleForumVote('reply', r.id, vb);
+  const ed = row.querySelector('[data-a="edit"]'); if (ed) ed.onclick = () => editReply(r, row);
   const rep = row.querySelector('[data-a="report"]'); if (rep) rep.onclick = () => openReportModal('forum_reply', r.id, r.user_id, 'esta respuesta del foro');
   const del = row.querySelector('[data-a="del"]'); if (del) del.onclick = async () => { if (!confirm('¿Borrar esta respuesta?')) return; const { error } = await sb.from('forum_replies').delete().eq('id', r.id); if (error) { toast('No se pudo borrar'); return; } row.remove(); };
   return row;
