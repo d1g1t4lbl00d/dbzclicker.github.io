@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>UnderBro · Story Studio</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap" rel="stylesheet" />
+<style>
+  :root { --bg:#0a0d18; --panel:#11151f; --line:#222838; --ink:#eaf0fb; --ink-soft:#93a0bd; --accent:#3e57fc; --r:14px; }
+  * { box-sizing:border-box; margin:0; padding:0; }
+  body { background:#06070f; color:var(--ink); font-family:'Inter',system-ui,sans-serif; -webkit-font-smoothing:antialiased; }
+  .wrap { display:grid; grid-template-columns: 380px 1fr; gap:24px; max-width:1200px; margin:0 auto; padding:24px; }
+  @media (max-width:880px){ .wrap{ grid-template-columns:1fr; } }
+  h1 { font-size:22px; font-weight:900; letter-spacing:-.02em; display:flex; align-items:center; gap:10px; margin-bottom:4px; }
+  h1 .b { color:#6e8cff; }
+  .sub { color:var(--ink-soft); font-size:13px; margin-bottom:18px; }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:18px; padding:18px; }
+  .field { margin-bottom:14px; }
+  label { display:block; font-size:12px; font-weight:700; color:var(--ink-soft); margin-bottom:6px; text-transform:uppercase; letter-spacing:.03em; }
+  input[type=text], textarea, select { width:100%; background:#0b0e16; border:1px solid var(--line); border-radius:10px; color:var(--ink); font:inherit; font-size:14px; padding:10px 12px; }
+  textarea { min-height:60px; resize:vertical; }
+  .seg { display:flex; gap:6px; background:#0b0e16; border:1px solid var(--line); border-radius:999px; padding:3px; }
+  .seg button { flex:1; border:none; background:none; color:var(--ink-soft); font:inherit; font-weight:700; font-size:13px; padding:8px; border-radius:999px; cursor:pointer; }
+  .seg button.on { background:linear-gradient(120deg,#27a9ff,#6e2df5); color:#fff; }
+  .rows { display:flex; flex-direction:column; gap:10px; }
+  .rowed { background:#0b0e16; border:1px solid var(--line); border-radius:12px; padding:10px; }
+  .rowed .rline { display:flex; gap:8px; margin-bottom:8px; }
+  .rowed .rline:last-child { margin-bottom:0; }
+  .rowed select { flex:none; width:120px; }
+  .rowed input { flex:1; }
+  .rowed .del { flex:none; width:36px; background:#1a1320; border:1px solid #3a2530; color:#e0807a; border-radius:8px; cursor:pointer; font-size:16px; }
+  .addrow { width:100%; margin-top:10px; background:none; border:1px dashed var(--line); color:var(--ink-soft); border-radius:10px; padding:10px; cursor:pointer; font:inherit; font-weight:700; }
+  .btn { width:100%; border:none; border-radius:12px; padding:14px; font:inherit; font-weight:800; font-size:15px; cursor:pointer; }
+  .btn.primary { background:linear-gradient(120deg,#27a9ff,#4060f5 52%,#6e2df5); color:#fff; box-shadow:0 12px 30px rgba(62,87,252,.4); }
+  .btn.ghost { background:#0b0e16; border:1px solid var(--line); color:var(--ink); margin-top:8px; }
+  .previewwrap { position:sticky; top:24px; align-self:start; display:flex; flex-direction:column; align-items:center; gap:12px; }
+  #cv { width:100%; max-width:340px; height:auto; border-radius:24px; box-shadow:0 30px 80px rgba(0,0,0,.6); border:1px solid var(--line); background:#000; }
+  .hint { font-size:12px; color:var(--ink-soft); text-align:center; max-width:340px; }
+  .hide { display:none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div>
+    <h1>UnderBro · Story <span class="b">Studio</span></h1>
+    <div class="sub">Crea historias 1080×1920 con los presets de marca y expórtalas en PNG.</div>
+    <div class="panel">
+      <div class="field"><label>Plantilla</label>
+        <div class="seg" id="presetSeg">
+          <button data-p="list" class="on">Lista (novedades)</button>
+          <button data-p="cover">Portada</button>
+        </div>
+      </div>
+      <div class="field"><label>Etiqueta superior</label><input type="text" id="fEyebrow" value="Novedades" /></div>
+      <div class="field"><label>Título (línea blanca)</label><input type="text" id="fTitle" value="Lo nuevo en" /></div>
+      <div class="field"><label>Título (degradado)</label><input type="text" id="fAccent" value="UnderBro" /></div>
+      <div class="field cover-only hide"><label>Subtítulo</label><textarea id="fSubtitle">La red social de la música underground. Sube tus pistas y conecta con tu escena.</textarea></div>
+
+      <div class="field list-only">
+        <label>Lista</label>
+        <div class="rows" id="rows"></div>
+        <button class="addrow" id="addRow">+ Añadir fila</button>
+      </div>
+
+      <div class="field"><label>Pie · línea grande</label><input type="text" id="fCtaMain" value="underbro.app" /></div>
+      <div class="field"><label>Pie · línea pequeña</label><input type="text" id="fCtaSub" value="Gratis · la red de la música underground" /></div>
+      <div class="field"><label>Texto "desliza" (opcional)</label><input type="text" id="fSwipe" value="Actualiza la app y pruébalo 👇" /></div>
+
+      <button class="btn primary" id="download">⬇ Descargar PNG (1080×1920)</button>
+      <button class="btn ghost" id="copyBtn">Copiar al portapapeles</button>
+    </div>
+  </div>
+
+  <div class="previewwrap">
+    <canvas id="cv" width="1080" height="1920"></canvas>
+    <div class="hint">Vista previa en tiempo real. Al subir la story, pon el sticker de enlace a underbro.app encima del texto de "desliza".</div>
+  </div>
+</div>
+
+<script>
+const W = 1080, H = 1920;
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+
+// ---- iconos (trazo, viewBox 24) ----
+const ICONS = {
+  comment:'<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',
+  headphones:'<path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/>',
+  people:'<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  pin:'<path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/>',
+  bell:'<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
+  music:'<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>',
+  heart:'<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>',
+  play:'<polygon points="6 4 20 12 6 20 6 4"/>',
+  search:'<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>',
+  chart:'<line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>',
+  calendar:'<rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/>',
+  cart:'<circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/>',
+  mic:'<path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/>',
+  upload:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/>',
+  download:'<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>',
+  star:'<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+  cantante:'<path d="M12 2a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M5 10v1a7 7 0 0 0 14 0v-1"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/>',
+  productor:'<rect x="3" y="5" width="18" height="14" rx="2"/><line x1="3" y1="14" x2="21" y2="14"/><line x1="7.5" y1="5" x2="7.5" y2="14"/><line x1="12" y1="5" x2="12" y2="14"/><line x1="16.5" y1="5" x2="16.5" y2="14"/>',
+  manager:'<rect x="2.5" y="7" width="19" height="13" rx="2"/><path d="M8 7V5.5A2.5 2.5 0 0 1 10.5 3h3A2.5 2.5 0 0 1 16 5.5V7"/><line x1="2.5" y1="12.5" x2="21.5" y2="12.5"/>',
+  sala:'<path d="M3 21V9l9-5 9 5v12"/><line x1="2" y1="21" x2="22" y2="21"/><path d="M10 21v-5a2 2 0 0 1 4 0v5"/>',
+};
+const ICON_KEYS = Object.keys(ICONS);
+const iconImgCache = {};
+function iconImage(key) {
+  if (iconImgCache[key]) return iconImgCache[key];
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="#ffffff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[key]||''}</svg>`;
+  const img = new Image(); img.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(svg);
+  const p = new Promise(res => { img.onload = () => res(img); img.onerror = () => res(null); });
+  iconImgCache[key] = p; return p;
+}
+const logoImg = new Image(); logoImg.crossOrigin = 'anonymous'; logoImg.src = '/assets/logo-text.png?v=20260605b';
+const logoReady = new Promise(res => { logoImg.onload = () => res(logoImg); logoImg.onerror = () => res(null); });
+
+// ---- estado ----
+const state = {
+  preset: 'list',
+  eyebrow: 'Novedades',
+  title: 'Lo nuevo en',
+  accent: 'UnderBro',
+  subtitle: 'La red social de la música underground. Sube tus pistas y conecta con tu escena.',
+  rows: [
+    { icon:'comment', label:'Foro de la comunidad', sub:'Temas, archivos, votos y respuestas' },
+    { icon:'headphones', label:'Álbumes y EPs', sub:'Sube varias pistas de una vez' },
+    { icon:'people', label:'Roles de perfil', sub:'Cantante · Productor · Mánager · Sala' },
+    { icon:'pin', label:'Tu ciudad / escena', sub:'Encuentra gente de tu zona' },
+    { icon:'bell', label:'Avisos al momento', sub:'Likes, seguidores y mensajes' },
+  ],
+  ctaMain:'underbro.app',
+  ctaSub:'Gratis · la red de la música underground',
+  swipe:'Actualiza la app y pruébalo 👇',
+};
+
+// ---- helpers de dibujo ----
+function roundRect(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+function wrapLines(text, maxW){ const words=String(text||'').split(/\s+/); const lines=[]; let cur=''; for(const w of words){ const t=cur?cur+' '+w:w; if(ctx.measureText(t).width>maxW && cur){ lines.push(cur); cur=w; } else cur=t; } if(cur)lines.push(cur); return lines; }
+
+async function render() {
+  const PAD = 92;
+  // fondo base
+  let g = ctx.createLinearGradient(0,0,0,H); g.addColorStop(0,'#080a16'); g.addColorStop(.64,'#06070f'); g.addColorStop(1,'#04050b');
+  ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+  // glows
+  let rg = ctx.createRadialGradient(W*0.82, -40, 0, W*0.82, -40, 760); rg.addColorStop(0,'rgba(110,45,245,.5)'); rg.addColorStop(1,'rgba(110,45,245,0)');
+  ctx.fillStyle = rg; ctx.fillRect(0,0,W,H);
+  rg = ctx.createRadialGradient(60, H*0.16, 0, 60, H*0.16, 700); rg.addColorStop(0,'rgba(39,169,255,.3)'); rg.addColorStop(1,'rgba(39,169,255,0)');
+  ctx.fillStyle = rg; ctx.fillRect(0,0,W,H);
+
+  // logo
+  const logo = await logoReady;
+  if (logo) { const lh = 54, lw = logo.width * (lh/logo.height); ctx.drawImage(logo, PAD, 150, lw, lh); }
+
+  let y = 250;
+  // etiqueta superior
+  if (state.eyebrow.trim()) {
+    ctx.font = '800 26px Inter'; const tw = ctx.measureText(state.eyebrow.toUpperCase()).width;
+    const pw = tw + 52, ph = 56;
+    ctx.fillStyle = 'rgba(39,140,255,.14)'; ctx.strokeStyle = 'rgba(80,150,255,.34)'; ctx.lineWidth = 2;
+    roundRect(PAD, y, pw, ph, 28); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#8fd0ff'; ctx.textBaseline = 'middle'; ctx.textAlign = 'left';
+    ctx.fillText(state.eyebrow.toUpperCase(), PAD+26, y+ph/2+1);
+    y += ph + 28;
+  }
+
+  // título
+  ctx.textBaseline = 'top'; ctx.textAlign = 'left';
+  const maxW = W - PAD*2; const titleFont = '900 102px Inter'; const lineH = 100;
+  ctx.font = titleFont;
+  ctx.fillStyle = '#ffffff';
+  wrapLines(state.title, maxW).forEach(line => { ctx.fillText(line, PAD, y); y += lineH; });
+  // acento con degradado
+  if (state.accent.trim()) {
+    const grad = ctx.createLinearGradient(PAD, 0, PAD+700, 0); grad.addColorStop(0,'#36b6ff'); grad.addColorStop(.5,'#5a6cff'); grad.addColorStop(1,'#9a52ff');
+    ctx.fillStyle = grad;
+    wrapLines(state.accent, maxW).forEach(line => { ctx.fillText(line, PAD, y); y += lineH; });
+  }
+
+  if (state.preset === 'cover') {
+    y += 30;
+    ctx.font = '400 38px Inter'; ctx.fillStyle = '#aeb8d2';
+    wrapLines(state.subtitle, maxW).forEach(line => { ctx.fillText(line, PAD, y); y += 54; });
+  } else {
+    y += 56;
+    for (const row of state.rows) {
+      const sq = 104; const iconImgP = await iconImage(row.icon);
+      const sg = ctx.createLinearGradient(PAD, y, PAD+sq, y+sq); sg.addColorStop(0,'#27a9ff'); sg.addColorStop(1,'#6e2df5');
+      ctx.fillStyle = sg; roundRect(PAD, y, sq, sq, 28); ctx.fill();
+      if (iconImgP) ctx.drawImage(iconImgP, PAD+(sq-52)/2, y+(sq-52)/2, 52, 52);
+      const tx = PAD + sq + 30;
+      ctx.textBaseline = 'top'; ctx.fillStyle = '#ffffff'; ctx.font = '800 42px Inter';
+      ctx.fillText(row.label, tx, y + 16);
+      ctx.fillStyle = '#aab5d0'; ctx.font = '400 27px Inter';
+      ctx.fillText(row.sub, tx, y + 64);
+      y += sq + 30;
+    }
+  }
+
+  // pie
+  ctx.textAlign = 'center';
+  if (state.swipe.trim()) { ctx.font = '700 26px Inter'; ctx.fillStyle = '#cfe0ff'; ctx.fillText(state.swipe, W/2, H-260); }
+  ctx.font = '900 44px Inter'; ctx.fillStyle = '#ffffff'; ctx.fillText(state.ctaMain, W/2, H-180);
+  ctx.font = '400 27px Inter'; ctx.fillStyle = '#aab5d0'; ctx.fillText(state.ctaSub, W/2, H-120);
+  ctx.textAlign = 'left';
+}
+
+// ---- UI ----
+function renderRowsUI() {
+  const box = document.getElementById('rows'); box.innerHTML = '';
+  state.rows.forEach((row, i) => {
+    const d = document.createElement('div'); d.className = 'rowed';
+    d.innerHTML = `
+      <div class="rline">
+        <select data-i="${i}" data-k="icon">${ICON_KEYS.map(k=>`<option value="${k}" ${row.icon===k?'selected':''}>${k}</option>`).join('')}</select>
+        <input type="text" data-i="${i}" data-k="label" value="${row.label.replace(/"/g,'&quot;')}" placeholder="Título" />
+        <button class="del" data-del="${i}" title="Quitar">×</button>
+      </div>
+      <div class="rline"><input type="text" data-i="${i}" data-k="sub" value="${row.sub.replace(/"/g,'&quot;')}" placeholder="Descripción" /></div>`;
+    box.appendChild(d);
+  });
+  box.querySelectorAll('[data-k]').forEach(el => el.oninput = el.onchange = () => { state.rows[+el.dataset.i][el.dataset.k] = el.value; schedule(); });
+  box.querySelectorAll('[data-del]').forEach(b => b.onclick = () => { state.rows.splice(+b.dataset.del,1); renderRowsUI(); schedule(); });
+}
+document.getElementById('addRow').onclick = () => { state.rows.push({ icon:'star', label:'Nueva función', sub:'Descripción' }); renderRowsUI(); schedule(); };
+
+const bind = (id, key) => { const el = document.getElementById(id); el.oninput = () => { state[key] = el.value; schedule(); }; };
+bind('fEyebrow','eyebrow'); bind('fTitle','title'); bind('fAccent','accent'); bind('fSubtitle','subtitle');
+bind('fCtaMain','ctaMain'); bind('fCtaSub','ctaSub'); bind('fSwipe','swipe');
+
+document.getElementById('presetSeg').querySelectorAll('button').forEach(b => b.onclick = () => {
+  state.preset = b.dataset.p;
+  document.getElementById('presetSeg').querySelectorAll('button').forEach(x => x.classList.toggle('on', x===b));
+  document.querySelectorAll('.list-only').forEach(e => e.classList.toggle('hide', state.preset!=='list'));
+  document.querySelectorAll('.cover-only').forEach(e => e.classList.toggle('hide', state.preset!=='cover'));
+  schedule();
+});
+
+let raf = 0;
+function schedule(){ if (raf) return; raf = requestAnimationFrame(async () => { raf = 0; await render(); }); }
+
+document.getElementById('download').onclick = () => {
+  cv.toBlob(blob => { const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'underbro-story.png'; a.click(); setTimeout(()=>URL.revokeObjectURL(a.href), 2000); }, 'image/png');
+};
+document.getElementById('copyBtn').onclick = async () => {
+  try { cv.toBlob(async blob => { await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); alert('Copiada al portapapeles ✓'); }, 'image/png'); }
+  catch (e) { alert('Tu navegador no permite copiar imágenes; usa Descargar.'); }
+};
+
+// init
+renderRowsUI();
+document.fonts.ready.then(() => Promise.all([
+  document.fonts.load('900 102px Inter'), document.fonts.load('800 42px Inter'), document.fonts.load('400 27px Inter'), document.fonts.load('800 26px Inter')
+])).then(schedule);
+setTimeout(schedule, 600);
+</script>
+</body>
+</html>
