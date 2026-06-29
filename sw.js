@@ -38,16 +38,19 @@ self.addEventListener('notificationclick', (event) => {
   const action = event.action; // 'accept' | 'decline' | '' (toque en el cuerpo)
   event.notification.close();
   const ucall = isCall ? (action === 'decline' ? 'decline' : 'accept') : '';
+  const url = isCall ? ('/?ucall=' + ucall) : (data.url || '/');
   event.waitUntil((async () => {
     const all = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const c of all) {
       if ('focus' in c) {
         await c.focus();
+        // la app ya estaba abierta: dile a qué pantalla ir
         if (isCall) c.postMessage({ type: 'callAction', action: ucall, from: data.from || '' });
+        else c.postMessage({ type: 'notifOpen', url });
         return;
       }
     }
-    const url = isCall ? ('/?ucall=' + ucall) : (data.url || '/');
+    // no había ninguna ventana: abre la app directamente en el destino
     if (self.clients.openWindow) return self.clients.openWindow(url);
   })());
 });

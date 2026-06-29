@@ -2900,10 +2900,29 @@ function shareToChatPicker(t) {
   }), 'Pista enviada');
 }
 // abrir una pista compartida por enlace (?track=ID)
+// Enruta a la pantalla de una notificación (?go=...). Devuelve true si gestionó algo.
+function routeGo(params) {
+  const go = params.get('go');
+  if (!go) return false;
+  try {
+    if (go === 'notifs') switchView('notifications');
+    else if (go === 'forum') switchView('forum');
+    else if (go === 'thread' && params.get('id')) openThread(params.get('id'));
+    else if (go === 'chat' && params.get('c')) openDM(params.get('c'));
+    else return false;
+  } catch (_) { return false; }
+  return true;
+}
+// Llamada desde el service worker cuando la app ya estaba abierta y tocas la notificación.
+function routeNotifUrl(url) {
+  try { const u = new URL(url, location.origin); routeGo(u.searchParams); } catch (_) {}
+}
+
 async function handleDeepLink() {
   const params = new URLSearchParams(location.search);
   const pay = params.get('pay');
   if (pay) { history.replaceState(null, '', location.pathname); handlePayReturn(pay, params.get('sid')); return; }
+  if (routeGo(params)) { history.replaceState(null, '', location.pathname); return; }
   const trackId = params.get('track');
   const postId = params.get('post');
   const playlistId = params.get('playlist');
@@ -9459,6 +9478,7 @@ function initCalls() {
       navigator.serviceWorker.addEventListener('message', (e) => {
         if (e.origin && e.origin !== location.origin) return;   // solo mensajes del propio SW
         if (e.data && e.data.type === 'callAction' && (e.data.action === 'accept' || e.data.action === 'decline')) { setAutoCallAction(e.data.action); applyAutoCallAction(); }
+        else if (e.data && e.data.type === 'notifOpen' && e.data.url) { routeNotifUrl(e.data.url); }
       });
     }
     callSignalCatchUp();
