@@ -7,6 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800;900&display=swap" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script src="/js/config.js"></script>
 <style>
   :root { --bg:#0a0d18; --panel:#11151f; --line:#222838; --ink:#eaf0fb; --ink-soft:#93a0bd; --accent:#3e57fc; --r:14px; }
   * { box-sizing:border-box; margin:0; padding:0; }
@@ -39,9 +41,15 @@
   #cv { width:100%; max-width:340px; height:auto; border-radius:24px; box-shadow:0 30px 80px rgba(0,0,0,.6); border:1px solid var(--line); background:#000; }
   .hint { font-size:12px; color:var(--ink-soft); text-align:center; max-width:340px; }
   .hide { display:none; }
+  .wrap { display:none; }
+  #gate { position:fixed; inset:0; z-index:50; display:grid; place-items:center; background:#06070f; color:#eaf0fb; text-align:center; padding:24px; }
+  .gate-box h2 { font-size:24px; font-weight:900; margin-bottom:10px; }
+  .gate-box p { color:#93a0bd; margin-bottom:18px; }
+  .gate-box a { display:inline-block; background:linear-gradient(120deg,#27a9ff,#6e2df5); color:#fff; text-decoration:none; font-weight:800; padding:12px 22px; border-radius:999px; }
 </style>
 </head>
 <body>
+<div id="gate">Comprobando acceso…</div>
 <div class="wrap">
   <div>
     <h1>UnderBro · Story <span class="b">Studio</span></h1>
@@ -252,12 +260,34 @@ document.getElementById('copyBtn').onclick = async () => {
   catch (e) { alert('Tu navegador no permite copiar imágenes; usa Descargar.'); }
 };
 
-// init
+// ---- candado de administrador ----
+const _cfg = window.UNDERBRO_CONFIG || {};
+const sbc = (window.supabase && _cfg.SUPABASE_URL) ? window.supabase.createClient(_cfg.SUPABASE_URL, _cfg.SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } }) : null;
+async function isAdmin() {
+  if (!sbc) return false;
+  try {
+    const { data: { session } } = await sbc.auth.getSession();
+    if (!session) return false;
+    const { data } = await sbc.from('profiles').select('is_admin').eq('id', session.user.id).maybeSingle();
+    return !!(data && data.is_admin);
+  } catch (_) { return false; }
+}
+function showLocked() {
+  const w = document.querySelector('.wrap'); if (w) w.remove();
+  document.getElementById('gate').innerHTML = '<div class="gate-box"><h2>🔒 Solo administradores</h2><p>Inicia sesión como administrador en UnderBro para usar el Story Studio.</p><a href="/">Ir a UnderBro</a></div>';
+}
+
+// init (solo si eres admin)
 renderRowsUI();
-document.fonts.ready.then(() => Promise.all([
-  document.fonts.load('900 102px Inter'), document.fonts.load('800 42px Inter'), document.fonts.load('400 27px Inter'), document.fonts.load('800 26px Inter')
-])).then(schedule);
-setTimeout(schedule, 600);
+isAdmin().then(ok => {
+  if (!ok) { showLocked(); return; }
+  document.getElementById('gate').remove();
+  document.querySelector('.wrap').style.display = 'grid';
+  document.fonts.ready.then(() => Promise.all([
+    document.fonts.load('900 102px Inter'), document.fonts.load('800 42px Inter'), document.fonts.load('400 27px Inter'), document.fonts.load('800 26px Inter')
+  ])).then(schedule);
+  setTimeout(schedule, 600);
+});
 </script>
 </body>
 </html>

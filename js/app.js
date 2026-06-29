@@ -9057,6 +9057,7 @@ function renderSettings() {
       <div class="field"><label>Privacidad y seguridad</label>
         <button class="btn" id="manageBlocks" style="width:100%"><svg fill="none" stroke="currentColor"><use href="#i-people"/></svg> Cuentas bloqueadas</button>
         ${p.is_admin ? `<button class="btn" id="modReports" style="width:100%;margin-top:8px"><svg fill="none" stroke="currentColor"><use href="#i-bell"/></svg> Moderación · Reportes</button>` : ''}
+        ${p.is_admin ? `<button class="btn" id="storyStudio" style="width:100%;margin-top:8px"><svg fill="none" stroke="currentColor"><use href="#i-image"/></svg> Story Studio (crear historias)</button>` : ''}
         <div class="sub" style="margin-top:6px">Gestiona a quién has bloqueado${p.is_admin ? ' y revisa los reportes de la comunidad.' : '.'}</div>
       </div>
       <hr style="border:none;border-top:1px solid var(--line-soft);margin:20px 0" />
@@ -9077,6 +9078,7 @@ function renderSettings() {
   $('policyLink').onclick = showPrivacyPolicy;
   $('manageBlocks').onclick = openBlockedList;
   if ($('modReports')) $('modReports').onclick = openReportsAdmin;
+  if ($('storyStudio')) $('storyStudio').onclick = () => window.open('/studio', '_blank');
   const themeBtn = $('setThemeBtn');
   const paintThemeBtn = () => { themeBtn.innerHTML = currentTheme() === 'dark' ? '☀️ Cambiar a tema claro' : '🌙 Cambiar a tema oscuro'; };
   paintThemeBtn();
