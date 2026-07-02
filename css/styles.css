@@ -3956,9 +3956,17 @@ img.ub-imgin { animation: ubImgIn .4s ease; }
    ===================================================================== */
 
 /* FIX: con música sonando, la sidebar deja hueco al reproductor fijo
-   (antes el último ítem —Ajustes— quedaba tapado y sin scroll posible) */
+   (antes el último ítem —Ajustes— quedaba tapado y sin scroll posible).
+   El segundo selector gana en especificidad al modo rail plegado. */
 @media (min-width: 721px) {
-  body.has-player .sidebar { padding-bottom: calc(var(--player-h) + 16px); }
+  body.has-player .sidebar,
+  body.has-player .app.side-collapsed > .sidebar { padding-bottom: calc(var(--player-h) + 16px); }
+}
+
+/* rail expandido con hover: scrollbar fina visible (en plegado sigue oculta) */
+@media (min-width: 1025px) {
+  .app.side-collapsed > .sidebar:hover { scrollbar-width: thin; }
+  .app.side-collapsed > .sidebar:hover::-webkit-scrollbar { width: 8px !important; display: block !important; }
 }
 
 @media (min-width: 1025px) {
