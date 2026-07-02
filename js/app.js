@@ -527,7 +527,7 @@ document.addEventListener('load', (e) => {
 }, true);
 
 const TOUR_STEPS = [
-  { t: ['#feedTabs'], title: 'Tu feed 🎧', text: 'Cambia entre <b>Following</b>, <b>Trending</b> y <b>New</b> para descubrir música de la comunidad.' },
+  { t: ['#feedTabs'], title: 'Tu feed 🎧', text: 'Cambia entre <b>Siguiendo</b>, <b>Tendencias</b> y <b>Nuevo</b> para descubrir música de la comunidad.' },
   { t: ['#btnSearchToggle', '#searchInput'], title: 'Buscar 🔎', text: 'Encuentra artistas, pistas y gente al instante.' },
   { t: ['#menuToggle', '#btnUpload'], title: 'Menú y Subir ⬆️', text: 'Aquí abres el menú para <b>Subir</b> tu música y entrar en Radio, Beats, Eventos, Fotos y tu biblioteca.' },
   { t: ['#btnMessages'], title: 'Chats 💬', text: 'Habla por privado con otros bros.' },
@@ -1031,7 +1031,7 @@ function feedSpec(view, tab) {
     return { key: 'following', fetch: () => fetchFollowingTracks(), head: { title: 'Following', sub: 'Pistas de gente que sigues' } };
   }
   if (view === 'feed-trending') return { key: 'trending', fetch: () => fetchTrending(), head: { title: 'Trending', sub: 'Lo que está pegando estos días' } };
-  if (view === 'all') return { key: 'all', fetch: () => fetchTracks({ order: 'created_at' }), head: { title: 'All Tracks', sub: 'Toda la biblioteca' } };
+  if (view === 'all') return { key: 'all', fetch: () => fetchTracks({ order: 'created_at' }), head: { title: 'Todas las pistas', sub: 'Toda la biblioteca' } };
   if (view === 'favorites') return { key: 'favorites', fetch: () => fetchFavorites(), head: { title: 'Favorites', sub: 'Tus pistas favoritas' } };
   if (view === 'mytracks') return { key: 'mytracks', fetch: () => fetchTracks({ order: 'created_at', userId: state.user.id }), head: { title: 'My Uploads', sub: 'Pistas que has subido' } };
   if (view === 'downloads') return { key: 'downloads', fetch: () => fetchByIds([...state.downloads]), head: { title: 'Downloads', sub: 'Pistas que descargaste' } };
@@ -9223,7 +9223,7 @@ async function fetchNotifications() {
 }
 async function renderNotifications() {
   setActiveNav('notifications');
-  $('main').innerHTML = `<div class="main-head"><div><h2>Notifications</h2><div class="sub">Actividad sobre ti y tus pistas</div></div></div><div id="notifList" class="loading"><div class="spinner"></div></div>`;
+  $('main').innerHTML = `<div class="main-head"><div><h2>Notificaciones</h2><div class="sub">Actividad sobre ti y tus pistas</div></div></div><div id="notifList" class="loading"><div class="spinner"></div></div>`;
   const items = await fetchNotifications();
   localStorage.setItem('ub_notif_seen', String(Date.now()));
   $('notifBadge').classList.add('hidden');

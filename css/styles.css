@@ -294,7 +294,7 @@ img { display: block; }
 .topbar-logo:hover { opacity: .78; }
 /* en escritorio el logo ocupa el ancho del menú lateral, así las pestañas
    (Following/Trending/New) quedan alineadas sobre la feed, como antes */
-@media (min-width: 99999px) {
+@media (min-width: 721px) {
   .topbar-logo { display: block; font-size: 24px; flex: none; box-sizing: border-box; width: max(calc(var(--col-side) - 34px), 110px); transition: width .3s var(--ease), opacity .15s var(--ease); }
 }
 .brand {
@@ -395,7 +395,7 @@ img { display: block; }
 .feed-list.compact .track .act { padding: 5px 7px; }
 .feed-list.compact .play-lg { width: 46px; height: 46px; }
 .feed-list.compact .play-lg svg { width: 17px; height: 17px; }
-@media (max-width: 99999px) { .feed-list.compact .track .wave { height: 26px; } }
+@media (max-width: 720px) { .feed-list.compact .track .wave { height: 26px; } }
 .feed-list .track:nth-child(1){animation-delay:.02s}.feed-list .track:nth-child(2){animation-delay:.06s}
 .feed-list .track:nth-child(3){animation-delay:.10s}.feed-list .track:nth-child(4){animation-delay:.14s}
 .feed-list .track:nth-child(5){animation-delay:.18s}.feed-list .track:nth-child(6){animation-delay:.22s}
@@ -1010,7 +1010,7 @@ body.has-player .right { padding-bottom: var(--player-h); }
 .convo .c-unread { width: 10px; height: 10px; border-radius: 50%; background: var(--blue-deep); flex-shrink: 0; }
 
 .mail-btn { position: relative; }
-@media (max-width: 99999px) { .mail-btn { display: none; } }
+@media (max-width: 720px) { .mail-btn { display: none; } }
 
 /* banner de cookies */
 .cookie-banner {
@@ -1023,7 +1023,7 @@ body.has-player .right { padding-bottom: var(--player-h); }
 .cookie-banner .ck-text { font-size: 12.8px; color: var(--ink-2); line-height: 1.45; flex: 1; }
 .cookie-banner .ck-text a { color: var(--blue-deep); font-weight: 650; cursor: pointer; text-decoration: underline; }
 .cookie-banner .ck-actions { display: flex; gap: 8px; flex-shrink: 0; }
-@media (max-width: 99999px) {
+@media (max-width: 720px) {
   .cookie-banner { flex-direction: column; align-items: stretch; bottom: 10px; gap: 10px; }
   .cookie-banner .ck-actions .btn { flex: 1; }
 }
@@ -1424,7 +1424,7 @@ body.has-player .right { padding-bottom: var(--player-h); }
 .modal-body .field input[data-su], .modal-body .field input[data-sf] { width: 100%; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 10px; background: var(--panel-2); }
 .profile-head .pactions { display: flex; flex-direction: row; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 16px auto 0; min-width: 0; max-width: 480px; }
 .profile-head .pactions .btn { justify-content: center; min-width: 140px; flex: 0 1 auto; }
-@media (max-width: 99999px) {
+@media (max-width: 720px) {
   .profile-cover { height: 150px; }
   .profile-head { margin-top: -56px; padding-left: 12px; padding-right: 12px; }
   .profile-head .avatar { width: 104px; height: 104px; font-size: 36px; }
@@ -1436,7 +1436,7 @@ body.has-player .right { padding-bottom: var(--player-h); }
 
 /* ---- perfil personalizable ---- */
 .profile-view { min-height: calc(100dvh - var(--topbar-h)); margin: -22px -26px calc(-1 * (var(--player-h) + 30px)); padding: 22px 26px calc(var(--player-h) + 30px); }
-@media (max-width: 99999px) { .profile-view { min-height: calc(100dvh - var(--topbar-h) - 14px); margin: -14px -13px calc(-1 * (var(--nav-h) + 126px + env(safe-area-inset-bottom,0px))); padding: 14px 13px calc(var(--nav-h) + 126px + env(safe-area-inset-bottom,0px)); } }
+@media (max-width: 720px) { .profile-view { min-height: calc(100dvh - var(--topbar-h) - 14px); margin: -14px -13px calc(-1 * (var(--nav-h) + 126px + env(safe-area-inset-bottom,0px))); padding: 14px 13px calc(var(--nav-h) + 126px + env(safe-area-inset-bottom,0px)); } }
 /* (banner antiguo sustituido por .profile-cover) */
 .profile-head .btn.primary { background: var(--accent, var(--blue-2)); border-color: transparent; }
 .profile-links { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; justify-content: center; }
@@ -1666,18 +1666,18 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
 .menu-toggle { display: none; }
 .drawer-only { display: none; }
 .search-toggle { display: none; }
-@media (max-width: 99999px) { .drawer-only { display: grid; } }
-@media (max-width: 99999px) { .drawer-only { display: none; } }
+@media (max-width: 1024px) { .drawer-only { display: grid; } }
+@media (max-width: 720px) { .drawer-only { display: none; } }
 /* botones de plegado: solo en escritorio (3 columnas) */
-@media (min-width: 99999px) { .topbar .desk-only { display: grid; } }
+@media (min-width: 1025px) { .topbar .desk-only { display: grid; } }
 .app.right-collapsed #toggleChatBtn { background: var(--blue); color: #fff; }
 .app.right-collapsed #toggleChatBtn svg { stroke: #fff; }
 
 /* ===================================================================== RESPONSIVE */
-@media (max-width: 99999px) {
+@media (max-width: 1180px) {
   .app { --col-side: 220px; --col-right: 280px; }
 }
-@media (max-width: 99999px) {
+@media (max-width: 1024px) {
   .app { grid-template-columns: 216px 1fr; grid-template-areas: "topbar topbar" "side main"; }
   .right {
     position: fixed; top: 0; right: 0; bottom: 0; width: min(340px, 86vw); z-index: 60;
@@ -1688,7 +1688,7 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
   .drawer-backdrop { position: fixed; inset: 0; background: rgba(40,48,70,.4); backdrop-filter: blur(2px); z-index: 55; opacity: 0; pointer-events: none; transition: opacity .25s; }
   .drawer-backdrop.show { display: block; opacity: 1; pointer-events: auto; }
 }
-@media (max-width: 99999px) {
+@media (max-width: 720px) {
   /* inputs a 16px: evita el zoom automático de iOS al enfocar */
   input, textarea, select { font-size: 16px; }
 
@@ -2297,7 +2297,7 @@ textarea.pk-in { resize: vertical; line-height: 1.5; }
 .p-close:active { transform: scale(.9); }
 .p-close svg { width: 18px; height: 18px; stroke: var(--ink-soft); }
 :root[data-theme="dark"] .p-close:hover { background: rgba(255,255,255,.1); }
-@media (max-width: 99999px) { .player .p-close { width: 40px; height: 40px; } .player .p-close svg { width: 20px; height: 20px; } }
+@media (max-width: 720px) { .player .p-close { width: 40px; height: 40px; } .player .p-close svg { width: 20px; height: 20px; } }
 
 /* deslizar el reproductor hacia abajo para cerrarlo */
 .player { touch-action: none; }
@@ -2382,7 +2382,7 @@ textarea.pk-in { resize: vertical; line-height: 1.5; }
 .np-times #npDur { cursor: pointer; }
 
 /* --- móvil: anterior/siguiente también en el mini-player --- */
-@media (max-width: 99999px) {
+@media (max-width: 720px) {
   .player { gap: 9px; }
   .player .controls { gap: 5px; }
   .player .controls #pPrev, .player .controls #pNext { display: grid !important; width: 33px; height: 33px; border: none; background: transparent; box-shadow: none; }
@@ -2513,7 +2513,7 @@ body.q-dragging .npq-list { overflow: hidden; }
 .adm-tabs button.active { background: var(--panel); color: var(--blue-deep); box-shadow: var(--sh-1); }
 .admin-card textarea, .admin-card #admBcTitle { width: 100%; padding: 10px 14px; border: 1.5px solid var(--line); border-radius: 12px; background: var(--panel-2); color: var(--ink); margin-bottom: 10px; resize: vertical; }
 .admin-card textarea:focus, .admin-card #admBcTitle:focus { outline: none; border-color: var(--blue); }
-@media (max-width: 99999px) { .admin-grid { grid-template-columns: 1fr; } .admin-card.span2 { grid-column: auto; } .adm-row-acts { width: 100%; justify-content: flex-start; margin-top: 4px; } .adm-row { flex-wrap: wrap; } }
+@media (max-width: 720px) { .admin-grid { grid-template-columns: 1fr; } .admin-card.span2 { grid-column: auto; } .adm-row-acts { width: 100%; justify-content: flex-start; margin-top: 4px; } .adm-row { flex-wrap: wrap; } }
 .adm-badges { display: inline-flex; gap: 4px; }
 .bdgbtn { width: 30px; height: 30px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); color: var(--ink-soft); font-size: 14px; font-weight: 800; cursor: pointer; display: grid; place-items: center; transition: all .15s var(--ease); }
 .bdgbtn.on { background: linear-gradient(180deg,#ffd96b,#f5b829); border-color: #e8a200; color: #5a3b00; box-shadow: 0 2px 8px rgba(245,184,41,.4); }
@@ -2546,7 +2546,7 @@ body.q-dragging .npq-list { overflow: hidden; }
 
 /* ===================== PULIDO v7: pestañas + barra inferior ===================== */
 :root[data-theme="dark"] .tabs button.active { background: var(--panel); color: var(--blue); }
-@media (max-width: 99999px) {
+@media (max-width: 1024px) {
   .bottom-nav button svg { transition: transform .2s var(--ease-spring), stroke .15s; }
   .bottom-nav button.active svg { transform: translateY(-2px) scale(1.06); }
   .bottom-nav button.active::before { content: ""; position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%); width: 16px; height: 3px; border-radius: 3px; background: var(--accent-grad); }
@@ -2603,7 +2603,7 @@ body.q-dragging .npq-list { overflow: hidden; }
 .t-genre { line-height: 1.4; }
 
 /* ===================== sidebar "rail" en escritorio (iconos; menú al pasar el ratón) ===================== */
-@media (min-width: 99999px) {
+@media (min-width: 1025px) {
   .app.side-collapsed { --col-side: 68px; }
   .app.side-collapsed > .sidebar {
     opacity: 1; pointer-events: auto;
@@ -2630,14 +2630,14 @@ body.q-dragging .npq-list { overflow: hidden; }
 }
 
 /* rail: ocultar la barra de scroll (manteniendo el scroll) para que no descuadre los iconos */
-@media (min-width: 99999px) {
+@media (min-width: 1025px) {
   .app.side-collapsed > .sidebar { scrollbar-width: none; }
   .app.side-collapsed > .sidebar::-webkit-scrollbar { width: 0 !important; height: 0 !important; display: none; }
   .app.side-collapsed > .sidebar:not(:hover) { padding-right: 10px; padding-left: 10px; }
 }
 
 /* ===================== arreglos rail: Subir visible + chat derecho como rail ===================== */
-@media (min-width: 99999px) {
+@media (min-width: 1025px) {
   /* botón Subir como círculo de acento bien centrado en el rail izquierdo */
   .app.side-collapsed > .sidebar:not(:hover) .upload-cta { width: 48px; height: 48px; margin: 0 auto 2px; padding: 0; border-radius: 50%; }
   .app.side-collapsed > .sidebar:not(:hover) .upload-cta svg { width: 22px; height: 22px; stroke: #fff; display: block; }
@@ -2672,18 +2672,18 @@ body.q-dragging .npq-list { overflow: hidden; }
 .topbar-upload:hover { box-shadow: var(--sh-blue); transform: translateY(-1px); }
 
 /* FIX móvil/tablet: el "plegado" es solo de escritorio; no ocultar el cajón */
-@media (max-width: 99999px) {
+@media (max-width: 1024px) {
   .app.side-collapsed > .sidebar { opacity: 1 !important; pointer-events: auto !important; }
   .app.right-collapsed > .right { opacity: 1 !important; pointer-events: auto !important; }
 }
 /* cajón móvil: fondo sólido (no translúcido) */
-@media (max-width: 99999px) {
+@media (max-width: 720px) {
   .sidebar { background: var(--panel) !important; backdrop-filter: none; box-shadow: 8px 0 40px rgba(0,0,0,.4); }
   .logo { font-family: var(--font); }
 }
 
 /* FIX móvil: restaurar el scroll del cajón (el plegado de escritorio ponía overflow:hidden) */
-@media (max-width: 99999px) {
+@media (max-width: 1024px) {
   .app.side-collapsed > .sidebar { overflow-y: auto !important; }
   .app.right-collapsed > .right { overflow-y: auto !important; }
 }
@@ -2840,7 +2840,7 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
 /* avatares: anillo interior más fino y limpio */
 :root[data-theme="dark"] .avatar { box-shadow: inset 0 0 0 1px rgba(255,255,255,.07); }
 /* logo del header más nítido (sin gradiente que se ve raro a tamaño pequeño en móvil) */
-@media (max-width: 99999px) {
+@media (max-width: 720px) {
   .topbar-logo.logo { -webkit-text-fill-color: initial; background: none; color: var(--ink); }
   .topbar-logo.logo .u { -webkit-text-fill-color: initial; background: none; color: var(--blue); }
 }
@@ -3952,54 +3952,81 @@ img.ub-imgin { animation: ubImgIn .4s ease; }
 #peopleRoles .role-ic { width: 15px; height: 15px; vertical-align: 0; }
 
 /* =====================================================================
-   ESCRITORIO = MÓVIL CENTRADO
-   La app usa siempre el layout móvil (el que funciona bien) y en
-   pantallas anchas se muestra como una columna tipo teléfono flotante
-   sobre la aurora ambiental. La landing pública conserva su diseño.
+   ESCRITORIO PULIDO — arreglos de solapes/scroll + estética premium
    ===================================================================== */
+
+/* FIX: con música sonando, la sidebar deja hueco al reproductor fijo
+   (antes el último ítem —Ajustes— quedaba tapado y sin scroll posible) */
 @media (min-width: 721px) {
-  /* columna tipo teléfono, flotante y con halo de neón */
-  .app {
-    max-width: 560px;
-    margin: 0 auto;
-    min-height: 100dvh;
-    border-left: 1px solid var(--line);
-    border-right: 1px solid var(--line);
-    box-shadow:
-      0 0 0 1px rgba(255,255,255,.02),
-      0 0 90px rgba(62,87,252,.14),
-      0 0 260px rgba(110,45,245,.10);
-  }
-  /* overlays a pantalla completa → misma columna (idéntico al móvil).
-     Fuera quedan los centrados por transform (toast, cookies, install-pop,
-     duel-pop) y la rueda GTA (usa coordenadas absolutas del viewport). */
-  .now-playing, .dm-screen, .call-screen, .game-screen,
-  .story-viewer, .img-viewer, .bottom-nav {
-    max-width: 560px;
-    margin-left: auto;
-    margin-right: auto;
-    left: 0;
-    right: 0;
-  }
-  /* el mini-reproductor conserva sus márgenes de 12px dentro de la columna */
-  .player { max-width: 536px; margin-left: auto; margin-right: auto; }
-  /* drawers anclados al borde de la columna (y ocultos de verdad al cerrar) */
-  .sidebar {
-    left: max(0px, calc(50% - 280px));
-    visibility: hidden;
-    transition: transform .28s var(--ease), visibility .28s;
-  }
-  .sidebar.open { visibility: visible; }
-  .right {
-    right: max(0px, calc(50% - 280px));
-    visibility: hidden;
-    transition: transform .28s var(--ease), visibility .28s;
-  }
-  .right.open { visibility: visible; }
-  /* scrollbars finos con el acento de la marca */
+  body.has-player .sidebar { padding-bottom: calc(var(--player-h) + 16px); }
+}
+
+@media (min-width: 1025px) {
+  /* ---- scrollbars finos con el acento de la marca ---- */
   * { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--accent) 30%, transparent) transparent; }
   *::-webkit-scrollbar { width: 8px; height: 8px; }
   *::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--accent) 26%, transparent); border-radius: 99px; }
   *::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--accent) 45%, transparent); }
   *::-webkit-scrollbar-track { background: transparent; }
+
+  /* ---- topbar: hairline degradado bajo el cristal ---- */
+  .topbar::after {
+    content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1px;
+    background: linear-gradient(90deg, transparent,
+      color-mix(in srgb, var(--accent) 45%, transparent) 30%,
+      color-mix(in srgb, #9a52ff 45%, transparent) 70%, transparent);
+    opacity: .55; pointer-events: none;
+  }
+
+  /* ---- navegación: hover con desplazamiento y activo con píldora glow ---- */
+  .nav-item { position: relative; transition: background-color .18s var(--ease), color .18s var(--ease), transform .18s var(--ease); }
+  .nav-item:hover { transform: translateX(3px); }
+  .nav-item.active {
+    background: linear-gradient(120deg,
+      color-mix(in srgb, var(--accent) 16%, transparent),
+      color-mix(in srgb, #6e2df5 12%, transparent));
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 22%, transparent),
+                0 4px 18px color-mix(in srgb, var(--accent) 15%, transparent);
+  }
+  .nav-item.active::before {
+    content: ""; position: absolute; left: -14px; top: 22%; bottom: 22%; width: 3px;
+    border-radius: 3px; background: var(--accent-grad);
+    box-shadow: 0 0 12px color-mix(in srgb, var(--accent) 80%, transparent);
+  }
+
+  /* ---- tarjetas: elevación con glow al pasar el ratón ---- */
+  .track, .pl-card, .person, .frm-row, .ev-card, .mkt-card, .ts-card, .forum-reply {
+    transition: transform .18s var(--ease), box-shadow .22s var(--ease), border-color .22s var(--ease);
+  }
+  .track:hover, .pl-card:hover, .person:hover, .frm-row:hover, .ev-card:hover, .mkt-card:hover, .ts-card:hover {
+    transform: translateY(-3px);
+    border-color: color-mix(in srgb, var(--accent) 32%, var(--line));
+    box-shadow: 0 14px 40px rgba(8, 12, 30, .30), 0 4px 18px color-mix(in srgb, var(--accent) 15%, transparent);
+  }
+
+  /* ---- botones primarios: barrido de brillo ---- */
+  .btn.primary { position: relative; overflow: hidden; }
+  .btn.primary::before {
+    content: ""; position: absolute; top: 0; bottom: 0; left: -80%; width: 60%;
+    background: linear-gradient(105deg, transparent, rgba(255,255,255,.26), transparent);
+    transform: skewX(-18deg); transition: left .5s var(--ease); pointer-events: none;
+  }
+  .btn.primary:hover::before { left: 130%; }
+
+  /* ---- reproductor: línea de glow superior ---- */
+  .player::before {
+    content: ""; position: absolute; left: 0; right: 0; top: -1px; height: 1px;
+    background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 60%, transparent), transparent);
+    opacity: .6; pointer-events: none;
+  }
+
+  /* ---- overlays a pantalla completa: contenido centrado y legible ---- */
+  .np-inner { width: min(100%, 640px); margin-left: auto; margin-right: auto; }
+  .dm-screen-head, .dm-thread-wrap, .dm-searchbar, .dm-form { width: min(100%, 900px); margin-left: auto; margin-right: auto; }
+
+  /* ---- foco de teclado con la marca ---- */
+  :focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 70%, transparent); outline-offset: 2px; }
+
+  /* ---- entrada suave del contenido al cambiar de vista ---- */
+  .main-head { animation: fadeUp .32s var(--ease); }
 }
