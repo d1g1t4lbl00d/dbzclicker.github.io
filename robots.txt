@@ -3,5 +3,7 @@ Allow: /
 Disallow: /editor
 Disallow: /editor.html
 Disallow: /api/
+Disallow: /studio
+Disallow: /studio.html
 
 Sitemap: https://underbro.app/sitemap.xml

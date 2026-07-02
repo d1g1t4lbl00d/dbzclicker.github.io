@@ -1,10 +1,29 @@
-/* UnderBro service worker — notificaciones push (mensajes y llamadas).
-   No cachea assets a propósito, para no interferir con el sistema de versiones. */
-self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()));
-// Handler 'fetch' (passthrough) requerido por Chrome para que la web sea INSTALABLE
-// (dispara beforeinstallprompt → instalador nativo). No interceptamos nada.
-self.addEventListener('fetch', () => {});
+/* UnderBro service worker — notificaciones push (mensajes y llamadas) + página offline.
+   No cachea assets a propósito, para no interferir con el sistema de versiones (?v=). */
+const OFFLINE_CACHE = 'ub-offline-v1';
+const OFFLINE_URL = '/offline.html';
+self.addEventListener('install', (event) => {
+  event.waitUntil((async () => {
+    try { const c = await caches.open(OFFLINE_CACHE); await c.add(new Request(OFFLINE_URL, { cache: 'reload' })); } catch (_) {}
+    await self.skipWaiting();
+  })());
+});
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    // limpiar cachés de versiones anteriores
+    const keys = await caches.keys();
+    await Promise.all(keys.filter((k) => k !== OFFLINE_CACHE).map((k) => caches.delete(k)));
+    await self.clients.claim();
+  })());
+});
+// Solo interceptamos NAVEGACIONES (y solo para dar la página offline si falla la red).
+// El handler 'fetch' además hace la web instalable en Chrome (beforeinstallprompt).
+self.addEventListener('fetch', (event) => {
+  if (event.request.mode !== 'navigate') return;   // assets: passthrough total
+  event.respondWith(
+    fetch(event.request).catch(async () => (await caches.match(OFFLINE_URL)) || Response.error())
+  );
+});
 
 self.addEventListener('push', (event) => {
   let d = {};

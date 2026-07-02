@@ -1656,7 +1656,7 @@ async function openMatch(id) {
     const patch = { status: 'done', winner };
     if (winner === g.host) patch.host_wins = (g.host_wins || 0) + 1;
     else if (winner === g.guest) patch.guest_wins = (g.guest_wins || 0) + 1;
-    sb.from('game_matches').update(patch).eq('id', id);
+    sb.from('game_matches').update(patch).eq('id', id).then(() => {}, () => {});   // .then() dispara la petición (supabase-js es lazy)
   }
 
   function onUpdate(g) {
@@ -4260,8 +4260,8 @@ function reactionBarHTML(target, id, map) {
   const m = (map && map[target + ':' + id]) || {};
   return `<div class="fx-bar" data-fxt="${target}" data-fxid="${esc(id)}">${FORUM_EMOJIS.map(e => { const d = m[e]; const on = d && d.mine; const c = d ? d.count : 0; return `<button class="fx ${on ? 'on' : ''} ${c ? '' : 'fx-empty'}" data-e="${e}">${e}${c ? `<span>${c}</span>` : ''}</button>`; }).join('')}</div>`;
 }
-function wireReactions(scope) { scope.querySelectorAll('.fx-bar .fx').forEach(b => { b.onclick = () => toggleReaction(b); }); }
-async function toggleReaction(btn) {
+function wireReactions(scope) { scope.querySelectorAll('.fx-bar .fx').forEach(b => { b.onclick = () => toggleForumReaction(b); }); }
+async function toggleForumReaction(btn) {   // ojo: no llamar toggleReaction — ese nombre lo usa el chat (DM)
   if (btn._busy) return; btn._busy = true;
   const bar = btn.closest('.fx-bar'); const target = bar.dataset.fxt, id = bar.dataset.fxid, emoji = btn.dataset.e;
   const on = btn.classList.contains('on');

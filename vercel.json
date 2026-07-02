@@ -2,48 +2,114 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "cleanUrls": true,
   "rewrites": [
-    { "source": "/google08061c74156461e8.html", "destination": "/api/gverify" },
-    { "source": "/google08061c74156461e8", "destination": "/api/gverify" },
-    { "source": "/", "has": [{ "type": "header", "key": "user-agent", "value": ".*([Bb]ot|[Cc]rawl|[Ss]pider|[Ss]lurp|[Gg]oogle|[Bb]ing|[Yy]andex|[Dd]uck|[Bb]aidu|facebookexternalhit|[Ww]hats[Aa]pp|[Tt]elegram|[Tt]witter|[Ll]inkedin|[Pp]interest|[Dd]iscord|[Aa]pple[Bb]ot|[Ee]mbedly|[Qq]uora|[Ll]ighthouse|[Hh]eadless|[Pp]review).*" }], "destination": "/api/home" },
-    { "source": "/t/:id", "destination": "/api/share?track=:id" },
-    { "source": "/p/:id", "destination": "/api/share?post=:id" },
-    { "source": "/pl/:id", "destination": "/api/share?playlist=:id" },
-    { "source": "/u/:username", "destination": "/api/share?artist=:username" },
-    { "source": "/embed/:id", "destination": "/api/embed?track=:id" },
-    { "source": "/charts", "destination": "/api/charts" },
-    { "source": "/sitemap.xml", "destination": "/api/sitemap" }
+    {
+      "source": "/google08061c74156461e8.html",
+      "destination": "/api/gverify"
+    },
+    {
+      "source": "/google08061c74156461e8",
+      "destination": "/api/gverify"
+    },
+    {
+      "source": "/",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*([Bb]ot|[Cc]rawl|[Ss]pider|[Ss]lurp|[Gg]oogle|[Bb]ing|[Yy]andex|[Dd]uck|[Bb]aidu|facebookexternalhit|[Ww]hats[Aa]pp|[Tt]elegram|[Tt]witter|[Ll]inkedin|[Pp]interest|[Dd]iscord|[Aa]pple[Bb]ot|[Ee]mbedly|[Qq]uora|[Ll]ighthouse|[Hh]eadless|[Pp]review).*"
+        }
+      ],
+      "destination": "/api/home"
+    },
+    {
+      "source": "/t/:id",
+      "destination": "/api/share?track=:id"
+    },
+    {
+      "source": "/p/:id",
+      "destination": "/api/share?post=:id"
+    },
+    {
+      "source": "/pl/:id",
+      "destination": "/api/share?playlist=:id"
+    },
+    {
+      "source": "/u/:username",
+      "destination": "/api/share?artist=:username"
+    },
+    {
+      "source": "/embed/:id",
+      "destination": "/api/embed?track=:id"
+    },
+    {
+      "source": "/charts",
+      "destination": "/api/charts"
+    },
+    {
+      "source": "/sitemap.xml",
+      "destination": "/api/sitemap"
+    }
   ],
   "headers": [
     {
       "source": "/(.*)",
       "headers": [
-        { "key": "X-Content-Type-Options", "value": "nosniff" },
-        { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "Cache-Control", "value": "public, max-age=0, must-revalidate" }
+        {
+          "key": "X-Content-Type-Options",
+          "value": "nosniff"
+        },
+        {
+          "key": "Referrer-Policy",
+          "value": "strict-origin-when-cross-origin"
+        },
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        },
+        {
+          "key": "Strict-Transport-Security",
+          "value": "max-age=63072000; includeSubDomains"
+        },
+        {
+          "key": "Permissions-Policy",
+          "value": "camera=(self), microphone=(self), geolocation=()"
+        }
       ]
     },
     {
       "source": "/assets/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=604800, stale-while-revalidate=86400" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
       ]
     },
     {
       "source": "/css/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=604800, stale-while-revalidate=86400" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
       ]
     },
     {
       "source": "/js/(.*)",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=604800, stale-while-revalidate=86400" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
       ]
     },
     {
       "source": "/icon-(.*).png",
       "headers": [
-        { "key": "Cache-Control", "value": "public, max-age=604800, stale-while-revalidate=86400" }
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
       ]
     }
   ]
