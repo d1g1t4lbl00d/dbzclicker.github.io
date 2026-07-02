@@ -671,6 +671,7 @@ async function onAuthenticated() {
   initPlayer();
   initNowPlaying();
   initChat();
+  renderRightChats();
   initPresence();
   initDM();
   initCalls();
@@ -902,6 +903,8 @@ function bindUI() {
   };
   { const b = $('toggleChatBtn'); if (b) b.onclick = () => { const on = appEl.classList.toggle('right-collapsed'); localStorage.setItem('ub_right_collapsed', on ? '1' : '0'); }; }
   $('chatClose').onclick = () => { const r = rightEl(); if (appEl.classList.contains('right-collapsed')) r.classList.remove('peek'); else closeRightPanel(); };
+  { const b = $('rpCommunity'); if (b) b.onclick = () => { closeRightPanel(); const r = rightEl(); if (r) r.classList.remove('peek'); openCommunityChat(); }; }
+  { const b = $('ccBack'); if (b) b.onclick = closeCommunityChat; }
   // rail de chat (derecha): abrir/cerrar con CLIC (no hover) para no estorbar el scroll
   document.addEventListener('click', (e) => {
     const r = rightEl(); if (!r || !appEl.classList.contains('right-collapsed')) return;
@@ -1787,7 +1790,7 @@ function initSwipeNav() {
   let sx = 0, sy = 0, st = 0, ignore = true, decided = false, horizontal = false, dragging = false, cur = -1;
   const W = () => window.innerWidth;
   const overlayOpen = () =>
-    document.querySelector('.modal-backdrop, .story-viewer, .right.open') ||
+    document.querySelector('.modal-backdrop, .story-viewer, .right.open, .community-chat.open') ||
     (typeof npIsOpen === 'function' && npIsOpen()) ||
     $('dmScreen')?.classList.contains('open') ||
     $('sidebar')?.classList.contains('open');
@@ -1912,6 +1915,7 @@ function ubCloseTopOverlay() {
   const mods = document.querySelectorAll('#modalRoot .modal-backdrop');
   if (mods.length) { mods[mods.length - 1].remove(); return true; }
   if ($('dmScreen') && $('dmScreen').classList.contains('open')) { try { closeDmScreen(); } catch (_) {} return true; }
+  if ($('communityChat') && $('communityChat').classList.contains('open')) { closeCommunityChat(); return true; }
   const right = document.querySelector('.right.open'); if (right) { right.classList.remove('open'); return true; }
   const sb2 = $('sidebar'); if (sb2 && sb2.classList.contains('open')) { sb2.classList.remove('open'); return true; }
   if (typeof npIsOpen === 'function' && npIsOpen()) { closeNowPlaying(); return true; }
@@ -9342,10 +9346,20 @@ function appendChatMsg(m) {
   const canDel = m.user_id === state.user.id || state.profile.is_admin;
   const mine = m.user_id === state.user.id;
   const rep = (!mine && !state.profile.is_admin) ? `<button class="act sm" data-rep-msg style="float:right;padding:0 5px" title="Reportar">⚐</button>` : '';
-  const row = el(`<div class="chat-msg" data-mid="${m.id}"><span class="who" data-uid="${m.user_id}">${esc(m.profiles?.display_name||m.profiles?.username||'anónimo')}</span><span class="when">${timeAgo(m.created_at)}</span>${canDel?`<button class="act sm" data-del-msg style="float:right;padding:0 5px" title="Borrar mensaje">✕</button>`:''}${rep}<p>${linkifyMentions(m.body)}</p></div>`);
+  const row = el(`
+    <div class="chat-msg ${mine ? 'mine' : ''}" data-mid="${m.id}">
+      ${mine ? '' : `<span class="cm-av" data-uid="${m.user_id}">${avatarHTML(m.profiles)}</span>`}
+      <div class="cm-bubble">
+        ${mine ? '' : `<span class="who" data-uid="${m.user_id}">${esc(m.profiles?.display_name||m.profiles?.username||'anónimo')}</span>`}
+        <p>${linkifyMentions(m.body)}</p>
+        <span class="when">${timeAgo(m.created_at)}</span>
+        <span class="cm-acts">${canDel ? `<button data-del-msg title="Borrar mensaje">✕</button>` : ''}${rep ? `<button data-rep-msg title="Reportar">⚐</button>` : ''}</span>
+      </div>
+    </div>`);
   const who = row.querySelector('.who');
-  who.onclick = () => openProfile(m.user_id);
-  who.style.cursor = 'pointer';
+  if (who) { who.onclick = () => openProfile(m.user_id); who.style.cursor = 'pointer'; }
+  const av = row.querySelector('.cm-av');
+  if (av) { av.onclick = () => openProfile(m.user_id); av.style.cursor = 'pointer'; }
   const repBtn = row.querySelector('[data-rep-msg]');
   if (repBtn) repBtn.onclick = () => openReportModal('chat', m.id, m.user_id, 'este mensaje del chat');
   const del = row.querySelector('[data-del-msg]');
@@ -9396,6 +9410,7 @@ function initDM() {
       const msg = payload.new;
       if (isHidden(msg.sender_id)) return; // ignora DMs de usuarios bloqueados
       if (state.hiddenConvos.has(msg.sender_id)) { state.hiddenConvos.delete(msg.sender_id); saveHiddenConvos(); } // un chat oculto reaparece con un mensaje nuevo
+      refreshRightChats();   // el panel de chats recientes refleja el mensaje nuevo
       if (state.dmPeer === msg.sender_id) {
         dmAppendMessage(msg, { scroll: true }); markDmRead(msg.sender_id); dmShowTyping(false);
       } else {
@@ -10746,13 +10761,70 @@ function isDesktopChat() { return matchMedia('(min-width: 1025px)').matches; }
 function openRightPanel() {
   if (isDesktopChat()) { $('app').classList.remove('right-collapsed'); try { localStorage.setItem('ub_right_collapsed', '0'); } catch (_) {} }
   else { const r = rightEl(); if (!r.classList.contains('open')) toggleRight(); }
-  setTimeout(scrollChat, 60);
+  refreshRightChats();
 }
 function closeRightPanel() {
   if (isDesktopChat()) { $('app').classList.add('right-collapsed'); try { localStorage.setItem('ub_right_collapsed', '1'); } catch (_) {} }
   else { const r = rightEl(); r.classList.remove('open'); $('drawerBackdrop')?.classList.remove('show'); }
 }
-function openCommunityChat() { openRightPanel(); }
+function openCommunityChat() {
+  const cc = $('communityChat'); if (!cc) return;
+  cc.classList.add('open');
+  const n = $('ccOnline'); if (n) n.textContent = String((state.online || []).length || 1);
+  setTimeout(scrollChat, 80);
+  setTimeout(() => { try { $('chatInput').focus({ preventScroll: true }); } catch (_) {} }, 320);
+}
+function closeCommunityChat() { $('communityChat')?.classList.remove('open'); }
+
+// ---- panel derecho: tus chats recientes ----
+function rpSnippet(mm) {
+  if (!mm) return '';
+  if (mm.deleted) return '🚫 Mensaje eliminado';
+  if (mm.attachment_url) {
+    if (mm.attachment_type === 'track') return mm.body || '🎵 Pista';
+    const lbl = mm.attachment_type === 'image' ? '📷 Foto' : mm.attachment_type === 'video' ? '🎬 Vídeo' : mm.attachment_type === 'audio' ? '🎙️ Nota de voz' : mm.attachment_type === 'call' ? '📞 Llamada' : '📎 Archivo';
+    return lbl + (mm.body ? ' · ' + mm.body : '');
+  }
+  return mm.body || '';
+}
+async function renderRightChats() {
+  const box = $('rpChats'); if (!box) return;
+  try {
+    const { data } = await sb.from('direct_messages').select('id,sender_id,recipient_id,body,attachment_url,attachment_type,deleted,read,created_at')
+      .or(`sender_id.eq.${state.user.id},recipient_id.eq.${state.user.id}`)
+      .order('created_at', { ascending: false }).limit(150);
+    const convos = new Map();
+    (data || []).forEach(mm => {
+      const other = mm.sender_id === state.user.id ? mm.recipient_id : mm.sender_id;
+      if (isHidden(other) || state.hiddenConvos.has(other)) return;
+      if (mm.attachment_type === 'call' && !convos.has(other)) return;   // que una llamada no "invente" un chat
+      if (!convos.has(other)) convos.set(other, { other, last: mm, unread: 0 });
+      if (mm.recipient_id === state.user.id && !mm.read) convos.get(other).unread++;
+    });
+    const top = [...convos.values()].slice(0, 8);
+    if (!top.length) { box.innerHTML = `<div class="rp-empty">Aún no tienes chats.<br>Escribe a alguien desde su perfil o desde Bro's.</div>`; return; }
+    const { data: profs } = await sb.from('profiles').select('id,username,display_name,avatar_url,theme,verified').in('id', top.map(c => c.other));
+    const byId = {}; (profs || []).forEach(p => byId[p.id] = p);
+    box.innerHTML = '';
+    top.forEach(c => {
+      const p = byId[c.other]; if (!p) return;
+      const online = state.online.some(u => u.id === c.other);
+      const row = el(`
+        <button class="rp-chat" data-uid="${esc(c.other)}">
+          <span class="rpc-av">${avatarHTML(p)}${online ? '<i class="rpc-on"></i>' : ''}</span>
+          <span class="rpc-main">
+            <b>${esc(p.display_name || p.username || 'usuario')}</b>
+            <span class="${c.unread ? 'rpc-unread' : ''}">${c.last.sender_id === state.user.id ? 'Tú: ' : ''}${esc(rpSnippet(c.last)).slice(0, 46)}</span>
+          </span>
+          ${c.unread ? `<span class="rpc-badge">${c.unread > 9 ? '9+' : c.unread}</span>` : `<span class="rpc-when">${timeAgo(c.last.created_at)}</span>`}
+        </button>`);
+      row.onclick = () => { closeRightPanel(); openDM(c.other); };
+      box.appendChild(row);
+    });
+  } catch (_) {}
+}
+let _rpChatsT = 0;
+function refreshRightChats() { clearTimeout(_rpChatsT); _rpChatsT = setTimeout(renderRightChats, 400); }
 function convoRow(c, p) {
   const last = c.last;
   const mine = last && last.sender_id === state.user.id;
@@ -11117,6 +11189,7 @@ function initPresence() {
 function renderOnline(users) {
   users = (users || []).filter(u => !isHidden(u.id));
   $('onlineCount').textContent = users.length;
+  { const n = $('ccOnline'); if (n) n.textContent = String(users.length || 1); }
   const list = $('onlineList');
   list.innerHTML = users.map(u => `
     <div class="online-item" data-uid="${u.id}">

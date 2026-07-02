@@ -29,7 +29,7 @@
 <link rel="manifest" href="/manifest.json?v=20260628m" />
 <meta name="theme-color" content="#0a0d18" />
 <link rel="apple-touch-icon" href="/icon-192.png?v=20260605l" />
-<link rel="stylesheet" href="css/styles.css?v=20260628q" />
+<link rel="stylesheet" href="css/styles.css?v=20260628r" />
 <script>(function(){try{var t=localStorage.getItem('ub_theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}try{if(sessionStorage.getItem('ub_splash'))document.documentElement.classList.add('no-splash');}catch(e){}})();</script>
 <!-- Vercel Web Analytics -->
 <script>
@@ -233,6 +233,53 @@ html.no-splash #splash{display:none}
   </footer>
 </div>
 
+<!-- experiencia de la landing: tilt 3D, spotlight, partículas y reveals -->
+<script>(function(){
+  var lp = document.getElementById('landing'); if (!lp) return;
+  var reduced = false;
+  try { reduced = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch(e){}
+  // partículas flotantes en el fondo
+  var bg = lp.querySelector('.lp-bg');
+  if (bg && !reduced) {
+    for (var i = 0; i < 16; i++) {
+      var s = document.createElement('span'); s.className = 'lp-p';
+      s.style.setProperty('--x', (Math.random() * 100).toFixed(1) + '%');
+      s.style.setProperty('--d', (16 + Math.random() * 20).toFixed(1) + 's');
+      s.style.setProperty('--delay', (-Math.random() * 24).toFixed(1) + 's');
+      s.style.setProperty('--s', (2 + Math.random() * 3.5).toFixed(1) + 'px');
+      s.style.setProperty('--o', (0.25 + Math.random() * 0.45).toFixed(2));
+      s.style.setProperty('--dx', ((Math.random() - .5) * 120).toFixed(0) + 'px');
+      bg.appendChild(s);
+    }
+  }
+  // spotlight que sigue al cursor
+  if (!reduced && matchMedia('(hover: hover)').matches) {
+    var spot = document.createElement('span'); spot.className = 'lp-spot'; lp.appendChild(spot);
+    lp.addEventListener('pointermove', function(e){ spot.style.left = e.clientX + 'px'; spot.style.top = e.clientY + 'px'; }, { passive: true });
+  }
+  // tilt 3D de los móviles siguiendo al ratón
+  var hero = lp.querySelector('.lp-hero'), art = lp.querySelector('.lp-hero-art');
+  if (hero && art && !reduced && matchMedia('(hover: hover)').matches) {
+    var raf = 0, tx = 0, ty = 0;
+    var apply = function(){ raf = 0; art.style.setProperty('--tx', tx.toFixed(2) + 'deg'); art.style.setProperty('--ty', ty.toFixed(2) + 'deg'); };
+    hero.addEventListener('pointermove', function(e){
+      var r = hero.getBoundingClientRect();
+      ty = ((e.clientX - r.left) / r.width - .5) * 10;
+      tx = -((e.clientY - r.top) / r.height - .5) * 8;
+      if (!raf) raf = requestAnimationFrame(apply);
+    }, { passive: true });
+    hero.addEventListener('pointerleave', function(){ tx = 0; ty = 0; if (!raf) raf = requestAnimationFrame(apply); });
+  }
+  // aparición al hacer scroll
+  try {
+    var io = new IntersectionObserver(function(es){
+      es.forEach(function(en){ if (en.isIntersecting) { en.target.classList.add('in'); io.unobserve(en.target); } });
+    }, { threshold: .12 });
+    var els = lp.querySelectorAll('.lp-h2, .lp-h2-sub, .lp-feat, .lp-soon, .lp-final-inner');
+    els.forEach(function(el2, i){ el2.classList.add('lp-reveal'); el2.style.transitionDelay = ((i % 6) * 70) + 'ms'; io.observe(el2); });
+  } catch(e){}
+})();</script>
+
 <div class="auth-screen hidden" id="authScreen">
   <div class="auth-card">
     <button type="button" class="auth-back" id="authBack">← Volver</button>
@@ -344,22 +391,39 @@ html.no-splash #splash{display:none}
 
   <!-- RIGHT -->
   <aside class="right">
-    <div class="right-section">
+    <div class="right-section rp-head">
       <h4><svg style="width:14px;height:14px" stroke="currentColor"><use href="#i-people"/></svg> Bro's online (<span id="onlineCount">0</span>)</h4>
-      <div class="online-list" id="onlineList"></div>
+      <button class="icon-btn" id="chatClose" title="Cerrar panel" aria-label="Cerrar panel"><svg fill="none" stroke="currentColor"><use href="#i-x"/></svg></button>
     </div>
-    <div class="chat">
-      <div class="right-section chat-head" style="border:none;padding-bottom:0;display:flex;align-items:center;justify-content:space-between;gap:8px">
-        <h4 style="margin:0"><svg style="width:14px;height:14px" stroke="currentColor"><use href="#i-comment"/></svg> UnderBro Chat</h4>
-        <button class="icon-btn" id="chatClose" title="Cerrar chat" aria-label="Cerrar chat"><svg fill="none" stroke="currentColor"><use href="#i-x"/></svg></button>
-      </div>
-      <div class="chat-msgs" id="chatMsgs"></div>
-      <form class="chat-form" id="chatForm">
-        <input type="text" id="chatInput" placeholder="Escribe un mensaje..." maxlength="500" autocomplete="off" />
-        <button type="submit" class="btn primary" title="Enviar"><svg style="width:16px;height:16px" stroke="#fff"><use href="#i-send"/></svg></button>
-      </form>
+    <div class="right-section" style="padding-top:10px;border:none"><div class="online-list" id="onlineList"></div></div>
+    <div class="rp-chats-wrap">
+      <div class="right-section" style="border:none;padding-bottom:6px"><h4><svg style="width:14px;height:14px" stroke="currentColor"><use href="#i-mail"/></svg> Tus chats</h4></div>
+      <button class="rp-community" id="rpCommunity">
+        <span class="rpc-ic"><svg fill="none" stroke="#fff"><use href="#i-comment"/></svg></span>
+        <span class="rpc-main"><b>Chat de la comunidad</b><span>Habla con toda la escena</span></span>
+        <svg class="rpc-chev" fill="none" stroke="currentColor"><use href="#i-chevron-right"/></svg>
+      </button>
+      <div class="rp-chats" id="rpChats"></div>
     </div>
   </aside>
+</div>
+
+<!-- ===================== CHAT DE LA COMUNIDAD (pantalla completa) ===================== -->
+<div class="community-chat" id="communityChat">
+  <div class="cc-bg" aria-hidden="true"></div>
+  <header class="cc-head">
+    <button class="dm-back" id="ccBack" title="Volver"><svg><use href="#i-chevron-left"/></svg></button>
+    <span class="cc-ic"><svg fill="none" stroke="#fff"><use href="#i-comment"/></svg></span>
+    <div class="cc-meta">
+      <div class="cc-title">Chat de la comunidad</div>
+      <div class="cc-sub"><span class="dot-online"></span> <span id="ccOnline">0</span> en línea</div>
+    </div>
+  </header>
+  <div class="chat-msgs" id="chatMsgs"></div>
+  <form class="chat-form" id="chatForm">
+    <input type="text" id="chatInput" placeholder="Escribe a toda la comunidad…" maxlength="500" autocomplete="off" />
+    <button type="submit" class="btn primary cc-send" title="Enviar" aria-label="Enviar"><svg style="width:17px;height:17px" stroke="#fff"><use href="#i-send"/></svg></button>
+  </form>
 </div>
 
 <!-- ===================== PLAYER ===================== -->
@@ -543,6 +607,6 @@ html.no-splash #splash{display:none}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
 <script src="js/config.js?v=20260628l"></script>
-<script src="js/app.js?v=20260628p"></script>
+<script src="js/app.js?v=20260628r"></script>
 </body>
 </html>
