@@ -16,8 +16,9 @@ self.addEventListener('push', (event) => {
     body: d.body || 'Tienes un mensaje nuevo',
     tag: d.tag || 'underbro',
     renotify: true,
-    icon: '/icon-192.png',
+    icon: d.icon || '/icon-192.png',   // foto de perfil de quien escribe (si viene)
     badge: '/icon-192.png',
+    image: d.image || undefined,        // miniatura grande (p. ej. foto enviada)
     data: { url: d.url || '/', type: d.type || '', from },
     requireInteraction: !!d.requireInteraction || isCall,
     vibrate: isCall ? [500, 300, 500, 300, 500, 300, 500] : [120],
