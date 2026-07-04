@@ -2419,7 +2419,7 @@ function openEditTrack(t, card) {
       if (coverFile) {
         const cext = (coverFile.name.split('.').pop() || 'jpg').toLowerCase();
         const path = `${state.user.id}/${Date.now()}.${cext}`;
-        const cu = await sb.storage.from('covers').upload(path, coverFile, { contentType: coverFile.type });
+        const cu = await sb.storage.from('covers').upload(path, coverFile, { cacheControl: '31536000', contentType: coverFile.type });
         if (cu.error) throw cu.error;
         cover_url = sb.storage.from('covers').getPublicUrl(path).data.publicUrl;
       }
@@ -3971,7 +3971,7 @@ function openUploadModal(prefill) {
       // iOS suele dar type vacío en WAV: deducimos el content-type por extensión
       const AUDIO_MIME = { mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac', flac: 'audio/flac', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/opus', aif: 'audio/aiff', aiff: 'audio/aiff', wma: 'audio/x-ms-wma', alac: 'audio/mp4' };
       const audioCT = uploadFile.type || AUDIO_MIME[ext] || 'audio/mpeg';
-      const up = await sb.storage.from('tracks').upload(audioPath, uploadFile, { contentType: audioCT, upsert: false });
+      const up = await sb.storage.from('tracks').upload(audioPath, uploadFile, { cacheControl: '31536000', contentType: audioCT, upsert: false });
       if (up.error) throw up.error;
       fill.style.width = '60%';
       const audioUrl = sb.storage.from('tracks').getPublicUrl(audioPath).data.publicUrl;
@@ -3980,7 +3980,7 @@ function openUploadModal(prefill) {
       if (coverFile) {
         const cext = (coverFile.name.split('.').pop() || 'jpg').toLowerCase();
         const coverPath = `${uid}/${stamp}.${cext}`;
-        const cu = await sb.storage.from('covers').upload(coverPath, coverFile, { contentType: coverFile.type, upsert: false });
+        const cu = await sb.storage.from('covers').upload(coverPath, coverFile, { cacheControl: '31536000', contentType: coverFile.type, upsert: false });
         if (!cu.error) coverUrl = sb.storage.from('covers').getPublicUrl(coverPath).data.publicUrl;
       }
       fill.style.width = '80%';
@@ -4055,7 +4055,7 @@ async function uploadAlbumTrack(file, opts, onProgress) {
   const ext = (uploadFile.name.split('.').pop() || 'mp3').toLowerCase();
   const AUDIO_MIME = { mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac', flac: 'audio/flac', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/opus', aif: 'audio/aiff', aiff: 'audio/aiff', wma: 'audio/x-ms-wma', alac: 'audio/mp4' };
   const audioPath = `${uid}/${stamp}.${ext}`;
-  const up = await sb.storage.from('tracks').upload(audioPath, uploadFile, { contentType: uploadFile.type || AUDIO_MIME[ext] || 'audio/mpeg', upsert: false });
+  const up = await sb.storage.from('tracks').upload(audioPath, uploadFile, { cacheControl: '31536000', contentType: uploadFile.type || AUDIO_MIME[ext] || 'audio/mpeg', upsert: false });
   if (up.error) throw up.error;
   const audioUrl = sb.storage.from('tracks').getPublicUrl(audioPath).data.publicUrl;
   let waveform = null; try { waveform = await computeWaveformPeaks(uploadFile); } catch (_) {}
@@ -4156,7 +4156,7 @@ function openAlbumModal() {
       let coverUrl = null;
       if (coverFile) {
         const cext = (coverFile.name.split('.').pop() || 'jpg').toLowerCase();
-        const cu = await sb.storage.from('covers').upload(`${uid}/album-${Date.now()}.${cext}`, coverFile, { contentType: coverFile.type, upsert: false });
+        const cu = await sb.storage.from('covers').upload(`${uid}/album-${Date.now()}.${cext}`, coverFile, { cacheControl: '31536000', contentType: coverFile.type, upsert: false });
         if (!cu.error) coverUrl = sb.storage.from('covers').getPublicUrl(cu.data.path).data.publicUrl;
       }
       // crea el álbum
@@ -4389,7 +4389,7 @@ async function uploadForumFiles(files, onProgress) {
     if (f.size > 50 * 1024 * 1024) { toast(`"${f.name}" supera 50 MB y se omite`); continue; }
     const ext = (f.name.split('.').pop() || 'bin').toLowerCase();
     const path = `${uid}/forum-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const up = await sb.storage.from('tracks').upload(path, f, { contentType: f.type || 'application/octet-stream', upsert: false });
+    const up = await sb.storage.from('tracks').upload(path, f, { cacheControl: '31536000', contentType: f.type || 'application/octet-stream', upsert: false });
     if (up.error) { toast('No se pudo subir ' + f.name); continue; }
     out.push({ url: sb.storage.from('tracks').getPublicUrl(path).data.publicUrl, type: f.type || '', name: f.name, size: f.size });
     if (onProgress) onProgress((i + 1) / files.length);
@@ -4662,7 +4662,7 @@ function openPhotoUploadModal() {
       const uid = state.user.id;
       const ext = (photoFile.name.split('.').pop() || 'jpg').toLowerCase();
       const path = `${uid}/${Date.now()}.${ext}`;
-      const up = await sb.storage.from('posts').upload(path, photoFile, { contentType: photoFile.type, upsert: false });
+      const up = await sb.storage.from('posts').upload(path, photoFile, { cacheControl: '31536000', contentType: photoFile.type, upsert: false });
       if (up.error) throw up.error;
       fill.style.width = '70%';
       const image_url = sb.storage.from('posts').getPublicUrl(path).data.publicUrl;
@@ -5397,8 +5397,8 @@ async function openShopEdit(p, userId, onSaved) {
     try {
       const stamp = Date.now();
       let image_url = p.image_url || null, file_url = p.file_url || null;
-      if (imgFile) { const path = `${userId}/shop-${stamp}`; const up = await sb.storage.from('covers').upload(path, imgFile, { contentType: imgFile.type, upsert: true }); if (!up.error) image_url = sb.storage.from('covers').getPublicUrl(path).data.publicUrl; }
-      if (dataFile) { const ext = (dataFile.name.split('.').pop() || 'zip').toLowerCase(); const rand = Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 12); const path = `${userId}/shopfile-${stamp}-${rand}.${ext}`; const up = await sb.storage.from('tracks').upload(path, dataFile, { contentType: dataFile.type || 'application/octet-stream', upsert: true }); if (!up.error) file_url = sb.storage.from('tracks').getPublicUrl(path).data.publicUrl; }
+      if (imgFile) { const path = `${userId}/shop-${stamp}`; const up = await sb.storage.from('covers').upload(path, imgFile, { cacheControl: '31536000', contentType: imgFile.type, upsert: true }); if (!up.error) image_url = sb.storage.from('covers').getPublicUrl(path).data.publicUrl; }
+      if (dataFile) { const ext = (dataFile.name.split('.').pop() || 'zip').toLowerCase(); const rand = Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 12); const path = `${userId}/shopfile-${stamp}-${rand}.${ext}`; const up = await sb.storage.from('tracks').upload(path, dataFile, { cacheControl: '31536000', contentType: dataFile.type || 'application/octet-stream', upsert: true }); if (!up.error) file_url = sb.storage.from('tracks').getPublicUrl(path).data.publicUrl; }
       const row = {
         user_id: userId, kind, type, title, is_free: free,
         pay_inapp: !free, price_cents, currency: 'eur',
@@ -5808,14 +5808,14 @@ function openProfileCustomizer() {
       if (bannerFile) {
         const ext = (bannerFile.name.split('.').pop() || 'jpg').toLowerCase();
         const path = `${uid}/banner_${Date.now()}.${ext}`;
-        const up = await sb.storage.from('avatars').upload(path, bannerFile, { contentType: bannerFile.type });
+        const up = await sb.storage.from('avatars').upload(path, bannerFile, { cacheControl: '31536000', contentType: bannerFile.type });
         if (up.error) throw up.error;
         theme.banner = sb.storage.from('avatars').getPublicUrl(path).data.publicUrl;
       }
       if (bgFile) {
         const ext = (bgFile.name.split('.').pop() || 'jpg').toLowerCase();
         const path = `${uid}/bg_${Date.now()}.${ext}`;
-        const up = await sb.storage.from('avatars').upload(path, bgFile, { contentType: bgFile.type });
+        const up = await sb.storage.from('avatars').upload(path, bgFile, { cacheControl: '31536000', contentType: bgFile.type });
         if (up.error) throw up.error;
         theme.bg.image = sb.storage.from('avatars').getPublicUrl(path).data.publicUrl;
       }
@@ -6448,7 +6448,7 @@ function openAddStory() {
     try {
       const ext = (imgFile.name.split('.').pop() || 'jpg').toLowerCase();
       const path = `${state.user.id}/story_${Date.now()}.${ext}`;
-      const up = await sb.storage.from('posts').upload(path, imgFile, { contentType: imgFile.type, upsert: false });
+      const up = await sb.storage.from('posts').upload(path, imgFile, { cacheControl: '31536000', contentType: imgFile.type, upsert: false });
       if (up.error) throw up.error;
       const image_url = sb.storage.from('posts').getPublicUrl(path).data.publicUrl;
       const links = [...linksWrap.querySelectorAll('.st-link-row')]
@@ -8337,7 +8337,7 @@ ${toolBar('smartlink', 'Smart link', 'Edita y publica tu página de lanzamiento'
     try {
       const ext = (f.name.split('.').pop() || 'jpg').toLowerCase();
       const path = `${uid}/sl_${Date.now()}.${ext}`;
-      const up = await sb.storage.from('covers').upload(path, f, { contentType: f.type || 'image/jpeg' });
+      const up = await sb.storage.from('covers').upload(path, f, { cacheControl: '31536000', contentType: f.type || 'image/jpeg' });
       if (up.error) throw up.error;
       smState.cover = sb.storage.from('covers').getPublicUrl(path).data.publicUrl;
       const cp = $('slCoverPrev'); cp.style.backgroundImage = `url('${czUrl(smState.cover)}')`; cp.innerHTML = '';
@@ -8761,7 +8761,7 @@ function createEventModal(existing) {
       if (flyerFile) {
         const ext = (flyerFile.name.split('.').pop() || 'jpg').toLowerCase();
         const path = `${state.user.id}/event_${Date.now()}.${ext}`;
-        const up = await sb.storage.from('posts').upload(path, flyerFile, { contentType: flyerFile.type, upsert: false });
+        const up = await sb.storage.from('posts').upload(path, flyerFile, { cacheControl: '31536000', contentType: flyerFile.type, upsert: false });
         if (up.error) throw up.error;
         flyer_url = sb.storage.from('posts').getPublicUrl(path).data.publicUrl;
       }
@@ -9143,7 +9143,7 @@ function renderSettings() {
       if (newAvatarFile) {
         const ext = (newAvatarFile.name.split('.').pop()||'jpg').toLowerCase();
         const path = `${state.user.id}/${Date.now()}.${ext}`;
-        const up = await sb.storage.from('avatars').upload(path, newAvatarFile, { contentType: newAvatarFile.type });
+        const up = await sb.storage.from('avatars').upload(path, newAvatarFile, { cacheControl: '31536000', contentType: newAvatarFile.type });
         if (up.error) throw up.error;
         avatar_url = sb.storage.from('avatars').getPublicUrl(path).data.publicUrl;
       }
@@ -10541,7 +10541,7 @@ async function sendDm(e) {
     try {
       const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
       const path = `${state.user.id}/${Date.now()}.${ext}`;
-      const up = await sb.storage.from('chat').upload(path, file, { contentType: file.type || 'application/octet-stream' });
+      const up = await sb.storage.from('chat').upload(path, file, { cacheControl: '31536000', contentType: file.type || 'application/octet-stream' });
       if (up.error) throw up.error;
       attachment_url = sb.storage.from('chat').getPublicUrl(path).data.publicUrl;
       attachment_type = file.type.startsWith('image') ? 'image' : file.type.startsWith('video') ? 'video' : file.type.startsWith('audio') ? 'audio' : 'file';
@@ -10563,7 +10563,7 @@ async function dmSendAudio(blob, secs, peaks) {
   if ((!isGroup && !other) || !requireNotBanned()) return;
   try {
     const path = `${state.user.id}/${Date.now()}.webm`;
-    const up = await sb.storage.from('chat').upload(path, blob, { contentType: blob.type || 'audio/webm' });
+    const up = await sb.storage.from('chat').upload(path, blob, { cacheControl: '31536000', contentType: blob.type || 'audio/webm' });
     if (up.error) throw up.error;
     const url = sb.storage.from('chat').getPublicUrl(path).data.publicUrl;
     const reply_to = state.dmReplyTo?.id || null; cancelReply();
