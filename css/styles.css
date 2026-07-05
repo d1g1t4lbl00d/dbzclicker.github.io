@@ -3615,16 +3615,16 @@ img.lpm-np-cov { width: 34px; height: 34px; border-radius: 9px; object-fit: cove
 
 /* ---- landing v3: pulido estético (animaciones sutiles, aurora, glow) ---- */
 /* fondo con aurora viva: orbes de gradiente a la deriva + grano sutil */
-.lp-orb { position: absolute; border-radius: 50%; filter: blur(64px); will-change: transform, opacity; mix-blend-mode: screen; }
+.lp-orb { position: absolute; border-radius: 50%; filter: blur(44px); will-change: transform; mix-blend-mode: screen; }
 .lp-orb.o1 { width: 58vmax; height: 58vmax; top: -20%; right: -14%;
   background: radial-gradient(circle, rgba(120,60,255,.5), rgba(120,60,255,0) 66%);
-  animation: lpDrift1 26s ease-in-out infinite alternate, lpPulse 14s ease-in-out infinite; }
+  animation: lpDrift1 26s ease-in-out infinite alternate; }
 .lp-orb.o2 { width: 50vmax; height: 50vmax; bottom: -18%; left: -16%;
   background: radial-gradient(circle, rgba(39,150,255,.42), rgba(39,150,255,0) 66%);
-  animation: lpDrift2 32s ease-in-out infinite alternate, lpPulse 18s ease-in-out infinite 2s; }
+  animation: lpDrift2 32s ease-in-out infinite alternate; }
 .lp-orb.o3 { width: 42vmax; height: 42vmax; top: 32%; left: 38%;
   background: radial-gradient(circle, rgba(45,205,255,.26), rgba(45,205,255,0) 68%);
-  animation: lpDrift3 38s ease-in-out infinite alternate, lpPulse 16s ease-in-out infinite 1s; }
+  animation: lpDrift3 38s ease-in-out infinite alternate; }
 /* marca de agua: patrón del emblema, muy sutil y con desvanecimiento */
 .lp-watermark { position: absolute; inset: 0; pointer-events: none; opacity: .05;
   background-image: url(/assets/landing/ub-pattern.png?v=20260627h);
@@ -3633,7 +3633,7 @@ img.lpm-np-cov { width: 34px; height: 34px; border-radius: 9px; object-fit: cove
           mask-image: radial-gradient(130% 95% at 80% 0%, #000 0%, rgba(0,0,0,.5) 38%, transparent 72%); }
 .lp-grain { position: absolute; inset: -50%; pointer-events: none; opacity: .04; mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  animation: lpGrain 8s steps(6) infinite; }
+  }
 @keyframes lpDrift1 { from { transform: translate(0,0) scale(1); } to { transform: translate(-7%,10%) scale(1.18); } }
 @keyframes lpDrift2 { from { transform: translate(0,0) scale(1); } to { transform: translate(10%,-8%) scale(1.14); } }
 @keyframes lpDrift3 { from { transform: translate(0,0) scale(.95); } to { transform: translate(-9%,-6%) scale(1.2); } }
@@ -3684,7 +3684,7 @@ img.lpm-np-cov { width: 34px; height: 34px; border-radius: 9px; object-fit: cove
   -webkit-backdrop-filter: blur(7px); backdrop-filter: blur(7px); }
 .lp-feat { background: rgba(255,255,255,.04); }
 /* subrayado degradado animado en las palabras destacadas de los títulos */
-.lp-title span, .lp-h2 span { background-size: 200% 100%; animation: lpGradShift 7s ease-in-out infinite; }
+.lp-title span, .lp-h2 span { background-size: 200% 100%; }
 @keyframes lpGradShift { 0%,100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
 /* tarjeta "muy pronto": anillo degradado coherente con las features */
 .lp-soon { position: relative; overflow: hidden; }
@@ -4136,24 +4136,6 @@ img.ub-imgin { animation: ubImgIn .4s ease; }
 /* =====================================================================
    LANDING — experiencia de entrada (tilt 3D, spotlight, partículas)
    ===================================================================== */
-.lp-spot {
-  position: fixed; left: 50%; top: 30%; width: 560px; height: 560px; border-radius: 50%;
-  transform: translate(-50%, -50%); pointer-events: none; z-index: 1;
-  background: radial-gradient(circle, rgba(96,140,255,.09), transparent 62%);
-  mix-blend-mode: screen;
-}
-.lp-p {
-  position: absolute; left: var(--x, 50%); bottom: -14px; width: var(--s, 3px); height: var(--s, 3px);
-  border-radius: 50%; background: #9db9ff; opacity: 0; filter: blur(.4px);
-  box-shadow: 0 0 8px 1px rgba(110,145,255,.75);
-  animation: lpRiseP var(--d, 18s) linear var(--delay, 0s) infinite;
-}
-@keyframes lpRiseP {
-  0% { transform: translateY(0) translateX(0); opacity: 0; }
-  10% { opacity: var(--o, .5); }
-  85% { opacity: var(--o, .5); }
-  100% { transform: translateY(-108vh) translateX(var(--dx, 0px)); opacity: 0; }
-}
 .lp-hero-art { transform-style: preserve-3d; transform: perspective(1100px) rotateX(var(--tx, 0deg)) rotateY(var(--ty, 0deg)); transition: transform .16s ease-out; }
 /* entrada cinematográfica del hero */
 #landing:not(.hidden) .lp-title { animation: lpIn .75s var(--ease) both; }
@@ -4161,19 +4143,11 @@ img.ub-imgin { animation: ubImgIn .4s ease; }
 #landing:not(.hidden) .lp-cta { animation: lpIn .75s var(--ease) .26s both; }
 #landing:not(.hidden) .lp-trust { animation: lpIn .75s var(--ease) .38s both; }
 @keyframes lpIn { from { opacity: 0; transform: translateY(26px); filter: blur(7px); } to { opacity: 1; transform: none; filter: none; } }
-/* shimmer del degradado del título */
-.lp-title span { background-size: 220% 100%; animation: lpShimmer 5.5s ease-in-out infinite; }
-.lp-h2 span { background-size: 220% 100%; animation: lpShimmer 5.5s ease-in-out infinite; }
-@keyframes lpShimmer { 0%, 100% { background-position: 0% 50%; } 50% { background-position: 100% 50%; } }
-/* CTA con pulso de neón */
-.lp-cta .btn.primary { animation: lpPulse 3.4s ease-in-out infinite; }
-@keyframes lpPulse { 0%, 100% { box-shadow: 0 12px 34px rgba(62,87,252,.38); } 50% { box-shadow: 0 14px 52px rgba(96,90,255,.6); } }
 /* aparición al hacer scroll */
 .lp-reveal { opacity: 0; transform: translateY(28px); transition: opacity .65s var(--ease), transform .65s var(--ease); }
 .lp-reveal.in { opacity: 1; transform: none; }
 @media (prefers-reduced-motion: reduce) {
-  .lp-p, .lp-spot { display: none; }
-  #landing:not(.hidden) .lp-title, #landing:not(.hidden) .lp-sub, #landing:not(.hidden) .lp-cta, #landing:not(.hidden) .lp-trust { animation: none; }
+  .lp-p,   #landing:not(.hidden) .lp-title, #landing:not(.hidden) .lp-sub, #landing:not(.hidden) .lp-cta, #landing:not(.hidden) .lp-trust { animation: none; }
   .lp-title span, .lp-h2 span, .lp-cta .btn.primary { animation: none; }
   .lp-reveal { opacity: 1; transform: none; transition: none; }
   .lp-hero-art { transform: none !important; }
@@ -4254,3 +4228,11 @@ img.ub-imgin { animation: ubImgIn .4s ease; }
 .ev-photobadge svg { width: 13px; height: 13px; }
 .ev-flyer.past::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 40%, rgba(8,10,22,.35)); }
 .ev-card-past .ev-date { color: var(--ink-faint); }
+
+/* galería del evento: candado y progreso de subida */
+.evg-progress { font-size: 12.5px; font-weight: 700; color: var(--accent); padding: 0 0 8px; }
+.evg-lock { padding: 22px 16px; text-align: center; border: 1px dashed var(--line); border-radius: 14px; }
+.evg-lock-ic { font-size: 30px; margin-bottom: 8px; }
+.evg-lock p { color: var(--ink-soft); font-size: 13px; margin: 0 0 14px; }
+.evg-lock-form { display: flex; gap: 8px; max-width: 340px; margin: 0 auto; }
+.evg-lock-form input { flex: 1; }

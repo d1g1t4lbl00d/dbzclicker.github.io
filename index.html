@@ -29,7 +29,7 @@
 <link rel="manifest" href="/manifest.json?v=20260628m" />
 <meta name="theme-color" content="#0a0d18" />
 <link rel="apple-touch-icon" href="/icon-192.png?v=20260605l" />
-<link rel="stylesheet" href="css/styles.css?v=20260628v" />
+<link rel="stylesheet" href="css/styles.css?v=20260628w" />
 <script>(function(){try{var t=localStorage.getItem('ub_theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}try{if(sessionStorage.getItem('ub_splash'))document.documentElement.classList.add('no-splash');}catch(e){}})();</script>
 <!-- Vercel Web Analytics -->
 <script>
@@ -238,25 +238,6 @@ html.no-splash #splash{display:none}
   var lp = document.getElementById('landing'); if (!lp) return;
   var reduced = false;
   try { reduced = matchMedia('(prefers-reduced-motion: reduce)').matches; } catch(e){}
-  // partículas flotantes en el fondo
-  var bg = lp.querySelector('.lp-bg');
-  if (bg && !reduced) {
-    for (var i = 0; i < 16; i++) {
-      var s = document.createElement('span'); s.className = 'lp-p';
-      s.style.setProperty('--x', (Math.random() * 100).toFixed(1) + '%');
-      s.style.setProperty('--d', (16 + Math.random() * 20).toFixed(1) + 's');
-      s.style.setProperty('--delay', (-Math.random() * 24).toFixed(1) + 's');
-      s.style.setProperty('--s', (2 + Math.random() * 3.5).toFixed(1) + 'px');
-      s.style.setProperty('--o', (0.25 + Math.random() * 0.45).toFixed(2));
-      s.style.setProperty('--dx', ((Math.random() - .5) * 120).toFixed(0) + 'px');
-      bg.appendChild(s);
-    }
-  }
-  // spotlight que sigue al cursor
-  if (!reduced && matchMedia('(hover: hover)').matches) {
-    var spot = document.createElement('span'); spot.className = 'lp-spot'; lp.appendChild(spot);
-    lp.addEventListener('pointermove', function(e){ spot.style.left = e.clientX + 'px'; spot.style.top = e.clientY + 'px'; }, { passive: true });
-  }
   // tilt 3D de los móviles siguiendo al ratón
   var hero = lp.querySelector('.lp-hero'), art = lp.querySelector('.lp-hero-art');
   if (hero && art && !reduced && matchMedia('(hover: hover)').matches) {
@@ -607,6 +588,6 @@ html.no-splash #splash{display:none}
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js"></script>
 <script src="js/config.js?v=20260628l"></script>
-<script src="js/app.js?v=20260628v"></script>
+<script src="js/app.js?v=20260628w"></script>
 </body>
 </html>

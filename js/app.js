@@ -21,6 +21,30 @@ async function uploadToR2(file, folder, onProgress, contentType) {
   if (!ext || ext.length > 8 || ext === nm.toLowerCase()) ext = (ct.split('/')[1] || 'bin').replace(/[^a-z0-9]/g, '') || 'bin';
   const { data: { session } } = await sb.auth.getSession();
   if (!session) throw new Error('sin sesión');
+
+  // ≤20MB: subida a través del servidor (sin CORS ni firmas en el navegador — a prueba de todo)
+  if ((file.size || 0) <= 20 * 1024 * 1024) {
+    const j = await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', R2_PRESIGN_URL);
+      xhr.setRequestHeader('Authorization', `Bearer ${session.access_token}`);
+      xhr.setRequestHeader('apikey', SUPABASE_ANON_KEY);
+      xhr.setRequestHeader('Content-Type', ct);
+      xhr.setRequestHeader('x-ub-folder', folder);
+      xhr.setRequestHeader('x-ub-ext', ext);
+      if (onProgress) xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
+      xhr.onload = () => {
+        let r = {}; try { r = JSON.parse(xhr.responseText); } catch (_) {}
+        if (xhr.status >= 200 && xhr.status < 300 && r.publicUrl) resolve(r);
+        else reject(new Error(r.error || ('upload ' + xhr.status)));
+      };
+      xhr.onerror = () => reject(new Error('red'));
+      xhr.send(file);
+    });
+    return j.publicUrl;
+  }
+
+  // grandes: URL firmada + PUT directo a R2
   const res = await fetch(R2_PRESIGN_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}`, 'apikey': SUPABASE_ANON_KEY },
@@ -32,13 +56,29 @@ async function uploadToR2(file, folder, onProgress, contentType) {
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', j.uploadUrl);
     xhr.setRequestHeader('Content-Type', ct);
-    xhr.setRequestHeader('Cache-Control', 'public, max-age=31536000');
     if (onProgress) xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
     xhr.onload = () => (xhr.status >= 200 && xhr.status < 300) ? resolve() : reject(new Error('PUT ' + xhr.status));
     xhr.onerror = () => reject(new Error('red'));
     xhr.send(file);
   });
   return j.publicUrl;
+}
+
+// comprime una foto en el navegador (máx 1600px de lado, JPEG ~82%) — ideal para galerías grandes
+async function compressPhoto(file, maxSide = 1600, quality = 0.82) {
+  try {
+    if (!/^image\/(jpe?g|png|webp|heic|heif)/i.test(file.type || '') || file.size < 350 * 1024) return file;
+    const bmp = await createImageBitmap(file).catch(() => null);
+    if (!bmp) return file;
+    const scale = Math.min(1, maxSide / Math.max(bmp.width, bmp.height));
+    const w = Math.round(bmp.width * scale), h = Math.round(bmp.height * scale);
+    const canvas = document.createElement('canvas'); canvas.width = w; canvas.height = h;
+    canvas.getContext('2d').drawImage(bmp, 0, 0, w, h);
+    bmp.close && bmp.close();
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', quality));
+    if (!blob || blob.size >= file.size) return file;
+    return new File([blob], (file.name || 'foto').replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' });
+  } catch (_) { return file; }
 }
 // Sube a R2; si algo falla, cae a Supabase Storage (para que las subidas nunca se rompan).
 async function uploadMedia(bucket, file, onProgress, contentType) {
@@ -8651,7 +8691,7 @@ async function renderEvents() {
   const upcoming = upRes.data || [], past = paRes.data || [];
   // nº de fotos de cada evento pasado
   const counts = {};
-  if (past.length) { try { const { data: ph } = await sb.from('event_photos').select('event_id').in('event_id', past.map(e => e.id)); (ph || []).forEach(r => counts[r.event_id] = (counts[r.event_id] || 0) + 1); } catch (_) {} }
+  if (past.length) { try { const { data: ph } = await sb.rpc('event_photo_counts', { p_ids: past.map(e => e.id) }); (ph || []).forEach(r => counts[r.event_id] = Number(r.n) || 0); } catch (_) {} }
   const list = $('evList');
   let tab = 'upcoming';
   const paint = () => {
@@ -8760,9 +8800,33 @@ async function openEvent(id) {
 /* ======================= GALERÍA DE FOTOS DEL EVENTO ======================= */
 async function loadEventGallery(ev, root, canManage) {
   if (!root) return;
-  root.innerHTML = `<div class="evg-head"><h3>📸 Galería del evento <span id="evgCount" class="evg-count"></span></h3><div class="evg-actions" id="evgActions"></div></div><div class="evg-strip" id="evgStrip"><div class="loading" style="padding:18px"><div class="spinner"></div></div></div>`;
-  const { data: photos } = await sb.from('event_photos').select('*, profiles:user_id(id,username,display_name,avatar_url,theme,verified)').eq('event_id', ev.id).order('sort', { ascending: true }).order('created_at', { ascending: true });
-  const list = photos || [];
+  root.innerHTML = `<div class="evg-head"><h3>📸 Galería del evento <span id="evgCount" class="evg-count"></span></h3><div class="evg-actions" id="evgActions"></div></div><div class="evg-progress" id="evgProgress"></div><div class="evg-strip" id="evgStrip"><div class="loading" style="padding:18px"><div class="spinner"></div></div></div>`;
+  // acceso con contraseña (admin y dueño entran directo)
+  const passKey = 'ub_evpass_' + ev.id;
+  const savedPass = localStorage.getItem(passKey) || '';
+  const { data: photos, error: gerr } = await sb.rpc('event_gallery_photos', { p_event: ev.id, p_pass: savedPass });
+  if (gerr) {
+    root.querySelector('#evgStrip').outerHTML = `
+      <div class="evg-lock">
+        <div class="evg-lock-ic">🔒</div>
+        <p>Esta galería es privada. Introduce la contraseña del evento para ver las fotos.</p>
+        <form class="evg-lock-form" id="evgPassForm">
+          <input type="password" id="evgPass" placeholder="Contraseña" autocomplete="off" />
+          <button class="btn primary" type="submit">Entrar</button>
+        </form>
+        <div class="auth-msg" id="evgPassMsg"></div>
+      </div>`;
+    root.querySelector('#evgPassForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const val = root.querySelector('#evgPass').value.trim();
+      const { error } = await sb.rpc('event_gallery_photos', { p_event: ev.id, p_pass: val });
+      if (error) { root.querySelector('#evgPassMsg').textContent = 'Contraseña incorrecta'; return; }
+      localStorage.setItem(passKey, val);
+      loadEventGallery(ev, root, canManage);
+    };
+    return;
+  }
+  const list = (photos || []).map(r => ({ ...r, profiles: { id: r.user_id, username: r.username, display_name: r.display_name, avatar_url: r.avatar_url, theme: r.theme, verified: r.verified } }));
   let myLikes = new Set();
   try { if (list.length) { const { data: lk } = await sb.from('event_photo_likes').select('photo_id').eq('user_id', state.user.id).in('photo_id', list.map(p => p.id)); myLikes = new Set((lk || []).map(x => x.photo_id)); } } catch (_) {}
 
@@ -8790,7 +8854,7 @@ async function loadEventGallery(ev, root, canManage) {
 
   if (canManage) {
     const up = root.querySelector('#evgUpload');
-    if (up) up.onclick = () => eventGalleryUpload(ev, () => loadEventGallery(ev, root, canManage));
+    if (up) up.onclick = () => eventGalleryUpload(ev, () => loadEventGallery(ev, root, canManage), root.querySelector('#evgProgress'));
     const mus = root.querySelector('#evgMusic');
     if (mus) mus.onclick = () => openGalleryMusicPicker(ev, () => loadEventGallery(ev, root, canManage));
   }
@@ -8798,24 +8862,35 @@ async function loadEventGallery(ev, root, canManage) {
   if (dl) dl.onclick = () => downloadAllPhotos(list, ev, dl);
 }
 
-function eventGalleryUpload(ev, onDone) {
+function eventGalleryUpload(ev, onDone, progressEl) {
   if (!requireNotBanned()) return;
   const inp = el('<input type="file" accept="image/*" multiple hidden />');
   document.body.appendChild(inp);
   inp.onchange = async () => {
     const files = Array.from(inp.files || []); inp.remove();
     if (!files.length) return;
-    toast(`Subiendo ${files.length} foto${files.length === 1 ? '' : 's'}…`);
+    const prog = progressEl || null;
+    const setP = (t) => { if (prog) prog.textContent = t; };
     const sort = Date.now();
-    let ok = 0;
-    for (let i = 0; i < files.length; i++) {
-      try {
-        const url = await uploadMedia('posts', files[i]);
-        const { error } = await sb.from('event_photos').insert({ event_id: ev.id, user_id: state.user.id, image_url: url, sort: sort + i });
-        if (!error) ok++;
-      } catch (e) { console.warn('foto', e); }
-    }
-    toast(`${ok} foto${ok === 1 ? '' : 's'} subida${ok === 1 ? '' : 's'} ✓`);
+    let ok = 0, fail = 0, firstErr = '';
+    let idx = 0;
+    const worker = async () => {
+      while (idx < files.length) {
+        const i = idx++;
+        try {
+          const small = await compressPhoto(files[i]);
+          const url = await uploadMedia('gallery', small);
+          const { error } = await sb.from('event_photos').insert({ event_id: ev.id, user_id: state.user.id, image_url: url, sort: sort + i });
+          if (error) throw error;
+          ok++;
+        } catch (e) { fail++; if (!firstErr) firstErr = String((e && e.message) || e); }
+        setP(`Subiendo ${ok + fail}/${files.length}… (${ok} ✓${fail ? ' · ' + fail + ' ✗' : ''})`);
+      }
+    };
+    setP(`Subiendo 0/${files.length}…`);
+    await Promise.all([worker(), worker(), worker()]);   // 3 en paralelo
+    setP('');
+    toast(fail ? `${ok} subidas · ${fail} fallaron (${firstErr.slice(0, 60)})` : `${ok} foto${ok === 1 ? '' : 's'} subida${ok === 1 ? '' : 's'} ✓`);
     onDone && onDone();
   };
   inp.click();
