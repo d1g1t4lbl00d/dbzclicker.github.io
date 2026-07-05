@@ -8939,26 +8939,35 @@ async function loadJSZip() {
   await new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js'; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
   return window.JSZip;
 }
-async function downloadEventPhoto(url, idx) {
-  toast('Descargando…');
+// pre-carga el blob de una foto (para que compartir/guardar en móvil sea INSTANTÁNEO,
+// dentro del gesto del usuario — si no, el navegador bloquea el menú nativo)
+function prefetchPhotoBlob(p) {
+  if (!p || p._blobP) return;
+  p._blobP = fetch(p.image_url).then(r => (r.ok ? r.blob() : null)).then(b => { p._blob = b; return b; }).catch(() => null);
+}
+function photoFileFrom(p, name) {
+  return p._blob ? new File([p._blob], name, { type: p._blob.type || 'image/jpeg' }) : null;
+}
+async function downloadEventPhoto(p, idx) {
+  const url = p.image_url;
   const ext = (url.split('.').pop() || 'jpg').split('?')[0];
   const name = `foto-${(idx || 0) + 1}.${ext}`;
+  // 1) blob ya pre-cargado → menú nativo al instante (móvil: "Guardar imagen")
+  let file = photoFileFrom(p, name);
+  if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file] }); return; } catch (err) { if (err && err.name === 'AbortError') return; }
+  }
   try {
-    const res = await fetch(url); const blob = await res.blob();
-    const file = new File([blob], name, { type: blob.type || 'image/jpeg' });
-    // móvil: el menú nativo ofrece "Guardar imagen"
-    if (navigator.canShare && navigator.canShare({ files: [file] })) {
-      try { await navigator.share({ files: [file] }); return; } catch (err) { if (err && err.name === 'AbortError') return; }
-    }
-    const objUrl = URL.createObjectURL(blob);
+    if (!p._blob) { toast('Descargando…'); p._blob = await (p._blobP || fetch(url).then(r => r.blob())); }
+    if (!p._blob) throw new Error('sin blob');
+    const objUrl = URL.createObjectURL(p._blob);
     const a = document.createElement('a'); a.href = objUrl; a.download = name; a.rel = 'noopener';
     document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(objUrl), 5000);
-    toast('Descargada ✓');
+    toast('Descargada ✓ (mira tus descargas)');
   } catch (_) {
-    // último recurso: abrir la imagen para guardarla a mano
     window.open(url, '_blank', 'noopener');
-    toast('Abre y mantén pulsado para guardar');
+    toast('Mantén pulsada la imagen para guardarla');
   }
 }
 async function downloadAllPhotos(photos, ev, btn) {
@@ -9012,6 +9021,8 @@ function openEventPhotoViewer(photos, index, ev, canManage, myLikes) {
     const p = photos[i]; if (!p) { close(); return; }
     const stage = v.querySelector('#evpStage');
     stage.innerHTML = `<img decoding="async" src="${esc(p.image_url)}" alt="${esc(p.caption || '')}" />${p.caption ? `<div class="evp-cap">${linkifyMentions(p.caption)}</div>` : ''}`;
+    prefetchPhotoBlob(p);                                  // deja lista la foto para guardar/compartir al instante
+    if (photos[i + 1]) prefetchPhotoBlob(photos[i + 1]);   // y la siguiente
     const who = v.querySelector('#evpWho');
     who.innerHTML = `${avatarHTML(p.profiles)}<div><b>${esc(p.profiles?.display_name || p.profiles?.username || 'usuario')}</b><span>${i + 1} / ${photos.length}</span></div>`;
     who.querySelector('div > b') && (who.onclick = () => { close(); openProfile(p.user_id); });
@@ -9030,7 +9041,7 @@ function openEventPhotoViewer(photos, index, ev, canManage, myLikes) {
     bar.querySelector('[data-a="like"]').onclick = (e) => toggleEventPhotoLike(p, myLikes, e.currentTarget);
     bar.querySelector('[data-a="comment"]').onclick = () => openEventPhotoComments(p);
     bar.querySelector('[data-a="tag"]').onclick = () => openEventPhotoTag(p, () => renderTags());
-    bar.querySelector('[data-a="dl"]').onclick = () => downloadEventPhoto(p.image_url, i);
+    bar.querySelector('[data-a="dl"]').onclick = () => downloadEventPhoto(p, i);
     bar.querySelector('[data-a="share"]').onclick = () => shareEventPhoto(p, ev);
     const del = bar.querySelector('[data-a="del"]');
     if (del) del.onclick = async () => { if (!confirm('¿Borrar esta foto?')) return; await sb.from('event_photos').delete().eq('id', p.id); photos.splice(i, 1); if (!photos.length) { close(); return; } if (i >= photos.length) i = photos.length - 1; render(); };
@@ -9073,16 +9084,16 @@ async function toggleEventPhotoLike(p, myLikes, btn) {
 async function shareEventPhoto(p, ev) {
   const text = `Fotos de ${ev.title || 'el evento'} en UnderBro`;
   try {
-    // 1) compartir la imagen como archivo (móvil)
-    try {
-      const r = await fetch(p.image_url); const b = await r.blob();
-      const file = new File([b], 'foto.jpg', { type: b.type || 'image/jpeg' });
-      if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], text }); return; }
-    } catch (err) { if (err && err.name === 'AbortError') return; }
-    // 2) compartir el enlace del evento
-    const url = `${location.origin}/`;
-    if (navigator.share) { try { await navigator.share({ title: 'UnderBro', text, url }); return; } catch (err) { if (err && err.name === 'AbortError') return; } }
-    // 3) copiar el enlace de la imagen
+    // 1) blob pre-cargado → compartir la imagen como archivo, dentro del gesto (móvil)
+    const file = photoFileFrom(p, 'foto.jpg');
+    if (file && navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file], text }); return; } catch (err) { if (err && err.name === 'AbortError') return; }
+    }
+    // 2) sin blob aún: compartir el ENLACE de la foto (sin await previo → el menú nativo siempre sale)
+    if (navigator.share) {
+      try { await navigator.share({ title: 'UnderBro', text, url: p.image_url }); return; } catch (err) { if (err && err.name === 'AbortError') return; }
+    }
+    // 3) copiar el enlace
     try { await navigator.clipboard.writeText(p.image_url); toast('Enlace de la foto copiado ✓'); return; } catch (_) {}
     window.open(p.image_url, '_blank', 'noopener');
   } catch (_) { toast('No se pudo compartir'); }
