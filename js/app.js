@@ -12,6 +12,49 @@ const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: { persistSession: true, autoRefreshToken: true },
 });
 
+// ===== Subida de media a Cloudflare R2 (egress gratis) vía URL firmada de la edge function =====
+const R2_PRESIGN_URL = `${SUPABASE_URL}/functions/v1/r2-presign`;
+async function uploadToR2(file, folder, onProgress, contentType) {
+  const nm = file.name || '';
+  const ct = contentType || file.type || 'application/octet-stream';
+  let ext = (nm.split('.').pop() || '').toLowerCase();
+  if (!ext || ext.length > 8 || ext === nm.toLowerCase()) ext = (ct.split('/')[1] || 'bin').replace(/[^a-z0-9]/g, '') || 'bin';
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) throw new Error('sin sesión');
+  const res = await fetch(R2_PRESIGN_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.access_token}`, 'apikey': SUPABASE_ANON_KEY },
+    body: JSON.stringify({ action: 'presign', folder, ext, contentType: ct }),
+  });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok || !j.uploadUrl) throw new Error(j.error || 'presign falló');
+  await new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open('PUT', j.uploadUrl);
+    xhr.setRequestHeader('Content-Type', ct);
+    xhr.setRequestHeader('Cache-Control', 'public, max-age=31536000');
+    if (onProgress) xhr.upload.onprogress = (e) => { if (e.lengthComputable) onProgress(e.loaded / e.total); };
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300) ? resolve() : reject(new Error('PUT ' + xhr.status));
+    xhr.onerror = () => reject(new Error('red'));
+    xhr.send(file);
+  });
+  return j.publicUrl;
+}
+// Sube a R2; si algo falla, cae a Supabase Storage (para que las subidas nunca se rompan).
+async function uploadMedia(bucket, file, onProgress, contentType) {
+  try { return await uploadToR2(file, bucket, onProgress, contentType); }
+  catch (e) {
+    console.warn('R2 no disponible, uso Supabase Storage:', (e && e.message) || e);
+    const ct = contentType || file.type || 'application/octet-stream';
+    const ext = ((file.name || '').split('.').pop() || ct.split('/')[1] || 'bin').toLowerCase();
+    const path = `${state.user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+    const up = await sb.storage.from(bucket).upload(path, file, { cacheControl: '31536000', contentType: ct, upsert: false });
+    if (up.error) throw up.error;
+    if (onProgress) onProgress(1);
+    return sb.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+  }
+}
+
 // ---------------------------------------------------------------- estado
 const state = {
   user: null,          // sesión auth
@@ -2418,10 +2461,7 @@ function openEditTrack(t, card) {
       let cover_url = t.cover_url;
       if (coverFile) {
         const cext = (coverFile.name.split('.').pop() || 'jpg').toLowerCase();
-        const path = `${state.user.id}/${Date.now()}.${cext}`;
-        const cu = await sb.storage.from('covers').upload(path, coverFile, { cacheControl: '31536000', contentType: coverFile.type });
-        if (cu.error) throw cu.error;
-        cover_url = sb.storage.from('covers').getPublicUrl(path).data.publicUrl;
+        cover_url = await uploadMedia('covers', coverFile);
       }
       // regenerar la onda real si la pista no la tiene (pistas antiguas)
       const patch = { title, genre: genre || null, description: description || null, cover_url, collaborators: collab.get(),
@@ -3971,17 +4011,12 @@ function openUploadModal(prefill) {
       // iOS suele dar type vacío en WAV: deducimos el content-type por extensión
       const AUDIO_MIME = { mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac', flac: 'audio/flac', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/opus', aif: 'audio/aiff', aiff: 'audio/aiff', wma: 'audio/x-ms-wma', alac: 'audio/mp4' };
       const audioCT = uploadFile.type || AUDIO_MIME[ext] || 'audio/mpeg';
-      const up = await sb.storage.from('tracks').upload(audioPath, uploadFile, { cacheControl: '31536000', contentType: audioCT, upsert: false });
-      if (up.error) throw up.error;
+      const audioUrl = await uploadMedia('tracks', uploadFile, (p) => { fill.style.width = (10 + p * 50) + '%'; }, audioCT);
       fill.style.width = '60%';
-      const audioUrl = sb.storage.from('tracks').getPublicUrl(audioPath).data.publicUrl;
 
       let coverUrl = null;
       if (coverFile) {
-        const cext = (coverFile.name.split('.').pop() || 'jpg').toLowerCase();
-        const coverPath = `${uid}/${stamp}.${cext}`;
-        const cu = await sb.storage.from('covers').upload(coverPath, coverFile, { cacheControl: '31536000', contentType: coverFile.type, upsert: false });
-        if (!cu.error) coverUrl = sb.storage.from('covers').getPublicUrl(coverPath).data.publicUrl;
+        try { coverUrl = await uploadMedia('covers', coverFile); } catch (_) {}
       }
       fill.style.width = '80%';
 
@@ -4054,10 +4089,7 @@ async function uploadAlbumTrack(file, opts, onProgress) {
   if (uploadFile.size > LIMIT) throw new Error('“' + file.name + '” es demasiado grande.');
   const ext = (uploadFile.name.split('.').pop() || 'mp3').toLowerCase();
   const AUDIO_MIME = { mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac', flac: 'audio/flac', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/opus', aif: 'audio/aiff', aiff: 'audio/aiff', wma: 'audio/x-ms-wma', alac: 'audio/mp4' };
-  const audioPath = `${uid}/${stamp}.${ext}`;
-  const up = await sb.storage.from('tracks').upload(audioPath, uploadFile, { cacheControl: '31536000', contentType: uploadFile.type || AUDIO_MIME[ext] || 'audio/mpeg', upsert: false });
-  if (up.error) throw up.error;
-  const audioUrl = sb.storage.from('tracks').getPublicUrl(audioPath).data.publicUrl;
+  const audioUrl = await uploadMedia('tracks', uploadFile, null, uploadFile.type || AUDIO_MIME[ext] || 'audio/mpeg');
   let waveform = null; try { waveform = await computeWaveformPeaks(uploadFile); } catch (_) {}
   const payload = {
     user_id: uid, title: opts.title, genre: opts.genre || null,
@@ -4155,9 +4187,7 @@ function openAlbumModal() {
       // portada del álbum
       let coverUrl = null;
       if (coverFile) {
-        const cext = (coverFile.name.split('.').pop() || 'jpg').toLowerCase();
-        const cu = await sb.storage.from('covers').upload(`${uid}/album-${Date.now()}.${cext}`, coverFile, { cacheControl: '31536000', contentType: coverFile.type, upsert: false });
-        if (!cu.error) coverUrl = sb.storage.from('covers').getPublicUrl(cu.data.path).data.publicUrl;
+        try { coverUrl = await uploadMedia('covers', coverFile); } catch (_) {}
       }
       // crea el álbum
       const { data: alb, error: ae } = await sb.from('albums').insert({ user_id: uid, title, description: description || null, cover_url: coverUrl, kind }).select().single();
@@ -4388,10 +4418,9 @@ async function uploadForumFiles(files, onProgress) {
     const f = files[i];
     if (f.size > 50 * 1024 * 1024) { toast(`"${f.name}" supera 50 MB y se omite`); continue; }
     const ext = (f.name.split('.').pop() || 'bin').toLowerCase();
-    const path = `${uid}/forum-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-    const up = await sb.storage.from('tracks').upload(path, f, { cacheControl: '31536000', contentType: f.type || 'application/octet-stream', upsert: false });
-    if (up.error) { toast('No se pudo subir ' + f.name); continue; }
-    out.push({ url: sb.storage.from('tracks').getPublicUrl(path).data.publicUrl, type: f.type || '', name: f.name, size: f.size });
+    let furl;
+    try { furl = await uploadMedia('tracks', f); } catch (_) { toast('No se pudo subir ' + f.name); continue; }
+    out.push({ url: furl, type: f.type || '', name: f.name, size: f.size });
     if (onProgress) onProgress((i + 1) / files.length);
   }
   return out;
@@ -4660,12 +4689,8 @@ function openPhotoUploadModal() {
     const fill = bar.firstElementChild; fill.style.width = '20%';
     try {
       const uid = state.user.id;
-      const ext = (photoFile.name.split('.').pop() || 'jpg').toLowerCase();
-      const path = `${uid}/${Date.now()}.${ext}`;
-      const up = await sb.storage.from('posts').upload(path, photoFile, { cacheControl: '31536000', contentType: photoFile.type, upsert: false });
-      if (up.error) throw up.error;
+      const image_url = await uploadMedia('posts', photoFile, (p) => { fill.style.width = (20 + p * 50) + '%'; });
       fill.style.width = '70%';
-      const image_url = sb.storage.from('posts').getPublicUrl(path).data.publicUrl;
       const { error } = await sb.from('posts').insert({ user_id: uid, image_url, caption });
       if (error) throw error;
       fill.style.width = '100%';
@@ -5807,17 +5832,11 @@ function openProfileCustomizer() {
       };
       if (bannerFile) {
         const ext = (bannerFile.name.split('.').pop() || 'jpg').toLowerCase();
-        const path = `${uid}/banner_${Date.now()}.${ext}`;
-        const up = await sb.storage.from('avatars').upload(path, bannerFile, { cacheControl: '31536000', contentType: bannerFile.type });
-        if (up.error) throw up.error;
-        theme.banner = sb.storage.from('avatars').getPublicUrl(path).data.publicUrl;
+        theme.banner = await uploadMedia('avatars', bannerFile);
       }
       if (bgFile) {
         const ext = (bgFile.name.split('.').pop() || 'jpg').toLowerCase();
-        const path = `${uid}/bg_${Date.now()}.${ext}`;
-        const up = await sb.storage.from('avatars').upload(path, bgFile, { cacheControl: '31536000', contentType: bgFile.type });
-        if (up.error) throw up.error;
-        theme.bg.image = sb.storage.from('avatars').getPublicUrl(path).data.publicUrl;
+        theme.bg.image = await uploadMedia('avatars', bgFile);
       }
       const { data, error } = await sb.from('profiles').update({ theme }).eq('id', uid).select().single();
       if (error) throw error;
@@ -6447,10 +6466,7 @@ function openAddStory() {
     publish.disabled = true; publish.textContent = 'Publicando…';
     try {
       const ext = (imgFile.name.split('.').pop() || 'jpg').toLowerCase();
-      const path = `${state.user.id}/story_${Date.now()}.${ext}`;
-      const up = await sb.storage.from('posts').upload(path, imgFile, { cacheControl: '31536000', contentType: imgFile.type, upsert: false });
-      if (up.error) throw up.error;
-      const image_url = sb.storage.from('posts').getPublicUrl(path).data.publicUrl;
+      const image_url = await uploadMedia('posts', imgFile);
       const links = [...linksWrap.querySelectorAll('.st-link-row')]
         .map(r => ({ url: czHref(r.querySelector('.st-link-url').value.trim()), label: r.querySelector('.st-link-label').value.trim() || 'Ver enlace' }))
         .filter(l => l.url);
@@ -8336,10 +8352,7 @@ ${toolBar('smartlink', 'Smart link', 'Edita y publica tu página de lanzamiento'
     $('slCoverBtn').disabled = true; $('slCoverBtn').textContent = 'Subiendo…';
     try {
       const ext = (f.name.split('.').pop() || 'jpg').toLowerCase();
-      const path = `${uid}/sl_${Date.now()}.${ext}`;
-      const up = await sb.storage.from('covers').upload(path, f, { cacheControl: '31536000', contentType: f.type || 'image/jpeg' });
-      if (up.error) throw up.error;
-      smState.cover = sb.storage.from('covers').getPublicUrl(path).data.publicUrl;
+      smState.cover = await uploadMedia('covers', f);
       const cp = $('slCoverPrev'); cp.style.backgroundImage = `url('${czUrl(smState.cover)}')`; cp.innerHTML = '';
       slRenderPreview();
     } catch (e) { toast('No se pudo subir la imagen'); }
@@ -8760,10 +8773,7 @@ function createEventModal(existing) {
       let flyer_url = existing?.flyer_url || null;
       if (flyerFile) {
         const ext = (flyerFile.name.split('.').pop() || 'jpg').toLowerCase();
-        const path = `${state.user.id}/event_${Date.now()}.${ext}`;
-        const up = await sb.storage.from('posts').upload(path, flyerFile, { cacheControl: '31536000', contentType: flyerFile.type, upsert: false });
-        if (up.error) throw up.error;
-        flyer_url = sb.storage.from('posts').getPublicUrl(path).data.publicUrl;
+        flyer_url = await uploadMedia('posts', flyerFile);
       }
       const endVal = m.querySelector('#evEnd').value;
       const payload = {
@@ -9142,10 +9152,7 @@ function renderSettings() {
       let avatar_url = state.profile.avatar_url;
       if (newAvatarFile) {
         const ext = (newAvatarFile.name.split('.').pop()||'jpg').toLowerCase();
-        const path = `${state.user.id}/${Date.now()}.${ext}`;
-        const up = await sb.storage.from('avatars').upload(path, newAvatarFile, { cacheControl: '31536000', contentType: newAvatarFile.type });
-        if (up.error) throw up.error;
-        avatar_url = sb.storage.from('avatars').getPublicUrl(path).data.publicUrl;
+        avatar_url = await uploadMedia('avatars', newAvatarFile);
       }
       const theme = { ...(state.profile.theme && typeof state.profile.theme === 'object' ? state.profile.theme : {}), avatarPos: avatarPos || null, avatarZoom: avatarZoom > 1 ? avatarZoom : null };
       const { data, error } = await sb.from('profiles').update({ display_name, username, bio, city: city || null, roles, avatar_url, theme }).eq('id', state.user.id).select().single();
@@ -10540,10 +10547,7 @@ async function sendDm(e) {
     const sendBtn = $('dmForm').querySelector('.dm-send'); sendBtn.disabled = true;
     try {
       const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
-      const path = `${state.user.id}/${Date.now()}.${ext}`;
-      const up = await sb.storage.from('chat').upload(path, file, { cacheControl: '31536000', contentType: file.type || 'application/octet-stream' });
-      if (up.error) throw up.error;
-      attachment_url = sb.storage.from('chat').getPublicUrl(path).data.publicUrl;
+      attachment_url = await uploadMedia('chat', file);
       attachment_type = file.type.startsWith('image') ? 'image' : file.type.startsWith('video') ? 'video' : file.type.startsWith('audio') ? 'audio' : 'file';
       attachment_name = file.name;
     } catch (err) { toast('No se pudo subir el archivo'); sendBtn.disabled = false; return; }
@@ -10562,10 +10566,7 @@ async function dmSendAudio(blob, secs, peaks) {
   const other = state.dmPeer;
   if ((!isGroup && !other) || !requireNotBanned()) return;
   try {
-    const path = `${state.user.id}/${Date.now()}.webm`;
-    const up = await sb.storage.from('chat').upload(path, blob, { cacheControl: '31536000', contentType: blob.type || 'audio/webm' });
-    if (up.error) throw up.error;
-    const url = sb.storage.from('chat').getPublicUrl(path).data.publicUrl;
+    const url = await uploadMedia('chat', blob, null, blob.type || 'audio/webm');
     const reply_to = state.dmReplyTo?.id || null; cancelReply();
     const name = JSON.stringify({ d: secs, w: (peaks && peaks.length) ? peaks : undefined });
     const baseRow = isGroup
