@@ -8720,7 +8720,9 @@ async function openEvent(id) {
         <button class="btn primary" id="evSaveBtn" style="flex:1">${saved ? '🔖 Guardado' : '🔖 Guardar y avisarme'}</button>
         ${isOwner ? `<button class="btn" id="evEditBtn"><svg fill="none" stroke="currentColor"><use href="#i-settings"/></svg></button><button class="btn danger-btn" id="evDelBtn"><svg fill="none" stroke="#fff"><use href="#i-trash"/></svg></button>` : ''}
       </div>
+      <div class="ev-gallery" id="evGallery"></div>
     </div>`;
+  loadEventGallery(ev, body.querySelector('#evGallery'), isOwner || state.profile.is_admin);
   const evOwner = body.querySelector('#evOwner'); if (evOwner) evOwner.onclick = () => { m.remove(); openProfile(ev.user_id); };
   const saveBtn = body.querySelector('#evSaveBtn');
   const paintSave = () => { saveBtn.textContent = state.eventSaves.has(ev.id) ? '🔖 Guardado' : '🔖 Guardar y avisarme'; saveBtn.classList.toggle('primary', !state.eventSaves.has(ev.id)); };
@@ -8734,6 +8736,296 @@ async function openEvent(id) {
     };
   }
 }
+/* ======================= GALERÍA DE FOTOS DEL EVENTO ======================= */
+async function loadEventGallery(ev, root, canManage) {
+  if (!root) return;
+  root.innerHTML = `<div class="evg-head"><h3>📸 Galería del evento <span id="evgCount" class="evg-count"></span></h3><div class="evg-actions" id="evgActions"></div></div><div class="evg-strip" id="evgStrip"><div class="loading" style="padding:18px"><div class="spinner"></div></div></div>`;
+  const { data: photos } = await sb.from('event_photos').select('*, profiles:user_id(id,username,display_name,avatar_url,theme,verified)').eq('event_id', ev.id).order('sort', { ascending: true }).order('created_at', { ascending: true });
+  const list = photos || [];
+  let myLikes = new Set();
+  try { if (list.length) { const { data: lk } = await sb.from('event_photo_likes').select('photo_id').eq('user_id', state.user.id).in('photo_id', list.map(p => p.id)); myLikes = new Set((lk || []).map(x => x.photo_id)); } } catch (_) {}
+
+  const cnt = root.querySelector('#evgCount'); if (cnt) cnt.textContent = list.length ? `· ${list.length}` : '';
+  const acts = root.querySelector('#evgActions');
+  let html = '';
+  if (canManage) html += `<button class="btn sm" id="evgUpload"><svg fill="none" stroke="currentColor"><use href="#i-upload"/></svg> Subir fotos</button>`;
+  if (canManage) html += `<button class="btn sm" id="evgMusic"><svg fill="none" stroke="currentColor"><use href="#i-music"/></svg> ${ev.gallery_track_id ? 'Música ✓' : 'Poner música'}</button>`;
+  if (list.length) html += `<button class="btn sm" id="evgDlAll"><svg fill="none" stroke="currentColor"><use href="#i-download"/></svg> Descargar todas</button>`;
+  acts.innerHTML = html;
+
+  const strip = root.querySelector('#evgStrip');
+  if (!list.length) {
+    strip.className = 'evg-empty';
+    strip.innerHTML = canManage ? `<p>Aún no hay fotos. ¡Sube las del evento para que todos se vean!</p>` : `<p>Todavía no hay fotos de este evento.</p>`;
+  } else {
+    strip.className = 'evg-strip';
+    strip.innerHTML = '';
+    list.forEach((p, i) => {
+      const cell = el(`<button class="evg-cell"><img decoding="async" loading="lazy" src="${esc(p.image_url)}" alt="" />${p.likes ? `<span class="evg-likes ${myLikes.has(p.id) ? 'on' : ''}">♥ <b>${p.likes}</b></span>` : ''}</button>`);
+      cell.onclick = () => openEventPhotoViewer(list, i, ev, canManage, myLikes);
+      strip.appendChild(cell);
+    });
+  }
+
+  if (canManage) {
+    const up = root.querySelector('#evgUpload');
+    if (up) up.onclick = () => eventGalleryUpload(ev, () => loadEventGallery(ev, root, canManage));
+    const mus = root.querySelector('#evgMusic');
+    if (mus) mus.onclick = () => openGalleryMusicPicker(ev, () => loadEventGallery(ev, root, canManage));
+  }
+  const dl = root.querySelector('#evgDlAll');
+  if (dl) dl.onclick = () => downloadAllPhotos(list, ev, dl);
+}
+
+function eventGalleryUpload(ev, onDone) {
+  if (!requireNotBanned()) return;
+  const inp = el('<input type="file" accept="image/*" multiple hidden />');
+  document.body.appendChild(inp);
+  inp.onchange = async () => {
+    const files = Array.from(inp.files || []); inp.remove();
+    if (!files.length) return;
+    toast(`Subiendo ${files.length} foto${files.length === 1 ? '' : 's'}…`);
+    const sort = Date.now();
+    let ok = 0;
+    for (let i = 0; i < files.length; i++) {
+      try {
+        const url = await uploadMedia('posts', files[i]);
+        const { error } = await sb.from('event_photos').insert({ event_id: ev.id, user_id: state.user.id, image_url: url, sort: sort + i });
+        if (!error) ok++;
+      } catch (e) { console.warn('foto', e); }
+    }
+    toast(`${ok} foto${ok === 1 ? '' : 's'} subida${ok === 1 ? '' : 's'} ✓`);
+    onDone && onDone();
+  };
+  inp.click();
+}
+
+function openGalleryMusicPicker(ev, onDone) {
+  const m = openModal(`<div class="modal-head"><h3>Música de la galería</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <p style="color:var(--ink-soft);font-size:13px;margin-top:0">Elige una pista de UnderBro. Sonará mientras la gente mira las fotos del evento.</p>
+      <div class="convo-search"><svg fill="none" stroke="currentColor"><use href="#i-search"/></svg><input type="text" id="gmSearch" placeholder="Buscar pista por título o artista…" autocomplete="off"></div>
+      <div id="gmList" style="margin-top:10px;display:flex;flex-direction:column;gap:6px"></div>
+      ${ev.gallery_track_id ? `<button class="btn danger-btn" id="gmClear" style="width:100%;margin-top:12px">Quitar música</button>` : ''}
+    </div>`);
+  const listEl = m.querySelector('#gmList');
+  const render = (rows) => {
+    listEl.innerHTML = '';
+    (rows || []).forEach(t => {
+      const row = el(`<button class="gm-row"><span class="gm-cover">${t.cover_url ? `<img src="${esc(t.cover_url)}" alt="">` : ''}</span><span class="gm-meta"><b>${esc(t.title || 'Pista')}</b><span>${esc(t.profiles?.display_name || t.profiles?.username || '')}</span></span></button>`);
+      row.onclick = async () => { await sb.from('events').update({ gallery_track_id: t.id }).eq('id', ev.id); ev.gallery_track_id = t.id; toast('Música puesta ✓'); m.remove(); onDone && onDone(); };
+      listEl.appendChild(row);
+    });
+  };
+  const search = async (q) => {
+    let query = sb.from('tracks').select('id,title,cover_url,profiles:user_id(username,display_name)').order('plays', { ascending: false }).limit(20);
+    if (q) query = sb.from('tracks').select('id,title,cover_url,profiles:user_id(username,display_name)').ilike('title', `%${q}%`).limit(20);
+    const { data } = await query; render(data || []);
+  };
+  const inp = m.querySelector('#gmSearch'); let tmr;
+  inp.oninput = () => { clearTimeout(tmr); tmr = setTimeout(() => search(inp.value.trim()), 250); };
+  search('');
+  const clr = m.querySelector('#gmClear');
+  if (clr) clr.onclick = async () => { await sb.from('events').update({ gallery_track_id: null }).eq('id', ev.id); ev.gallery_track_id = null; toast('Música quitada'); m.remove(); onDone && onDone(); };
+}
+
+async function playGalleryMusic(ev) {
+  if (!ev.gallery_track_id) return;
+  if (playGalleryMusic._last === ev.gallery_track_id && state.current && state.current.id === ev.gallery_track_id) return;
+  try {
+    const { data: t } = await sb.from('tracks').select('*, profiles!tracks_user_id_fkey(*)').eq('id', ev.gallery_track_id).maybeSingle();
+    if (t) { playGalleryMusic._last = ev.gallery_track_id; playTrack(t); }
+  } catch (_) {}
+}
+
+async function loadJSZip() {
+  if (window.JSZip) return window.JSZip;
+  await new Promise((res, rej) => { const s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js'; s.onload = res; s.onerror = rej; document.head.appendChild(s); });
+  return window.JSZip;
+}
+async function downloadEventPhoto(url, idx) {
+  try {
+    toast('Descargando…');
+    const res = await fetch(url); const blob = await res.blob();
+    const ext = (url.split('.').pop() || 'jpg').split('?')[0];
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `foto-${(idx || 0) + 1}.${ext}`;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+  } catch (_) { toast('No se pudo descargar'); }
+}
+async function downloadAllPhotos(photos, ev, btn) {
+  if (!photos.length) return;
+  if (btn) { btn.disabled = true; btn.textContent = 'Preparando…'; }
+  try {
+    const JSZip = await loadJSZip();
+    const zip = new JSZip();
+    for (let i = 0; i < photos.length; i++) {
+      if (btn) btn.textContent = `Descargando ${i + 1}/${photos.length}…`;
+      try { const r = await fetch(photos[i].image_url); const b = await r.blob(); const ext = (photos[i].image_url.split('.').pop() || 'jpg').split('?')[0]; zip.file(`foto-${String(i + 1).padStart(3, '0')}.${ext}`, b); } catch (_) {}
+    }
+    if (btn) btn.textContent = 'Comprimiendo…';
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+    a.download = `${(ev.title || 'evento').replace(/[\\/:*?"<>|]/g, '_')}-fotos.zip`;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 6000);
+    toast('ZIP descargado ✓');
+  } catch (e) { console.error(e); toast('No se pudo crear el ZIP'); }
+  finally { if (btn) { btn.disabled = false; btn.innerHTML = `<svg fill="none" stroke="currentColor"><use href="#i-download"/></svg> Descargar todas`; } }
+}
+
+function openEventPhotoViewer(photos, index, ev, canManage, myLikes) {
+  myLikes = myLikes || new Set();
+  let i = index;
+  const v = el(`
+    <div class="evp-viewer" id="evpViewer">
+      <div class="evp-top">
+        <button class="evp-icon" id="evpClose" aria-label="Cerrar"><svg fill="none" stroke="currentColor"><use href="#i-x"/></svg></button>
+        <div class="evp-who" id="evpWho"></div>
+        ${ev.gallery_track_id ? `<button class="evp-icon" id="evpMusic" aria-label="Música"><svg fill="none" stroke="currentColor"><use href="#i-music"/></svg></button>` : '<span></span>'}
+      </div>
+      <button class="evp-nav prev" id="evpPrev" aria-label="Anterior"><svg fill="none" stroke="currentColor"><use href="#i-chevron-left"/></svg></button>
+      <div class="evp-stage" id="evpStage"></div>
+      <button class="evp-nav next" id="evpNext" aria-label="Siguiente"><svg fill="none" stroke="currentColor"><use href="#i-chevron-right"/></svg></button>
+      <div class="evp-tags" id="evpTags"></div>
+      <div class="evp-bar" id="evpBar"></div>
+    </div>`);
+  document.body.appendChild(v);
+  document.documentElement.style.overflow = 'hidden';
+  playGalleryMusic(ev);
+
+  const close = () => { v.remove(); document.documentElement.style.overflow = ''; document.removeEventListener('keydown', onKey); };
+  const onKey = (e) => { if (e.key === 'Escape') close(); else if (e.key === 'ArrowLeft') go(-1); else if (e.key === 'ArrowRight') go(1); };
+  document.addEventListener('keydown', onKey);
+  v.querySelector('#evpClose').onclick = close;
+  v.addEventListener('click', (e) => { if (e.target === v) close(); });
+  const mus = v.querySelector('#evpMusic'); if (mus) mus.onclick = () => { playGalleryMusic._last = null; playGalleryMusic(ev); };
+
+  async function render() {
+    const p = photos[i]; if (!p) { close(); return; }
+    const stage = v.querySelector('#evpStage');
+    stage.innerHTML = `<img decoding="async" src="${esc(p.image_url)}" alt="${esc(p.caption || '')}" />${p.caption ? `<div class="evp-cap">${linkifyMentions(p.caption)}</div>` : ''}`;
+    const who = v.querySelector('#evpWho');
+    who.innerHTML = `${avatarHTML(p.profiles)}<div><b>${esc(p.profiles?.display_name || p.profiles?.username || 'usuario')}</b><span>${i + 1} / ${photos.length}</span></div>`;
+    who.querySelector('div > b') && (who.onclick = () => { close(); openProfile(p.user_id); });
+    v.querySelector('#evpPrev').style.visibility = i > 0 ? 'visible' : 'hidden';
+    v.querySelector('#evpNext').style.visibility = i < photos.length - 1 ? 'visible' : 'hidden';
+    const liked = myLikes.has(p.id);
+    const canDel = canManage || p.user_id === state.user.id;
+    v.querySelector('#evpBar').innerHTML = `
+      <button class="evp-act ${liked ? 'on' : ''}" data-a="like"><svg fill="${liked ? 'currentColor' : 'none'}" stroke="currentColor"><use href="#i-heart"/></svg><b>${p.likes || 0}</b></button>
+      <button class="evp-act" data-a="comment"><svg fill="none" stroke="currentColor"><use href="#i-comment"/></svg><span>Comentar</span></button>
+      <button class="evp-act" data-a="tag"><svg fill="none" stroke="currentColor"><use href="#i-people"/></svg><span>Etiquetar</span></button>
+      <button class="evp-act" data-a="dl"><svg fill="none" stroke="currentColor"><use href="#i-download"/></svg></button>
+      <button class="evp-act" data-a="share"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg></button>
+      ${canDel ? `<button class="evp-act" data-a="del"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg></button>` : ''}`;
+    const bar = v.querySelector('#evpBar');
+    bar.querySelector('[data-a="like"]').onclick = (e) => toggleEventPhotoLike(p, myLikes, e.currentTarget);
+    bar.querySelector('[data-a="comment"]').onclick = () => openEventPhotoComments(p);
+    bar.querySelector('[data-a="tag"]').onclick = () => openEventPhotoTag(p, () => renderTags());
+    bar.querySelector('[data-a="dl"]').onclick = () => downloadEventPhoto(p.image_url, i);
+    bar.querySelector('[data-a="share"]').onclick = () => shareEventPhoto(p, ev);
+    const del = bar.querySelector('[data-a="del"]');
+    if (del) del.onclick = async () => { if (!confirm('¿Borrar esta foto?')) return; await sb.from('event_photos').delete().eq('id', p.id); photos.splice(i, 1); if (!photos.length) { close(); return; } if (i >= photos.length) i = photos.length - 1; render(); };
+    renderTags();
+  }
+  async function renderTags() {
+    const p = photos[i]; const box = v.querySelector('#evpTags');
+    try {
+      const { data } = await sb.from('event_photo_tags').select('user_id, profiles:user_id(id,username,display_name)').eq('photo_id', p.id);
+      const tags = data || [];
+      if (!tags.length) { box.innerHTML = ''; return; }
+      box.innerHTML = `<span class="evp-tag-lbl">🏷️</span>` + tags.map(t => `<button class="evp-tag" data-uid="${t.user_id}">@${esc(t.profiles?.username || 'usuario')}</button>`).join('');
+      box.querySelectorAll('.evp-tag').forEach(b => b.onclick = () => { close(); openProfile(b.dataset.uid); });
+    } catch (_) { box.innerHTML = ''; }
+  }
+  function go(d) { const ni = i + d; if (ni < 0 || ni >= photos.length) return; i = ni; render(); }
+  v.querySelector('#evpPrev').onclick = () => go(-1);
+  v.querySelector('#evpNext').onclick = () => go(1);
+  // swipe
+  let sx = 0; v.querySelector('#evpStage').addEventListener('touchstart', e => sx = e.touches[0].clientX, { passive: true });
+  v.querySelector('#evpStage').addEventListener('touchend', e => { const dx = e.changedTouches[0].clientX - sx; if (Math.abs(dx) > 50) go(dx < 0 ? 1 : -1); }, { passive: true });
+  render();
+}
+
+async function toggleEventPhotoLike(p, myLikes, btn) {
+  const liked = myLikes.has(p.id);
+  if (btn._busy) return; btn._busy = true;
+  myLikes[liked ? 'delete' : 'add'](p.id);
+  p.likes = Math.max(0, (p.likes || 0) + (liked ? -1 : 1));
+  btn.classList.toggle('on', !liked);
+  btn.querySelector('b').textContent = p.likes;
+  btn.querySelector('svg').setAttribute('fill', liked ? 'none' : 'currentColor');
+  try {
+    if (liked) await sb.from('event_photo_likes').delete().eq('photo_id', p.id).eq('user_id', state.user.id);
+    else await sb.from('event_photo_likes').insert({ photo_id: p.id, user_id: state.user.id });
+  } catch (_) {}
+  finally { btn._busy = false; }
+}
+
+function shareEventPhoto(p, ev) {
+  (async () => {
+    try { const r = await fetch(p.image_url); const b = await r.blob(); await shareBlob(b, 'foto.jpg', `Fotos de ${ev.title || 'el evento'} en UnderBro`); }
+    catch (_) { toast('No se pudo compartir'); }
+  })();
+}
+
+function openEventPhotoTag(p, onDone) {
+  const already = state.__epTagMine === p.id;
+  const m = openModal(`<div class="modal-head"><h3>Etiquetar en la foto</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <button class="btn primary" id="tagMe" style="width:100%;margin-bottom:12px">🙋 Etiquetarme</button>
+      <div class="field"><label>O etiqueta a alguien por su usuario</label><input type="text" id="tagWho" placeholder="@usuario" autocomplete="off" /></div>
+      <button class="btn" id="tagAdd" style="width:100%">Etiquetar</button>
+      <div class="auth-msg" id="tagMsg"></div>
+    </div>`);
+  attachMentionAutocomplete(m.querySelector('#tagWho'));
+  const addTag = async (userId) => {
+    if (!userId) return;
+    const { error } = await sb.from('event_photo_tags').insert({ photo_id: p.id, user_id: userId, tagger_id: state.user.id });
+    if (error && !String(error.message || '').includes('duplicate')) { m.querySelector('#tagMsg').textContent = 'No se pudo etiquetar'; return; }
+    if (userId !== state.user.id) notifySocial('photo_tag', userId, { photo_id: p.id });
+    toast('Etiquetado ✓'); m.remove(); onDone && onDone();
+  };
+  m.querySelector('#tagMe').onclick = () => addTag(state.user.id);
+  m.querySelector('#tagAdd').onclick = async () => {
+    const name = m.querySelector('#tagWho').value.trim().replace(/^@/, '');
+    if (!name) return;
+    const { data } = await sb.from('profiles').select('id').ilike('username', name).maybeSingle();
+    if (!data) { m.querySelector('#tagMsg').textContent = 'Usuario no encontrado'; return; }
+    addTag(data.id);
+  };
+}
+
+async function openEventPhotoComments(p) {
+  const m = openModal(`<div class="modal-head"><h3>Comentarios</h3><button class="close">&times;</button></div><div class="modal-body" id="epcBody"><div class="loading" style="padding:18px"><div class="spinner"></div></div></div>`);
+  const body = m.querySelector('#epcBody');
+  const load = async () => {
+    const { data } = await sb.from('event_photo_comments').select('*, profiles:user_id(id,username,display_name,avatar_url,theme,verified)').eq('photo_id', p.id).order('created_at', { ascending: true });
+    const rows = data || [];
+    body.innerHTML = `<div class="epc-list">${rows.length ? '' : '<div class="empty" style="padding:10px"><p>Sé el primero en comentar.</p></div>'}</div>
+      <form class="epc-form" id="epcForm"><input type="text" id="epcInput" placeholder="Escribe un comentario…" maxlength="500" autocomplete="off" /><button class="btn primary" type="submit"><svg style="width:16px;height:16px" fill="none" stroke="#fff"><use href="#i-send"/></svg></button></form>`;
+    const listEl = body.querySelector('.epc-list');
+    rows.forEach(c => {
+      const mine = c.user_id === state.user.id, canDel = mine || state.profile.is_admin;
+      const row = el(`<div class="epc-item">${avatarHTML(c.profiles)}<div class="epc-main"><div class="epc-top"><b data-uid="${c.user_id}">${esc(c.profiles?.display_name || c.profiles?.username || 'usuario')}</b><span>${timeAgo(c.created_at)}</span></div><p>${linkifyMentions(c.body)}</p></div>${canDel ? `<button class="epc-del" title="Borrar">✕</button>` : ''}</div>`);
+      row.querySelector('[data-uid]').onclick = () => { m.remove(); openProfile(c.user_id); };
+      const d = row.querySelector('.epc-del'); if (d) d.onclick = async () => { await sb.from('event_photo_comments').delete().eq('id', c.id); row.remove(); };
+      listEl.appendChild(row);
+    });
+    attachMentionAutocomplete(body.querySelector('#epcInput'));
+    body.querySelector('#epcForm').onsubmit = async (e) => {
+      e.preventDefault();
+      const inp = body.querySelector('#epcInput'); const txt = inp.value.trim(); if (!txt) return;
+      inp.value = '';
+      const { error } = await sb.from('event_photo_comments').insert({ photo_id: p.id, user_id: state.user.id, body: txt });
+      if (error) { toast('No se pudo comentar'); return; }
+      if (p.user_id !== state.user.id) notifySocial('photo_comment', p.user_id, { photo_id: p.id, comment: txt });
+      load();
+    };
+    body.querySelector('.epc-list').scrollTop = body.querySelector('.epc-list').scrollHeight;
+  };
+  load();
+}
+
 function createEventModal(existing) {
   const editing = !!existing;
   const toLocal = (iso) => { try { const d = new Date(iso); const off = d.getTimezoneOffset(); return new Date(d.getTime() - off * 60000).toISOString().slice(0, 16); } catch (_) { return ''; } };
