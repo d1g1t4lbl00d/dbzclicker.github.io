@@ -82,7 +82,10 @@ async function compressPhoto(file, maxSide = 1600, quality = 0.82) {
 }
 // Sube a R2; si algo falla, cae a Supabase Storage (para que las subidas nunca se rompan).
 async function uploadMedia(bucket, file, onProgress, contentType) {
-  try { return await uploadToR2(file, bucket, onProgress, contentType); }
+  try {
+    if ((file.size || 0) > 20 * 1024 * 1024) throw new Error('archivo grande: directo a Storage');
+    return await uploadToR2(file, bucket, onProgress, contentType);
+  }
   catch (e) {
     console.warn('R2 no disponible, uso Supabase Storage:', (e && e.message) || e);
     const ct = contentType || file.type || 'application/octet-stream';
@@ -4131,10 +4134,22 @@ async function uploadAlbumTrack(file, opts, onProgress) {
   const AUDIO_MIME = { mp3: 'audio/mpeg', wav: 'audio/wav', m4a: 'audio/mp4', aac: 'audio/aac', flac: 'audio/flac', ogg: 'audio/ogg', oga: 'audio/ogg', opus: 'audio/opus', aif: 'audio/aiff', aiff: 'audio/aiff', wma: 'audio/x-ms-wma', alac: 'audio/mp4' };
   const audioUrl = await uploadMedia('tracks', uploadFile, null, uploadFile.type || AUDIO_MIME[ext] || 'audio/mpeg');
   let waveform = null; try { waveform = await computeWaveformPeaks(uploadFile); } catch (_) {}
+  // medir la duración del audio (antes se referenciaba una variable inexistente y el álbum entero fallaba)
+  let duration = 0;
+  try {
+    duration = await new Promise((res) => {
+      const u = URL.createObjectURL(uploadFile); const a = new Audio();
+      const done = (d) => { try { URL.revokeObjectURL(u); } catch (_) {} res(d); };
+      a.onloadedmetadata = () => done(a.duration || 0);
+      a.onerror = () => done(0);
+      setTimeout(() => done(0), 10000);
+      a.src = u;
+    });
+  } catch (_) {}
   const payload = {
     user_id: uid, title: opts.title, genre: opts.genre || null,
     artist: state.profile.display_name || state.profile.username,
-    audio_url: audioUrl, cover_url: opts.coverUrl || null, duration: Math.round(duration),
+    audio_url: audioUrl, cover_url: opts.coverUrl || null, duration: Math.round(duration || 0),
     waveform, album_id: opts.album_id, album_pos: opts.album_pos,
   };
   let { error } = await sb.from('tracks').insert(payload);
