@@ -8639,32 +8639,53 @@ function fmtEventFull(iso) {
 async function renderEvents() {
   setActiveNav('events');
   const main = $('main');
-  main.innerHTML = `<div class="main-head"><div><h2>Eventos</h2><div class="sub">Conciertos, quedadas y fechas de la comunidad</div></div><button class="btn primary" id="newEventBtn"><svg fill="none" stroke="#fff"><use href="#i-plus"/></svg> Crear</button></div><div id="evList"><div class="loading" style="padding:30px"><div class="spinner"></div></div></div>`;
+  main.innerHTML = `<div class="main-head"><div><h2>Eventos</h2><div class="sub">Conciertos, quedadas y fechas de la comunidad</div></div><button class="btn primary" id="newEventBtn"><svg fill="none" stroke="#fff"><use href="#i-plus"/></svg> Crear</button></div>
+    <div class="ev-tabs" id="evTabs"><button data-t="upcoming" class="on">Próximos</button><button data-t="past">📸 Recuerdos</button></div>
+    <div id="evList"><div class="loading" style="padding:30px"><div class="spinner"></div></div></div>`;
   $('newEventBtn').onclick = () => createEventModal();
   const since = new Date(Date.now() - 6 * 3600 * 1000).toISOString();
-  const { data } = await sb.from('events').select('*, profiles!events_user_id_fkey(*)').gte('starts_at', since).order('starts_at', { ascending: true }).limit(80);
+  const [upRes, paRes] = await Promise.all([
+    sb.from('events').select('*, profiles!events_user_id_fkey(*)').gte('starts_at', since).order('starts_at', { ascending: true }).limit(80),
+    sb.from('events').select('*, profiles!events_user_id_fkey(*)').lt('starts_at', since).order('starts_at', { ascending: false }).limit(80),
+  ]);
+  const upcoming = upRes.data || [], past = paRes.data || [];
+  // nº de fotos de cada evento pasado
+  const counts = {};
+  if (past.length) { try { const { data: ph } = await sb.from('event_photos').select('event_id').in('event_id', past.map(e => e.id)); (ph || []).forEach(r => counts[r.event_id] = (counts[r.event_id] || 0) + 1); } catch (_) {} }
   const list = $('evList');
-  const evs = data || [];
-  if (!evs.length) { list.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-calendar"/></svg><p>No hay eventos próximos. ¡Crea el primero con el botón <b>Crear</b>!</p></div>`; return; }
-  list.className = 'ev-list'; list.innerHTML = '';
-  evs.forEach(ev => list.appendChild(eventCard(ev)));
+  let tab = 'upcoming';
+  const paint = () => {
+    const evs = tab === 'upcoming' ? upcoming : past;
+    if (!evs.length) {
+      list.className = '';
+      list.innerHTML = tab === 'upcoming'
+        ? `<div class="empty"><svg fill="none"><use href="#i-calendar"/></svg><p>No hay eventos próximos. ¡Crea el primero con el botón <b>Crear</b>!</p></div>`
+        : `<div class="empty"><svg fill="none"><use href="#i-image"/></svg><p>Aún no hay eventos pasados. Cuando un evento termine, aparecerá aquí con su galería de fotos.</p></div>`;
+      return;
+    }
+    list.className = 'ev-list'; list.innerHTML = '';
+    evs.forEach(ev => list.appendChild(eventCard(ev, tab === 'past', counts[ev.id] || 0)));
+  };
+  $('evTabs').querySelectorAll('button').forEach(b => b.onclick = () => { tab = b.dataset.t; $('evTabs').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); paint(); });
+  paint();
 }
-function eventCard(ev) {
+function eventCard(ev, isPast, photoCount) {
   const saved = state.eventSaves.has(ev.id);
+  const badge = (isPast && photoCount) ? `<span class="ev-photobadge"><svg fill="none" stroke="#fff"><use href="#i-image"/></svg> ${photoCount}</span>` : '';
   const cover = ev.flyer_url
-    ? `<div class="ev-flyer" style="background-image:url('${czUrl(ev.flyer_url)}')"></div>`
-    : `<div class="ev-flyer ev-flyer-empty"><svg fill="none" stroke="#fff"><use href="#i-calendar"/></svg></div>`;
+    ? `<div class="ev-flyer ${isPast ? 'past' : ''}" style="background-image:url('${czUrl(ev.flyer_url)}')">${badge}</div>`
+    : `<div class="ev-flyer ev-flyer-empty ${isPast ? 'past' : ''}"><svg fill="none" stroke="#fff"><use href="#i-calendar"/></svg>${badge}</div>`;
+  const foot = isPast
+    ? `<div class="ev-foot"><button class="btn sm primary" data-ev-open><svg fill="none" stroke="#fff"><use href="#i-image"/></svg> ${photoCount ? 'Ver ' + photoCount + ' foto' + (photoCount === 1 ? '' : 's') : 'Ver galería'}</button></div>`
+    : `<div class="ev-foot"><button class="btn sm ${saved ? '' : 'primary'}" data-ev-save><svg fill="none" stroke="currentColor"><use href="#i-bookmark"/></svg> <span>${saved ? 'Guardado' : 'Guardar'}</span></button><span class="ev-saves"><b>${ev.saves_count || 0}</b> guardados</span></div>`;
   const card = el(`
-    <div class="ev-card" data-id="${ev.id}">
+    <div class="ev-card ${isPast ? 'ev-card-past' : ''}" data-id="${ev.id}">
       ${cover}
       <div class="ev-info">
-        <div class="ev-date"><svg fill="none" stroke="currentColor"><use href="#i-clock"/></svg> ${esc(fmtEventDate(ev.starts_at))}</div>
+        <div class="ev-date"><svg fill="none" stroke="currentColor"><use href="#i-clock"/></svg> ${esc(fmtEventDate(ev.starts_at))}${isPast ? ' · finalizado' : ''}</div>
         <div class="ev-title">${esc(ev.title)}</div>
         ${ev.location ? `<div class="ev-loc"><svg fill="none" stroke="currentColor"><use href="#i-pin"/></svg> ${esc(ev.location)}</div>` : ''}
-        <div class="ev-foot">
-          <button class="btn sm ${saved ? '' : 'primary'}" data-ev-save><svg fill="none" stroke="currentColor"><use href="#i-bookmark"/></svg> <span>${saved ? 'Guardado' : 'Guardar'}</span></button>
-          <span class="ev-saves"><b>${ev.saves_count || 0}</b> guardados</span>
-        </div>
+        ${foot}
       </div>
     </div>`);
   card.addEventListener('click', (e) => {

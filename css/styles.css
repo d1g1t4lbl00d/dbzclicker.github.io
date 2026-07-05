@@ -4245,3 +4245,12 @@ img.ub-imgin { animation: ubImgIn .4s ease; }
 .epc-form input { flex: 1; border-radius: 999px; padding: 10px 16px; }
 .epc-form .btn { flex: none; width: 44px; height: 44px; border-radius: 50%; padding: 0; display: grid; place-items: center; }
 @media (min-width: 560px) { .evg-strip { grid-template-columns: repeat(4, 1fr); } }
+
+/* pestañas Próximos / Recuerdos en Eventos */
+.ev-tabs { display: flex; gap: 6px; background: var(--panel-2); border: 1px solid var(--line-soft); border-radius: 12px; padding: 4px; margin-bottom: 16px; max-width: 340px; }
+.ev-tabs button { flex: 1; border: none; background: none; color: var(--ink-soft); font: inherit; font-weight: 700; font-size: 13.5px; padding: 9px; border-radius: 9px; cursor: pointer; transition: background .18s, color .18s; }
+.ev-tabs button.on { background: var(--accent-grad); color: #fff; box-shadow: var(--sh-blue); }
+.ev-photobadge { position: absolute; top: 8px; right: 8px; display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 800; color: #fff; background: rgba(0,0,0,.55); padding: 3px 9px; border-radius: 999px; backdrop-filter: blur(4px); }
+.ev-photobadge svg { width: 13px; height: 13px; }
+.ev-flyer.past::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 40%, rgba(8,10,22,.35)); }
+.ev-card-past .ev-date { color: var(--ink-faint); }
