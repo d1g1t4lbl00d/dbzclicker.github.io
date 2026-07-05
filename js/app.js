@@ -8940,13 +8940,26 @@ async function loadJSZip() {
   return window.JSZip;
 }
 async function downloadEventPhoto(url, idx) {
+  toast('Descargando…');
+  const ext = (url.split('.').pop() || 'jpg').split('?')[0];
+  const name = `foto-${(idx || 0) + 1}.${ext}`;
   try {
-    toast('Descargando…');
     const res = await fetch(url); const blob = await res.blob();
-    const ext = (url.split('.').pop() || 'jpg').split('?')[0];
-    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `foto-${(idx || 0) + 1}.${ext}`;
-    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-  } catch (_) { toast('No se pudo descargar'); }
+    const file = new File([blob], name, { type: blob.type || 'image/jpeg' });
+    // móvil: el menú nativo ofrece "Guardar imagen"
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      try { await navigator.share({ files: [file] }); return; } catch (err) { if (err && err.name === 'AbortError') return; }
+    }
+    const objUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = objUrl; a.download = name; a.rel = 'noopener';
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(objUrl), 5000);
+    toast('Descargada ✓');
+  } catch (_) {
+    // último recurso: abrir la imagen para guardarla a mano
+    window.open(url, '_blank', 'noopener');
+    toast('Abre y mantén pulsado para guardar');
+  }
 }
 async function downloadAllPhotos(photos, ev, btn) {
   if (!photos.length) return;
@@ -9057,11 +9070,22 @@ async function toggleEventPhotoLike(p, myLikes, btn) {
   finally { btn._busy = false; }
 }
 
-function shareEventPhoto(p, ev) {
-  (async () => {
-    try { const r = await fetch(p.image_url); const b = await r.blob(); await shareBlob(b, 'foto.jpg', `Fotos de ${ev.title || 'el evento'} en UnderBro`); }
-    catch (_) { toast('No se pudo compartir'); }
-  })();
+async function shareEventPhoto(p, ev) {
+  const text = `Fotos de ${ev.title || 'el evento'} en UnderBro`;
+  try {
+    // 1) compartir la imagen como archivo (móvil)
+    try {
+      const r = await fetch(p.image_url); const b = await r.blob();
+      const file = new File([b], 'foto.jpg', { type: b.type || 'image/jpeg' });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) { await navigator.share({ files: [file], text }); return; }
+    } catch (err) { if (err && err.name === 'AbortError') return; }
+    // 2) compartir el enlace del evento
+    const url = `${location.origin}/`;
+    if (navigator.share) { try { await navigator.share({ title: 'UnderBro', text, url }); return; } catch (err) { if (err && err.name === 'AbortError') return; } }
+    // 3) copiar el enlace de la imagen
+    try { await navigator.clipboard.writeText(p.image_url); toast('Enlace de la foto copiado ✓'); return; } catch (_) {}
+    window.open(p.image_url, '_blank', 'noopener');
+  } catch (_) { toast('No se pudo compartir'); }
 }
 
 function openEventPhotoTag(p, onDone) {
