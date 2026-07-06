@@ -1903,12 +1903,14 @@ function initSwipeNav() {
       else { ignore = true; return; }   // intención vertical → dejar pasar el scroll
     }
     if (!dragging) return;
-    e.preventDefault();                  // bloquea el scroll vertical mientras arrastras en horizontal
+    // (el scroll vertical durante el arrastre horizontal lo bloquea CSS touch-action: pan-y
+    //  en .main — así este listener puede ser PASIVO y el navegador no espera al JS en
+    //  cada frame de scroll: adiós input lag global en móvil)
     let d = dx;
     const atStart = cur <= 0, atEnd = cur >= SWIPE_SEQ.length - 1;
     if ((d > 0 && atStart) || (d < 0 && atEnd)) d *= 0.32;   // resistencia en los extremos
     main.style.transform = `translateX(${d}px)`;
-  }, { passive: false });
+  }, { passive: true });
   document.addEventListener('touchend', (e) => {
     if (ignore || !dragging) { ignore = true; return; }
     dragging = false; ignore = true;

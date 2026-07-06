@@ -4236,3 +4236,20 @@ img.ub-imgin { animation: ubImgIn .4s ease; }
 .evg-lock p { color: var(--ink-soft); font-size: 13px; margin: 0 0 14px; }
 .evg-lock-form { display: flex; gap: 8px; max-width: 340px; margin: 0 auto; }
 .evg-lock-form input { flex: 1; }
+
+/* =====================================================================
+   PERF TÁCTIL — solo rendimiento, cero cambios visuales
+   ===================================================================== */
+/* sin retardo de doble-tap en toda la app (pan y pinch siguen igual) */
+html { touch-action: manipulation; }
+/* el scroll vertical de la vista es 100% nativo; el gesto horizontal
+   (cambiar de pantalla) lo maneja JS con listeners pasivos.
+   Los scrollers horizontales internos (historias, etc.) no se ven
+   afectados: el gesto lo resuelve su propio contenedor. */
+.main { touch-action: pan-y; }
+/* listas largas: el navegador se salta el renderizado de lo que está
+   fuera de pantalla (idéntico aspecto, mucho menos trabajo por frame) */
+.track { content-visibility: auto; contain-intrinsic-size: auto 118px; }
+.person { content-visibility: auto; contain-intrinsic-size: auto 96px; }
+.convo { content-visibility: auto; contain-intrinsic-size: auto 68px; }
+.forum-reply { content-visibility: auto; contain-intrinsic-size: auto 140px; }
