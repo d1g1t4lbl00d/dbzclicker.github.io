@@ -51,7 +51,7 @@
     },
     {
       "source": "/media/:path*",
-      "destination": "https://pub-7584459257e74c60bbfa65a0f9836d40.r2.dev/:path*"
+      "destination": "https://hvpycejcaljgpxwnykuh.supabase.co/storage/v1/object/public/:path*"
     }
   ],
   "headers": [

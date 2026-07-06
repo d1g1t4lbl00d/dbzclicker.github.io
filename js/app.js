@@ -80,21 +80,21 @@ async function compressPhoto(file, maxSide = 1600, quality = 0.82) {
     return new File([blob], (file.name || 'foto').replace(/\.\w+$/, '') + '.jpg', { type: 'image/jpeg' });
   } catch (_) { return file; }
 }
-// Sube a R2; si algo falla, cae a Supabase Storage (para que las subidas nunca se rompan).
+// Sube el archivo y devuelve una URL /media/... (CDN de Vercel delante del almacenamiento).
+// Primario: Supabase Storage (origen actual de /media). Respaldo: proxy R2 (que además
+// refleja a Storage en el servidor), y último recurso: URL pública directa de Storage.
 async function uploadMedia(bucket, file, onProgress, contentType) {
+  const ct = contentType || file.type || 'application/octet-stream';
+  const ext = (((file.name || '').split('.').pop() || '') || ct.split('/')[1] || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin';
   try {
-    if ((file.size || 0) > 20 * 1024 * 1024) throw new Error('archivo grande: directo a Storage');
-    return await uploadToR2(file, bucket, onProgress, contentType);
-  }
-  catch (e) {
-    console.warn('R2 no disponible, uso Supabase Storage:', (e && e.message) || e);
-    const ct = contentType || file.type || 'application/octet-stream';
-    const ext = ((file.name || '').split('.').pop() || ct.split('/')[1] || 'bin').toLowerCase();
     const path = `${state.user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
     const up = await sb.storage.from(bucket).upload(path, file, { cacheControl: '31536000', contentType: ct, upsert: false });
     if (up.error) throw up.error;
     if (onProgress) onProgress(1);
-    return sb.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+    return `https://underbro.app/media/${bucket}/${path}`;
+  } catch (e) {
+    console.warn('Storage no disponible, uso el proxy R2:', (e && e.message) || e);
+    return await uploadToR2(file, bucket, onProgress, contentType);
   }
 }
 
