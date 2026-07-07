@@ -4101,7 +4101,18 @@ function openUploadModal(prefill) {
 // Render pixel-art: el canvas trabaja a baja resolución (px de arte) y CSS lo
 // escala con image-rendering:pixelated → píxeles gordos y nítidos, estilo Habbo.
 const PLZ = { COLS: 10, ROWS: 10, TW: 32, TH: 16, SPEED: 3.2, WH: 34, PADX: 10, PADT: 58, PADB: 40 };
-const PLZ_BLOCKED = new Set(['0,0', '9,0', '0,9', '9,9', '4,0', '5,0']);   // altavoces/decoración
+// mobiliario de la sala: sólidos (bloquean el paso) y asientos (te sientas al llegar)
+const PLZ_FURN = [
+  { t: 'spk', i: 4, j: 0 }, { t: 'spk', i: 5, j: 0 },                                   // altavoces (escenario norte)
+  { t: 'tree', i: 0, j: 0 }, { t: 'tree', i: 9, j: 0 }, { t: 'tree', i: 0, j: 9 }, { t: 'tree', i: 9, j: 9 },
+  { t: 'lamp', i: 0, j: 4 }, { t: 'lamp', i: 7, j: 0 },                                 // farolas de neón
+  { t: 'bench', i: 2, j: 7, back: 'nw' }, { t: 'bench', i: 3, j: 7, back: 'nw' },       // banco oeste (2 plazas)
+  { t: 'bench', i: 6, j: 2, back: 'ne' }, { t: 'bench', i: 7, j: 2, back: 'ne' },       // banco norte (2 plazas)
+  { t: 'stool', i: 5, j: 5 }, { t: 'stool', i: 7, j: 7 },                               // taburetes
+];
+const PLZ_SOLID = new Set(['spk', 'tree', 'lamp']);
+const PLZ_BLOCKED = new Set(PLZ_FURN.filter(f => PLZ_SOLID.has(f.t)).map(f => f.i + ',' + f.j));
+const PLZ_SEATS = new Map(PLZ_FURN.filter(f => !PLZ_SOLID.has(f.t)).map(f => [f.i + ',' + f.j, f]));
 let plaza = null;          // runtime del render (solo mientras la vista está abierta)
 let plazaChan = null;      // canal realtime (vive toda la sesión: alimenta el badge)
 let plazaCount = 0;
@@ -4196,7 +4207,7 @@ async function renderPlaza() {
       <input type="text" id="plazaMsg" maxlength="140" placeholder="Di algo a la plaza…" autocomplete="off" />
       <button class="btn primary" type="submit" aria-label="Hablar"><svg style="width:16px;height:16px" fill="none" stroke="#fff"><use href="#i-send"/></svg></button>
     </form>
-    <div class="plaza-hint">Toca el suelo para caminar · lo que digas sale en un bocadillo sobre tu cabeza</div>`;
+    <div class="plaza-hint">Toca el suelo para caminar · toca un banco o taburete para sentarte · lo que digas sale en un bocadillo</div>`;
 
   const canvas = $('plazaCanvas'), ctx = canvas.getContext('2d');
   // spawn: última casilla o una libre aleatoria
@@ -4231,6 +4242,12 @@ async function renderPlaza() {
     const fi = Math.floor((rx / (PLZ.TW / 2) + ry / (PLZ.TH / 2)) / 2);
     const fj = Math.floor((ry / (PLZ.TH / 2) - rx / (PLZ.TW / 2)) / 2);
     if (!plzFree(fi, fj)) return;
+    // asiento ocupado por otra persona → no se puede
+    if (PLZ_SEATS.has(plzKey(fi, fj))) {
+      for (const o of plaza.ents.values()) {
+        if (o.id !== state.user.id && !o.path.length && Math.round(o.x) === fi && Math.round(o.y) === fj) { toast('Ese sitio está ocupado 😅'); return; }
+      }
+    }
     const from = { i: Math.round(me.x), j: Math.round(me.y) };
     const path = plzPath(from, { i: fi, j: fj });
     if (!path || !path.length) return;
@@ -4337,19 +4354,77 @@ function plzPrerenderFloor() {
     plzDiamond(c, p.x, p.y, PLZ.TW, PLZ.TH, (i + j) % 2 ? '#161c33' : '#121729'); // cara
   }
 
-  // altavoces pixel en las casillas bloqueadas
-  for (const key of PLZ_BLOCKED) {
-    const [i, j] = key.split(',').map(Number);
-    const p = plzIso(i, j);
-    const cx = Math.round(p.x), base = Math.round(p.y + PLZ.TH / 2);
-    plzRect(c, cx - 7, base - 30, 14, 30, '#0c101f', '#05070f');
-    plzRect(c, cx - 5, base - 26, 10, 10, '#131a30', '#27a9ff');   // cono grande
-    plzRect(c, cx - 3, base - 24, 6, 6, '#0a0e1c');
-    plzRect(c, cx - 4, base - 12, 8, 8, '#131a30', '#6e2df5');     // cono pequeño
-    plzRect(c, cx - 2, base - 10, 4, 4, '#0a0e1c');
-    c.fillStyle = '#2dc878'; c.fillRect(cx + 3, base - 29, 2, 2);   // LED
-  }
   plaza.floor = off;
+}
+
+// ---- sprites pixel del mobiliario (dibujados por frame, ordenados por profundidad) ----
+function plzDrawFurn(f, now) {
+  const c = plaza.ctx;
+  const p = plzIso(f.i, f.j);
+  const cx = Math.round(p.x), base = Math.round(p.y + PLZ.TH / 2);
+
+  if (f.t === 'spk') {
+    plzRect(c, cx - 7, base - 30, 14, 30, '#0c101f', '#05070f');
+    plzRect(c, cx - 5, base - 26, 10, 10, '#131a30', '#27a9ff');
+    plzRect(c, cx - 3, base - 24, 6, 6, '#0a0e1c');
+    plzRect(c, cx - 4, base - 12, 8, 8, '#131a30', '#6e2df5');
+    plzRect(c, cx - 2, base - 10, 4, 4, '#0a0e1c');
+    // LED al ritmo + nota musical pixel que sube y se desvanece
+    if (Math.floor(now / 480) % 2 === 0) { c.fillStyle = '#2dc878'; c.fillRect(cx + 3, base - 29, 2, 2); }
+    const nt = ((now / 1400) + (f.i % 3) * 0.37) % 1;
+    if (nt < 0.85) {
+      c.globalAlpha = 1 - nt;
+      const ny = base - 34 - nt * 20, nx = cx + Math.round(Math.sin(nt * 6.28) * 3);
+      c.fillStyle = '#8fc0ff';
+      c.fillRect(nx, ny, 2, 6); c.fillRect(nx - 2, ny + 5, 3, 3); c.fillRect(nx + 1, ny - 1, 4, 2);   // ♪
+      c.globalAlpha = 1;
+    }
+    return;
+  }
+
+  if (f.t === 'tree') {
+    // árbol urbano en jardinera, con vaivén de copa
+    const sway = Math.floor(now / 900 + f.i + f.j) % 2 ? 1 : 0;
+    plzRect(c, cx - 7, base - 8, 14, 8, '#0c101f', '#05070f');                 // jardinera
+    c.fillStyle = 'rgba(96,140,255,.5)'; c.fillRect(cx - 7, base - 8, 14, 1);  // borde neón
+    plzRect(c, cx - 1, base - 20, 3, 12, '#3d2c1e', '#1c130c');                // tronco
+    const g1 = '#1f7a44', g2 = '#2a9e58', g3 = '#4cc678';
+    plzRect(c, cx - 9 + sway, base - 30, 18, 10, g1, '#0c3520');               // copa base
+    plzRect(c, cx - 6 + sway, base - 36, 13, 8, g2);                            // copa media
+    plzRect(c, cx - 3 + sway, base - 40, 8, 5, g3);                             // copa alta
+    c.fillStyle = g3; c.fillRect(cx - 8 + sway, base - 28, 3, 2); c.fillRect(cx + 5 + sway, base - 33, 3, 2);   // brillos
+    return;
+  }
+
+  if (f.t === 'lamp') {
+    // farola de neón con halo pulsante
+    const pulse = 0.55 + 0.45 * Math.abs(Math.sin(now / 700 + f.i));
+    plzRect(c, cx - 4, base - 4, 8, 4, '#0c101f', '#05070f');                  // pie
+    plzRect(c, cx - 1, base - 34, 2, 30, '#101527', '#05070f');                // poste
+    plzRect(c, cx - 4, base - 40, 8, 7, '#131a30', '#05070f');                 // cabeza
+    c.globalAlpha = pulse;
+    c.fillStyle = '#9db9ff'; c.fillRect(cx - 3, base - 39, 6, 5);              // luz
+    c.globalAlpha = 1;
+    return;
+  }
+
+  if (f.t === 'bench') {
+    // banco metálico oscuro con listones de acento (respaldo hacia atrás: no tapa al sentado)
+    plzRect(c, cx - 10, base - 6, 3, 6, '#0a0e1c'); plzRect(c, cx + 7, base - 6, 3, 6, '#0a0e1c');   // patas
+    plzRect(c, cx - 12, base - 10, 24, 5, '#182038', '#05070f');                                      // asiento
+    c.fillStyle = 'rgba(96,140,255,.55)'; c.fillRect(cx - 12, base - 10, 24, 1);                      // filo neón
+    const bx = f.back === 'nw' ? -14 : 12;                                                            // respaldo
+    plzRect(c, cx + (f.back === 'nw' ? -14 : 12), base - 22, 2, 13, '#101527', '#05070f');
+    plzRect(c, cx + bx - (f.back === 'nw' ? 0 : 8), base - 21, 10, 2, '#182038');
+    plzRect(c, cx + bx - (f.back === 'nw' ? 0 : 8), base - 17, 10, 2, '#182038');
+    return;
+  }
+
+  if (f.t === 'stool') {
+    plzRect(c, cx - 2, base - 8, 4, 6, '#0a0e1c');                             // pie central
+    plzRect(c, cx - 6, base - 12, 12, 5, '#182038', '#05070f');                // asiento
+    c.fillStyle = 'rgba(110,45,245,.6)'; c.fillRect(cx - 6, base - 12, 12, 1); // filo violeta
+  }
 }
 
 function plzDraw(now) {
@@ -4360,14 +4435,26 @@ function plzDraw(now) {
   if (plaza.floor) ctx.drawImage(plaza.floor, 0, 0);
   ctx.translate(plaza.ox, plaza.oy);
 
+  // charcos de luz de las farolas (sobre el suelo, bajo todo lo demás)
+  for (const f of PLZ_FURN) {
+    if (f.t !== 'lamp') continue;
+    const p = plzIso(f.i, f.j);
+    const pulse = 0.5 + 0.5 * Math.abs(Math.sin(now / 700 + f.i));
+    plzDiamond(ctx, p.x, p.y - 4, PLZ.TW * 2, PLZ.TH * 2, `rgba(125,155,255,${0.05 + 0.05 * pulse})`);
+  }
+
   // marcador de destino: rombo que parpadea
   if (plaza.target && plaza.me.path.length) {
     const p = plzIso(plaza.target.i, plaza.target.j);
     if (Math.floor(now / 220) % 2 === 0) plzDiamond(ctx, p.x, p.y + 2, PLZ.TW - 8, PLZ.TH - 4, 'rgba(96,140,255,.55)');
   }
 
-  const ents = [...plaza.ents.values()].sort((a, b) => (a.x + a.y) - (b.x + b.y));
-  for (const e of ents) plzDrawAvatar(e, now);
+  // mobiliario + avatares, ordenados por profundidad (pintor)
+  const items = [];
+  for (const f of PLZ_FURN) items.push({ d: f.i + f.j - 0.15, draw: () => plzDrawFurn(f, now) });
+  for (const e of plaza.ents.values()) items.push({ d: e.x + e.y, draw: () => plzDrawAvatar(e, now) });
+  items.sort((a, b) => a.d - b.d);
+  for (const it of items) it.draw();
 }
 
 function plzDrawAvatar(e, now) {
@@ -4375,25 +4462,34 @@ function plzDrawAvatar(e, now) {
   const p = plzIso(e.x, e.y);
   const cx = Math.round(p.x), base = Math.round(p.y + PLZ.TH / 2);
   const walking = e.path.length > 0;
-  const bob = walking ? Math.round(Math.abs(Math.sin(now / 100)) * 2) : (Math.floor(now / 600 + e.phase) % 2);
+  const seated = !walking && PLZ_SEATS.has(plzKey(Math.round(e.x), Math.round(e.y)));
+  const bob = walking ? Math.round(Math.abs(Math.sin(now / 100)) * 2)
+            : seated ? (Math.floor(now / 1100 + e.phase) % 2)               // respiración lenta sentado
+            : (Math.floor(now / 600 + e.phase) % 2);
   const isMe = e.id === state.user.id;
 
   // aro propio + sombra (rombos pixel)
   if (isMe) plzDiamond(c, cx, base - PLZ.TH / 2 + 2, PLZ.TW - 6, PLZ.TH - 3, 'rgba(96,140,255,.28)');
-  plzDiamond(c, cx, base - 4, 18, 8, 'rgba(0,0,0,.4)');
+  if (!seated) plzDiamond(c, cx, base - 4, 18, 8, 'rgba(0,0,0,.4)');
 
-  const by = base - 24 - bob;   // hombros
+  const by = seated ? (base - 20 - bob) : (base - 24 - bob);   // hombros (sentado: más bajo)
 
-  // piernas (caminando alternan)
-  const lo = walking ? (Math.floor(now / 110) % 2 ? 1 : -1) : 0;
-  plzRect(c, cx - 5, by + 12, 4, 8 + (lo === -1 ? 1 : 0), '#10142a', '#05070f');
-  plzRect(c, cx + 1, by + 12, 4, 8 + (lo === 1 ? 1 : 0), '#10142a', '#05070f');
+  if (seated) {
+    // piernas dobladas hacia delante (estilo Habbo)
+    plzRect(c, cx - 5, by + 12, 10, 3, '#10142a', '#05070f');   // muslos
+    plzRect(c, cx - 5, by + 15, 3, 5, '#10142a', '#05070f');    // espinilla izq
+    plzRect(c, cx + 2, by + 15, 3, 5, '#10142a', '#05070f');    // espinilla dch
+  } else {
+    const lo = walking ? (Math.floor(now / 110) % 2 ? 1 : -1) : 0;
+    plzRect(c, cx - 5, by + 12, 4, 8 + (lo === -1 ? 1 : 0), '#10142a', '#05070f');
+    plzRect(c, cx + 1, by + 12, 4, 8 + (lo === 1 ? 1 : 0), '#10142a', '#05070f');
+  }
 
   // cuerpo plano con el acento del usuario + brazos
   plzRect(c, cx - 7, by, 14, 13, e.accent, '#05070f');
   c.fillStyle = 'rgba(255,255,255,.22)'; c.fillRect(cx - 7, by, 14, 2);       // brillo superior
-  plzRect(c, cx - 10, by + 1, 3, 9, e.accent, '#05070f');                     // brazo izq
-  plzRect(c, cx + 7, by + 1, 3, 9, e.accent, '#05070f');                      // brazo dch
+  plzRect(c, cx - 10, by + 1, 3, seated ? 7 : 9, e.accent, '#05070f');        // brazo izq
+  plzRect(c, cx + 7, by + 1, 3, seated ? 7 : 9, e.accent, '#05070f');         // brazo dch
 
   // cabeza: foto de perfil pixelada en cuadrado con contorno
   const hs = 14, hx = cx - hs / 2, hy = by - hs - 1;
@@ -4423,13 +4519,16 @@ function plzDrawAvatar(e, now) {
     if (cur) lines.push(cur);
     const bw = Math.min(110, Math.max(...lines.map(l => Math.ceil(c.measureText(l).width))) + 10);
     const bh = lines.length * 10 + 7;
-    const bx = Math.round(cx - bw / 2), byy = Math.round(hy - bh - 8);
+    // no dejar que el bocadillo se salga del lienzo (asientos junto al borde)
+    const minX = -plaza.ox + 3, maxX = plaza.canvas.width - plaza.ox - bw - 3;
+    const bx = Math.round(Math.max(minX, Math.min(cx - bw / 2, maxX))), byy = Math.round(hy - bh - 8);
     plzRect(c, bx, byy, bw, bh, '#ffffff', '#0a0e1c');
     c.fillStyle = '#ffffff';
     c.fillRect(cx - 3, byy + bh, 6, 2); c.fillRect(cx - 1, byy + bh + 2, 3, 2);   // cola escalonada
     c.fillStyle = '#0a0e1c'; c.fillRect(cx - 4, byy + bh, 1, 2); c.fillRect(cx + 3, byy + bh, 1, 2); c.fillRect(cx - 2, byy + bh + 2, 1, 2); c.fillRect(cx + 2, byy + bh + 2, 1, 2);
     c.fillStyle = '#131a2c'; c.textAlign = 'center';
-    lines.forEach((l, i2) => c.fillText(l, cx, byy + 10 + i2 * 10));
+    const tcx = bx + bw / 2;   // centrado en el bocadillo (la cola sigue apuntando al avatar)
+    lines.forEach((l, i2) => c.fillText(l, tcx, byy + 10 + i2 * 10));
     c.globalAlpha = 1;
   }
 }
