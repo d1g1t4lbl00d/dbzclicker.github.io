@@ -758,6 +758,7 @@ async function onAuthenticated() {
   initNowPlaying();
   initChat();
   renderRightChats();
+  initPlazaWatch();
   initPresence();
   initDM();
   initCalls();
@@ -1085,6 +1086,7 @@ async function switchView(view) {
   if (view === 'notifications') return renderNotifications();
   if (view === 'people') return renderPeople();
   if (view === 'forum') return renderForum();
+  if (view === 'plaza') return renderPlaza();
   if (view === 'messages') return renderMessages();
   if (view === 'posts') return renderPosts();
   if (view === 'search') return renderSearch();
@@ -1871,7 +1873,7 @@ document.addEventListener('pointercancel', () => { _hapDown = null; }, { passive
 
 function initSwipeNav() {
   if (initSwipeNav._done) return; initSwipeNav._done = true;
-  const EXCLUDE = '.seek, .vol-slider, .wave, #npWave, .stories-bar, .dm-bubble, .dm-thread, .pl-cover-grid, input, textarea, select, .mention-dd, .post-grid';
+  const EXCLUDE = '.seek, .vol-slider, .wave, #npWave, .stories-bar, .dm-bubble, .dm-thread, .pl-cover-grid, input, textarea, select, .mention-dd, .post-grid, .plaza-wrap';
   const main = $('main');
   let sx = 0, sy = 0, st = 0, ignore = true, decided = false, horizontal = false, dragging = false, cur = -1;
   const W = () => window.innerWidth;
@@ -2996,6 +2998,7 @@ function routeGo(params) {
   try {
     if (go === 'notifs') switchView('notifications');
     else if (go === 'forum') switchView('forum');
+    else if (go === 'plaza') switchView('plaza');
     else if (go === 'thread' && params.get('id')) openThread(params.get('id'));
     else if (go === 'chat' && params.get('c')) openDM(params.get('c'));
     else return false;
@@ -4090,6 +4093,345 @@ function openUploadModal(prefill) {
       btn.disabled = false;
     }
   };
+}
+
+/* =======================================================================
+   LA PLAZA — sala isométrica multijugador (fase 1)
+   ======================================================================= */
+// Render pixel-art: el canvas trabaja a baja resolución (px de arte) y CSS lo
+// escala con image-rendering:pixelated → píxeles gordos y nítidos, estilo Habbo.
+const PLZ = { COLS: 10, ROWS: 10, TW: 32, TH: 16, SPEED: 3.2, WH: 34, PADX: 10, PADT: 58, PADB: 40 };
+const PLZ_BLOCKED = new Set(['0,0', '9,0', '0,9', '9,9', '4,0', '5,0']);   // altavoces/decoración
+let plaza = null;          // runtime del render (solo mientras la vista está abierta)
+let plazaChan = null;      // canal realtime (vive toda la sesión: alimenta el badge)
+let plazaCount = 0;
+
+const plzKey = (i, j) => i + ',' + j;
+const plzFree = (i, j) => i >= 0 && j >= 0 && i < PLZ.COLS && j < PLZ.ROWS && !PLZ_BLOCKED.has(plzKey(i, j));
+
+// BFS: camino entre dos casillas (rejilla pequeña, sobra)
+function plzPath(from, to) {
+  if (from.i === to.i && from.j === to.j) return [];
+  const prev = new Map(); prev.set(plzKey(from.i, from.j), null);
+  const q = [[from.i, from.j]];
+  while (q.length) {
+    const [ci, cj] = q.shift();
+    if (ci === to.i && cj === to.j) break;
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const ni = ci + di, nj = cj + dj;
+      if (!plzFree(ni, nj) || prev.has(plzKey(ni, nj))) continue;
+      prev.set(plzKey(ni, nj), [ci, cj]); q.push([ni, nj]);
+    }
+  }
+  if (!prev.has(plzKey(to.i, to.j))) return null;
+  const path = []; let cur = [to.i, to.j];
+  while (cur) { path.unshift({ i: cur[0], j: cur[1] }); cur = prev.get(plzKey(cur[0], cur[1])); }
+  path.shift();
+  return path;
+}
+
+function plzEntity(meta, id) {
+  const e = {
+    id, username: meta.username || 'bro', name: meta.name || meta.username || 'bro',
+    accent: meta.accent || '#3e57fc', x: meta.i ?? 5, y: meta.j ?? 5,
+    path: [], bubble: null, phase: Math.random() * 6.28, img: null, imgOk: false,
+  };
+  if (meta.avatar_url) {
+    const im = new Image(); im.crossOrigin = 'anonymous';
+    im.onload = () => { e.imgOk = true; }; im.src = czUrl ? czUrl(meta.avatar_url) : meta.avatar_url;
+    e.img = im;
+  }
+  return e;
+}
+
+// canal realtime: se abre al iniciar sesión (para el badge) y se reutiliza en la vista
+function initPlazaWatch() {
+  if (plazaChan) return;
+  try {
+    plazaChan = sb.channel('plaza', { config: { presence: { key: state.user.id }, broadcast: { self: false } } });
+    plazaChan
+      .on('presence', { event: 'sync' }, () => {
+        const st = plazaChan.presenceState();
+        plazaCount = Object.keys(st).length;
+        const b = $('cntPlaza'); if (b) b.textContent = plazaCount > 0 ? String(plazaCount) : '';
+        if (plaza) plzSyncRoster(st);
+      })
+      .on('broadcast', { event: 'move' }, ({ payload }) => {
+        if (!plaza || !payload || payload.id === state.user.id || isHidden(payload.id)) return;
+        const e = plaza.ents.get(payload.id); if (!e) return;
+        if (payload.from) { e.x = payload.from.i; e.y = payload.from.j; }
+        e.path = payload.path || [];
+      })
+      .on('broadcast', { event: 'chat' }, ({ payload }) => {
+        if (!plaza || !payload || isHidden(payload.id)) return;
+        const e = plaza.ents.get(payload.id);
+        if (e) e.bubble = { text: String(payload.text || '').slice(0, 140), until: performance.now() + 6500 };
+      })
+      .subscribe();
+  } catch (_) {}
+}
+
+function plzSyncRoster(st) {
+  const seen = new Set();
+  for (const [uid, metas] of Object.entries(st)) {
+    if (isHidden(uid)) continue;
+    seen.add(uid);
+    const meta = metas[metas.length - 1] || {};
+    let e = plaza.ents.get(uid);
+    if (!e) { e = plzEntity(meta, uid); plaza.ents.set(uid, e); }
+    else if (uid !== state.user.id && !e.path.length) { e.x = meta.i ?? e.x; e.y = meta.j ?? e.y; }
+  }
+  for (const uid of [...plaza.ents.keys()]) if (!seen.has(uid)) plaza.ents.delete(uid);
+  const n = $('plazaLiveN'); if (n) n.textContent = String(plaza.ents.size);
+}
+
+async function renderPlaza() {
+  setActiveNav('plaza');
+  const main = $('main');
+  main.innerHTML = `
+    <div class="main-head"><div><h2>La Plaza</h2><div class="sub">Pasea, saluda y conecta con la escena</div></div>
+      <span class="plaza-live"><span class="dot-online"></span> <b id="plazaLiveN">1</b> aquí</span></div>
+    <div class="plaza-wrap" id="plazaWrap"><canvas class="plaza-canvas" id="plazaCanvas"></canvas></div>
+    <form class="plaza-chat" id="plazaChat">
+      <input type="text" id="plazaMsg" maxlength="140" placeholder="Di algo a la plaza…" autocomplete="off" />
+      <button class="btn primary" type="submit" aria-label="Hablar"><svg style="width:16px;height:16px" fill="none" stroke="#fff"><use href="#i-send"/></svg></button>
+    </form>
+    <div class="plaza-hint">Toca el suelo para caminar · lo que digas sale en un bocadillo sobre tu cabeza</div>`;
+
+  const canvas = $('plazaCanvas'), ctx = canvas.getContext('2d');
+  // spawn: última casilla o una libre aleatoria
+  let si = 5, sj = 6;
+  try { const s = JSON.parse(localStorage.getItem('ub_plaza_pos') || 'null'); if (s && plzFree(s.i, s.j)) { si = s.i; sj = s.j; } } catch (_) {}
+  if (!plzFree(si, sj)) { si = 5; sj = 6; }
+
+  const me = plzEntity({
+    username: state.profile.username, name: state.profile.display_name || state.profile.username,
+    avatar_url: state.profile.avatar_url, accent: (state.profile.theme && state.profile.theme.accent) || '#3e57fc',
+    i: si, j: sj,
+  }, state.user.id);
+
+  // resolución de arte fija (los píxeles gordos los pone CSS al escalar)
+  const artW = (PLZ.COLS + PLZ.ROWS) * PLZ.TW / 2 + PLZ.PADX * 2;
+  const artH = (PLZ.COLS + PLZ.ROWS) * PLZ.TH / 2 + PLZ.PADT + PLZ.PADB;
+  canvas.width = artW; canvas.height = artH;
+  ctx.imageSmoothingEnabled = false;
+  plaza = { canvas, ctx, ents: new Map([[state.user.id, me]]), me, raf: 0, last: performance.now(), target: null, ox: artW / 2, oy: PLZ.PADT, floor: null };
+  plzPrerenderFloor();
+
+  // presencia: entrar en la sala
+  initPlazaWatch();
+  const track = () => { try { plazaChan.track({ username: me.username, name: me.name, avatar_url: state.profile.avatar_url, accent: me.accent, i: Math.round(me.x), j: Math.round(me.y) }); } catch (_) {} };
+  track();
+
+  // tocar el suelo → caminar (traducir px CSS → px de arte)
+  canvas.addEventListener('pointerdown', (e) => {
+    const r = canvas.getBoundingClientRect();
+    const s = r.width / canvas.width;
+    const rx = (e.clientX - r.left) / s - plaza.ox, ry = (e.clientY - r.top) / s - plaza.oy;
+    const fi = Math.floor((rx / (PLZ.TW / 2) + ry / (PLZ.TH / 2)) / 2);
+    const fj = Math.floor((ry / (PLZ.TH / 2) - rx / (PLZ.TW / 2)) / 2);
+    if (!plzFree(fi, fj)) return;
+    const from = { i: Math.round(me.x), j: Math.round(me.y) };
+    const path = plzPath(from, { i: fi, j: fj });
+    if (!path || !path.length) return;
+    me.path = path; plaza.target = { i: fi, j: fj, t0: performance.now() };
+    haptic(8);
+    try { plazaChan.send({ type: 'broadcast', event: 'move', payload: { id: state.user.id, from, path } }); } catch (_) {}
+  });
+
+  // hablar
+  $('plazaChat').addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!requireNotBanned()) return;
+    const inp = $('plazaMsg'); const text = inp.value.trim(); if (!text) return;
+    inp.value = '';
+    me.bubble = { text: text.slice(0, 140), until: performance.now() + 6500 };
+    try { plazaChan.send({ type: 'broadcast', event: 'chat', payload: { id: state.user.id, text: text.slice(0, 140) } }); } catch (_) {}
+  });
+
+  // bucle principal (se apaga solo al salir de la vista)
+  const loop = (now) => {
+    if (!plaza || !canvas.isConnected) { plzLeave(); return; }
+    const dt = Math.min((now - plaza.last) / 1000, 0.1); plaza.last = now;
+    for (const e of plaza.ents.values()) plzStep(e, dt, e === me);
+    plzDraw(now);
+    plaza.raf = requestAnimationFrame(loop);
+  };
+  plaza.raf = requestAnimationFrame(loop);
+
+  function plzLeave() {
+    try { plazaChan.untrack(); } catch (_) {}
+    try { localStorage.setItem('ub_plaza_pos', JSON.stringify({ i: Math.round(me.x), j: Math.round(me.y) })); } catch (_) {}
+    plaza = null;
+  }
+
+  function plzStep(e, dt, isMe) {
+    if (!e.path.length) return;
+    const t = e.path[0];
+    const dx = t.i - e.x, dy = t.j - e.y;
+    const dist = Math.hypot(dx, dy), step = PLZ.SPEED * dt;
+    if (dist <= step) {
+      e.x = t.i; e.y = t.j; e.path.shift();
+      if (isMe && !e.path.length) { track(); try { localStorage.setItem('ub_plaza_pos', JSON.stringify({ i: t.i, j: t.j })); } catch (_) {} }
+    } else { e.x += dx / dist * step; e.y += dy / dist * step; }
+  }
+}
+
+function plzIso(x, y) { return { x: (x - y) * PLZ.TW / 2, y: (x + y) * PLZ.TH / 2 }; }
+
+// ---- utilidades pixel-art (rombos por tiras de 1px: bordes duros, cero antialiasing) ----
+function plzDiamond(c, cx, y0, tw, th, color) {
+  c.fillStyle = color;
+  const step = tw / th;                       // px de ancho que gana/pierde cada fila
+  for (let k = 0; k < th; k++) {
+    const hw = Math.round(Math.min(k + 1, th - k) * step);
+    c.fillRect(Math.round(cx - hw), Math.round(y0 + k), hw * 2, 1);
+  }
+}
+function plzRect(c, x, y, w, h, fill, outline) {
+  if (outline) { c.fillStyle = outline; c.fillRect(Math.round(x) - 1, Math.round(y) - 1, w + 2, h + 2); }
+  c.fillStyle = fill; c.fillRect(Math.round(x), Math.round(y), w, h);
+}
+
+function plzPrerenderFloor() {
+  const off = document.createElement('canvas');
+  off.width = plaza.canvas.width; off.height = plaza.canvas.height;
+  const c = off.getContext('2d');
+  c.imageSmoothingEnabled = false;
+  c.translate(plaza.ox, plaza.oy);
+
+  const TL = plzIso(0, 0), TR = plzIso(PLZ.COLS, 0), LL = plzIso(0, PLZ.ROWS), BR = plzIso(PLZ.COLS, PLZ.ROWS);
+  const WH = PLZ.WH;
+
+  // paredes traseras: columnas verticales de 1px (perfectamente crujientes)
+  const wallCols = (a, b, base) => {
+    const dx = b.x - a.x, dy = b.y - a.y, n = Math.abs(Math.round(dx));
+    for (let s = 0; s <= n; s++) {
+      const x = Math.round(a.x + Math.sign(dx) * s);
+      const y = Math.round(a.y + dy * (s / n));
+      c.fillStyle = (Math.floor(s / 8) % 2) ? base : '#101527';
+      c.fillRect(x, y - WH, 1, WH);
+      // filo de neón superior (degradado azul→violeta hecho por tramos)
+      c.fillStyle = s < n / 2 ? '#27a9ff' : '#6e2df5';
+      c.fillRect(x, y - WH, 1, 2);
+    }
+  };
+  wallCols(TL, TR, '#0d1122');
+  wallCols(TL, LL, '#0d1122');
+
+  // letrero pixel "UNDER BRO" con halo
+  c.font = '700 9px monospace'; c.textAlign = 'center';
+  c.fillStyle = '#3e57fc';
+  for (const [ox2, oy2] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) c.fillText('UNDER BRO', ox2, TL.y - WH - 8 + oy2);
+  c.fillStyle = '#eaf2ff'; c.fillText('UNDER BRO', 0, TL.y - WH - 8);
+
+  // grosor de la plataforma (rombo grande oscuro desplazado hacia abajo)
+  const roomTW = (PLZ.COLS + PLZ.ROWS) * PLZ.TW / 2, roomTH = (PLZ.COLS + PLZ.ROWS) * PLZ.TH / 2;
+  const centerX = (TR.x + LL.x) / 2, topY = TL.y;
+  for (let d = 4; d >= 1; d--) plzDiamond(c, centerX, topY + d, roomTW, roomTH, d > 2 ? '#04060d' : '#080b16');
+
+  // suelo: baldosas rombo con borde inferior oscuro (efecto Habbo)
+  for (let i = 0; i < PLZ.COLS; i++) for (let j = 0; j < PLZ.ROWS; j++) {
+    const p = plzIso(i, j);
+    plzDiamond(c, p.x, p.y + 1, PLZ.TW, PLZ.TH, '#0a0e1c');                       // canto
+    plzDiamond(c, p.x, p.y, PLZ.TW, PLZ.TH, (i + j) % 2 ? '#161c33' : '#121729'); // cara
+  }
+
+  // altavoces pixel en las casillas bloqueadas
+  for (const key of PLZ_BLOCKED) {
+    const [i, j] = key.split(',').map(Number);
+    const p = plzIso(i, j);
+    const cx = Math.round(p.x), base = Math.round(p.y + PLZ.TH / 2);
+    plzRect(c, cx - 7, base - 30, 14, 30, '#0c101f', '#05070f');
+    plzRect(c, cx - 5, base - 26, 10, 10, '#131a30', '#27a9ff');   // cono grande
+    plzRect(c, cx - 3, base - 24, 6, 6, '#0a0e1c');
+    plzRect(c, cx - 4, base - 12, 8, 8, '#131a30', '#6e2df5');     // cono pequeño
+    plzRect(c, cx - 2, base - 10, 4, 4, '#0a0e1c');
+    c.fillStyle = '#2dc878'; c.fillRect(cx + 3, base - 29, 2, 2);   // LED
+  }
+  plaza.floor = off;
+}
+
+function plzDraw(now) {
+  const { ctx, canvas } = plaza;
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (plaza.floor) ctx.drawImage(plaza.floor, 0, 0);
+  ctx.translate(plaza.ox, plaza.oy);
+
+  // marcador de destino: rombo que parpadea
+  if (plaza.target && plaza.me.path.length) {
+    const p = plzIso(plaza.target.i, plaza.target.j);
+    if (Math.floor(now / 220) % 2 === 0) plzDiamond(ctx, p.x, p.y + 2, PLZ.TW - 8, PLZ.TH - 4, 'rgba(96,140,255,.55)');
+  }
+
+  const ents = [...plaza.ents.values()].sort((a, b) => (a.x + a.y) - (b.x + b.y));
+  for (const e of ents) plzDrawAvatar(e, now);
+}
+
+function plzDrawAvatar(e, now) {
+  const { ctx: c } = plaza;
+  const p = plzIso(e.x, e.y);
+  const cx = Math.round(p.x), base = Math.round(p.y + PLZ.TH / 2);
+  const walking = e.path.length > 0;
+  const bob = walking ? Math.round(Math.abs(Math.sin(now / 100)) * 2) : (Math.floor(now / 600 + e.phase) % 2);
+  const isMe = e.id === state.user.id;
+
+  // aro propio + sombra (rombos pixel)
+  if (isMe) plzDiamond(c, cx, base - PLZ.TH / 2 + 2, PLZ.TW - 6, PLZ.TH - 3, 'rgba(96,140,255,.28)');
+  plzDiamond(c, cx, base - 4, 18, 8, 'rgba(0,0,0,.4)');
+
+  const by = base - 24 - bob;   // hombros
+
+  // piernas (caminando alternan)
+  const lo = walking ? (Math.floor(now / 110) % 2 ? 1 : -1) : 0;
+  plzRect(c, cx - 5, by + 12, 4, 8 + (lo === -1 ? 1 : 0), '#10142a', '#05070f');
+  plzRect(c, cx + 1, by + 12, 4, 8 + (lo === 1 ? 1 : 0), '#10142a', '#05070f');
+
+  // cuerpo plano con el acento del usuario + brazos
+  plzRect(c, cx - 7, by, 14, 13, e.accent, '#05070f');
+  c.fillStyle = 'rgba(255,255,255,.22)'; c.fillRect(cx - 7, by, 14, 2);       // brillo superior
+  plzRect(c, cx - 10, by + 1, 3, 9, e.accent, '#05070f');                     // brazo izq
+  plzRect(c, cx + 7, by + 1, 3, 9, e.accent, '#05070f');                      // brazo dch
+
+  // cabeza: foto de perfil pixelada en cuadrado con contorno
+  const hs = 14, hx = cx - hs / 2, hy = by - hs - 1;
+  plzRect(c, hx, hy, hs, hs, '#1a2138', '#05070f');
+  if (e.imgOk) { try { c.drawImage(e.img, hx + 1, hy + 1, hs - 2, hs - 2); } catch (_) { e.imgOk = false; } }
+  if (!e.imgOk) {
+    c.fillStyle = e.accent; c.fillRect(hx + 1, hy + 1, hs - 2, hs - 2);
+    c.fillStyle = '#fff'; c.font = '700 9px monospace'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText((e.name || '?').slice(0, 1).toUpperCase(), cx, hy + hs / 2 + 1);
+  }
+
+  // nombre (placa pixel)
+  c.font = '700 7px monospace'; c.textAlign = 'center'; c.textBaseline = 'alphabetic';
+  const nm = e.name.length > 13 ? e.name.slice(0, 12) + '…' : e.name;
+  const nw = Math.ceil(c.measureText(nm).width) + 8;
+  plzRect(c, cx - nw / 2, base + 3, nw, 10, 'rgba(6,9,18,.85)', 'rgba(96,140,255,.35)');
+  c.fillStyle = isMe ? '#8fc0ff' : '#d6dff5'; c.fillText(nm, cx, base + 11);
+
+  // bocadillo estilo Habbo (esquinas duras, borde 1px, cola en escalera)
+  if (e.bubble) {
+    const left = e.bubble.until - now;
+    if (left <= 0) { e.bubble = null; return; }
+    c.globalAlpha = Math.min(1, left / 300);
+    c.font = '700 8px monospace';
+    const words = e.bubble.text.split(' '); const lines = []; let cur = '';
+    for (const w of words) { const t = cur ? cur + ' ' + w : w; if (c.measureText(t).width > 96 && cur) { lines.push(cur); cur = w; } else cur = t; }
+    if (cur) lines.push(cur);
+    const bw = Math.min(110, Math.max(...lines.map(l => Math.ceil(c.measureText(l).width))) + 10);
+    const bh = lines.length * 10 + 7;
+    const bx = Math.round(cx - bw / 2), byy = Math.round(hy - bh - 8);
+    plzRect(c, bx, byy, bw, bh, '#ffffff', '#0a0e1c');
+    c.fillStyle = '#ffffff';
+    c.fillRect(cx - 3, byy + bh, 6, 2); c.fillRect(cx - 1, byy + bh + 2, 3, 2);   // cola escalonada
+    c.fillStyle = '#0a0e1c'; c.fillRect(cx - 4, byy + bh, 1, 2); c.fillRect(cx + 3, byy + bh, 1, 2); c.fillRect(cx - 2, byy + bh + 2, 1, 2); c.fillRect(cx + 2, byy + bh + 2, 1, 2);
+    c.fillStyle = '#131a2c'; c.textAlign = 'center';
+    lines.forEach((l, i2) => c.fillText(l, cx, byy + 10 + i2 * 10));
+    c.globalAlpha = 1;
+  }
 }
 
 /* =======================================================================
