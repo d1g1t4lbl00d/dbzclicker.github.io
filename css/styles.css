@@ -4321,3 +4321,6 @@ html { touch-action: manipulation; }
 .pcz-sw { aspect-ratio: 1; border-radius: 12px; border: 2px solid transparent; cursor: pointer; box-shadow: var(--sh-1); transition: transform .1s; }
 .pcz-sw:hover { transform: scale(1.08); }
 .pcz-sw.on { border-color: #fff; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 60%, transparent); }
+
+.plaza-np .np-stop { margin-left: 4px; border: none; background: rgba(255,255,255,.14); color: #fff; width: 18px; height: 18px; border-radius: 50%; font-size: 11px; line-height: 1; cursor: pointer; }
+.plaza-np .np-stop:hover { background: rgba(255,90,90,.6); }

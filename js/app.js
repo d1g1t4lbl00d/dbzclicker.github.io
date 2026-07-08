@@ -4117,8 +4117,8 @@ const PLZ_ROOMS = {
       { t: 'fountain', i: 4, j: 5 }, { t: 'fountain', i: 5, j: 5 },
       { t: 'bench', i: 2, j: 7, back: 'nw' }, { t: 'bench', i: 3, j: 7, back: 'nw' },
       { t: 'stool', i: 2, j: 4 }, { t: 'stool', i: 7, j: 5 }, { t: 'table', i: 3, j: 4 },
-      { t: 'plant', i: 9, j: 7 }, { t: 'plant', i: 6, j: 9 },
-      { t: 'photobooth', i: 0, j: 2 }, { t: 'vending', i: 9, j: 2 },
+      { t: 'plant', i: 9, j: 7 }, { t: 'plant', i: 6, j: 9 }, { t: 'plant', i: 0, j: 2 },
+      { t: 'vending', i: 9, j: 2 },
       { t: 'crate', i: 8, j: 8 }, { t: 'crate', i: 1, j: 8 },
       { t: 'portal', i: 0, j: 6, to: 'estudio', spawn: [5, 8], label: '🎙️ Estudio', col: '#e0507a' },
       { t: 'portal', i: 9, j: 6, to: 'azotea', spawn: [5, 8], label: '🌆 Azotea', col: '#f0a13e' },
@@ -4326,6 +4326,7 @@ async function renderPlaza() {
     <div class="plaza-hint">Camina tocando el suelo · siéntate en bancos y taburetes · toca a alguien para interactuar · usa la barra para bailar, reaccionar o personalizarte</div>`;
 
   const canvas = $('plazaCanvas'), ctx = canvas.getContext('2d');
+  let radioChan = null;
   // sala de inicio (la última visitada) y su posición
   let startRoom = 'plaza';
   try { const r = localStorage.getItem('ub_plaza_room'); if (r && PLZ_ROOMS[r]) startRoom = r; } catch (_) {}
@@ -4433,14 +4434,58 @@ async function renderPlaza() {
     try { plaza.chan.send({ type: 'broadcast', event: 'move', payload: { id: state.user.id, from, path } }); } catch (_) {}
   });
 
-  // ---- radio de la Plaza: todos escuchan la misma pista sincronizada ----
-  plaza.radio = { playing: false };
+  // === EL BUCLE ARRANCA YA (antes que nada opcional): moverse siempre funciona ===
+  const loop = (now) => {
+    if (!plaza || !canvas.isConnected) { plzLeave(); return; }
+    const dt = Math.min((now - plaza.last) / 1000, 0.1); plaza.last = now;
+    try { for (const e of plaza.ents.values()) plzStep(e, dt, e === me); plzDraw(now); } catch (_) {}
+    plaza.raf = requestAnimationFrame(loop);
+  };
+  plaza.raf = requestAnimationFrame(loop);
+
+  // ---- barra de acciones (junto al chat) ----
+  try {
+    const tray = $('plazaReactTray');
+    const REACTS = ['❤️', '🔥', '😂', '🫡', '😮', '👏', '💜', '😎', '🥶', '🤝'];
+    tray.innerHTML = REACTS.map(e => `<button data-e="${e}">${e}</button>`).join('');
+    tray.querySelectorAll('button').forEach(b => b.onclick = () => { sendEmote('react', b.dataset.e); tray.classList.add('hidden'); haptic(8); });
+    $('plazaBar').querySelectorAll('.pbar-btn').forEach(b => b.onclick = () => {
+      const a = b.dataset.act; haptic(8);
+      if (a === 'dance') { const on = me.emote && me.emote.kind === 'dance'; if (on) { me.emote = null; sendEmote('idle'); } else sendEmote('dance'); b.classList.toggle('on', !on); }
+      else if (a === 'wave') sendEmote('wave');
+      else if (a === 'react') tray.classList.toggle('hidden');
+      else if (a === 'custom') openPlazaCustomizer(() => { const m2 = state.profile.theme && state.profile.theme.accent; if (m2) me.accent = m2; try { plzTrack(); } catch (_) {} });
+    });
+  } catch (err) { console.warn('plaza bar', err); }
+
+  // hablar
+  try {
+    $('plazaChat').addEventListener('submit', (e) => {
+      e.preventDefault();
+      if (!requireNotBanned()) return;
+      const inp = $('plazaMsg'); const text = inp.value.trim(); if (!text) return;
+      inp.value = '';
+      me.bubble = { text: text.slice(0, 140), until: performance.now() + 6500 };
+      try { plaza.chan.send({ type: 'broadcast', event: 'chat', payload: { id: state.user.id, text: text.slice(0, 140) } }); } catch (_) {}
+    });
+  } catch (_) {}
+
+  // ---- radio de la Plaza: todos escuchan la misma pista sincronizada (opcional) ----
+  plaza.radio = { playing: false, trackId: null };
   const npEl = $('plazaNp');
   const updNp = (t, byName) => {
-    if (!t) { npEl.classList.add('hidden'); plaza.radio.playing = false; return; }
-    plaza.radio.playing = true;
-    npEl.innerHTML = `<span class="np-eq"><i></i><i></i><i></i></span> <b>${esc(t.title || 'Pista')}</b>${byName ? ` <span>· la puso ${esc(byName)}</span>` : ''}`;
+    if (!t) {
+      npEl.classList.add('hidden');
+      if (plaza.radio.playing && plaza.radio.trackId && state.current && state.current.id === plaza.radio.trackId) { try { audio.pause(); } catch (_) {} }
+      plaza.radio.playing = false; plaza.radio.trackId = null; return;
+    }
+    plaza.radio.playing = true; plaza.radio.trackId = t.id;
+    npEl.innerHTML = `<span class="np-eq"><i></i><i></i><i></i></span> <b>${esc(t.title || 'Pista')}</b>${byName ? ` <span>· la puso ${esc(byName)}</span>` : ''}<button class="np-stop" title="Quitar la música">✕</button>`;
     npEl.classList.remove('hidden');
+    const st = npEl.querySelector('.np-stop'); if (st) st.onclick = stopPlazaRadio;
+  };
+  const stopPlazaRadio = async () => {
+    try { await sb.from('plaza_radio').update({ track_id: null, started_at: null, set_by: null }).eq('id', 1); toast('Música quitada'); updNp(null); } catch (_) { toast('No se pudo quitar'); }
   };
   const applyRadio = async (row) => {
     try {
@@ -4458,50 +4503,19 @@ async function renderPlaza() {
       }
     } catch (_) {}
   };
-  const radioChan = sb.channel('plaza-radio-db')
-    .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'plaza_radio' }, (p) => { if (plaza) applyRadio(p.new); })
-    .subscribe();
-  sb.from('plaza_radio').select('*').eq('id', 1).maybeSingle().then(({ data }) => { if (plaza) applyRadio(data); });
-
-  $('plazaDj').onclick = () => openPlazaTrackPicker(async (t) => {
-    const { error } = await sb.from('plaza_radio').update({ track_id: t.id, started_at: new Date().toISOString(), set_by: state.user.id }).eq('id', 1);
-    if (error) { toast('No se pudo poner la música'); return; }
-    toast('🎧 Pinchando para toda la plaza');
-    sendEmote('react', '🎶');
-  });
-
-  // hablar
-  $('plazaChat').addEventListener('submit', (e) => {
-    e.preventDefault();
-    if (!requireNotBanned()) return;
-    const inp = $('plazaMsg'); const text = inp.value.trim(); if (!text) return;
-    inp.value = '';
-    me.bubble = { text: text.slice(0, 140), until: performance.now() + 6500 };
-    try { plaza.chan.send({ type: 'broadcast', event: 'chat', payload: { id: state.user.id, text: text.slice(0, 140) } }); } catch (_) {}
-  });
-
-  // ---- barra de acciones (junto al chat) ----
-  const tray = $('plazaReactTray');
-  const REACTS = ['❤️', '🔥', '😂', '🫡', '😮', '👏', '💜', '😎', '🥶', '🤝'];
-  tray.innerHTML = REACTS.map(e => `<button data-e="${e}">${e}</button>`).join('');
-  tray.querySelectorAll('button').forEach(b => b.onclick = () => { sendEmote('react', b.dataset.e); tray.classList.add('hidden'); haptic(8); });
-  $('plazaBar').querySelectorAll('.pbar-btn').forEach(b => b.onclick = () => {
-    const a = b.dataset.act; haptic(8);
-    if (a === 'dance') { const on = me.emote && me.emote.kind === 'dance'; if (on) { me.emote = null; sendEmote('idle'); } else sendEmote('dance'); b.classList.toggle('on', !on); }
-    else if (a === 'wave') sendEmote('wave');
-    else if (a === 'react') tray.classList.toggle('hidden');
-    else if (a === 'custom') openPlazaCustomizer(() => { const m2 = state.profile.theme && state.profile.theme.accent; if (m2) me.accent = m2; try { plzTrack(); } catch (_) {} });
-  });
-
-  // bucle principal (se apaga solo al salir de la vista)
-  const loop = (now) => {
-    if (!plaza || !canvas.isConnected) { plzLeave(); return; }
-    const dt = Math.min((now - plaza.last) / 1000, 0.1); plaza.last = now;
-    for (const e of plaza.ents.values()) plzStep(e, dt, e === me);
-    plzDraw(now);
-    plaza.raf = requestAnimationFrame(loop);
-  };
-  plaza.raf = requestAnimationFrame(loop);
+  try {
+    radioChan = sb.channel('plaza-radio-db')
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'plaza_radio' }, (p) => { if (plaza) applyRadio(p.new); })
+      .subscribe();
+    sb.from('plaza_radio').select('*').eq('id', 1).maybeSingle().then(({ data }) => { if (plaza) applyRadio(data); });
+    $('plazaDj').onclick = () => openPlazaTrackPicker(async (t) => {
+      if (t === '__stop__') { stopPlazaRadio(); return; }
+      const { error } = await sb.from('plaza_radio').update({ track_id: t.id, started_at: new Date().toISOString(), set_by: state.user.id }).eq('id', 1);
+      if (error) { toast('No se pudo poner la música'); return; }
+      toast('🎧 Pinchando para toda la plaza');
+      sendEmote('react', '🎶');
+    }, plaza.radio.playing);
+  } catch (err) { console.warn('plaza radio', err); }
 
   function plzLeave() {
     try { plazaChan.untrack(); } catch (_) {}                                  // salir del conteo del mundo
@@ -4552,13 +4566,15 @@ function openPlazaCustomizer(onChange) {
 }
 
 // selector de pista para pinchar en la Plaza (busca por título)
-function openPlazaTrackPicker(onPick) {
+function openPlazaTrackPicker(onPick, playing) {
   const m = openModal(`<div class="modal-head"><h3>🎧 Pon música para la plaza</h3><button class="close">&times;</button></div>
     <div class="modal-body">
       <p style="color:var(--ink-soft);font-size:13px;margin-top:0">Sonará <b>sincronizada</b> para todos los que estén ahora en la Plaza.</p>
+      ${playing ? `<button class="btn danger-btn" id="pdjStop" style="width:100%;margin-bottom:10px">🔇 Quitar la música (parar para todos)</button>` : ''}
       <div class="convo-search"><svg fill="none" stroke="currentColor"><use href="#i-search"/></svg><input type="text" id="pdjSearch" placeholder="Buscar pista o artista…" autocomplete="off"></div>
       <div id="pdjList" style="margin-top:10px;display:flex;flex-direction:column;gap:6px"></div>
     </div>`);
+  { const st = m.querySelector('#pdjStop'); if (st) st.onclick = () => { m.remove(); onPick('__stop__'); }; }
   const listEl = m.querySelector('#pdjList');
   const render = (rows) => {
     listEl.innerHTML = '';
