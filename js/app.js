@@ -4116,7 +4116,6 @@ const PLZ_ROOMS = {
       // esquinas con un árbol cada una (aire en el centro)
       { t: 'tree', i: 0, j: 0 }, { t: 'tree', i: 9, j: 0 },
       { t: 'lamp', i: 0, j: 5 }, { t: 'lamp', i: 9, j: 5 },
-      { t: 'fountain', i: 4, j: 5 }, { t: 'fountain', i: 5, j: 5 },
       { t: 'bench', i: 2, j: 8, back: 'nw' }, { t: 'bench', i: 3, j: 8, back: 'nw' },
       { t: 'stool', i: 7, j: 8 }, { t: 'plant', i: 0, j: 9 }, { t: 'plant', i: 9, j: 9 },
       { t: 'portal', i: 0, j: 3, to: 'estudio', spawn: [5, 8], label: '🎙️ Estudio', col: '#e0507a' },
@@ -4265,7 +4264,7 @@ function plzJoinRoom(id, si, sj) {
   const h = $('plazaRoomName'); if (h) h.textContent = plzR.def.name;
   const s = $('plazaRoomSub'); if (s) s.textContent = plzR.def.sub;
   const n = $('plazaLiveN'); if (n) n.textContent = '1';
-  if (plaza._paintRooms) plaza._paintRooms();
+  if (id === 'arcade') setTimeout(() => { if (plaza && plaza.roomId === 'arcade') toast('🎮 Toca una recreativa para jugar a PerkyInvaders'); }, 500);
 
   // canal de la sala: presencia (roster) + movimiento + chat + emotes
   plaza.chan = sb.channel('plaza-room-' + id, { config: { presence: { key: state.user.id }, broadcast: { self: false } } });
@@ -4334,13 +4333,6 @@ async function renderPlaza() {
       </div></div>
     <div class="plaza-wrap" id="plazaWrap">
       <canvas class="plaza-canvas" id="plazaCanvas"></canvas>
-      <div class="plaza-rooms" id="plazaRooms">
-        <button data-room="plaza" title="La Plaza">🏙️</button>
-        <button data-room="estudio" title="El Estudio">🎙️</button>
-        <button data-room="azotea" title="La Azotea">🌆</button>
-        <button data-room="arcade" title="El Arcade">🎮</button>
-        <button data-room="playa" title="La Playa">🌊</button>
-      </div>
       <div class="plaza-np hidden" id="plazaNp"></div>
       <div class="plaza-menu hidden" id="plazaMenu"></div>
     </div>
@@ -4442,6 +4434,15 @@ async function renderPlaza() {
     const s = r.width / canvas.width;
     const rx = (e.clientX - r.left) / s - plaza.ox, ry = (e.clientY - r.top) / s - plaza.oy;
     closeMenu();
+    // ¿ha tocado una máquina del arcade? → abre PerkyInvaders
+    if (plaza.roomId === 'arcade') {
+      const cab = plzR.furn.find(f => {
+        if (f.t !== 'arcade') return false;
+        const p2 = plzIso(f.i, f.j), bx2 = p2.x, base2 = p2.y + PLZ.TH / 2;
+        return rx >= bx2 - 11 && rx <= bx2 + 11 && ry >= base2 - 40 && ry <= base2 + 3;
+      });
+      if (cab) { haptic(12); openPerkyInvaders(); return; }
+    }
     // ¿ha tocado un avatar? (los de delante tienen prioridad)
     const hit = [...plaza.ents.values()].sort((a, b) => (b.x + b.y) - (a.x + a.y)).find(en => {
       const p2 = plzIso(en.x, en.y); const bx2 = p2.x, base2 = p2.y + PLZ.TH / 2;
@@ -4465,19 +4466,6 @@ async function renderPlaza() {
     haptic(8);
     try { plaza.chan.send({ type: 'broadcast', event: 'move', payload: { id: state.user.id, from, path } }); } catch (_) {}
   });
-
-  // ---- minimapa de salas: salto directo ----
-  try {
-    const roomsEl = $('plazaRooms');
-    const paintRooms = () => roomsEl.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.room === plaza.roomId));
-    roomsEl.querySelectorAll('button').forEach(b => b.onclick = () => {
-      if (b.dataset.room === plaza.roomId) return;
-      haptic(10);
-      const sp = { plaza: [5, 6], estudio: [5, 8], azotea: [5, 8], arcade: [5, 8], playa: [5, 8] }[b.dataset.room] || [5, 6];
-      plzJoinRoom(b.dataset.room, sp[0], sp[1]); paintRooms();
-    });
-    plaza._paintRooms = paintRooms; paintRooms();
-  } catch (_) {}
 
   // === EL BUCLE ARRANCA YA (antes que nada opcional): moverse siempre funciona ===
   const loop = (now) => {
@@ -4637,6 +4625,219 @@ function openPlazaTrackPicker(onPick, playing) {
   const inp = m.querySelector('#pdjSearch'); let tmr;
   inp.oninput = () => { clearTimeout(tmr); tmr = setTimeout(() => search(inp.value.trim()), 250); };
   search('');
+}
+
+/* ============================ PERKY INVADERS 👾 ============================ */
+function openPerkyInvaders() {
+  if (window._pkGameOpen) return; window._pkGameOpen = true;
+  const AW = 180, AH = 236;
+  const accent = (state.profile.theme && state.profile.theme.accent) || '#3e57fc';
+  const wrap = el(`
+    <div class="pk-game" id="pkGame">
+      <div class="pk-top">
+        <button class="pk-x" id="pkClose" aria-label="Salir">✕</button>
+        <div class="pk-title">PERKY&nbsp;<span>INVADERS</span></div>
+        <div class="pk-stat">SCORE <b id="pkScore">0</b></div>
+      </div>
+      <div class="pk-stage" id="pkStage"><canvas id="pkCanvas" width="${AW}" height="${AH}"></canvas></div>
+      <div class="pk-ctrl">
+        <button class="pk-btn" id="pkLeft" aria-label="Izquierda">◀</button>
+        <button class="pk-btn pk-fire" id="pkFire" aria-label="Disparar">🔫</button>
+        <button class="pk-btn" id="pkRight" aria-label="Derecha">▶</button>
+      </div>
+      <div class="pk-hint">Arrastra o usa ◀ ▶ para moverte · dispara solo · ¡defiende UnderBro!</div>
+    </div>`);
+  document.body.appendChild(wrap);
+  document.documentElement.style.overflow = 'hidden';
+  const canvas = wrap.querySelector('#pkCanvas'), ctx = canvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+
+  // sprites de invasor (8x8, dos fotogramas)
+  const A1 = ['00100100', '00111100', '01111110', '11011011', '11111111', '01011010', '10000001', '01000010'];
+  const A2 = ['00100100', '10111101', '11111111', '11011011', '11111111', '00111100', '01000010', '10100101'];
+  const ROWCOL = ['#e0507a', '#f0a13e', '#2dc878', '#27a9ff', '#b06eff'];
+
+  let g;
+  function reset() {
+    g = {
+      px: AW / 2, pv: 0, targetX: null, lives: 3, score: 0, wave: 1, over: false, invuln: 0,
+      bullets: [], bombs: [], boom: [], aliens: [], dir: 1, step: 0, stepEvery: 0.7, fireCd: 0,
+      ufo: null, ufoT: 4 + Math.random() * 6, shields: [], frame: 0, t: 0,
+    };
+    spawnWave();
+    buildShields();
+  }
+  function spawnWave() {
+    g.aliens = [];
+    for (let r = 0; r < 5; r++) for (let cI = 0; cI < 8; cI++) {
+      g.aliens.push({ x: 16 + cI * 18, y: 26 + r * 14, r, alive: true });
+    }
+    g.dir = 1; g.stepEvery = Math.max(0.14, 0.72 - g.wave * 0.07);
+  }
+  function buildShields() {
+    g.shields = [];
+    for (let s = 0; s < 3; s++) {
+      const ox = 26 + s * 56, oy = 176, cells = [];
+      for (let i = 0; i < 12; i++) for (let j = 0; j < 6; j++) {
+        if ((j === 0 && (i < 2 || i > 9)) || (j > 3 && i > 3 && i < 8)) continue;   // forma de búnker
+        cells.push({ x: ox + i * 2, y: oy + j * 2, on: true });
+      }
+      g.shields.push(cells);
+    }
+  }
+  reset();
+
+  // ---- input ----
+  let leftHeld = false, rightHeld = false;
+  const stage = wrap.querySelector('#pkStage');
+  const onMove = (clientX) => { const r = canvas.getBoundingClientRect(); g.targetX = (clientX - r.left) / (r.width / AW); };
+  stage.addEventListener('pointerdown', (e) => { onMove(e.clientX); stage.setPointerCapture(e.pointerId); });
+  stage.addEventListener('pointermove', (e) => { if (e.buttons || e.pressure) onMove(e.clientX); });
+  stage.addEventListener('pointerup', () => { g.targetX = null; });
+  const hold = (id, set) => { const b = wrap.querySelector(id); b.addEventListener('pointerdown', (e) => { e.preventDefault(); set(true); }); ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, () => set(false))); };
+  hold('#pkLeft', v => leftHeld = v); hold('#pkRight', v => rightHeld = v);
+  wrap.querySelector('#pkFire').addEventListener('pointerdown', (e) => { e.preventDefault(); if (!g.over) fire(); });
+  const onKey = (e) => {
+    if (e.key === 'ArrowLeft') leftHeld = true; else if (e.key === 'ArrowRight') rightHeld = true;
+    else if (e.key === ' ') { e.preventDefault(); if (!g.over) fire(); }
+    else if (e.key === 'Escape') close();
+  };
+  const onKeyUp = (e) => { if (e.key === 'ArrowLeft') leftHeld = false; else if (e.key === 'ArrowRight') rightHeld = false; };
+  document.addEventListener('keydown', onKey); document.addEventListener('keyup', onKeyUp);
+
+  function fire() { if (g.bullets.length < 3) { g.bullets.push({ x: g.px, y: 214 }); haptic(6); } }
+
+  const close = () => {
+    cancelAnimationFrame(g._raf);
+    document.removeEventListener('keydown', onKey); document.removeEventListener('keyup', onKeyUp);
+    document.documentElement.style.overflow = '';
+    wrap.remove(); window._pkGameOpen = false;
+  };
+  wrap.querySelector('#pkClose').onclick = close;
+
+  // ---- lógica ----
+  function update(dt) {
+    if (g.over) return;
+    g.t += dt; g.fireCd -= dt;
+    // mover nave
+    let vx = 0; if (leftHeld) vx -= 1; if (rightHeld) vx += 1;
+    if (g.targetX != null) g.px += Math.max(-3, Math.min(3, (g.targetX - g.px) * 0.35));
+    g.px += vx * 2.4; g.px = Math.max(10, Math.min(AW - 10, g.px));
+    // auto-fire
+    if (g.fireCd <= 0) { fire(); g.fireCd = 0.42; }
+    // balas
+    g.bullets.forEach(b => b.y -= 3.2); g.bullets = g.bullets.filter(b => b.y > -4);
+    // marcha de invasores
+    const alive = g.aliens.filter(a => a.alive);
+    const speed = g.stepEvery * (alive.length / 40) ** 0.9;
+    g.step += dt;
+    if (g.step >= Math.max(0.08, speed)) {
+      g.step = 0; g.frame ^= 1;
+      let edge = false;
+      for (const a of alive) { if ((g.dir > 0 && a.x > AW - 14) || (g.dir < 0 && a.x < 14)) { edge = true; break; } }
+      if (edge) { g.dir *= -1; alive.forEach(a => a.y += 8); }
+      else alive.forEach(a => a.x += g.dir * 4);
+      // bombas: algún invasor de abajo dispara
+      if (alive.length && Math.random() < 0.5) {
+        const shooter = alive[Math.floor(Math.random() * alive.length)];
+        g.bombs.push({ x: shooter.x, y: shooter.y + 6 });
+      }
+      // ¿llegaron abajo? game over
+      if (alive.some(a => a.y > 196)) return gameOver();
+    }
+    // bombas
+    g.bombs.forEach(b => b.y += 1.8); g.bombs = g.bombs.filter(b => b.y < AH);
+    // UFO bonus
+    g.ufoT -= dt;
+    if (!g.ufo && g.ufoT <= 0) { g.ufo = { x: -12, y: 16 }; g.ufoT = 10 + Math.random() * 12; }
+    if (g.ufo) { g.ufo.x += 1.1; if (g.ufo.x > AW + 12) g.ufo = null; }
+    if (g.invuln > 0) g.invuln -= dt;
+
+    // colisiones bala→invasor / UFO / escudo
+    for (const b of g.bullets) {
+      for (const a of alive) { if (a.alive && Math.abs(a.x - b.x) < 8 && Math.abs(a.y - b.y) < 7) { a.alive = false; b.y = -99; g.score += (5 - a.r) * 10 + 10; boom(a.x, a.y, ROWCOL[a.r]); haptic(8); break; } }
+      if (g.ufo && Math.abs(g.ufo.x - b.x) < 10 && Math.abs(g.ufo.y - b.y) < 7) { g.score += 150; boom(g.ufo.x, g.ufo.y, '#ffd23e'); g.ufo = null; b.y = -99; }
+      hitShield(b.x, b.y, b) && (b.y = -99);
+    }
+    // bombas → escudo / nave
+    for (const b of g.bombs) {
+      if (hitShield(b.x, b.y, b)) { b.y = AH + 9; continue; }
+      if (g.invuln <= 0 && Math.abs(b.x - g.px) < 9 && b.y > 210 && b.y < 224) { b.y = AH + 9; loseLife(); }
+    }
+    g.bombs = g.bombs.filter(b => b.y < AH);
+    // explosiones
+    g.boom.forEach(e => e.t += dt); g.boom = g.boom.filter(e => e.t < 0.35);
+    // ¿oleada limpia?
+    if (!g.aliens.some(a => a.alive)) { g.wave++; g.score += 50; spawnWave(); }
+    wrap.querySelector('#pkScore').textContent = g.score;
+  }
+  function boom(x, y, col) { g.boom.push({ x, y, col, t: 0 }); }
+  function hitShield(x, y, obj) {
+    for (const cells of g.shields) for (const cel of cells) { if (cel.on && Math.abs(cel.x + 1 - x) < 3 && Math.abs(cel.y + 1 - y) < 3) { cel.on = false; return true; } }
+    return false;
+  }
+  function loseLife() { g.lives--; g.invuln = 1.4; boom(g.px, 218, accent); haptic(30); if (g.lives <= 0) gameOver(); }
+  function gameOver() { if (g.over) return; g.over = true; showGameOver(); }
+
+  // ---- dibujo ----
+  const px = (x, y, w, h, col) => { ctx.fillStyle = col; ctx.fillRect(Math.round(x), Math.round(y), w, h); };
+  function drawBmp(bmp, x, y, col) { ctx.fillStyle = col; for (let r = 0; r < 8; r++) for (let cI = 0; cI < 8; cI++) if (bmp[r][cI] === '1') ctx.fillRect(Math.round(x - 8) + cI * 2, Math.round(y - 8) + r * 2, 2, 2); }
+  function draw() {
+    ctx.clearRect(0, 0, AW, AH);
+    px(0, 0, AW, AH, '#05070f');
+    // estrellas de fondo
+    ctx.fillStyle = 'rgba(120,150,255,.35)';
+    for (let s = 0; s < 26; s++) { const sx = (s * 61) % AW, sy = ((s * 37 + Math.floor(g.t * 12)) % AH); ctx.fillRect(sx, sy, 1, 1); }
+    // UFO
+    if (g.ufo) { px(g.ufo.x - 8, g.ufo.y - 2, 16, 4, '#ffd23e'); px(g.ufo.x - 4, g.ufo.y - 5, 8, 3, '#fff2b0'); }
+    // invasores
+    const bmp = g.frame ? A2 : A1;
+    for (const a of g.aliens) if (a.alive) drawBmp(bmp, a.x, a.y, ROWCOL[a.r]);
+    // escudos
+    for (const cells of g.shields) for (const cel of cells) if (cel.on) px(cel.x, cel.y, 2, 2, '#2dc878');
+    // balas y bombas
+    for (const b of g.bullets) px(b.x - 1, b.y - 4, 2, 6, '#eaf2ff');
+    for (const b of g.bombs) px(b.x - 1, b.y, 2, 5, '#ff6b81');
+    // nave (parpadea si invulnerable)
+    if (!(g.invuln > 0 && Math.floor(g.t * 12) % 2)) {
+      px(g.px - 9, 220, 18, 5, accent); px(g.px - 4, 216, 8, 4, accent); px(g.px - 1, 212, 2, 4, '#eaf2ff');
+    }
+    // explosiones
+    for (const e of g.boom) { const s = 2 + e.t * 20; ctx.globalAlpha = 1 - e.t / 0.35; px(e.x - s / 2, e.y - s / 2, s, s, e.col); ctx.globalAlpha = 1; }
+    // HUD: vidas
+    for (let i = 0; i < g.lives; i++) px(6 + i * 8, 6, 6, 3, accent);
+    ctx.fillStyle = '#8fa0c8'; ctx.font = '6px monospace'; ctx.textAlign = 'right'; ctx.fillText('OLA ' + g.wave, AW - 6, 10);
+  }
+
+  let last = performance.now();
+  const loop = (now) => {
+    const dt = Math.min((now - last) / 1000, 0.05); last = now;
+    try { update(dt); draw(); } catch (e) { console.warn('perky', e); }
+    g._raf = requestAnimationFrame(loop);
+  };
+  g._raf = requestAnimationFrame(loop);
+
+  async function showGameOver() {
+    let saved = false;
+    try { await sb.from('arcade_scores').insert({ game: 'perky', user_id: state.user.id, score: g.score }); saved = true; } catch (_) {}
+    let rows = [];
+    try { const { data } = await sb.rpc('arcade_leaderboard', { p_game: 'perky', p_limit: 10 }); rows = data || []; } catch (_) {}
+    const myBest = Math.max(g.score, ...rows.filter(r => r.user_id === state.user.id).map(r => r.best), 0);
+    const ov = el(`
+      <div class="pk-over">
+        <div class="pk-over-card">
+          <div class="pk-go">GAME OVER</div>
+          <div class="pk-final">Puntuación <b>${g.score}</b></div>
+          <div class="pk-best">Tu récord: ${myBest}</div>
+          <div class="pk-lb-title">🏆 Mejores</div>
+          <div class="pk-lb">${rows.length ? rows.map((r, i) => `<div class="pk-lb-row ${r.user_id === state.user.id ? 'me' : ''}"><span class="pk-rank">${i + 1}</span><b>${esc(r.display_name || r.username || 'bro')}</b><span class="pk-pts">${r.best}</span></div>`).join('') : '<div style="color:var(--ink-soft);font-size:12px;padding:8px">Sé el primero del ranking.</div>'}</div>
+          <div class="pk-over-actions"><button class="btn primary" id="pkRetry">↻ Reintentar</button><button class="btn" id="pkQuit">Salir</button></div>
+        </div>
+      </div>`);
+    wrap.appendChild(ov);
+    ov.querySelector('#pkRetry').onclick = () => { ov.remove(); reset(); last = performance.now(); };
+    ov.querySelector('#pkQuit').onclick = close;
+  }
 }
 
 // ---- utilidades pixel-art (rombos por tiras de 1px: bordes duros, cero antialiasing) ----

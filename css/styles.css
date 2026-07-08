@@ -4326,11 +4326,70 @@ html { touch-action: manipulation; }
 .plaza-np .np-stop:hover { background: rgba(255,90,90,.6); }
 
 /* La Plaza — minimapa de salas */
-.plaza-rooms { position: absolute; top: 10px; right: 10px; z-index: 16; display: flex; flex-direction: column; gap: 6px; }
-.plaza-rooms button {
-  width: 38px; height: 38px; border-radius: 12px; border: 1px solid rgba(96,140,255,.3);
-  background: rgba(10,14,28,.78); backdrop-filter: blur(6px); font-size: 18px; cursor: pointer;
-  transition: transform .12s, border-color .15s, background .15s; box-shadow: 0 4px 14px rgba(0,0,0,.4);
+/* ===== PerkyInvaders (minijuego del arcade) ===== */
+.pk-game {
+  position: fixed; inset: 0; z-index: 3000; display: flex; flex-direction: column; align-items: center;
+  gap: 12px; padding: 16px 14px calc(16px + env(safe-area-inset-bottom));
+  background: radial-gradient(80% 50% at 50% 0%, rgba(45,200,120,.16), transparent 60%),
+              radial-gradient(70% 50% at 50% 100%, rgba(224,80,122,.14), transparent 60%),
+              linear-gradient(180deg, #0a0715, #05040c);
+  animation: pkIn .22s ease; overscroll-behavior: contain; touch-action: none; user-select: none;
 }
-.plaza-rooms button:hover { transform: scale(1.08); background: rgba(20,26,44,.9); }
-.plaza-rooms button.on { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent), 0 4px 14px rgba(0,0,0,.4); }
+@keyframes pkIn { from { opacity: 0; transform: scale(.97); } to { opacity: 1; transform: none; } }
+.pk-top { width: 100%; max-width: 440px; display: flex; align-items: center; gap: 10px; }
+.pk-x {
+  width: 34px; height: 34px; border-radius: 10px; border: 1px solid rgba(255,255,255,.14);
+  background: rgba(255,255,255,.06); color: #eaf2ff; font-size: 16px; cursor: pointer; flex: none;
+  transition: background .15s, transform .1s;
+}
+.pk-x:hover { background: rgba(255,255,255,.14); }
+.pk-x:active { transform: scale(.92); }
+.pk-title {
+  flex: 1; text-align: center; font-family: 'Courier New', monospace; font-weight: 900; letter-spacing: .16em;
+  font-size: 15px; color: #2dc878; text-shadow: 0 0 12px rgba(45,200,120,.5);
+}
+.pk-title span { color: #e0507a; text-shadow: 0 0 12px rgba(224,80,122,.5); }
+.pk-stat { font-family: 'Courier New', monospace; font-size: 11px; letter-spacing: .1em; color: #8fa0c8; flex: none; }
+.pk-stat b { color: #eaf2ff; font-size: 14px; }
+.pk-stage {
+  position: relative; width: min(92vw, 340px); aspect-ratio: 180 / 236; border-radius: 14px;
+  overflow: hidden; border: 2px solid rgba(96,140,255,.22); box-shadow: 0 0 0 4px rgba(0,0,0,.35), 0 20px 60px rgba(0,0,0,.55);
+  touch-action: none;
+}
+.pk-stage canvas { width: 100%; height: 100%; display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+.pk-ctrl { display: flex; gap: 14px; align-items: center; }
+.pk-btn {
+  width: 66px; height: 58px; border-radius: 16px; border: 1px solid rgba(255,255,255,.12);
+  background: linear-gradient(180deg, rgba(40,48,74,.9), rgba(22,28,46,.9)); color: #eaf2ff; font-size: 24px;
+  cursor: pointer; display: grid; place-items: center; transition: transform .08s, background .15s;
+  box-shadow: 0 6px 18px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.08);
+}
+.pk-btn:active { transform: translateY(2px) scale(.96); background: linear-gradient(180deg, rgba(50,58,88,.95), rgba(28,34,54,.95)); }
+.pk-fire {
+  width: 78px; height: 62px; font-size: 26px;
+  background: linear-gradient(180deg, #ff6b81, #e0507a); border-color: rgba(255,180,195,.4);
+  box-shadow: 0 8px 22px rgba(224,80,122,.45), inset 0 1px 0 rgba(255,255,255,.25);
+}
+.pk-fire:active { background: linear-gradient(180deg, #f0596f, #cf3f6a); }
+.pk-hint { max-width: 360px; text-align: center; font-size: 11px; color: #6b7899; line-height: 1.5; }
+/* game over */
+.pk-over { position: absolute; inset: 0; display: grid; place-items: center; background: rgba(4,4,10,.72); backdrop-filter: blur(4px); animation: pkIn .2s ease; }
+.pk-over-card {
+  width: 90%; max-width: 300px; background: linear-gradient(180deg, #14122a, #0c0a1c); border: 1px solid rgba(96,140,255,.2);
+  border-radius: 18px; padding: 20px 18px; text-align: center; box-shadow: 0 24px 70px rgba(0,0,0,.6);
+}
+.pk-go { font-family: 'Courier New', monospace; font-weight: 900; letter-spacing: .12em; font-size: 22px; color: #e0507a; text-shadow: 0 0 16px rgba(224,80,122,.5); }
+.pk-final { margin-top: 8px; font-size: 15px; color: #c7d2ee; }
+.pk-final b { color: #2dc878; font-size: 20px; }
+.pk-best { margin-top: 2px; font-size: 12px; color: #8fa0c8; }
+.pk-lb-title { margin: 16px 0 8px; font-size: 13px; font-weight: 800; color: #eaf2ff; }
+.pk-lb { display: flex; flex-direction: column; gap: 4px; max-height: 190px; overflow-y: auto; }
+.pk-lb-row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 10px; background: rgba(255,255,255,.03); font-size: 13px; color: #c7d2ee; }
+.pk-lb-row.me { background: color-mix(in srgb, var(--accent, #3e57fc) 22%, transparent); color: #fff; }
+.pk-lb-row b { flex: 1; text-align: left; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pk-rank { width: 18px; text-align: center; font-weight: 800; color: #8fa0c8; flex: none; }
+.pk-lb-row.me .pk-rank { color: #fff; }
+.pk-pts { font-family: 'Courier New', monospace; font-weight: 800; color: #2dc878; flex: none; }
+.pk-lb-row.me .pk-pts { color: #eaffef; }
+.pk-over-actions { margin-top: 16px; display: flex; gap: 10px; }
+.pk-over-actions .btn { flex: 1; }
