@@ -4101,35 +4101,81 @@ function openUploadModal(prefill) {
 // Render pixel-art: el canvas trabaja a baja resolución (px de arte) y CSS lo
 // escala con image-rendering:pixelated → píxeles gordos y nítidos, estilo Habbo.
 const PLZ = { COLS: 10, ROWS: 10, TW: 32, TH: 16, SPEED: 3.2, WH: 34, PADX: 10, PADT: 58, PADB: 40 };
-// mobiliario de la sala: sólidos (bloquean el paso) y asientos (te sientas al llegar)
-const PLZ_FURN = [
-  // escenario norte: cabina DJ entre los altavoces
-  { t: 'spk', i: 3, j: 0 }, { t: 'djbooth', i: 4, j: 0 }, { t: 'djbooth', i: 5, j: 0 }, { t: 'spk', i: 6, j: 0 },
-  { t: 'tree', i: 0, j: 0 }, { t: 'tree', i: 9, j: 0 }, { t: 'tree', i: 0, j: 9 }, { t: 'tree', i: 9, j: 9 },
-  { t: 'lamp', i: 0, j: 4 }, { t: 'lamp', i: 9, j: 4 },                                 // farolas de neón (simétricas)
-  { t: 'fountain', i: 4, j: 5 }, { t: 'fountain', i: 5, j: 5 },                         // fuente central (2 casillas)
-  { t: 'bench', i: 2, j: 7, back: 'nw' }, { t: 'bench', i: 3, j: 7, back: 'nw' },       // banco oeste (2 plazas)
-  { t: 'bench', i: 7, j: 3, back: 'ne' }, { t: 'bench', i: 8, j: 3, back: 'ne' },       // banco este (2 plazas)
-  { t: 'stool', i: 2, j: 4 }, { t: 'stool', i: 7, j: 5 },                               // taburetes
-  { t: 'table', i: 3, j: 4 },                                                            // mesa alta (con taburete al lado)
-  { t: 'plant', i: 0, j: 6 }, { t: 'plant', i: 9, j: 7 }, { t: 'plant', i: 6, j: 9 },   // plantas de neón
-  { t: 'photobooth', i: 0, j: 2 },                                                       // photobooth (esquina oeste)
-  { t: 'vending', i: 9, j: 2 },                                                          // máquina expendedora
-  { t: 'crate', i: 8, j: 8 }, { t: 'crate', i: 1, j: 8 },                                // cajas / mobiliario urbano
-];
-const PLZ_SOLID = new Set(['spk', 'tree', 'lamp', 'fountain', 'djbooth', 'plant', 'photobooth', 'vending', 'crate', 'table']);
-const PLZ_BLOCKED = new Set(PLZ_FURN.filter(f => PLZ_SOLID.has(f.t)).map(f => f.i + ',' + f.j));
-const PLZ_SEATS = new Map(PLZ_FURN.filter(f => !PLZ_SOLID.has(f.t)).map(f => [f.i + ',' + f.j, f]));
-// pista de baile: casillas centrales que pulsan de color bajo el escenario
-const PLZ_DANCE = [];
-for (let i = 3; i <= 6; i++) for (let j = 1; j <= 3; j++) PLZ_DANCE.push([i, j]);
+const PLZ_SOLID = new Set(['spk', 'tree', 'lamp', 'fountain', 'djbooth', 'plant', 'photobooth', 'vending', 'crate', 'table', 'bar', 'sofa', 'pool', 'rack', 'couch', 'neon']);
 const PLZ_DANCE_COLS = ['rgba(39,169,255,', 'rgba(110,45,245,', 'rgba(224,80,122,', 'rgba(45,200,120,'];
+
+// --- SALAS: cada una con su tema, mobiliario y portales a otras salas ---
+const PLZ_ROOMS = {
+  plaza: {
+    name: 'La Plaza', sub: 'El centro de la escena',
+    floorA: '#161c33', floorB: '#121729', wall: '#0d1122', neonA: '#27a9ff', neonB: '#6e2df5', sign: 'UNDER BRO',
+    dance: (() => { const d = []; for (let i = 3; i <= 6; i++) for (let j = 1; j <= 3; j++) d.push([i, j]); return d; })(),
+    furn: [
+      { t: 'spk', i: 3, j: 0 }, { t: 'djbooth', i: 4, j: 0 }, { t: 'djbooth', i: 5, j: 0 }, { t: 'spk', i: 6, j: 0 },
+      { t: 'tree', i: 0, j: 0 }, { t: 'tree', i: 9, j: 0 }, { t: 'tree', i: 0, j: 9 }, { t: 'tree', i: 9, j: 9 },
+      { t: 'lamp', i: 0, j: 4 }, { t: 'lamp', i: 9, j: 4 },
+      { t: 'fountain', i: 4, j: 5 }, { t: 'fountain', i: 5, j: 5 },
+      { t: 'bench', i: 2, j: 7, back: 'nw' }, { t: 'bench', i: 3, j: 7, back: 'nw' },
+      { t: 'stool', i: 2, j: 4 }, { t: 'stool', i: 7, j: 5 }, { t: 'table', i: 3, j: 4 },
+      { t: 'plant', i: 9, j: 7 }, { t: 'plant', i: 6, j: 9 },
+      { t: 'photobooth', i: 0, j: 2 }, { t: 'vending', i: 9, j: 2 },
+      { t: 'crate', i: 8, j: 8 }, { t: 'crate', i: 1, j: 8 },
+      { t: 'portal', i: 0, j: 6, to: 'estudio', spawn: [5, 8], label: '🎙️ Estudio', col: '#e0507a' },
+      { t: 'portal', i: 9, j: 6, to: 'azotea', spawn: [5, 8], label: '🌆 Azotea', col: '#f0a13e' },
+    ],
+  },
+  azotea: {
+    name: 'La Azotea', sub: 'Terraza chill con vistas',
+    floorA: '#241b12', floorB: '#1c150e', wall: '#161016', neonA: '#f0a13e', neonB: '#e0507a', sign: 'ROOFTOP', warm: true,
+    dance: [],
+    furn: [
+      { t: 'plant', i: 0, j: 0 }, { t: 'plant', i: 9, j: 0 }, { t: 'plant', i: 0, j: 8 }, { t: 'plant', i: 2, j: 1 }, { t: 'plant', i: 8, j: 2 },
+      { t: 'bar', i: 4, j: 0 }, { t: 'bar', i: 5, j: 0 },                                   // barra
+      { t: 'stool', i: 4, j: 1 }, { t: 'stool', i: 5, j: 1 },                               // taburetes de barra
+      { t: 'sofa', i: 1, j: 4, back: 'nw' }, { t: 'sofa', i: 1, j: 5, back: 'nw' },         // sofá chill
+      { t: 'table', i: 2, j: 4 },
+      { t: 'pool', i: 6, j: 5 }, { t: 'pool', i: 7, j: 5 }, { t: 'pool', i: 6, j: 6 }, { t: 'pool', i: 7, j: 6 },   // piscinita
+      { t: 'lamp', i: 9, j: 5 },
+      { t: 'portal', i: 5, j: 9, to: 'plaza', spawn: [5, 6], label: '↓ Bajar a la Plaza', col: '#27a9ff' },
+    ],
+  },
+  estudio: {
+    name: 'El Estudio', sub: 'Sala de grabación underground',
+    floorA: '#14182b', floorB: '#0f1322', wall: '#0a0d18', neonA: '#6e2df5', neonB: '#27a9ff', sign: 'STUDIO', dark: true,
+    dance: [],
+    furn: [
+      { t: 'spk', i: 0, j: 0 }, { t: 'spk', i: 9, j: 0 },
+      { t: 'djbooth', i: 4, j: 0 }, { t: 'djbooth', i: 5, j: 0 },                            // mesa de mezclas
+      { t: 'rack', i: 2, j: 0 }, { t: 'rack', i: 7, j: 0 },                                  // racks de equipo
+      { t: 'couch', i: 1, j: 5, back: 'nw' }, { t: 'couch', i: 2, j: 5, back: 'nw' }, { t: 'couch', i: 3, j: 5, back: 'nw' },
+      { t: 'table', i: 5, j: 5 }, { t: 'stool', i: 6, j: 5 },
+      { t: 'neon', i: 8, j: 3 }, { t: 'neon', i: 0, j: 6 },                                  // carteles de neón
+      { t: 'crate', i: 8, j: 7 }, { t: 'crate', i: 8, j: 8 },
+      { t: 'plant', i: 0, j: 8 },
+      { t: 'portal', i: 5, j: 9, to: 'plaza', spawn: [1, 6], label: '↓ Salir a la Plaza', col: '#27a9ff' },
+    ],
+  },
+};
+
 let plaza = null;          // runtime del render (solo mientras la vista está abierta)
-let plazaChan = null;      // canal realtime (vive toda la sesión: alimenta el badge)
+let plazaChan = null;      // canal del contador (badge del menú)
 let plazaCount = 0;
+let plzR = null;           // sala activa computada { def, furn, blocked, seats, dance, portals }
+
+function plzComputeRoom(id) {
+  const def = PLZ_ROOMS[id] || PLZ_ROOMS.plaza;
+  const furn = def.furn;
+  return {
+    id, def, furn,
+    blocked: new Set(furn.filter(f => PLZ_SOLID.has(f.t)).map(f => f.i + ',' + f.j)),
+    seats: new Map(furn.filter(f => f.t === 'bench' || f.t === 'stool' || f.t === 'sofa' || f.t === 'couch').map(f => [f.i + ',' + f.j, f])),
+    portals: new Map(furn.filter(f => f.t === 'portal').map(f => [f.i + ',' + f.j, f])),
+    dance: def.dance || [],
+  };
+}
 
 const plzKey = (i, j) => i + ',' + j;
-const plzFree = (i, j) => i >= 0 && j >= 0 && i < PLZ.COLS && j < PLZ.ROWS && !PLZ_BLOCKED.has(plzKey(i, j));
+const plzFree = (i, j) => i >= 0 && j >= 0 && i < PLZ.COLS && j < PLZ.ROWS && plzR && !plzR.blocked.has(plzKey(i, j));
 
 // BFS: camino entre dos casillas (rejilla pequeña, sobra)
 function plzPath(from, to) {
@@ -4167,47 +4213,75 @@ function plzEntity(meta, id) {
 }
 
 // canal realtime: se abre al iniciar sesión (para el badge) y se reutiliza en la vista
+// canal global de conteo (badge del menú): cuenta a todos los que están en la Plaza (cualquier sala)
 function initPlazaWatch() {
   if (plazaChan) return;
   try {
-    plazaChan = sb.channel('plaza', { config: { presence: { key: state.user.id }, broadcast: { self: false } } });
-    plazaChan
-      .on('presence', { event: 'sync' }, () => {
-        const st = plazaChan.presenceState();
-        plazaCount = Object.keys(st).length;
-        const b = $('cntPlaza'); if (b) b.textContent = plazaCount > 0 ? String(plazaCount) : '';
-        if (plaza) plzSyncRoster(st);
-      })
-      .on('broadcast', { event: 'move' }, ({ payload }) => {
-        if (!plaza || !payload || payload.id === state.user.id || isHidden(payload.id)) return;
-        const e = plaza.ents.get(payload.id); if (!e) return;
-        if (payload.from) { e.x = payload.from.i; e.y = payload.from.j; }
-        e.path = payload.path || [];
-      })
-      .on('broadcast', { event: 'chat' }, ({ payload }) => {
-        if (!plaza || !payload || isHidden(payload.id)) return;
-        const e = plaza.ents.get(payload.id);
-        if (e) e.bubble = { text: String(payload.text || '').slice(0, 140), until: performance.now() + 6500 };
-      })
-      .on('broadcast', { event: 'emote' }, ({ payload }) => {
-        if (!plaza || !payload || isHidden(payload.id)) return;
-        const e = plaza.ents.get(payload.id);
-        if (payload.kind === 'react') {
-          // el emoji flota sobre el objetivo (o sobre quien reacciona si no hay objetivo)
-          const t = payload.target ? plaza.ents.get(payload.target) : e;
-          if (t && payload.emoji) t.float = { emoji: payload.emoji, until: performance.now() + 2600 };
-          return;
-        }
-        const dur = payload.kind === 'dance' ? 12000 : 2600;
-        if (e) e.emote = { kind: payload.kind, until: performance.now() + dur, target: payload.target || null };
-        if (payload.target === state.user.id) {
-          const who = e ? e.name : 'Alguien';
-          if (payload.kind === 'wave') toast(`👋 ${who} te saluda`);
-          if (payload.kind === 'fist') { toast(`🤜🤛 ${who} te la choca`); const me2 = plaza.ents.get(state.user.id); if (me2) me2.emote = { kind: 'fistback', until: performance.now() + 2600 }; haptic(20); }
-        }
-      })
-      .subscribe();
+    plazaChan = sb.channel('plaza-world', { config: { presence: { key: state.user.id } } });
+    plazaChan.on('presence', { event: 'sync' }, () => {
+      plazaCount = Object.keys(plazaChan.presenceState()).length;
+      const b = $('cntPlaza'); if (b) b.textContent = plazaCount > 0 ? String(plazaCount) : '';
+    }).subscribe();
   } catch (_) {}
+}
+
+// entra en una sala: cambia el canal de tiempo real, mobiliario y suelo
+function plzJoinRoom(id, si, sj) {
+  if (!plaza) return;
+  // salir del canal de la sala anterior
+  if (plaza.chan) { try { plaza.chan.untrack(); } catch (_) {} try { sb.removeChannel(plaza.chan); } catch (_) {} plaza.chan = null; }
+  plzR = plzComputeRoom(id);
+  plaza.roomId = id;
+  const me = plaza.me;
+  if (!plzFree(si, sj)) { si = 5; sj = 6; }
+  me.x = si; me.y = sj; me.path = []; me.emote = null;
+  plaza.ents = new Map([[state.user.id, me]]);
+  plaza.target = null;
+  plzPrerenderFloor();
+  // cabecera
+  const h = $('plazaRoomName'); if (h) h.textContent = plzR.def.name;
+  const s = $('plazaRoomSub'); if (s) s.textContent = plzR.def.sub;
+  const n = $('plazaLiveN'); if (n) n.textContent = '1';
+
+  // canal de la sala: presencia (roster) + movimiento + chat + emotes
+  plaza.chan = sb.channel('plaza-room-' + id, { config: { presence: { key: state.user.id }, broadcast: { self: false } } });
+  plaza.chan
+    .on('presence', { event: 'sync' }, () => { if (plaza && plaza.roomId === id) plzSyncRoster(plaza.chan.presenceState()); })
+    .on('broadcast', { event: 'move' }, ({ payload }) => {
+      if (!plaza || !payload || payload.id === state.user.id || isHidden(payload.id)) return;
+      const e = plaza.ents.get(payload.id); if (!e) return;
+      if (payload.from) { e.x = payload.from.i; e.y = payload.from.j; }
+      e.path = payload.path || [];
+    })
+    .on('broadcast', { event: 'chat' }, ({ payload }) => {
+      if (!plaza || !payload || isHidden(payload.id)) return;
+      const e = plaza.ents.get(payload.id);
+      if (e) e.bubble = { text: String(payload.text || '').slice(0, 140), until: performance.now() + 6500 };
+    })
+    .on('broadcast', { event: 'emote' }, ({ payload }) => {
+      if (!plaza || !payload || isHidden(payload.id)) return;
+      const e = plaza.ents.get(payload.id);
+      if (payload.kind === 'react') {
+        const t = payload.target ? plaza.ents.get(payload.target) : e;
+        if (t && payload.emoji) t.float = { emoji: payload.emoji, until: performance.now() + 2600 };
+        return;
+      }
+      const dur = payload.kind === 'dance' ? 12000 : 2600;
+      if (e) e.emote = { kind: payload.kind, until: performance.now() + dur, target: payload.target || null };
+      if (payload.target === state.user.id) {
+        const who = e ? e.name : 'Alguien';
+        if (payload.kind === 'wave') toast(`👋 ${who} te saluda`);
+        if (payload.kind === 'fist') { toast(`🤜🤛 ${who} te la choca`); const me2 = plaza.ents.get(state.user.id); if (me2) me2.emote = { kind: 'fistback', until: performance.now() + 2600 }; haptic(20); }
+      }
+    })
+    .subscribe((status) => { if (status === 'SUBSCRIBED') plzTrack(); });
+  try { localStorage.setItem('ub_plaza_room', id); } catch (_) {}
+}
+
+function plzTrack() {
+  if (!plaza || !plaza.chan) return;
+  const me = plaza.me;
+  try { plaza.chan.track({ username: me.username, name: me.name, avatar_url: state.profile.avatar_url, accent: me.accent, i: Math.round(me.x), j: Math.round(me.y) }); } catch (_) {}
 }
 
 function plzSyncRoster(st) {
@@ -4228,7 +4302,7 @@ async function renderPlaza() {
   setActiveNav('plaza');
   const main = $('main');
   main.innerHTML = `
-    <div class="main-head"><div><h2>La Plaza</h2><div class="sub">Pasea, saluda y conecta con la escena</div></div>
+    <div class="main-head"><div><h2 id="plazaRoomName">La Plaza</h2><div class="sub" id="plazaRoomSub">Pasea, saluda y conecta con la escena</div></div>
       <div style="display:flex;gap:8px;align-items:center">
         <button class="btn sm" id="plazaDj">🎧 DJ</button>
         <span class="plaza-live"><span class="dot-online"></span> <b id="plazaLiveN">1</b> aquí</span>
@@ -4252,10 +4326,11 @@ async function renderPlaza() {
     <div class="plaza-hint">Camina tocando el suelo · siéntate en bancos y taburetes · toca a alguien para interactuar · usa la barra para bailar, reaccionar o personalizarte</div>`;
 
   const canvas = $('plazaCanvas'), ctx = canvas.getContext('2d');
-  // spawn: última casilla o una libre aleatoria
+  // sala de inicio (la última visitada) y su posición
+  let startRoom = 'plaza';
+  try { const r = localStorage.getItem('ub_plaza_room'); if (r && PLZ_ROOMS[r]) startRoom = r; } catch (_) {}
   let si = 5, sj = 6;
-  try { const s = JSON.parse(localStorage.getItem('ub_plaza_pos') || 'null'); if (s && plzFree(s.i, s.j)) { si = s.i; sj = s.j; } } catch (_) {}
-  if (!plzFree(si, sj)) { si = 5; sj = 6; }
+  try { const s = JSON.parse(localStorage.getItem('ub_plaza_pos_' + startRoom) || 'null'); if (s) { si = s.i; sj = s.j; } } catch (_) {}
 
   const me = plzEntity({
     username: state.profile.username, name: state.profile.display_name || state.profile.username,
@@ -4268,13 +4343,12 @@ async function renderPlaza() {
   const artH = (PLZ.COLS + PLZ.ROWS) * PLZ.TH / 2 + PLZ.PADT + PLZ.PADB;
   canvas.width = artW; canvas.height = artH;
   ctx.imageSmoothingEnabled = false;
-  plaza = { canvas, ctx, ents: new Map([[state.user.id, me]]), me, raf: 0, last: performance.now(), target: null, ox: artW / 2, oy: PLZ.PADT, floor: null };
-  plzPrerenderFloor();
+  plaza = { canvas, ctx, ents: new Map([[state.user.id, me]]), me, raf: 0, last: performance.now(), target: null, ox: artW / 2, oy: PLZ.PADT, floor: null, chan: null, roomId: startRoom };
 
-  // presencia: entrar en la sala
+  // canal de conteo (badge) + entrar en la sala inicial
   initPlazaWatch();
-  const track = () => { try { plazaChan.track({ username: me.username, name: me.name, avatar_url: state.profile.avatar_url, accent: me.accent, i: Math.round(me.x), j: Math.round(me.y) }); } catch (_) {} };
-  track();
+  try { plazaChan.track({ room: startRoom }); } catch (_) {}   // aparece en el conteo del mundo
+  plzJoinRoom(startRoom, si, sj);
 
   // ---- emotes (saludo, baile, reacciones, chocarla) ----
   const sendEmote = (kind, emoji, target) => {
@@ -4285,7 +4359,7 @@ async function renderPlaza() {
     } else {
       me.emote = { kind, until: performance.now() + (kind === 'dance' ? 12000 : 2600), target };
     }
-    try { plazaChan.send({ type: 'broadcast', event: 'emote', payload }); } catch (_) {}
+    try { plaza.chan.send({ type: 'broadcast', event: 'emote', payload }); } catch (_) {}
   };
 
   // ---- menú al tocar un avatar ----
@@ -4345,7 +4419,7 @@ async function renderPlaza() {
     const fj = Math.floor((ry / (PLZ.TH / 2) - rx / (PLZ.TW / 2)) / 2);
     if (!plzFree(fi, fj)) return;
     // asiento ocupado por otra persona → no se puede
-    if (PLZ_SEATS.has(plzKey(fi, fj))) {
+    if (plzR.seats.has(plzKey(fi, fj))) {
       for (const o of plaza.ents.values()) {
         if (o.id !== state.user.id && !o.path.length && Math.round(o.x) === fi && Math.round(o.y) === fj) { toast('Ese sitio está ocupado 😅'); return; }
       }
@@ -4356,7 +4430,7 @@ async function renderPlaza() {
     me.path = path; plaza.target = { i: fi, j: fj, t0: performance.now() };
     me.emote = null;   // caminar corta el baile
     haptic(8);
-    try { plazaChan.send({ type: 'broadcast', event: 'move', payload: { id: state.user.id, from, path } }); } catch (_) {}
+    try { plaza.chan.send({ type: 'broadcast', event: 'move', payload: { id: state.user.id, from, path } }); } catch (_) {}
   });
 
   // ---- radio de la Plaza: todos escuchan la misma pista sincronizada ----
@@ -4403,7 +4477,7 @@ async function renderPlaza() {
     const inp = $('plazaMsg'); const text = inp.value.trim(); if (!text) return;
     inp.value = '';
     me.bubble = { text: text.slice(0, 140), until: performance.now() + 6500 };
-    try { plazaChan.send({ type: 'broadcast', event: 'chat', payload: { id: state.user.id, text: text.slice(0, 140) } }); } catch (_) {}
+    try { plaza.chan.send({ type: 'broadcast', event: 'chat', payload: { id: state.user.id, text: text.slice(0, 140) } }); } catch (_) {}
   });
 
   // ---- barra de acciones (junto al chat) ----
@@ -4416,7 +4490,7 @@ async function renderPlaza() {
     if (a === 'dance') { const on = me.emote && me.emote.kind === 'dance'; if (on) { me.emote = null; sendEmote('idle'); } else sendEmote('dance'); b.classList.toggle('on', !on); }
     else if (a === 'wave') sendEmote('wave');
     else if (a === 'react') tray.classList.toggle('hidden');
-    else if (a === 'custom') openPlazaCustomizer(() => { const m2 = state.profile.theme && state.profile.theme.accent; if (m2) me.accent = m2; try { track(); } catch (_) {} });
+    else if (a === 'custom') openPlazaCustomizer(() => { const m2 = state.profile.theme && state.profile.theme.accent; if (m2) me.accent = m2; try { plzTrack(); } catch (_) {} });
   });
 
   // bucle principal (se apaga solo al salir de la vista)
@@ -4430,10 +4504,11 @@ async function renderPlaza() {
   plaza.raf = requestAnimationFrame(loop);
 
   function plzLeave() {
-    try { plazaChan.untrack(); } catch (_) {}
+    try { plazaChan.untrack(); } catch (_) {}                                  // salir del conteo del mundo
+    try { plaza.chan.untrack(); sb.removeChannel(plaza.chan); } catch (_) {}    // salir de la sala
     try { sb.removeChannel(radioChan); } catch (_) {}
     try { closeMenu(); } catch (_) {}
-    try { localStorage.setItem('ub_plaza_pos', JSON.stringify({ i: Math.round(me.x), j: Math.round(me.y) })); } catch (_) {}
+    try { localStorage.setItem('ub_plaza_pos_' + plaza.roomId, JSON.stringify({ i: Math.round(me.x), j: Math.round(me.y) })); } catch (_) {}
     plaza = null;
   }
 
@@ -4444,7 +4519,12 @@ async function renderPlaza() {
     const dist = Math.hypot(dx, dy), step = PLZ.SPEED * dt;
     if (dist <= step) {
       e.x = t.i; e.y = t.j; e.path.shift();
-      if (isMe && !e.path.length) { track(); try { localStorage.setItem('ub_plaza_pos', JSON.stringify({ i: t.i, j: t.j })); } catch (_) {} }
+      if (isMe && !e.path.length) {
+        const portal = plzR.portals.get(plzKey(t.i, t.j));
+        if (portal) { toast('Entrando en ' + (PLZ_ROOMS[portal.to] ? PLZ_ROOMS[portal.to].name : '…')); plzJoinRoom(portal.to, portal.spawn[0], portal.spawn[1]); return; }
+        plzTrack();
+        try { localStorage.setItem('ub_plaza_pos_' + plaza.roomId, JSON.stringify({ i: t.i, j: t.j })); } catch (_) {}
+      }
     } else { e.x += dx / dist * step; e.y += dy / dist * step; }
   }
 }
@@ -4521,6 +4601,7 @@ function plzPrerenderFloor() {
 
   const TL = plzIso(0, 0), TR = plzIso(PLZ.COLS, 0), LL = plzIso(0, PLZ.ROWS), BR = plzIso(PLZ.COLS, PLZ.ROWS);
   const WH = PLZ.WH;
+  const D = (plzR && plzR.def) || PLZ_ROOMS.plaza;   // tema de la sala activa
 
   // paredes traseras: columnas verticales de 1px (perfectamente crujientes)
   const wallCols = (a, b, base) => {
@@ -4530,13 +4611,12 @@ function plzPrerenderFloor() {
       const y = Math.round(a.y + dy * (s / n));
       c.fillStyle = (Math.floor(s / 8) % 2) ? base : '#101527';
       c.fillRect(x, y - WH, 1, WH);
-      // filo de neón superior (degradado azul→violeta hecho por tramos)
-      c.fillStyle = s < n / 2 ? '#27a9ff' : '#6e2df5';
+      c.fillStyle = s < n / 2 ? D.neonA : D.neonB;   // filo de neón según el tema
       c.fillRect(x, y - WH, 1, 2);
     }
   };
-  wallCols(TL, TR, '#0d1122');
-  wallCols(TL, LL, '#0d1122');
+  wallCols(TL, TR, D.wall);
+  wallCols(TL, LL, D.wall);
 
   // skyline pixel + estrellas en las paredes traseras (ciudad nocturna)
   const skyline = (a, b) => {
@@ -4566,22 +4646,23 @@ function plzPrerenderFloor() {
   };
   garland(TL, TR); garland(TL, LL);
 
-  // letrero pixel "UNDER BRO" con halo
+  // letrero pixel con el nombre de la sala + halo
+  const sign = D.sign || 'UNDER BRO';
   c.font = '700 9px monospace'; c.textAlign = 'center';
-  c.fillStyle = '#3e57fc';
-  for (const [ox2, oy2] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) c.fillText('UNDER BRO', ox2, TL.y - WH - 8 + oy2);
-  c.fillStyle = '#eaf2ff'; c.fillText('UNDER BRO', 0, TL.y - WH - 8);
+  c.fillStyle = D.neonB;
+  for (const [ox2, oy2] of [[-1, 0], [1, 0], [0, -1], [0, 1]]) c.fillText(sign, ox2, TL.y - WH - 8 + oy2);
+  c.fillStyle = '#eaf2ff'; c.fillText(sign, 0, TL.y - WH - 8);
 
   // grosor de la plataforma (rombo grande oscuro desplazado hacia abajo)
   const roomTW = (PLZ.COLS + PLZ.ROWS) * PLZ.TW / 2, roomTH = (PLZ.COLS + PLZ.ROWS) * PLZ.TH / 2;
   const centerX = (TR.x + LL.x) / 2, topY = TL.y;
   for (let d = 4; d >= 1; d--) plzDiamond(c, centerX, topY + d, roomTW, roomTH, d > 2 ? '#04060d' : '#080b16');
 
-  // suelo: baldosas rombo con borde inferior oscuro (efecto Habbo)
+  // suelo: baldosas rombo con canto oscuro, en los colores del tema
   for (let i = 0; i < PLZ.COLS; i++) for (let j = 0; j < PLZ.ROWS; j++) {
     const p = plzIso(i, j);
     plzDiamond(c, p.x, p.y + 1, PLZ.TW, PLZ.TH, '#0a0e1c');                       // canto
-    plzDiamond(c, p.x, p.y, PLZ.TW, PLZ.TH, (i + j) % 2 ? '#161c33' : '#121729'); // cara
+    plzDiamond(c, p.x, p.y, PLZ.TW, PLZ.TH, (i + j) % 2 ? D.floorA : D.floorB);   // cara
   }
 
   plaza.floor = off;
@@ -4685,6 +4766,78 @@ function plzDrawFurn(f, now) {
     return;
   }
 
+  if (f.t === 'portal') {
+    // arco de neón que lleva a otra sala
+    const col = f.col || '#27a9ff';
+    const pulse = 0.6 + 0.4 * Math.abs(Math.sin(now / 500));
+    plzDiamond(c, cx, base - 2, PLZ.TW - 6, PLZ.TH - 3, 'rgba(96,140,255,' + (0.06 + 0.06 * pulse) + ')');  // charco
+    // marco del arco
+    plzRect(c, cx - 10, base - 30, 3, 30, '#0c101f', '#05070f');
+    plzRect(c, cx + 7, base - 30, 3, 30, '#0c101f', '#05070f');
+    plzRect(c, cx - 10, base - 33, 20, 4, '#0c101f', '#05070f');
+    // interior "portal" con brillo pulsante y partículas que suben
+    c.globalAlpha = 0.5 + 0.3 * pulse; c.fillStyle = col; c.fillRect(cx - 7, base - 29, 14, 29); c.globalAlpha = 1;
+    for (let s = 0; s < 4; s++) { const t = ((now / 900) + s * 0.25) % 1; c.globalAlpha = 1 - t; c.fillStyle = '#fff'; c.fillRect(cx - 5 + ((s * 4) % 10), base - 2 - Math.round(t * 26), 1, 2); c.globalAlpha = 1; }
+    // filo de neón del marco
+    c.fillStyle = col; c.fillRect(cx - 10, base - 33, 20, 1); c.fillRect(cx - 10, base - 33, 1, 30); c.fillRect(cx + 9, base - 33, 1, 30);
+    // cartelito con el destino
+    c.font = '700 6px monospace'; c.textAlign = 'center'; c.textBaseline = 'alphabetic';
+    const lbl = (f.label || '').replace(/[^\wÁÉÍÓÚáéíóúñ ↑↓🎙️🌆🏠→]/g, '').trim() || 'Ir';
+    c.fillStyle = '#0a0e1c'; c.fillRect(cx - Math.ceil(c.measureText(lbl).width / 2) - 3, base - 42, Math.ceil(c.measureText(lbl).width) + 6, 9);
+    c.fillStyle = '#eaf2ff'; c.fillText(lbl, cx, base - 35);
+    return;
+  }
+
+  if (f.t === 'bar') {
+    // barra de bar con botellas de neón
+    plzRect(c, cx - 12, base - 16, 24, 16, '#1a1208', '#05070f');
+    c.fillStyle = 'rgba(240,161,62,.6)'; c.fillRect(cx - 12, base - 16, 24, 1);
+    for (let k = -8; k <= 6; k += 4) { c.fillStyle = ['#e0507a', '#2dc878', '#27a9ff'][((k + 8) / 4) % 3]; c.fillRect(cx + k, base - 24, 2, 8); }
+    plzRect(c, cx - 12, base - 6, 24, 3, '#2a1c0e');
+    return;
+  }
+
+  if (f.t === 'sofa' || f.t === 'couch') {
+    // sofá chill (asiento): respaldo hacia atrás
+    const warm = f.t === 'sofa';
+    plzRect(c, cx - 11, base - 6, 3, 6, '#0a0e1c'); plzRect(c, cx + 8, base - 6, 3, 6, '#0a0e1c');
+    plzRect(c, cx - 12, base - 11, 24, 6, warm ? '#2a1d2e' : '#171d33', '#05070f');
+    c.fillStyle = warm ? 'rgba(240,161,62,.5)' : 'rgba(110,45,245,.5)'; c.fillRect(cx - 12, base - 11, 24, 1);
+    plzRect(c, cx + (f.back === 'nw' ? -14 : 12), base - 22, 2, 13, '#0e1220', '#05070f');   // respaldo
+    plzRect(c, cx - 13, base - 12, 3, 7, warm ? '#33243a' : '#1c2340');                       // reposabrazos
+    plzRect(c, cx + 10, base - 12, 3, 7, warm ? '#33243a' : '#1c2340');
+    return;
+  }
+
+  if (f.t === 'pool') {
+    // agua de la piscina (baldosa cian con reflejos ondulando)
+    plzDiamond(c, cx, base - 1, PLZ.TW - 2, PLZ.TH - 1, '#0c2a3e');
+    plzDiamond(c, cx, base - 2, PLZ.TW - 8, PLZ.TH - 4, '#12557f');
+    const w = Math.floor(now / 400 + f.i + f.j) % 2;
+    c.fillStyle = 'rgba(159,208,255,.5)'; c.fillRect(cx - 4 + w * 3, base - 3, 3, 1); c.fillRect(cx + 2 - w * 2, base, 2, 1);
+    return;
+  }
+
+  if (f.t === 'rack') {
+    // rack de equipo de estudio con luces
+    plzRect(c, cx - 7, base - 32, 14, 32, '#0a0e1c', '#05070f');
+    for (let r = 0; r < 5; r++) { plzRect(c, cx - 5, base - 29 + r * 6, 10, 4, '#141b30'); c.fillStyle = (Math.floor(now / 300) + r) % 3 === 0 ? '#2dc878' : '#0e2a1c'; c.fillRect(cx + 3, base - 28 + r * 6, 1, 1); }
+    return;
+  }
+
+  if (f.t === 'neon') {
+    // cartel de neón en la pared
+    const col = (plzR && plzR.def) ? plzR.def.neonA : '#6e2df5';
+    const on = Math.floor(now / 700) % 8 !== 0;   // parpadeo de neón
+    c.globalAlpha = on ? 1 : 0.35;
+    plzRect(c, cx - 9, base - 24, 18, 10, '#080b16', '#05070f');
+    c.fillStyle = col; c.font = '700 7px monospace'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText('UB', cx, base - 19);
+    c.strokeStyle = col; c.lineWidth = 1; c.strokeRect(cx - 8, base - 23, 16, 8);
+    c.globalAlpha = 1;
+    return;
+  }
+
   if (f.t === 'djbooth') {
     // cabina del DJ: mesa con platos y luces al ritmo
     const on = plaza.radio && plaza.radio.playing;
@@ -4780,7 +4933,7 @@ function plzDraw(now) {
   // pista de baile: baldosas centrales que cambian de color (más intensa con música)
   const beat = plaza.radio && plaza.radio.playing ? 320 : 620;
   const boost = plaza.radio && plaza.radio.playing ? 1 : 0.5;
-  for (const [i, j] of PLZ_DANCE) {
+  for (const [i, j] of plzR.dance) {
     const p = plzIso(i, j);
     const phase = Math.sin(now / beat + (i * 0.9 + j * 1.7));
     const col = PLZ_DANCE_COLS[(i + j + Math.floor(now / (beat * 2))) % PLZ_DANCE_COLS.length];
@@ -4789,7 +4942,7 @@ function plzDraw(now) {
   }
 
   // charcos de luz de las farolas (sobre el suelo, bajo todo lo demás)
-  for (const f of PLZ_FURN) {
+  for (const f of plzR.furn) {
     if (f.t !== 'lamp') continue;
     const p = plzIso(f.i, f.j);
     const pulse = 0.5 + 0.5 * Math.abs(Math.sin(now / 700 + f.i));
@@ -4807,7 +4960,7 @@ function plzDraw(now) {
 
   // mobiliario + avatares, ordenados por profundidad (pintor)
   const items = [];
-  for (const f of PLZ_FURN) items.push({ d: f.i + f.j - 0.15, draw: () => plzDrawFurn(f, now) });
+  for (const f of plzR.furn) items.push({ d: f.i + f.j - 0.15, draw: () => plzDrawFurn(f, now) });
   for (const e of plaza.ents.values()) items.push({ d: e.x + e.y, draw: () => plzDrawAvatar(e, now) });
   items.sort((a, b) => a.d - b.d);
   for (const it of items) it.draw();
@@ -4820,7 +4973,7 @@ function plzDrawAvatar(e, now) {
   const walking = e.path.length > 0;
   if (e.emote && e.emote.until < now) e.emote = null;
   const dancing = !walking && e.emote && e.emote.kind === 'dance';
-  const seated = !walking && !dancing && PLZ_SEATS.has(plzKey(Math.round(e.x), Math.round(e.y)));
+  const seated = !walking && !dancing && plzR.seats.has(plzKey(Math.round(e.x), Math.round(e.y)));
   // bailar: balanceo lateral + brinco al ritmo de la radio si suena
   let danceLift = 0;
   if (dancing) {
