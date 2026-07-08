@@ -4294,7 +4294,8 @@ function plzSyncRoster(st) {
     if (!e) { e = plzEntity(meta, uid); plaza.ents.set(uid, e); }
     else if (uid !== state.user.id) { if (!e.path.length) { e.x = meta.i ?? e.x; e.y = meta.j ?? e.y; } if (meta.accent) e.accent = meta.accent; }
   }
-  for (const uid of [...plaza.ents.keys()]) if (!seen.has(uid)) plaza.ents.delete(uid);
+  // quitar a quien ya no está — PERO nunca a mí mismo (mi presencia puede tardar en sincronizar)
+  for (const uid of [...plaza.ents.keys()]) if (uid !== state.user.id && !seen.has(uid)) plaza.ents.delete(uid);
   const n = $('plazaLiveN'); if (n) n.textContent = String(plaza.ents.size);
 }
 
