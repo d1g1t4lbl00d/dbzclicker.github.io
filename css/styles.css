@@ -4324,3 +4324,13 @@ html { touch-action: manipulation; }
 
 .plaza-np .np-stop { margin-left: 4px; border: none; background: rgba(255,255,255,.14); color: #fff; width: 18px; height: 18px; border-radius: 50%; font-size: 11px; line-height: 1; cursor: pointer; }
 .plaza-np .np-stop:hover { background: rgba(255,90,90,.6); }
+
+/* La Plaza — minimapa de salas */
+.plaza-rooms { position: absolute; top: 10px; right: 10px; z-index: 16; display: flex; flex-direction: column; gap: 6px; }
+.plaza-rooms button {
+  width: 38px; height: 38px; border-radius: 12px; border: 1px solid rgba(96,140,255,.3);
+  background: rgba(10,14,28,.78); backdrop-filter: blur(6px); font-size: 18px; cursor: pointer;
+  transition: transform .12s, border-color .15s, background .15s; box-shadow: 0 4px 14px rgba(0,0,0,.4);
+}
+.plaza-rooms button:hover { transform: scale(1.08); background: rgba(20,26,44,.9); }
+.plaza-rooms button.on { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 45%, transparent), 0 4px 14px rgba(0,0,0,.4); }

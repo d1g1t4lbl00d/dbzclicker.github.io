@@ -4101,7 +4101,7 @@ function openUploadModal(prefill) {
 // Render pixel-art: el canvas trabaja a baja resolución (px de arte) y CSS lo
 // escala con image-rendering:pixelated → píxeles gordos y nítidos, estilo Habbo.
 const PLZ = { COLS: 10, ROWS: 10, TW: 32, TH: 16, SPEED: 3.2, WH: 34, PADX: 10, PADT: 58, PADB: 40 };
-const PLZ_SOLID = new Set(['spk', 'tree', 'lamp', 'fountain', 'djbooth', 'plant', 'photobooth', 'vending', 'crate', 'table', 'bar', 'sofa', 'pool', 'rack', 'couch', 'neon']);
+const PLZ_SOLID = new Set(['spk', 'tree', 'lamp', 'fountain', 'djbooth', 'plant', 'photobooth', 'vending', 'crate', 'table', 'bar', 'pool', 'rack', 'neon', 'arcade', 'sea', 'palm', 'umbrella']);
 const PLZ_DANCE_COLS = ['rgba(39,169,255,', 'rgba(110,45,245,', 'rgba(224,80,122,', 'rgba(45,200,120,'];
 
 // --- SALAS: cada una con su tema, mobiliario y portales a otras salas ---
@@ -4111,17 +4111,18 @@ const PLZ_ROOMS = {
     floorA: '#161c33', floorB: '#121729', wall: '#0d1122', neonA: '#27a9ff', neonB: '#6e2df5', sign: 'UNDER BRO',
     dance: (() => { const d = []; for (let i = 3; i <= 6; i++) for (let j = 1; j <= 3; j++) d.push([i, j]); return d; })(),
     furn: [
-      { t: 'spk', i: 3, j: 0 }, { t: 'djbooth', i: 4, j: 0 }, { t: 'djbooth', i: 5, j: 0 }, { t: 'spk', i: 6, j: 0 },
-      { t: 'tree', i: 0, j: 0 }, { t: 'tree', i: 9, j: 0 }, { t: 'tree', i: 0, j: 9 }, { t: 'tree', i: 9, j: 9 },
-      { t: 'lamp', i: 0, j: 4 }, { t: 'lamp', i: 9, j: 4 },
+      // escenario norte, despejado
+      { t: 'djbooth', i: 4, j: 0 }, { t: 'djbooth', i: 5, j: 0 }, { t: 'spk', i: 2, j: 0 }, { t: 'spk', i: 7, j: 0 },
+      // esquinas con un árbol cada una (aire en el centro)
+      { t: 'tree', i: 0, j: 0 }, { t: 'tree', i: 9, j: 0 },
+      { t: 'lamp', i: 0, j: 5 }, { t: 'lamp', i: 9, j: 5 },
       { t: 'fountain', i: 4, j: 5 }, { t: 'fountain', i: 5, j: 5 },
-      { t: 'bench', i: 2, j: 7, back: 'nw' }, { t: 'bench', i: 3, j: 7, back: 'nw' },
-      { t: 'stool', i: 2, j: 4 }, { t: 'stool', i: 7, j: 5 }, { t: 'table', i: 3, j: 4 },
-      { t: 'plant', i: 9, j: 7 }, { t: 'plant', i: 6, j: 9 }, { t: 'plant', i: 0, j: 2 },
-      { t: 'vending', i: 9, j: 2 },
-      { t: 'crate', i: 8, j: 8 }, { t: 'crate', i: 1, j: 8 },
-      { t: 'portal', i: 0, j: 6, to: 'estudio', spawn: [5, 8], label: '🎙️ Estudio', col: '#e0507a' },
-      { t: 'portal', i: 9, j: 6, to: 'azotea', spawn: [5, 8], label: '🌆 Azotea', col: '#f0a13e' },
+      { t: 'bench', i: 2, j: 8, back: 'nw' }, { t: 'bench', i: 3, j: 8, back: 'nw' },
+      { t: 'stool', i: 7, j: 8 }, { t: 'plant', i: 0, j: 9 }, { t: 'plant', i: 9, j: 9 },
+      { t: 'portal', i: 0, j: 3, to: 'estudio', spawn: [5, 8], label: '🎙️ Estudio', col: '#e0507a' },
+      { t: 'portal', i: 9, j: 3, to: 'azotea', spawn: [5, 8], label: '🌆 Azotea', col: '#f0a13e' },
+      { t: 'portal', i: 0, j: 7, to: 'arcade', spawn: [5, 8], label: '🎮 Arcade', col: '#2dc878' },
+      { t: 'portal', i: 9, j: 7, to: 'playa', spawn: [5, 8], label: '🌊 Playa', col: '#12c2c2' },
     ],
   },
   azotea: {
@@ -4129,13 +4130,12 @@ const PLZ_ROOMS = {
     floorA: '#241b12', floorB: '#1c150e', wall: '#161016', neonA: '#f0a13e', neonB: '#e0507a', sign: 'ROOFTOP', warm: true,
     dance: [],
     furn: [
-      { t: 'plant', i: 0, j: 0 }, { t: 'plant', i: 9, j: 0 }, { t: 'plant', i: 0, j: 8 }, { t: 'plant', i: 2, j: 1 }, { t: 'plant', i: 8, j: 2 },
-      { t: 'bar', i: 4, j: 0 }, { t: 'bar', i: 5, j: 0 },                                   // barra
-      { t: 'stool', i: 4, j: 1 }, { t: 'stool', i: 5, j: 1 },                               // taburetes de barra
-      { t: 'sofa', i: 1, j: 4, back: 'nw' }, { t: 'sofa', i: 1, j: 5, back: 'nw' },         // sofá chill
-      { t: 'table', i: 2, j: 4 },
-      { t: 'pool', i: 6, j: 5 }, { t: 'pool', i: 7, j: 5 }, { t: 'pool', i: 6, j: 6 }, { t: 'pool', i: 7, j: 6 },   // piscinita
-      { t: 'lamp', i: 9, j: 5 },
+      { t: 'bar', i: 4, j: 0 }, { t: 'bar', i: 5, j: 0 },
+      { t: 'stool', i: 4, j: 1 }, { t: 'stool', i: 5, j: 1 },
+      { t: 'plant', i: 0, j: 0 }, { t: 'plant', i: 9, j: 0 },
+      { t: 'sofa', i: 1, j: 4, back: 'nw' }, { t: 'sofa', i: 1, j: 5, back: 'nw' },
+      { t: 'pool', i: 6, j: 5 }, { t: 'pool', i: 7, j: 5 }, { t: 'pool', i: 6, j: 6 }, { t: 'pool', i: 7, j: 6 },
+      { t: 'lamp', i: 9, j: 8 }, { t: 'plant', i: 0, j: 8 },
       { t: 'portal', i: 5, j: 9, to: 'plaza', spawn: [5, 6], label: '↓ Bajar a la Plaza', col: '#27a9ff' },
     ],
   },
@@ -4144,15 +4144,38 @@ const PLZ_ROOMS = {
     floorA: '#14182b', floorB: '#0f1322', wall: '#0a0d18', neonA: '#6e2df5', neonB: '#27a9ff', sign: 'STUDIO', dark: true,
     dance: [],
     furn: [
-      { t: 'spk', i: 0, j: 0 }, { t: 'spk', i: 9, j: 0 },
-      { t: 'djbooth', i: 4, j: 0 }, { t: 'djbooth', i: 5, j: 0 },                            // mesa de mezclas
-      { t: 'rack', i: 2, j: 0 }, { t: 'rack', i: 7, j: 0 },                                  // racks de equipo
+      { t: 'djbooth', i: 4, j: 0 }, { t: 'djbooth', i: 5, j: 0 },
+      { t: 'spk', i: 1, j: 0 }, { t: 'spk', i: 8, j: 0 },
+      { t: 'rack', i: 3, j: 0 }, { t: 'rack', i: 6, j: 0 },
       { t: 'couch', i: 1, j: 5, back: 'nw' }, { t: 'couch', i: 2, j: 5, back: 'nw' }, { t: 'couch', i: 3, j: 5, back: 'nw' },
-      { t: 'table', i: 5, j: 5 }, { t: 'stool', i: 6, j: 5 },
-      { t: 'neon', i: 8, j: 3 }, { t: 'neon', i: 0, j: 6 },                                  // carteles de neón
-      { t: 'crate', i: 8, j: 7 }, { t: 'crate', i: 8, j: 8 },
-      { t: 'plant', i: 0, j: 8 },
+      { t: 'neon', i: 9, j: 3 }, { t: 'plant', i: 0, j: 8 },
       { t: 'portal', i: 5, j: 9, to: 'plaza', spawn: [1, 6], label: '↓ Salir a la Plaza', col: '#27a9ff' },
+    ],
+  },
+  arcade: {
+    name: 'El Arcade', sub: 'Recreativos y neón',
+    floorA: '#1a1030', floorB: '#140b26', wall: '#0d0720', neonA: '#2dc878', neonB: '#e0507a', sign: 'ARCADE',
+    dance: [],
+    furn: [
+      { t: 'arcade', i: 2, j: 0 }, { t: 'arcade', i: 3, j: 0 }, { t: 'arcade', i: 6, j: 0 }, { t: 'arcade', i: 7, j: 0 },
+      { t: 'arcade', i: 0, j: 3 }, { t: 'arcade', i: 0, j: 4 }, { t: 'arcade', i: 9, j: 3 }, { t: 'arcade', i: 9, j: 4 },
+      { t: 'neon', i: 4, j: 0 }, { t: 'neon', i: 5, j: 0 },
+      { t: 'stool', i: 3, j: 6 }, { t: 'stool', i: 6, j: 6 }, { t: 'table', i: 4, j: 6 },
+      { t: 'plant', i: 0, j: 8 }, { t: 'plant', i: 9, j: 8 },
+      { t: 'portal', i: 5, j: 9, to: 'plaza', spawn: [1, 6], label: '↓ Salir a la Plaza', col: '#27a9ff' },
+    ],
+  },
+  playa: {
+    name: 'La Playa', sub: 'Chiringuito y olas',
+    floorA: '#c9a86a', floorB: '#bd9a58', wall: '#1a3a4a', neonA: '#12c2c2', neonB: '#ffd23e', sign: 'BEACH', beach: true,
+    dance: [],
+    furn: [
+      { t: 'sea', i: 0, j: 0 }, { t: 'sea', i: 1, j: 0 }, { t: 'sea', i: 2, j: 0 }, { t: 'sea', i: 3, j: 0 }, { t: 'sea', i: 4, j: 0 }, { t: 'sea', i: 5, j: 0 }, { t: 'sea', i: 6, j: 0 }, { t: 'sea', i: 7, j: 0 }, { t: 'sea', i: 8, j: 0 }, { t: 'sea', i: 9, j: 0 },
+      { t: 'palm', i: 0, j: 2 }, { t: 'palm', i: 9, j: 2 },
+      { t: 'bar', i: 4, j: 2 }, { t: 'bar', i: 5, j: 2 }, { t: 'stool', i: 4, j: 3 }, { t: 'stool', i: 5, j: 3 },
+      { t: 'umbrella', i: 2, j: 6 }, { t: 'umbrella', i: 7, j: 6 },
+      { t: 'stool', i: 2, j: 7 }, { t: 'stool', i: 7, j: 7 },
+      { t: 'portal', i: 5, j: 9, to: 'plaza', spawn: [5, 6], label: '↓ Volver a la Plaza', col: '#6e2df5' },
     ],
   },
 };
@@ -4242,6 +4265,7 @@ function plzJoinRoom(id, si, sj) {
   const h = $('plazaRoomName'); if (h) h.textContent = plzR.def.name;
   const s = $('plazaRoomSub'); if (s) s.textContent = plzR.def.sub;
   const n = $('plazaLiveN'); if (n) n.textContent = '1';
+  if (plaza._paintRooms) plaza._paintRooms();
 
   // canal de la sala: presencia (roster) + movimiento + chat + emotes
   plaza.chan = sb.channel('plaza-room-' + id, { config: { presence: { key: state.user.id }, broadcast: { self: false } } });
@@ -4310,6 +4334,13 @@ async function renderPlaza() {
       </div></div>
     <div class="plaza-wrap" id="plazaWrap">
       <canvas class="plaza-canvas" id="plazaCanvas"></canvas>
+      <div class="plaza-rooms" id="plazaRooms">
+        <button data-room="plaza" title="La Plaza">🏙️</button>
+        <button data-room="estudio" title="El Estudio">🎙️</button>
+        <button data-room="azotea" title="La Azotea">🌆</button>
+        <button data-room="arcade" title="El Arcade">🎮</button>
+        <button data-room="playa" title="La Playa">🌊</button>
+      </div>
       <div class="plaza-np hidden" id="plazaNp"></div>
       <div class="plaza-menu hidden" id="plazaMenu"></div>
     </div>
@@ -4434,6 +4465,19 @@ async function renderPlaza() {
     haptic(8);
     try { plaza.chan.send({ type: 'broadcast', event: 'move', payload: { id: state.user.id, from, path } }); } catch (_) {}
   });
+
+  // ---- minimapa de salas: salto directo ----
+  try {
+    const roomsEl = $('plazaRooms');
+    const paintRooms = () => roomsEl.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.room === plaza.roomId));
+    roomsEl.querySelectorAll('button').forEach(b => b.onclick = () => {
+      if (b.dataset.room === plaza.roomId) return;
+      haptic(10);
+      const sp = { plaza: [5, 6], estudio: [5, 8], azotea: [5, 8], arcade: [5, 8], playa: [5, 8] }[b.dataset.room] || [5, 6];
+      plzJoinRoom(b.dataset.room, sp[0], sp[1]); paintRooms();
+    });
+    plaza._paintRooms = paintRooms; paintRooms();
+  } catch (_) {}
 
   // === EL BUCLE ARRANCA YA (antes que nada opcional): moverse siempre funciona ===
   const loop = (now) => {
@@ -4718,6 +4762,8 @@ function plzDrawFurn(f, now) {
   const c = plaza.ctx;
   const p = plzIso(f.i, f.j);
   const cx = Math.round(p.x), base = Math.round(p.y + PLZ.TH / 2);
+  // sombra de contacto bajo cada mueble (da volumen y asienta la pieza en el suelo)
+  if (f.t !== 'portal' && f.t !== 'pool') plzDiamond(c, cx, base - Math.round(PLZ.TH / 2) + 2, PLZ.TW - 8, PLZ.TH - 4, 'rgba(0,0,0,.28)');
 
   if (f.t === 'spk') {
     plzRect(c, cx - 7, base - 30, 14, 30, '#0c101f', '#05070f');
@@ -4855,6 +4901,49 @@ function plzDrawFurn(f, now) {
     return;
   }
 
+  if (f.t === 'arcade') {
+    // recreativa: mueble con pantalla que parpadea
+    plzRect(c, cx - 7, base - 34, 14, 34, '#160c2a', '#05070f');
+    plzRect(c, cx - 6, base - 32, 12, 10, '#05070f', (plzR && plzR.def) ? plzR.def.neonA : '#2dc878');  // marco pantalla
+    const cols = ['#2dc878', '#e0507a', '#27a9ff', '#ffd23e'];
+    for (let px = -4; px <= 3; px += 2) for (let py = 0; py < 6; py += 2) { c.fillStyle = (Math.floor(now / 200) + px + py) % 4 === 0 ? cols[(px + py + Math.floor(now / 400)) % 4] : '#0a0e1c'; c.fillRect(cx + px, base - 30 + py, 2, 2); }
+    plzRect(c, cx - 6, base - 20, 12, 4, '#0a0e1c');                 // panel de controles
+    c.fillStyle = '#e0507a'; c.fillRect(cx - 3, base - 19, 2, 2); c.fillStyle = '#2dc878'; c.fillRect(cx + 2, base - 19, 2, 2);  // botones
+    return;
+  }
+
+  if (f.t === 'sea') {
+    // franja de mar al fondo con olas animadas
+    for (let row = 0; row < 3; row++) {
+      const yy = base - 2 - row * 4;
+      c.fillStyle = ['#0e5b7a', '#127a9e', '#1a9ec2'][row];
+      plzDiamond(c, cx, yy, PLZ.TW, PLZ.TH, ['#0e5b7a', '#127a9e', '#1a9ec2'][row]);
+    }
+    const w = (Math.floor(now / 300) + f.i) % 2;
+    c.fillStyle = 'rgba(210,245,255,.6)'; c.fillRect(cx - 6 + w * 4, base - 6, 4, 1); c.fillRect(cx + 2 - w * 3, base - 3, 3, 1);
+    return;
+  }
+
+  if (f.t === 'palm') {
+    // palmera
+    plzRect(c, cx - 5, base - 6, 10, 6, '#b8955a', '#05070f');       // arena/maceta
+    plzRect(c, cx - 1, base - 26, 3, 20, '#6b4a2a', '#3a2814');      // tronco curvo
+    plzRect(c, cx, base - 30, 3, 6, '#5a3f24');
+    const sway = Math.floor(now / 700 + f.i) % 2;
+    c.fillStyle = '#2a9e58';
+    for (const [dx, dy] of [[-10, -28], [6, -30], [-6, -33], [2, -33], [-2, -36]]) c.fillRect(cx + dx + sway, base + dy, 8, 3);   // hojas
+    c.fillStyle = '#8a5a2a'; c.fillRect(cx + 1, base - 26, 2, 2);    // coco
+    return;
+  }
+
+  if (f.t === 'umbrella') {
+    // sombrilla de playa
+    plzRect(c, cx - 1, base - 22, 2, 22, '#c9b28a', '#05070f');      // palo
+    for (let r = 0; r < 3; r++) { const wtop = 14 - r * 4; c.fillStyle = r % 2 ? '#e0507a' : '#fff'; c.fillRect(cx - wtop / 2, base - 24 + r * 2, wtop, 2); }
+    c.fillStyle = '#e0507a'; c.fillRect(cx - 8, base - 20, 16, 1);
+    return;
+  }
+
   if (f.t === 'djbooth') {
     // cabina del DJ: mesa con platos y luces al ritmo
     const on = plaza.radio && plaza.radio.playing;
@@ -4981,6 +5070,18 @@ function plzDraw(now) {
   for (const e of plaza.ents.values()) items.push({ d: e.x + e.y, draw: () => plzDrawAvatar(e, now) });
   items.sort((a, b) => a.d - b.d);
   for (const it of items) it.draw();
+
+  // viñeta suave en los bordes (profundidad cinematográfica) — coordenadas de pantalla
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  if (!plaza._vig) {
+    const v = document.createElement('canvas'); v.width = canvas.width; v.height = canvas.height;
+    const vc = v.getContext('2d');
+    const g = vc.createRadialGradient(canvas.width / 2, canvas.height * 0.42, canvas.height * 0.25, canvas.width / 2, canvas.height * 0.5, canvas.height * 0.72);
+    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(4,6,13,.5)');
+    vc.fillStyle = g; vc.fillRect(0, 0, v.width, v.height);
+    plaza._vig = v;
+  }
+  ctx.drawImage(plaza._vig, 0, 0);
 }
 
 function plzDrawAvatar(e, now) {
