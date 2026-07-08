@@ -4103,14 +4103,21 @@ function openUploadModal(prefill) {
 const PLZ = { COLS: 10, ROWS: 10, TW: 32, TH: 16, SPEED: 3.2, WH: 34, PADX: 10, PADT: 58, PADB: 40 };
 // mobiliario de la sala: sólidos (bloquean el paso) y asientos (te sientas al llegar)
 const PLZ_FURN = [
-  { t: 'spk', i: 4, j: 0 }, { t: 'spk', i: 5, j: 0 },                                   // altavoces (escenario norte)
+  // escenario norte: cabina DJ entre los altavoces
+  { t: 'spk', i: 3, j: 0 }, { t: 'djbooth', i: 4, j: 0 }, { t: 'djbooth', i: 5, j: 0 }, { t: 'spk', i: 6, j: 0 },
   { t: 'tree', i: 0, j: 0 }, { t: 'tree', i: 9, j: 0 }, { t: 'tree', i: 0, j: 9 }, { t: 'tree', i: 9, j: 9 },
-  { t: 'lamp', i: 0, j: 4 }, { t: 'lamp', i: 7, j: 0 },                                 // farolas de neón
+  { t: 'lamp', i: 0, j: 4 }, { t: 'lamp', i: 9, j: 4 },                                 // farolas de neón (simétricas)
+  { t: 'fountain', i: 4, j: 5 }, { t: 'fountain', i: 5, j: 5 },                         // fuente central (2 casillas)
   { t: 'bench', i: 2, j: 7, back: 'nw' }, { t: 'bench', i: 3, j: 7, back: 'nw' },       // banco oeste (2 plazas)
-  { t: 'bench', i: 6, j: 2, back: 'ne' }, { t: 'bench', i: 7, j: 2, back: 'ne' },       // banco norte (2 plazas)
-  { t: 'stool', i: 5, j: 5 }, { t: 'stool', i: 7, j: 7 },                               // taburetes
+  { t: 'bench', i: 7, j: 3, back: 'ne' }, { t: 'bench', i: 8, j: 3, back: 'ne' },       // banco este (2 plazas)
+  { t: 'stool', i: 2, j: 4 }, { t: 'stool', i: 7, j: 5 },                               // taburetes
+  { t: 'table', i: 3, j: 4 },                                                            // mesa alta (con taburete al lado)
+  { t: 'plant', i: 0, j: 6 }, { t: 'plant', i: 9, j: 7 }, { t: 'plant', i: 6, j: 9 },   // plantas de neón
+  { t: 'photobooth', i: 0, j: 2 },                                                       // photobooth (esquina oeste)
+  { t: 'vending', i: 9, j: 2 },                                                          // máquina expendedora
+  { t: 'crate', i: 8, j: 8 }, { t: 'crate', i: 1, j: 8 },                                // cajas / mobiliario urbano
 ];
-const PLZ_SOLID = new Set(['spk', 'tree', 'lamp']);
+const PLZ_SOLID = new Set(['spk', 'tree', 'lamp', 'fountain', 'djbooth', 'plant', 'photobooth', 'vending', 'crate', 'table']);
 const PLZ_BLOCKED = new Set(PLZ_FURN.filter(f => PLZ_SOLID.has(f.t)).map(f => f.i + ',' + f.j));
 const PLZ_SEATS = new Map(PLZ_FURN.filter(f => !PLZ_SOLID.has(f.t)).map(f => [f.i + ',' + f.j, f]));
 // pista de baile: casillas centrales que pulsan de color bajo el escenario
@@ -4211,7 +4218,7 @@ function plzSyncRoster(st) {
     const meta = metas[metas.length - 1] || {};
     let e = plaza.ents.get(uid);
     if (!e) { e = plzEntity(meta, uid); plaza.ents.set(uid, e); }
-    else if (uid !== state.user.id && !e.path.length) { e.x = meta.i ?? e.x; e.y = meta.j ?? e.y; }
+    else if (uid !== state.user.id) { if (!e.path.length) { e.x = meta.i ?? e.x; e.y = meta.j ?? e.y; } if (meta.accent) e.accent = meta.accent; }
   }
   for (const uid of [...plaza.ents.keys()]) if (!seen.has(uid)) plaza.ents.delete(uid);
   const n = $('plazaLiveN'); if (n) n.textContent = String(plaza.ents.size);
@@ -4231,11 +4238,18 @@ async function renderPlaza() {
       <div class="plaza-np hidden" id="plazaNp"></div>
       <div class="plaza-menu hidden" id="plazaMenu"></div>
     </div>
+    <div class="plaza-bar" id="plazaBar">
+      <button class="pbar-btn" data-act="dance" title="Bailar">💃</button>
+      <button class="pbar-btn" data-act="wave" title="Saludar">👋</button>
+      <button class="pbar-btn" data-act="react" title="Reacciones">😀</button>
+      <button class="pbar-btn" data-act="custom" title="Personalizar mi avatar">🎨</button>
+    </div>
+    <div class="plaza-react-tray hidden" id="plazaReactTray"></div>
     <form class="plaza-chat" id="plazaChat">
       <input type="text" id="plazaMsg" maxlength="140" placeholder="Di algo a la plaza…" autocomplete="off" />
       <button class="btn primary" type="submit" aria-label="Hablar"><svg style="width:16px;height:16px" fill="none" stroke="#fff"><use href="#i-send"/></svg></button>
     </form>
-    <div class="plaza-hint">Camina tocando el suelo · siéntate en bancos y taburetes · toca a alguien para interactuar · 🎧 pon música para todos</div>`;
+    <div class="plaza-hint">Camina tocando el suelo · siéntate en bancos y taburetes · toca a alguien para interactuar · usa la barra para bailar, reaccionar o personalizarte</div>`;
 
   const canvas = $('plazaCanvas'), ctx = canvas.getContext('2d');
   // spawn: última casilla o una libre aleatoria
@@ -4392,6 +4406,19 @@ async function renderPlaza() {
     try { plazaChan.send({ type: 'broadcast', event: 'chat', payload: { id: state.user.id, text: text.slice(0, 140) } }); } catch (_) {}
   });
 
+  // ---- barra de acciones (junto al chat) ----
+  const tray = $('plazaReactTray');
+  const REACTS = ['❤️', '🔥', '😂', '🫡', '😮', '👏', '💜', '😎', '🥶', '🤝'];
+  tray.innerHTML = REACTS.map(e => `<button data-e="${e}">${e}</button>`).join('');
+  tray.querySelectorAll('button').forEach(b => b.onclick = () => { sendEmote('react', b.dataset.e); tray.classList.add('hidden'); haptic(8); });
+  $('plazaBar').querySelectorAll('.pbar-btn').forEach(b => b.onclick = () => {
+    const a = b.dataset.act; haptic(8);
+    if (a === 'dance') { const on = me.emote && me.emote.kind === 'dance'; if (on) { me.emote = null; sendEmote('idle'); } else sendEmote('dance'); b.classList.toggle('on', !on); }
+    else if (a === 'wave') sendEmote('wave');
+    else if (a === 'react') tray.classList.toggle('hidden');
+    else if (a === 'custom') openPlazaCustomizer(() => { const m2 = state.profile.theme && state.profile.theme.accent; if (m2) me.accent = m2; try { track(); } catch (_) {} });
+  });
+
   // bucle principal (se apaga solo al salir de la vista)
   const loop = (now) => {
     if (!plaza || !canvas.isConnected) { plzLeave(); return; }
@@ -4423,6 +4450,26 @@ async function renderPlaza() {
 }
 
 function plzIso(x, y) { return { x: (x - y) * PLZ.TW / 2, y: (x + y) * PLZ.TH / 2 }; }
+
+// personalizador del avatar de la Plaza (color del personaje)
+function openPlazaCustomizer(onChange) {
+  const COLORS = ['#3e57fc', '#27a9ff', '#6e2df5', '#e0507a', '#2dc878', '#f0a13e', '#ff5d5d', '#12c2c2', '#b06eff', '#ffd23e', '#8f99ad', '#111827'];
+  const cur = (state.profile.theme && state.profile.theme.accent) || '#3e57fc';
+  const m = openModal(`<div class="modal-head"><h3>🎨 Personaliza tu avatar</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <p style="color:var(--ink-soft);font-size:13px;margin-top:0">Elige el color de tu personaje en la Plaza. Tu foto de perfil es la cara.</p>
+      <div class="pcz-grid" id="pczGrid">${COLORS.map(col => `<button class="pcz-sw ${col === cur ? 'on' : ''}" data-c="${col}" style="background:${col}"></button>`).join('')}</div>
+    </div>`);
+  m.querySelectorAll('.pcz-sw').forEach(b => b.onclick = async () => {
+    const col = b.dataset.c;
+    m.querySelectorAll('.pcz-sw').forEach(x => x.classList.toggle('on', x === b));
+    const theme = Object.assign({}, state.profile.theme || {}, { accent: col });
+    state.profile.theme = theme;
+    try { await sb.from('profiles').update({ theme }).eq('id', state.user.id); } catch (_) {}
+    onChange && onChange();
+    toast('Color actualizado ✓');
+  });
+}
 
 // selector de pista para pinchar en la Plaza (busca por título)
 function openPlazaTrackPicker(onPick) {
@@ -4635,6 +4682,90 @@ function plzDrawFurn(f, now) {
     plzRect(c, cx - 2, base - 8, 4, 6, '#0a0e1c');                             // pie central
     plzRect(c, cx - 6, base - 12, 12, 5, '#182038', '#05070f');                // asiento
     c.fillStyle = 'rgba(110,45,245,.6)'; c.fillRect(cx - 6, base - 12, 12, 1); // filo violeta
+    return;
+  }
+
+  if (f.t === 'djbooth') {
+    // cabina del DJ: mesa con platos y luces al ritmo
+    const on = plaza.radio && plaza.radio.playing;
+    plzRect(c, cx - 11, base - 14, 22, 14, '#0c1120', '#05070f');              // frontal
+    plzRect(c, cx - 11, base - 17, 22, 4, '#141b30', '#05070f');               // tapa
+    // tira LED frontal al ritmo
+    for (let k = -9; k <= 8; k += 3) { c.fillStyle = (on && (Math.floor(now / 130) + k) % 3 === 0) ? '#2dc878' : '#1b2340'; c.fillRect(cx + k, base - 6, 2, 2); }
+    // dos platos que giran
+    for (const px of [-6, 4]) {
+      plzRect(c, cx + px, base - 21, 6, 4, '#0a0e1c', '#27a9ff');
+      const ang = now / (on ? 200 : 600);
+      c.fillStyle = '#6e8cff'; c.fillRect(cx + px + 2 + Math.round(Math.cos(ang) * 1.5), base - 20 + Math.round(Math.sin(ang) * 1), 1, 1);
+    }
+    return;
+  }
+
+  if (f.t === 'fountain') {
+    // fuente: pilón redondo con chorro y salpicaduras
+    plzDiamond(c, cx, base - 2, 26, 13, '#0a1428');                            // agua (base rombo)
+    plzDiamond(c, cx, base - 3, 20, 10, '#123a5e');
+    plzDiamond(c, cx, base - 4, 12, 6, '#1d5c8f');
+    plzRect(c, cx - 12, base - 3, 24, 3, '#141b30', '#05070f');                // borde del pilón (visual)
+    c.fillStyle = 'rgba(96,140,255,.5)'; c.fillRect(cx - 12, base - 3, 24, 1);
+    // chorro central animado
+    plzRect(c, cx - 1, base - 20, 2, 16, '#2a6fa0');
+    for (let d = 0; d < 3; d++) {
+      const t = ((now / 700) + d * 0.33) % 1;
+      const dx = Math.round((d - 1) * t * 8), dy = Math.round(-16 + t * 18);
+      c.globalAlpha = 1 - t; c.fillStyle = '#9fd0ff'; c.fillRect(cx + dx, base - 4 + dy, 2, 2); c.globalAlpha = 1;
+    }
+    plzRect(c, cx - 3, base - 22, 6, 3, '#3a8bc0', '#05070f');                 // surtidor
+    return;
+  }
+
+  if (f.t === 'table') {
+    plzRect(c, cx - 2, base - 12, 4, 12, '#0a0e1c');                           // pata alta
+    plzDiamond(c, cx, base - 15, 22, 11, '#182038');                          // tablero redondo
+    plzDiamond(c, cx, base - 16, 18, 9, '#20294a');
+    c.fillStyle = '#e0507a'; c.fillRect(cx - 2, base - 20, 3, 4);              // vasito
+    c.fillStyle = '#2dc878'; c.fillRect(cx + 3, base - 19, 2, 3);
+    return;
+  }
+
+  if (f.t === 'plant') {
+    plzRect(c, cx - 5, base - 7, 10, 7, '#0c101f', '#05070f');                 // maceta
+    c.fillStyle = 'rgba(45,200,120,.5)'; c.fillRect(cx - 5, base - 7, 10, 1);
+    const sway = Math.floor(now / 800 + f.i) % 2;
+    for (const [lx, ly, lw, lh, col] of [[-4, -18, 3, 12, '#1f7a44'], [1, -20, 3, 14, '#2a9e58'], [-1, -24, 3, 10, '#4cc678']]) {
+      plzRect(c, cx + lx + sway, base + ly, lw, lh, col);
+    }
+    c.fillStyle = '#8fffc0'; c.fillRect(cx - 1 + sway, base - 25, 1, 2);       // brote luminoso
+    return;
+  }
+
+  if (f.t === 'photobooth') {
+    plzRect(c, cx - 9, base - 34, 18, 34, '#12081f', '#05070f');               // cabina
+    plzRect(c, cx - 9, base - 34, 18, 5, '#6e2df5', '#05070f');                // cartel superior
+    c.fillStyle = '#eaf2ff'; c.font = '700 6px monospace'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText('FOTO', cx, base - 31);
+    plzRect(c, cx - 6, base - 26, 12, 14, '#0a0e1c', '#27a9ff');               // hueco/cortina
+    if (Math.floor(now / 900) % 4 === 0) { c.fillStyle = 'rgba(255,255,255,.85)'; c.fillRect(cx - 6, base - 26, 12, 14); }  // flash
+    plzRect(c, cx - 8, base - 12, 16, 3, '#241436');                          // banquito
+    return;
+  }
+
+  if (f.t === 'vending') {
+    plzRect(c, cx - 8, base - 30, 16, 30, '#0c1424', '#05070f');               // cuerpo
+    plzRect(c, cx - 6, base - 27, 8, 16, '#0a1a2e', '#27a9ff');                // escaparate iluminado
+    for (let r = 0; r < 3; r++) for (let k = 0; k < 2; k++) { c.fillStyle = ['#e0507a', '#2dc878', '#f0a13e'][r]; c.fillRect(cx - 5 + k * 4, base - 25 + r * 5, 2, 3); }
+    plzRect(c, cx + 3, base - 27, 3, 20, '#101b30');                          // panel botones
+    c.fillStyle = (Math.floor(now / 500) % 2) ? '#2dc878' : '#0e2a1c'; c.fillRect(cx + 4, base - 25, 1, 1);
+    return;
+  }
+
+  if (f.t === 'crate') {
+    plzRect(c, cx - 8, base - 12, 16, 12, '#241a12', '#0c0804');               // caja de madera
+    c.strokeStyle = '#3a2a1a'; c.lineWidth = 1; c.strokeRect(cx - 8, base - 12, 16, 6);
+    c.fillStyle = 'rgba(96,140,255,.5)'; c.fillRect(cx - 8, base - 12, 16, 1); // filo neón sutil
+    c.fillStyle = '#8fc0ff'; c.font = '700 6px monospace'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText('UB', cx, base - 7);
+    return;
   }
 }
 

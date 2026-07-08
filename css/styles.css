@@ -4300,3 +4300,24 @@ html { touch-action: manipulation; }
 .plaza-np .np-eq i:nth-child(3) { height: 8px; }
 @keyframes npEq { 0%, 100% { transform: scaleY(.4); } 50% { transform: scaleY(1); } }
 #plazaDj { white-space: nowrap; }
+
+/* La Plaza — barra de acciones + reacciones + personalizador */
+.plaza-bar { display: flex; gap: 8px; margin-top: 12px; }
+.pbar-btn {
+  flex: 1; height: 46px; border: 1px solid var(--line); background: var(--panel);
+  border-radius: 14px; font-size: 20px; cursor: pointer; transition: transform .1s, background .15s, border-color .15s;
+}
+.pbar-btn:hover { background: var(--panel-2); border-color: color-mix(in srgb, var(--accent) 35%, var(--line)); }
+.pbar-btn:active { transform: scale(.93); }
+.pbar-btn.on { background: var(--accent-grad); border-color: transparent; box-shadow: var(--sh-blue); }
+.plaza-react-tray {
+  display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding: 8px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 14px; animation: fadeUp .14s var(--ease);
+}
+.plaza-react-tray.hidden { display: none; }
+.plaza-react-tray button { flex: 1; min-width: 40px; height: 40px; border: none; background: var(--panel-2); border-radius: 10px; font-size: 20px; cursor: pointer; transition: transform .1s, background .15s; }
+.plaza-react-tray button:hover { background: color-mix(in srgb, var(--accent) 20%, transparent); transform: scale(1.14); }
+.pcz-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; }
+.pcz-sw { aspect-ratio: 1; border-radius: 12px; border: 2px solid transparent; cursor: pointer; box-shadow: var(--sh-1); transition: transform .1s; }
+.pcz-sw:hover { transform: scale(1.08); }
+.pcz-sw.on { border-color: #fff; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 60%, transparent); }
