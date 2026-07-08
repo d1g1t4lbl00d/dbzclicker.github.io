@@ -4270,3 +4270,33 @@ html { touch-action: manipulation; }
 .plaza-chat .btn { flex: none; width: 46px; height: 46px; border-radius: 50%; padding: 0; display: grid; place-items: center; }
 .plaza-hint { margin-top: 8px; font-size: 12px; color: var(--ink-faint); text-align: center; }
 .plaza-count:not(:empty) { background: rgba(45,200,120,.16); color: #2dc878; }
+
+/* La Plaza — capa de interfaz (menú de interacción, now playing, DJ) */
+.plaza-wrap { position: relative; }
+.plaza-menu {
+  position: absolute; z-index: 20; min-width: 150px; padding: 6px;
+  background: rgba(12,16,28,.97); border: 1px solid var(--line); border-radius: 14px;
+  box-shadow: 0 14px 40px rgba(0,0,0,.55); backdrop-filter: blur(10px); animation: fadeUp .14s var(--ease);
+}
+.plaza-menu.hidden { display: none; }
+.plaza-menu .pm-head { font-size: 12px; font-weight: 800; color: #8fc0ff; padding: 5px 8px 7px; border-bottom: 1px solid var(--line-soft); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.plaza-menu > button { display: block; width: 100%; text-align: left; border: none; background: none; color: var(--ink); font: inherit; font-size: 13px; font-weight: 600; padding: 8px 8px; border-radius: 9px; cursor: pointer; }
+.plaza-menu > button:hover { background: color-mix(in srgb, var(--accent) 16%, transparent); }
+.plaza-menu .pm-row { display: flex; gap: 3px; padding: 6px 4px 2px; margin-top: 3px; border-top: 1px solid var(--line-soft); }
+.plaza-menu .pm-row button { flex: 1; border: none; background: var(--panel-2); border-radius: 9px; font-size: 16px; padding: 6px 0; cursor: pointer; transition: transform .1s, background .15s; }
+.plaza-menu .pm-row button:hover { background: color-mix(in srgb, var(--accent) 22%, transparent); transform: scale(1.12); }
+.plaza-np {
+  position: absolute; left: 10px; bottom: 10px; z-index: 15; display: inline-flex; align-items: center; gap: 8px;
+  max-width: calc(100% - 20px); padding: 7px 13px 7px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; color: #eaf2ff;
+  background: rgba(10,14,28,.82); border: 1px solid rgba(96,140,255,.35); backdrop-filter: blur(8px); box-shadow: 0 6px 20px rgba(0,0,0,.4);
+}
+.plaza-np.hidden { display: none; }
+.plaza-np b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40vw; }
+.plaza-np span { color: var(--ink-soft); font-weight: 500; }
+.plaza-np .np-eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 13px; }
+.plaza-np .np-eq i { width: 3px; background: linear-gradient(180deg, #27a9ff, #6e2df5); border-radius: 1px; animation: npEq .9s ease-in-out infinite; }
+.plaza-np .np-eq i:nth-child(1) { height: 6px; animation-delay: -.2s; }
+.plaza-np .np-eq i:nth-child(2) { height: 12px; animation-delay: -.5s; }
+.plaza-np .np-eq i:nth-child(3) { height: 8px; }
+@keyframes npEq { 0%, 100% { transform: scaleY(.4); } 50% { transform: scaleY(1); } }
+#plazaDj { white-space: nowrap; }
