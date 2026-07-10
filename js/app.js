@@ -4924,7 +4924,12 @@ function openPerkyDance() {
       </div>
       <div class="pk-stage" id="pkStage">
         <canvas id="pkCanvas" width="${AW}" height="${AH}"></canvas>
-        <div class="pk-load" id="pkLoad"><div class="pk-spin"></div><div class="pk-load-txt" id="pkLoadTxt">Buscando una pista…</div></div>
+        <div class="pk-load" id="pkLoad"><div class="pk-spin"></div><div class="pk-load-txt" id="pkLoadTxt">Cargando canciones…</div></div>
+        <div class="pk-pick" id="pkPick" style="display:none">
+          <div class="pk-pick-h">Elige tu canción</div>
+          <button class="pk-pick-rand" id="pkPickRand">🎲 Aleatoria</button>
+          <div class="pk-pick-list" id="pkPickList"></div>
+        </div>
       </div>
       <div class="pk-now" id="pkNow">🎧 Cargando pista de UnderBro…</div>
       <div class="pk-ctrl pk-lanes">
@@ -4939,7 +4944,28 @@ function openPerkyDance() {
   document.documentElement.style.overflow = 'hidden';
   const canvas = wrap.querySelector('#pkCanvas'), ctx = canvas.getContext('2d');
   const DPR = Math.min(2, Math.max(1, Math.round(window.devicePixelRatio || 1))); canvas.width = AW * DPR; canvas.height = AH * DPR; ctx.scale(DPR, DPR);
-  const speed = (HITY + 20) / LEAD;
+  // ---- autopista en perspectiva estilo Guitar Hero ----
+  const YTOP = 46, YHIT = 262, MARG = 14, LANEW = (AW - MARG * 2) / 4, CX = AW / 2, DNEAR = 1, DFAR = 8.5;
+  const proj = (z) => { const zz = z < 0 ? 0 : z; const D = DNEAR + zz * (DFAR - DNEAR); const sc = DNEAR / D; return { y: YTOP + (YHIT - YTOP) * sc, sc }; };
+  const laneCX = (i, sc) => CX + (MARG + (i + 0.5) * LANEW - CX) * sc;   // centro del carril i
+  const edgeX = (i, sc) => CX + (MARG + i * LANEW - CX) * sc;           // borde/divisor i (0..4)
+  const held = [false, false, false, false];
+  function drawGem(x, y, r, col, bright) {
+    ctx.save(); ctx.shadowColor = col; ctx.shadowBlur = bright ? 16 : 10;
+    const rg = ctx.createRadialGradient(x - r * 0.3, y - r * 0.4, r * 0.1, x, y, r);
+    rg.addColorStop(0, '#ffffff'); rg.addColorStop(0.35, bright ? '#ffffff' : col); rg.addColorStop(1, col);
+    ctx.fillStyle = rg; ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.78, 0, 0, 7); ctx.fill();
+    ctx.lineWidth = Math.max(1, r * 0.14); ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.stroke();
+    ctx.restore();
+  }
+  function drawFret(x, y, i) {
+    const pop = g.pop[i], r = 11.5;
+    ctx.save(); ctx.shadowColor = LC[i]; ctx.shadowBlur = 8 + pop * 16;
+    ctx.lineWidth = 3; ctx.strokeStyle = LC[i]; ctx.globalAlpha = 0.65 + pop * 0.35; ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.66, 0, 0, 7); ctx.stroke();
+    if (pop > 0.02) { ctx.globalAlpha = pop * 0.6; const rg = ctx.createRadialGradient(x, y, 1, x, y, r); rg.addColorStop(0, '#fff'); rg.addColorStop(1, LC[i]); ctx.fillStyle = rg; ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.66, 0, 0, 7); ctx.fill(); }
+    ctx.restore();
+    ctx.globalAlpha = 0.9; ctx.fillStyle = '#fff'; ctx.font = 'bold 11px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(GLYPH[i], x, y + 0.5); ctx.globalAlpha = 1; ctx.textBaseline = 'alphabetic';
+  }
   let g = null, last = performance.now(), closed = false;
   let srcNode = null, gainNode = null, audioBuf = null, builtOnsets = null, track = null;
 
@@ -4952,12 +4978,20 @@ function openPerkyDance() {
   const setNow = (tr) => { const e = wrap.querySelector('#pkNow'); if (!e) return; e.innerHTML = tr ? `♫ <b>${esc(tr.title || 'Pista')}</b>${tr.profiles ? ' — ' + esc(tr.profiles.display_name || tr.profiles.username || '') : ''}` : '🎶 Modo sin música (no pude cargar audio)'; };
 
   // ---- selección y análisis de la pista ----
-  async function pickTrack() {
+  async function fetchTracks() {
     try {
-      const { data } = await sb.from('tracks').select('id,title,audio_url,cover_url,profiles:user_id(username,display_name)').not('audio_url', 'is', null).order('plays', { ascending: false }).limit(60);
-      if (data && data.length) return data[Math.floor(Math.random() * data.length)];
-    } catch (_) {}
-    return null;
+      const { data } = await sb.from('tracks').select('id,title,audio_url,cover_url,profiles:user_id(username,display_name)').not('audio_url', 'is', null).order('plays', { ascending: false }).limit(40);
+      return data || [];
+    } catch (_) { return []; }
+  }
+  function hidePicker() { const p = wrap.querySelector('#pkPick'); if (p) p.style.display = 'none'; }
+  function showChooser(list) {
+    hideLoad();
+    const pick = wrap.querySelector('#pkPick'), listEl = wrap.querySelector('#pkPickList');
+    listEl.innerHTML = list.map((t, i) => `<button class="pk-song" data-i="${i}"><span class="pk-song-cov">${t.cover_url ? `<img src="${esc(czUrl(t.cover_url))}" alt="">` : '♫'}</span><span class="pk-song-meta"><b>${esc(t.title || 'Sin título')}</b><span>${esc((t.profiles && (t.profiles.display_name || t.profiles.username)) || 'UnderBro')}</span></span></button>`).join('');
+    listEl.querySelectorAll('.pk-song').forEach(b => b.onclick = () => { haptic(8); startWith(list[+b.dataset.i]); });
+    wrap.querySelector('#pkPickRand').onclick = () => { haptic(10); startWith(list[Math.floor(Math.random() * list.length)]); };
+    pick.style.display = '';
   }
   // detección de onsets por energía (spectral-flux simplificado sobre RMS)
   function detectOnsets(buf, maxDur) {
@@ -4983,16 +5017,22 @@ function openPerkyDance() {
   }
   function chartFromOnsets(onsets) {
     let prev = -1; const chart = [];
-    onsets.forEach((o, i) => { let lane = (i * 3 + Math.floor(o.s * 40)) % 4; if (lane === prev) lane = (lane + 1) % 4; prev = lane; chart.push({ lane, t: o.t, hit: false }); });
+    onsets.forEach((o, i) => {
+      let lane = (i * 3 + Math.floor(o.s * 40)) % 4; if (lane === prev) lane = (lane + 1) % 4; prev = lane;
+      const next = onsets[i + 1], gap = next ? next.t - o.t : 1.4;
+      const dur = (gap > 0.82 && i % 2 === 0) ? Math.min(gap - 0.32, 2.2) : 0;   // hueco largo → nota sostenida
+      chart.push({ lane, t: o.t, dur, hit: false, done: false, holding: false });
+    });
     return chart;
   }
   function proceduralChart() {
     const chart = []; let prev = -1;
     for (let s = 2; s < 130; s++) {
       const t = 0.5 + s * 0.28; if (t > 34) break;
-      if (s % 2 === 0) { let l = (s * 3 + (s >> 2)) % 4; if (l === prev) l = (l + 1) % 4; prev = l; chart.push({ lane: l, t, hit: false }); }
-      else if ((s * 7) % 3 === 0) chart.push({ lane: (s * 5 + 1) % 4, t, hit: false });
-      if (s % 8 === 7) chart.push({ lane: (s * 2 + 2) % 4, t, hit: false });
+      const long = s % 9 === 4;
+      if (s % 2 === 0) { let l = (s * 3 + (s >> 2)) % 4; if (l === prev) l = (l + 1) % 4; prev = l; chart.push({ lane: l, t, dur: long ? 1.1 : 0, hit: false, done: false, holding: false }); }
+      else if ((s * 7) % 3 === 0) chart.push({ lane: (s * 5 + 1) % 4, t, dur: 0, hit: false, done: false, holding: false });
+      if (s % 8 === 7) chart.push({ lane: (s * 2 + 2) % 4, t, dur: 0, hit: false, done: false, holding: false });
     }
     return chart;
   }
@@ -5019,9 +5059,9 @@ function openPerkyDance() {
     g = newState(proceduralChart(), 34, false);
     hideLoad(); setNow(null); last = performance.now(); startLoop();
   }
-  async function init() {
-    setLoad('Buscando una pista…');
-    track = await pickTrack();
+  async function startWith(chosen) {
+    hidePicker(); const ld = wrap.querySelector('#pkLoad'); if (ld) ld.style.display = '';
+    audioBuf = null; builtOnsets = null; track = chosen || null;
     if (track && ac) {
       try {
         setLoad('Cargando «' + (track.title || 'pista') + '»…');
@@ -5037,17 +5077,24 @@ function openPerkyDance() {
     if (closed) return;
     playFallback();
   }
+  async function init() {
+    setLoad('Cargando canciones…');
+    const list = await fetchTracks();
+    if (closed) return;
+    if (!list.length) { startWith(null); return; }
+    showChooser(list);
+  }
   init();
 
   function burst(x, y, col, n) { for (let i = 0; i < n; i++) { const a = Math.random() * 7, sp = 40 + Math.random() * 120; g.parts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 40, life: 0.5 + Math.random() * 0.25, t: 0, col, r: 1.5 + Math.random() * 2 }); } }
 
   function tap(lane) {
     if (!g || g.over) return;
-    g.flash[lane] = 1; haptic(4);
     let best = null, bd = 1;
     for (const n of g.chart) { if (n.hit || n.lane !== lane) continue; const d = Math.abs(n.t - g.t); if (d < bd) { bd = d; best = n; } }
     if (best && bd < 0.18) {
       best.hit = true;
+      if (best.dur > 0) { best.holding = true; best.holdT = g.t; } else { best.done = true; }
       let pts, txt, col;
       if (bd < 0.05) { pts = 300; txt = 'PERFECT'; col = '#ffd23e'; }
       else if (bd < 0.10) { pts = 200; txt = 'GREAT'; col = '#2dc878'; }
@@ -5055,11 +5102,11 @@ function openPerkyDance() {
       g.combo++; g.maxCombo = Math.max(g.maxCombo, g.combo);
       const tier = g.combo >= 50 ? 4 : g.combo >= 35 ? 3 : g.combo >= 20 ? 2 : 1;
       g.score += (pts + g.combo * 2) * tier; g.judge = { txt, col, t: g.t }; g.judgePop = 1; g.comboPop = 1; g.pop[lane] = 1;
-      burst(lane * LW + LW / 2, HITY, col, bd < 0.05 ? 14 : 9);
+      burst(laneCX(lane, 1), YHIT, col, bd < 0.05 ? 14 : 9);
       // entrada / subida de frenesí
       if (tier > g.feverTier) {
         g.feverPop = 1; g.judge = { txt: tier === 2 ? '¡FRENESÍ!' : '×' + tier + ' ¡A TOPE!', col: '#ffd23e', t: g.t };
-        for (let i = 0; i < 4; i++) burst(i * LW + LW / 2, HITY, LC[i], 10);
+        for (let i = 0; i < 4; i++) burst(laneCX(i, 1), YHIT, LC[i], 10);
         pkBlip(360, 0.14, 'sawtooth'); pkBlip(720, 0.16, 'square'); haptic(40);
       }
       g.feverTier = tier; g.fever = tier >= 2;
@@ -5067,24 +5114,40 @@ function openPerkyDance() {
       wrap.querySelector('#pkScore').textContent = g.score;
     }
   }
-  // input
+  // input: pulsar/​mantener por carril (mantener = notas largas)
+  function press(lane) { if (!g || g.over) return; if (!held[lane]) haptic(4); held[lane] = true; g.flash[lane] = 1; tap(lane); }
+  function release(lane) { held[lane] = false; }
   const stage = wrap.querySelector('#pkStage');
-  stage.addEventListener('pointerdown', (e) => { const r = stage.getBoundingClientRect(); tap(Math.max(0, Math.min(3, Math.floor((e.clientX - r.left) / (r.width / 4))))); });
-  wrap.querySelectorAll('.pk-lanes .pk-btn').forEach(b => b.addEventListener('pointerdown', (e) => { e.preventDefault(); tap(+b.dataset.l); }));
-  const onKey = (e) => {
-    const k = e.key.toLowerCase();
-    if (k === 'escape') { close(); return; }
-    if (k in KEYMAP && !e.repeat) { e.preventDefault(); tap(KEYMAP[k]); }
-  };
-  document.addEventListener('keydown', onKey);
+  const laneFromX = (clientX) => { const r = stage.getBoundingClientRect(); return Math.max(0, Math.min(3, Math.floor((clientX - r.left) / (r.width / 4)))); };
+  const ptrLane = new Map();
+  stage.addEventListener('pointerdown', (e) => { if (!g) return; const l = laneFromX(e.clientX); ptrLane.set(e.pointerId, l); try { stage.setPointerCapture(e.pointerId); } catch (_) {} press(l); });
+  const relPtr = (e) => { const l = ptrLane.get(e.pointerId); if (l != null) release(l); ptrLane.delete(e.pointerId); };
+  stage.addEventListener('pointerup', relPtr); stage.addEventListener('pointercancel', relPtr);
+  wrap.querySelectorAll('.pk-lanes .pk-btn').forEach(b => { const l = +b.dataset.l; b.addEventListener('pointerdown', (e) => { e.preventDefault(); press(l); }); ['pointerup', 'pointerleave', 'pointercancel'].forEach(ev => b.addEventListener(ev, () => release(l))); });
+  const onKey = (e) => { const k = e.key.toLowerCase(); if (k === 'escape') { close(); return; } if (k in KEYMAP && !e.repeat) { e.preventDefault(); press(KEYMAP[k]); } };
+  const onKeyUp = (e) => { const k = e.key.toLowerCase(); if (k in KEYMAP) release(KEYMAP[k]); };
+  document.addEventListener('keydown', onKey); document.addEventListener('keyup', onKeyUp);
 
-  const close = () => { closed = true; if (g && g._raf) cancelAnimationFrame(g._raf); stopAudio(); document.removeEventListener('keydown', onKey); document.documentElement.style.overflow = ''; try { if (resumeApp && typeof audio !== 'undefined' && audio) audio.play(); } catch (_) {} wrap.remove(); window._pkGameOpen = false; };
+  const close = () => { closed = true; if (g && g._raf) cancelAnimationFrame(g._raf); stopAudio(); document.removeEventListener('keydown', onKey); document.removeEventListener('keyup', onKeyUp); document.documentElement.style.overflow = ''; try { if (resumeApp && typeof audio !== 'undefined' && audio) audio.play(); } catch (_) {} wrap.remove(); window._pkGameOpen = false; };
   wrap.querySelector('#pkClose').onclick = close;
 
   function update(dt) {
     if (!g || g.over) return;
     if (g.synced && g.audioStart) g.t = ac.currentTime - g.audioStart; else g.t += dt;
-    for (const n of g.chart) if (!n.hit && g.t > n.t + 0.18) { n.hit = true; g.combo = 0; g.fever = false; g.feverTier = 1; g.judge = { txt: 'MISS', col: '#e0507a', t: g.t }; g.judgePop = 1; }
+    for (const n of g.chart) if (!n.hit && g.t > n.t + 0.18) { n.hit = true; n.done = true; g.combo = 0; g.fever = false; g.feverTier = 1; g.judge = { txt: 'MISS', col: '#e0507a', t: g.t }; g.judgePop = 1; }
+    // notas largas: puntúan mientras mantengas el carril
+    for (const n of g.chart) {
+      if (n.dur > 0 && n.holding) {
+        if (g.t >= n.t + n.dur) { n.holding = false; n.done = true; g.pop[n.lane] = Math.max(g.pop[n.lane], 0.7); g.judge = { txt: '¡SOSTÉN!', col: '#2dc878', t: g.t }; g.judgePop = 1; }
+        else if (!held[n.lane]) { n.holding = false; n.done = true; }
+        else {
+          const tier = g.combo >= 50 ? 4 : g.combo >= 35 ? 3 : g.combo >= 20 ? 2 : 1;
+          g.score += Math.round(90 * dt * tier); g.pop[n.lane] = 1; g.flash[n.lane] = Math.max(g.flash[n.lane], 0.5);
+          if (Math.random() < 0.55) g.parts.push({ x: laneCX(n.lane, 1) + (Math.random() - 0.5) * 12, y: YHIT, vx: (Math.random() - 0.5) * 60, vy: -40 - Math.random() * 90, life: 0.4 + Math.random() * 0.25, t: 0, col: LC[n.lane], r: 1 + Math.random() * 1.8 });
+          wrap.querySelector('#pkScore').textContent = g.score;
+        }
+      }
+    }
     for (let i = 0; i < 4; i++) { g.flash[i] = Math.max(0, g.flash[i] - dt * 4); g.pop[i] = Math.max(0, g.pop[i] - dt * 4); }
     g.judgePop = Math.max(0, g.judgePop - dt * 3); g.comboPop = Math.max(0, g.comboPop - dt * 5); g.feverPop = Math.max(0, g.feverPop - dt * 2);
     // lluvia de chispas de colores durante el frenesí
@@ -5096,41 +5159,56 @@ function openPerkyDance() {
   }
   function draw() {
     ctx.clearRect(0, 0, AW, AH);
-    const bg = ctx.createLinearGradient(0, 0, 0, AH); bg.addColorStop(0, '#0c0820'); bg.addColorStop(1, '#070512'); ctx.fillStyle = bg; ctx.fillRect(0, 0, AW, AH);
-    // pulso de fondo al ritmo
-    const pulse = 0.5 + 0.5 * Math.sin(g.t * 4);
-    ctx.globalAlpha = 0.05 + 0.05 * pulse; ctx.fillStyle = '#6e2df5'; ctx.fillRect(0, 0, AW, AH); ctx.globalAlpha = 1;
+    const bg = ctx.createLinearGradient(0, 0, 0, AH); bg.addColorStop(0, '#0a0618'); bg.addColorStop(0.5, '#0b0a1e'); bg.addColorStop(1, '#050410'); ctx.fillStyle = bg; ctx.fillRect(0, 0, AW, AH);
+    // resplandor del horizonte (punto de fuga)
+    const hz = ctx.createRadialGradient(CX, YTOP, 3, CX, YTOP, 130); hz.addColorStop(0, 'rgba(90,110,225,.22)'); hz.addColorStop(1, 'transparent'); ctx.fillStyle = hz; ctx.fillRect(0, 0, AW, YHIT);
     // baño de color del modo frenesí
     if (g.fever) { const hue = (g.t * 150) % 360; ctx.globalAlpha = 0.07 + 0.06 * (0.5 + 0.5 * Math.sin(g.t * 9)) + g.feverPop * 0.15; ctx.fillStyle = 'hsl(' + hue + ',90%,55%)'; ctx.fillRect(0, 0, AW, AH); ctx.globalAlpha = 1; }
-    // carriles con haz de luz sobre la línea
+    const top = proj(1);
+    // ---- mástil en perspectiva ----
+    ctx.beginPath(); ctx.moveTo(edgeX(0, 1), YHIT); ctx.lineTo(edgeX(4, 1), YHIT); ctx.lineTo(edgeX(4, top.sc), YTOP); ctx.lineTo(edgeX(0, top.sc), YTOP); ctx.closePath();
+    const fb = ctx.createLinearGradient(0, YTOP, 0, YHIT); fb.addColorStop(0, 'rgba(34,30,60,.4)'); fb.addColorStop(1, 'rgba(20,18,40,.82)'); ctx.fillStyle = fb; ctx.fill();
+    // carriles alternos + haz de luz al pulsar
     for (let i = 0; i < 4; i++) {
-      const x0 = i * LW; ctx.fillStyle = i % 2 ? 'rgba(255,255,255,.015)' : 'rgba(255,255,255,.035)'; ctx.fillRect(x0, 0, LW, AH);
+      ctx.beginPath(); ctx.moveTo(edgeX(i, 1), YHIT); ctx.lineTo(edgeX(i + 1, 1), YHIT); ctx.lineTo(edgeX(i + 1, top.sc), YTOP); ctx.lineTo(edgeX(i, top.sc), YTOP); ctx.closePath();
+      ctx.fillStyle = i % 2 ? 'rgba(255,255,255,.02)' : 'rgba(255,255,255,.05)'; ctx.fill();
       const glow = Math.max(g.flash[i], g.pop[i]);
-      if (glow > 0) { const gg = ctx.createLinearGradient(0, 0, 0, HITY); gg.addColorStop(0, 'transparent'); gg.addColorStop(1, LC[i]); ctx.globalAlpha = glow * 0.28; ctx.fillStyle = gg; ctx.fillRect(x0, 0, LW, HITY); ctx.globalAlpha = 1; }
-      ctx.strokeStyle = 'rgba(255,255,255,.06)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(x0, 0); ctx.lineTo(x0, AH); ctx.stroke();
+      if (glow > 0) { ctx.save(); ctx.clip(); ctx.globalAlpha = glow * 0.5; const lg = ctx.createLinearGradient(0, YTOP, 0, YHIT); lg.addColorStop(0, 'transparent'); lg.addColorStop(1, LC[i]); ctx.fillStyle = lg; ctx.fillRect(0, YTOP, AW, YHIT - YTOP); ctx.restore(); ctx.globalAlpha = 1; }
     }
-    // línea de golpeo con brillo
-    ctx.save(); ctx.shadowColor = 'rgba(160,190,255,.8)'; ctx.shadowBlur = 10; ctx.fillStyle = 'rgba(230,240,255,.7)'; ctx.fillRect(0, HITY - 1, AW, 2); ctx.restore();
-    // receptores
-    for (let i = 0; i < 4; i++) {
-      const cx = i * LW + LW / 2, r = 13 + g.pop[i] * 6;
-      ctx.save(); ctx.shadowColor = LC[i]; ctx.shadowBlur = 8 + g.pop[i] * 14;
-      ctx.strokeStyle = LC[i]; ctx.lineWidth = 2.5; ctx.globalAlpha = 0.55 + Math.max(g.flash[i], g.pop[i]) * 0.45; ctx.beginPath(); ctx.arc(cx, HITY, r, 0, 7); ctx.stroke();
-      if (g.pop[i] > 0) { ctx.globalAlpha = g.pop[i] * 0.5; ctx.fillStyle = LC[i]; ctx.beginPath(); ctx.arc(cx, HITY, r, 0, 7); ctx.fill(); }
-      ctx.restore();
-      ctx.globalAlpha = 0.7; ctx.fillStyle = 'rgba(255,255,255,.8)'; ctx.font = 'bold 12px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(GLYPH[i], cx, HITY + 1); ctx.globalAlpha = 1;
+    // líneas de traste horizontales que se acercan
+    const SP = 0.5, frac = SP - (g.t % SP);
+    for (let k = 0; k < 11; k++) { const d = frac + k * SP, z = d / LEAD; if (z < 0 || z > 1) continue; const p = proj(z); ctx.globalAlpha = 0.08 + 0.22 * (1 - z); ctx.strokeStyle = 'rgba(200,210,255,.9)'; ctx.lineWidth = Math.max(0.5, 1.3 * p.sc); ctx.beginPath(); ctx.moveTo(edgeX(0, p.sc), p.y); ctx.lineTo(edgeX(4, p.sc), p.y); ctx.stroke(); }
+    ctx.globalAlpha = 1;
+    // divisores de carril (convergen al punto de fuga)
+    for (let i = 0; i <= 4; i++) { ctx.strokeStyle = (i === 0 || i === 4) ? 'rgba(150,170,255,.28)' : 'rgba(255,255,255,.09)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(edgeX(i, 1), YHIT); ctx.lineTo(edgeX(i, top.sc), YTOP); ctx.stroke(); }
+
+    // ---- notas (dibujando de lejos a cerca) ----
+    const notes = g.chart.filter(n => !n.done).sort((a, b) => (b.t - a.t));
+    for (const n of notes) {
+      const zc = (n.t - g.t) / LEAD;
+      // cola de nota larga
+      if (n.dur > 0) {
+        const zEnd = (n.t + n.dur - g.t) / LEAD;
+        if (!(zc > 1.06 && zEnd > 1.06) && (n.t + n.dur) > g.t - 0.05) {
+          const a = proj(Math.min(Math.max(zc, -0.02), 1)), b2 = proj(Math.min(zEnd, 1));
+          const xA = laneCX(n.lane, a.sc), xB = laneCX(n.lane, b2.sc), wA = 7 * a.sc, wB = 7 * b2.sc;
+          ctx.save(); ctx.shadowColor = LC[n.lane]; ctx.shadowBlur = n.holding ? 16 : 8;
+          ctx.beginPath(); ctx.moveTo(xA - wA, a.y); ctx.lineTo(xA + wA, a.y); ctx.lineTo(xB + wB, b2.y); ctx.lineTo(xB - wB, b2.y); ctx.closePath();
+          ctx.globalAlpha = n.holding ? 0.95 : 0.68; ctx.fillStyle = LC[n.lane]; ctx.fill();
+          ctx.globalAlpha = n.holding ? 0.9 : 0.45; ctx.beginPath(); ctx.moveTo(xA - wA * 0.4, a.y); ctx.lineTo(xA + wA * 0.4, a.y); ctx.lineTo(xB + wB * 0.4, b2.y); ctx.lineTo(xB - wB * 0.4, b2.y); ctx.closePath(); ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.fill();
+          ctx.restore(); ctx.globalAlpha = 1;
+        }
+      }
+      // cabeza (gema)
+      if (!n.hit && zc >= -0.02 && zc <= 1.06) { const p = proj(zc); drawGem(laneCX(n.lane, p.sc), p.y, 12 * p.sc, LC[n.lane]); }
+      // sostenido en curso: gema anclada en la línea de golpeo
+      if (n.dur > 0 && n.holding) drawGem(laneCX(n.lane, 1), YHIT, 12, LC[n.lane], true);
     }
-    // notas con estela + brillo
-    for (const n of g.chart) {
-      if (n.hit) continue;
-      const y = HITY - (n.t - g.t) * speed;
-      if (y < -24 || y > AH + 12) continue;
-      const x = n.lane * LW + LW / 2;
-      const tg = ctx.createLinearGradient(x, y - 26, x, y); tg.addColorStop(0, 'transparent'); tg.addColorStop(1, LC[n.lane]); ctx.globalAlpha = 0.35; ctx.fillStyle = tg; ctx.fillRect(x - 10, y - 26, 20, 26); ctx.globalAlpha = 1;
-      ctx.save(); ctx.shadowColor = LC[n.lane]; ctx.shadowBlur = 12;
-      const rg = ctx.createRadialGradient(x - 3, y - 3, 1, x, y, 12); rg.addColorStop(0, '#ffffff'); rg.addColorStop(0.4, LC[n.lane]); rg.addColorStop(1, LC[n.lane]); ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(x, y, 12, 0, 7); ctx.fill(); ctx.restore();
-      ctx.fillStyle = 'rgba(255,255,255,.95)'; ctx.font = 'bold 13px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(GLYPH[n.lane], x, y + 1);
-    }
+
+    // ---- línea de golpeo + frets ----
+    ctx.save(); ctx.shadowColor = 'rgba(180,200,255,.85)'; ctx.shadowBlur = 10; ctx.strokeStyle = 'rgba(235,242,255,.7)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(edgeX(0, 1), YHIT); ctx.lineTo(edgeX(4, 1), YHIT); ctx.stroke(); ctx.restore();
+    for (let i = 0; i < 4; i++) drawFret(laneCX(i, 1), YHIT, i);
+
     // partículas
     for (const p of g.parts) { ctx.globalAlpha = Math.max(0, 1 - p.t / p.life); ctx.fillStyle = p.col; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill(); }
     ctx.globalAlpha = 1;
