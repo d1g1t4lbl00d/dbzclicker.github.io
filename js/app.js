@@ -4101,7 +4101,7 @@ function openUploadModal(prefill) {
 // Render pixel-art: el canvas trabaja a baja resolución (px de arte) y CSS lo
 // escala con image-rendering:pixelated → píxeles gordos y nítidos, estilo Habbo.
 const PLZ = { COLS: 10, ROWS: 10, TW: 32, TH: 16, SPEED: 3.2, WH: 34, PADX: 10, PADT: 58, PADB: 40 };
-const PLZ_SOLID = new Set(['spk', 'tree', 'lamp', 'fountain', 'djbooth', 'plant', 'photobooth', 'vending', 'crate', 'table', 'bar', 'pool', 'rack', 'neon', 'arcade', 'sea', 'palm', 'umbrella']);
+const PLZ_SOLID = new Set(['spk', 'tree', 'lamp', 'fountain', 'djbooth', 'plant', 'photobooth', 'vending', 'crate', 'table', 'bar', 'pool', 'rack', 'neon', 'arcade', 'sea', 'palm', 'umbrella', 'hoop']);
 const PLZ_DANCE_COLS = ['rgba(39,169,255,', 'rgba(110,45,245,', 'rgba(224,80,122,', 'rgba(45,200,120,'];
 
 // --- SALAS: cada una con su tema, mobiliario y portales a otras salas ---
@@ -4134,7 +4134,7 @@ const PLZ_ROOMS = {
       { t: 'plant', i: 0, j: 0 }, { t: 'plant', i: 9, j: 0 },
       { t: 'sofa', i: 1, j: 4, back: 'nw' }, { t: 'sofa', i: 1, j: 5, back: 'nw' },
       { t: 'pool', i: 6, j: 5 }, { t: 'pool', i: 7, j: 5 }, { t: 'pool', i: 6, j: 6 }, { t: 'pool', i: 7, j: 6 },
-      { t: 'lamp', i: 9, j: 8 }, { t: 'plant', i: 0, j: 8 },
+      { t: 'hoop', i: 4, j: 8 }, { t: 'lamp', i: 9, j: 8 }, { t: 'plant', i: 0, j: 8 },
       { t: 'portal', i: 5, j: 9, to: 'plaza', spawn: [5, 6], label: '↓ Bajar a la Plaza', col: '#27a9ff' },
     ],
   },
@@ -4177,6 +4177,16 @@ const PLZ_ROOMS = {
       { t: 'portal', i: 5, j: 9, to: 'plaza', spawn: [5, 6], label: '↓ Volver a la Plaza', col: '#6e2df5' },
     ],
   },
+};
+
+// Objeto interactivo de cada sala: al tocarlo se abre su minijuego/actividad.
+// (Las funciones openPerky* están declaradas más abajo — hoisting las hace accesibles.)
+const PLZ_ACTIVITY = {
+  plaza:   { furn: 'djbooth', icon: '🕺', open: () => openPerkyDance(),    w: 13, top: 44, hint: '🎧 Toca la cabina para bailar en PerkyDance' },
+  estudio: { furn: 'djbooth', icon: '🎹', open: () => openPerkyBeats(),    w: 13, top: 44, hint: '🎹 Toca la mesa para crear beats en PerkyBeats' },
+  azotea:  { furn: 'hoop',    icon: '🏀', open: () => openPerkyHoops(),     w: 14, top: 52, hint: '🏀 Toca la canasta para jugar a PerkyHoops' },
+  arcade:  { furn: 'arcade',  icon: '🎮', open: () => openPerkyInvaders(),  w: 11, top: 40, hint: '🎮 Toca una recreativa para jugar a PerkyInvaders' },
+  playa:   { furn: 'sea',     icon: '🎣', open: () => openPerkyFish(),      w: 16, top: 22, bot: 14, hint: '🎣 Toca el mar para pescar en PerkyFish' },
 };
 
 let plaza = null;          // runtime del render (solo mientras la vista está abierta)
@@ -4264,7 +4274,8 @@ function plzJoinRoom(id, si, sj) {
   const h = $('plazaRoomName'); if (h) h.textContent = plzR.def.name;
   const s = $('plazaRoomSub'); if (s) s.textContent = plzR.def.sub;
   const n = $('plazaLiveN'); if (n) n.textContent = '1';
-  if (id === 'arcade') setTimeout(() => { if (plaza && plaza.roomId === 'arcade') toast('🎮 Toca una recreativa para jugar a PerkyInvaders'); }, 500);
+  const act0 = PLZ_ACTIVITY[id];
+  if (act0 && act0.hint) setTimeout(() => { if (plaza && plaza.roomId === id) toast(act0.hint); }, 550);
 
   // canal de la sala: presencia (roster) + movimiento + chat + emotes
   plaza.chan = sb.channel('plaza-room-' + id, { config: { presence: { key: state.user.id }, broadcast: { self: false } } });
@@ -4434,14 +4445,16 @@ async function renderPlaza() {
     const s = r.width / canvas.width;
     const rx = (e.clientX - r.left) / s - plaza.ox, ry = (e.clientY - r.top) / s - plaza.oy;
     closeMenu();
-    // ¿ha tocado una máquina del arcade? → abre PerkyInvaders
-    if (plaza.roomId === 'arcade') {
-      const cab = plzR.furn.find(f => {
-        if (f.t !== 'arcade') return false;
+    // ¿ha tocado el objeto interactivo de la sala? → abre su minijuego
+    const act = PLZ_ACTIVITY[plaza.roomId];
+    if (act) {
+      const w = act.w || 12, top = act.top || 40, bot = act.bot || 4;
+      const spot = plzR.furn.find(f => {
+        if (f.t !== act.furn) return false;
         const p2 = plzIso(f.i, f.j), bx2 = p2.x, base2 = p2.y + PLZ.TH / 2;
-        return rx >= bx2 - 11 && rx <= bx2 + 11 && ry >= base2 - 40 && ry <= base2 + 3;
+        return rx >= bx2 - w && rx <= bx2 + w && ry >= base2 - top && ry <= base2 + bot;
       });
-      if (cab) { haptic(12); openPerkyInvaders(); return; }
+      if (spot) { haptic(12); act.open(); return; }
     }
     // ¿ha tocado un avatar? (los de delante tienen prioridad)
     const hit = [...plaza.ents.values()].sort((a, b) => (b.x + b.y) - (a.x + a.y)).find(en => {
@@ -4840,6 +4853,422 @@ function openPerkyInvaders() {
   }
 }
 
+// ===== Infraestructura común de los minijuegos del arcade =====
+function pkAC() {
+  try {
+    if (!window._pkAC) window._pkAC = new (window.AudioContext || window.webkitAudioContext)();
+    if (window._pkAC.state === 'suspended') window._pkAC.resume();
+    return window._pkAC;
+  } catch (_) { return null; }
+}
+function pkNoise(ac) {
+  if (ac._noise) return ac._noise;
+  const b = ac.createBuffer(1, Math.floor(ac.sampleRate * 0.5), ac.sampleRate), d = b.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+  ac._noise = b; return b;
+}
+function pkBlip(freq, dur, type) {
+  const ac = pkAC(); if (!ac) return;
+  const o = ac.createOscillator(), g = ac.createGain(), t = ac.currentTime;
+  o.type = type || 'square'; o.frequency.setValueAtTime(freq, t);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.22, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + (dur || 0.1));
+  o.connect(g).connect(ac.destination); o.start(t); o.stop(t + (dur || 0.1) + 0.02);
+}
+// tarjeta de fin de partida + ranking global (compartida por todos los juegos con marcador)
+async function pkGameOver({ game, score, wrap, onRetry, onQuit, title }) {
+  let rows = [];
+  try { await sb.from('arcade_scores').insert({ game, user_id: state.user.id, score }); } catch (_) {}
+  try { const { data } = await sb.rpc('arcade_leaderboard', { p_game: game, p_limit: 10 }); rows = data || []; } catch (_) {}
+  const myBest = Math.max(score, ...rows.filter(r => r.user_id === state.user.id).map(r => r.best), 0);
+  const ov = el(`
+    <div class="pk-over">
+      <div class="pk-over-card">
+        <div class="pk-go">${title || 'GAME OVER'}</div>
+        <div class="pk-final">Puntuación <b>${score}</b></div>
+        <div class="pk-best">Tu récord: ${myBest}</div>
+        <div class="pk-lb-title">🏆 Mejores</div>
+        <div class="pk-lb">${rows.length ? rows.map((r, i) => `<div class="pk-lb-row ${r.user_id === state.user.id ? 'me' : ''}"><span class="pk-rank">${i + 1}</span><b>${esc(r.display_name || r.username || 'bro')}</b><span class="pk-pts">${r.best}</span></div>`).join('') : '<div style="color:var(--ink-soft);font-size:12px;padding:8px">Sé el primero del ranking.</div>'}</div>
+        <div class="pk-over-actions"><button class="btn primary" id="pkRetry">↻ Reintentar</button><button class="btn" id="pkQuit">Salir</button></div>
+      </div>
+    </div>`);
+  wrap.appendChild(ov);
+  ov.querySelector('#pkRetry').onclick = () => { ov.remove(); onRetry && onRetry(); };
+  ov.querySelector('#pkQuit').onclick = () => { onQuit && onQuit(); };
+  return ov;
+}
+
+// ============ PERKYDANCE (Plaza) — juego de ritmo de 4 carriles ============
+function openPerkyDance() {
+  if (window._pkGameOpen) return; window._pkGameOpen = true;
+  const AW = 220, AH = 320, LANES = 4, LW = AW / LANES, HITY = 270, LEAD = 1.5;
+  const LC = ['#27a9ff', '#6e2df5', '#e0507a', '#2dc878'];
+  const GLYPH = ['◀', '▼', '▲', '▶'];
+  const KEYMAP = { arrowleft: 0, a: 0, arrowdown: 1, s: 1, arrowup: 2, k: 2, arrowright: 3, l: 3 };
+  const wrap = el(`
+    <div class="pk-game" id="pkGame">
+      <div class="pk-top">
+        <button class="pk-x" id="pkClose" aria-label="Salir">✕</button>
+        <div class="pk-title">PERKY&nbsp;<span>DANCE</span></div>
+        <div class="pk-stat">SCORE <b id="pkScore">0</b></div>
+      </div>
+      <div class="pk-stage" id="pkStage"><canvas id="pkCanvas" width="${AW}" height="${AH}"></canvas></div>
+      <div class="pk-ctrl pk-lanes">
+        <button class="pk-btn" data-l="0" style="color:${LC[0]}">◀</button>
+        <button class="pk-btn" data-l="1" style="color:${LC[1]}">▼</button>
+        <button class="pk-btn" data-l="2" style="color:${LC[2]}">▲</button>
+        <button class="pk-btn" data-l="3" style="color:${LC[3]}">▶</button>
+      </div>
+      <div class="pk-hint">Pulsa el carril cuando la flecha llegue a la línea · teclas A S K L o flechas</div>
+    </div>`);
+  document.body.appendChild(wrap);
+  document.documentElement.style.overflow = 'hidden';
+  const canvas = wrap.querySelector('#pkCanvas'), ctx = canvas.getContext('2d'); ctx.imageSmoothingEnabled = false;
+  const speed = (HITY + 20) / LEAD;
+  let g, last = performance.now();
+
+  function buildChart() {
+    const chart = [];
+    for (let s = 6; s < 132; s++) {
+      const t = LEAD + 0.6 + s * 0.26;
+      if (s % 2 === 0) chart.push({ lane: (s * 3 + (s >> 2)) % 4, t, hit: false });
+      else if ((s * 7) % 3 === 0) chart.push({ lane: (s * 5 + 1) % 4, t, hit: false });
+      if (s % 8 === 7) chart.push({ lane: (s * 2 + 2) % 4, t, hit: false });
+    }
+    return chart;
+  }
+  function reset() {
+    g = { t: -LEAD, score: 0, combo: 0, maxCombo: 0, chart: buildChart(), judge: null, flash: [0, 0, 0, 0], over: false, ended: 0 };
+    g.lastT = g.chart[g.chart.length - 1].t;
+    wrap.querySelector('#pkScore').textContent = '0';
+  }
+  reset();
+
+  function tap(lane) {
+    if (g.over) return;
+    g.flash[lane] = 1; haptic(4);
+    let best = null, bd = 1;
+    for (const n of g.chart) { if (n.hit || n.lane !== lane) continue; const d = Math.abs(n.t - g.t); if (d < bd) { bd = d; best = n; } }
+    if (best && bd < 0.18) {
+      best.hit = true;
+      let pts, txt, col;
+      if (bd < 0.05) { pts = 300; txt = 'PERFECT'; col = '#ffd23e'; }
+      else if (bd < 0.10) { pts = 200; txt = 'GREAT'; col = '#2dc878'; }
+      else { pts = 100; txt = 'GOOD'; col = '#27a9ff'; }
+      g.combo++; g.maxCombo = Math.max(g.maxCombo, g.combo);
+      g.score += pts + g.combo * 2; g.judge = { txt, col, t: g.t };
+      pkBlip(560 + Math.min(g.combo, 24) * 16, 0.06, 'square');
+      wrap.querySelector('#pkScore').textContent = g.score;
+    }
+  }
+  // input
+  const stage = wrap.querySelector('#pkStage');
+  stage.addEventListener('pointerdown', (e) => { const r = stage.getBoundingClientRect(); tap(Math.max(0, Math.min(3, Math.floor((e.clientX - r.left) / (r.width / 4))))); });
+  wrap.querySelectorAll('.pk-lanes .pk-btn').forEach(b => b.addEventListener('pointerdown', (e) => { e.preventDefault(); tap(+b.dataset.l); }));
+  const onKey = (e) => {
+    const k = e.key.toLowerCase();
+    if (k === 'escape') { close(); return; }
+    if (k in KEYMAP && !e.repeat) { e.preventDefault(); tap(KEYMAP[k]); }
+  };
+  document.addEventListener('keydown', onKey);
+
+  const close = () => { cancelAnimationFrame(g._raf); document.removeEventListener('keydown', onKey); document.documentElement.style.overflow = ''; wrap.remove(); window._pkGameOpen = false; };
+  wrap.querySelector('#pkClose').onclick = close;
+
+  function update(dt) {
+    if (g.over) return;
+    g.t += dt;
+    for (const n of g.chart) if (!n.hit && g.t > n.t + 0.18) { n.hit = true; g.combo = 0; g.judge = { txt: 'MISS', col: '#e0507a', t: g.t }; }
+    for (let i = 0; i < 4; i++) g.flash[i] = Math.max(0, g.flash[i] - dt * 4);
+    if (g.t > g.lastT + 1.8) { g.over = true; showEnd(); }
+  }
+  function draw() {
+    ctx.clearRect(0, 0, AW, AH);
+    ctx.fillStyle = '#0a0716'; ctx.fillRect(0, 0, AW, AH);
+    for (let i = 0; i < 4; i++) {
+      ctx.fillStyle = i % 2 ? 'rgba(255,255,255,.02)' : 'rgba(255,255,255,.04)'; ctx.fillRect(i * LW, 0, LW, AH);
+      if (g.flash[i] > 0) { ctx.globalAlpha = g.flash[i] * 0.35; ctx.fillStyle = LC[i]; ctx.fillRect(i * LW, 0, LW, AH); ctx.globalAlpha = 1; }
+    }
+    // línea de golpeo + receptores
+    ctx.fillStyle = 'rgba(255,255,255,.5)'; ctx.fillRect(0, HITY, AW, 2);
+    for (let i = 0; i < 4; i++) { ctx.strokeStyle = LC[i]; ctx.lineWidth = 2; ctx.globalAlpha = 0.6 + g.flash[i] * 0.4; ctx.beginPath(); ctx.arc(i * LW + LW / 2, HITY, 13, 0, 7); ctx.stroke(); ctx.globalAlpha = 1; }
+    // notas
+    for (const n of g.chart) {
+      if (n.hit) continue;
+      const y = HITY - (n.t - g.t) * speed;
+      if (y < -20 || y > AH + 10) continue;
+      const x = n.lane * LW + LW / 2;
+      ctx.fillStyle = LC[n.lane]; ctx.beginPath(); ctx.arc(x, y, 12, 0, 7); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.85)'; ctx.font = 'bold 13px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(GLYPH[n.lane], x, y + 1);
+    }
+    // combo + juicio
+    if (g.combo > 1) { ctx.fillStyle = '#eaf2ff'; ctx.font = 'bold 22px system-ui'; ctx.textAlign = 'center'; ctx.fillText(g.combo, AW / 2, 130); ctx.fillStyle = '#8fa0c8'; ctx.font = '10px system-ui'; ctx.fillText('COMBO', AW / 2, 148); }
+    if (g.judge && g.t - g.judge.t < 0.45) { ctx.globalAlpha = 1 - (g.t - g.judge.t) / 0.45; ctx.fillStyle = g.judge.col; ctx.font = 'bold 18px system-ui'; ctx.textAlign = 'center'; ctx.fillText(g.judge.txt, AW / 2, 200); ctx.globalAlpha = 1; }
+    ctx.textBaseline = 'alphabetic';
+  }
+  async function showEnd() {
+    await pkGameOver({ game: 'dance', score: g.score, wrap, title: '¡FIN DEL TEMA!', onRetry: () => { reset(); last = performance.now(); }, onQuit: close });
+  }
+  const loop = (now) => { const dt = Math.min((now - last) / 1000, 0.05); last = now; try { update(dt); draw(); } catch (e) { console.warn('dance', e); } g._raf = requestAnimationFrame(loop); };
+  g._raf = requestAnimationFrame(loop);
+}
+
+// ============ PERKYBEATS (Estudio) — caja de ritmos WebAudio ============
+function openPerkyBeats() {
+  if (window._pkGameOpen) return; window._pkGameOpen = true;
+  const TRACKS = [
+    { k: 'kick', n: 'BOMBO', c: '#e0507a' }, { k: 'snare', n: 'CAJA', c: '#f0a13e' },
+    { k: 'hat', n: 'HI-HAT', c: '#27a9ff' }, { k: 'clap', n: 'CLAP', c: '#2dc878' },
+    { k: 'tom', n: 'TOM', c: '#b06eff' }, { k: 'bass', n: 'BAJO', c: '#12c2c2' },
+  ];
+  const STEPS = 16;
+  const pat = TRACKS.map(() => Array(STEPS).fill(false));
+  [0, 4, 8, 12].forEach(s => pat[0][s] = true);
+  [4, 12].forEach(s => pat[1][s] = true);
+  [0, 2, 4, 6, 8, 10, 12, 14].forEach(s => pat[2][s] = true);
+  let bpm = 110, playing = false, cur = 0, nextT = 0, timer = null, ac = null;
+
+  const rows = TRACKS.map((tr, ti) => `
+    <div class="pb-row">
+      <span class="pb-lab" style="color:${tr.c}">${tr.n}</span>
+      <div class="pb-cells">${Array.from({ length: STEPS }, (_, s) => `<button class="pb-cell${pat[ti][s] ? ' on' : ''}${s % 4 === 0 ? ' beat' : ''}" data-tr="${ti}" data-st="${s}" style="--cc:${tr.c}"></button>`).join('')}</div>
+    </div>`).join('');
+  const wrap = el(`
+    <div class="pk-game" id="pkGame">
+      <div class="pk-top">
+        <button class="pk-x" id="pkClose" aria-label="Salir">✕</button>
+        <div class="pk-title">PERKY&nbsp;<span>BEATS</span></div>
+        <div class="pk-stat" id="pkBpmLab">${bpm} BPM</div>
+      </div>
+      <div class="pb-grid" id="pbGrid">${rows}</div>
+      <div class="pb-ctrl">
+        <button class="pk-btn pb-play" id="pbPlay">▶</button>
+        <label class="pb-tempo">BPM<input type="range" id="pbBpm" min="70" max="170" value="${bpm}"></label>
+        <button class="pk-btn pb-sm" id="pbRand" title="Aleatorio">🎲</button>
+        <button class="pk-btn pb-sm" id="pbClear" title="Vaciar">🗑️</button>
+      </div>
+      <div class="pk-hint">Toca las celdas para crear tu ritmo · dale a ▶ para reproducir</div>
+    </div>`);
+  document.body.appendChild(wrap);
+  document.documentElement.style.overflow = 'hidden';
+  const grid = wrap.querySelector('#pbGrid');
+
+  function voice(k, t) {
+    const out = ac.createGain(); out.gain.value = 0.8; out.connect(ac.destination);
+    if (k === 'kick') { const o = ac.createOscillator(), g = ac.createGain(); o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(48, t + 0.13); g.gain.setValueAtTime(1, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.15); o.connect(g).connect(out); o.start(t); o.stop(t + 0.16); }
+    else if (k === 'bass') { const o = ac.createOscillator(), g = ac.createGain(), lp = ac.createBiquadFilter(); o.type = 'sawtooth'; o.frequency.setValueAtTime(72, t); lp.type = 'lowpass'; lp.frequency.value = 640; g.gain.setValueAtTime(0.6, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.26); o.connect(lp).connect(g).connect(out); o.start(t); o.stop(t + 0.28); }
+    else if (k === 'tom') { const o = ac.createOscillator(), g = ac.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(230, t); o.frequency.exponentialRampToValueAtTime(92, t + 0.2); g.gain.setValueAtTime(0.7, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.22); o.connect(g).connect(out); o.start(t); o.stop(t + 0.23); }
+    else { const s = ac.createBufferSource(); s.buffer = pkNoise(ac); const bp = ac.createBiquadFilter(), g = ac.createGain();
+      if (k === 'hat') { bp.type = 'highpass'; bp.frequency.value = 7000; g.gain.setValueAtTime(0.3, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.05); s.connect(bp).connect(g).connect(out); s.start(t); s.stop(t + 0.06); }
+      else if (k === 'snare') { bp.type = 'highpass'; bp.frequency.value = 1800; g.gain.setValueAtTime(0.55, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.16); s.connect(bp).connect(g).connect(out); s.start(t); s.stop(t + 0.17); const o = ac.createOscillator(), og = ac.createGain(); o.type = 'triangle'; o.frequency.value = 190; og.gain.setValueAtTime(0.32, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.09); o.connect(og).connect(out); o.start(t); o.stop(t + 0.1); }
+      else if (k === 'clap') { bp.type = 'bandpass'; bp.frequency.value = 1200; bp.Q.value = 1.2; g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.13); s.connect(bp).connect(g).connect(out); s.start(t); s.stop(t + 0.14); } }
+  }
+  function highlight(step) {
+    grid.querySelectorAll('.pb-cell.play').forEach(c => c.classList.remove('play'));
+    grid.querySelectorAll('.pb-cell[data-st="' + step + '"]').forEach(c => c.classList.add('play'));
+  }
+  function tick() {
+    const now = ac.currentTime;
+    while (nextT < now + 0.12) {
+      const step = cur;
+      for (let ti = 0; ti < TRACKS.length; ti++) if (pat[ti][step]) voice(TRACKS[ti].k, nextT);
+      setTimeout(() => { if (playing) highlight(step); }, Math.max(0, (nextT - now) * 1000));
+      nextT += (60 / bpm) / 4; cur = (cur + 1) % STEPS;
+    }
+  }
+  const playBtn = wrap.querySelector('#pbPlay');
+  function play() { ac = pkAC(); if (!ac) { toast('Audio no disponible'); return; } playing = true; cur = 0; nextT = ac.currentTime + 0.06; timer = setInterval(tick, 25); playBtn.textContent = '⏸'; playBtn.classList.add('on'); }
+  function stop() { playing = false; if (timer) clearInterval(timer); timer = null; grid.querySelectorAll('.pb-cell.play').forEach(c => c.classList.remove('play')); playBtn.textContent = '▶'; playBtn.classList.remove('on'); }
+  playBtn.onclick = () => { playing ? stop() : play(); haptic(6); };
+  grid.addEventListener('pointerdown', (e) => { const cell = e.target.closest('.pb-cell'); if (!cell) return; const ti = +cell.dataset.tr, st = +cell.dataset.st; pat[ti][st] = !pat[ti][st]; cell.classList.toggle('on', pat[ti][st]); if (pat[ti][st]) { if (!ac) ac = pkAC(); if (ac) voice(TRACKS[ti].k, ac.currentTime); } haptic(4); });
+  wrap.querySelector('#pbBpm').addEventListener('input', (e) => { bpm = +e.target.value; wrap.querySelector('#pkBpmLab').textContent = bpm + ' BPM'; });
+  wrap.querySelector('#pbClear').onclick = () => { pat.forEach(r => r.fill(false)); grid.querySelectorAll('.pb-cell').forEach(c => c.classList.remove('on')); haptic(8); };
+  wrap.querySelector('#pbRand').onclick = () => { const dens = [0.4, 0.25, 0.55, 0.2, 0.15, 0.3]; pat.forEach((r, ti) => r.forEach((_, s) => r[s] = Math.random() < dens[ti])); grid.querySelectorAll('.pb-cell').forEach(c => c.classList.toggle('on', pat[+c.dataset.tr][+c.dataset.st])); haptic(10); };
+
+  const onKey = (e) => { if (e.key === 'Escape') close(); else if (e.key === ' ') { e.preventDefault(); playing ? stop() : play(); } };
+  document.addEventListener('keydown', onKey);
+  const close = () => { stop(); document.removeEventListener('keydown', onKey); document.documentElement.style.overflow = ''; wrap.remove(); window._pkGameOpen = false; };
+  wrap.querySelector('#pkClose').onclick = close;
+}
+
+// ============ PERKYHOOPS (Azotea) — baloncesto con física ============
+function openPerkyHoops() {
+  if (window._pkGameOpen) return; window._pkGameOpen = true;
+  const AW = 220, AH = 300, accent = (state.profile.theme && state.profile.theme.accent) || '#3e57fc';
+  const wrap = el(`
+    <div class="pk-game" id="pkGame">
+      <div class="pk-top">
+        <button class="pk-x" id="pkClose" aria-label="Salir">✕</button>
+        <div class="pk-title">PERKY&nbsp;<span>HOOPS</span></div>
+        <div class="pk-stat">SCORE <b id="pkScore">0</b></div>
+      </div>
+      <div class="pk-stage" id="pkStage"><canvas id="pkCanvas" width="${AW}" height="${AH}"></canvas></div>
+      <div class="pk-hint">Arrastra desde el balón hacia atrás y suelta para encestar · ¡mete todas las que puedas en 45 s!</div>
+    </div>`);
+  document.body.appendChild(wrap);
+  document.documentElement.style.overflow = 'hidden';
+  const canvas = wrap.querySelector('#pkCanvas'), ctx = canvas.getContext('2d');
+  const BR = 9, RIMR = 15, GRAV = 620;
+  let g, last = performance.now();
+  function resetBall() { g.ball = { x: AW / 2, y: AH - 22, vx: 0, vy: 0, flying: false, tb: false, tr: false }; g.aim = null; }
+  function reset() { g = { score: 0, time: 45, combo: 0, over: false, hoopX: AW / 2, hoopY: 82, popup: null }; resetBall(); wrap.querySelector('#pkScore').textContent = '0'; }
+  reset();
+
+  const stage = wrap.querySelector('#pkStage');
+  const toCv = (e) => { const r = canvas.getBoundingClientRect(); return { x: (e.clientX - r.left) / (r.width / AW), y: (e.clientY - r.top) / (r.height / AH) }; };
+  stage.addEventListener('pointerdown', (e) => { if (g.over || g.ball.flying) return; const p = toCv(e); if (Math.hypot(p.x - g.ball.x, p.y - g.ball.y) < 46) { g.aim = { sx: g.ball.x, sy: g.ball.y, x: p.x, y: p.y }; stage.setPointerCapture(e.pointerId); } });
+  stage.addEventListener('pointermove', (e) => { if (g.aim) { const p = toCv(e); g.aim.x = p.x; g.aim.y = p.y; } });
+  stage.addEventListener('pointerup', () => {
+    if (!g.aim) return;
+    const dx = g.ball.x - g.aim.x, dy = g.ball.y - g.aim.y, d = Math.hypot(dx, dy);
+    if (d > 8) { const k = 3.4; g.ball.vx = dx * k; g.ball.vy = dy * k; const mx = 620; const sp = Math.hypot(g.ball.vx, g.ball.vy); if (sp > mx) { g.ball.vx *= mx / sp; g.ball.vy *= mx / sp; } g.ball.flying = true; g.ball.scored = false; haptic(8); }
+    g.aim = null;
+  });
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  const close = () => { cancelAnimationFrame(g._raf); document.removeEventListener('keydown', onKey); document.documentElement.style.overflow = ''; wrap.remove(); window._pkGameOpen = false; };
+  wrap.querySelector('#pkClose').onclick = close;
+
+  function update(dt) {
+    if (g.over) return;
+    g.time -= dt; if (g.time <= 0) { g.time = 0; g.over = true; showEnd(); return; }
+    if (g.popup && performance.now() - g.popup.t0 > 800) g.popup = null;
+    const b = g.ball;
+    if (b.flying) {
+      const py = b.y;
+      b.vy += GRAV * dt; b.x += b.vx * dt; b.y += b.vy * dt;
+      // tablero (a la derecha del aro)
+      const boardX = g.hoopX + RIMR + 5;
+      if (b.x + BR > boardX && b.x < boardX + 6 && b.y > g.hoopY - 34 && b.y < g.hoopY + 4 && b.vx > 0) { b.x = boardX - BR; b.vx = -Math.abs(b.vx) * 0.6; b.tb = true; }
+      // postes del aro
+      for (const rx of [g.hoopX - RIMR, g.hoopX + RIMR]) { const d = Math.hypot(b.x - rx, b.y - g.hoopY); if (d < BR + 2) { const nx = (b.x - rx) / d, ny = (b.y - g.hoopY) / d; const dot = b.vx * nx + b.vy * ny; b.vx = (b.vx - 2 * dot * nx) * 0.6; b.vy = (b.vy - 2 * dot * ny) * 0.6; b.tr = true; } }
+      // canasta: cruza el aro hacia abajo dentro del arco
+      if (!b.scored && py < g.hoopY && b.y >= g.hoopY && b.vy > 0 && Math.abs(b.x - g.hoopX) < RIMR - 3) {
+        b.scored = true; g.combo++;
+        let pts = 2 + (g.combo - 1); if (!b.tb && !b.tr) pts += 1;
+        g.score += pts; g.popup = { txt: (!b.tb && !b.tr ? '¡SWISH! +' : '+') + pts, col: (!b.tb && !b.tr) ? '#2dc878' : '#ffd23e', t0: performance.now() };
+        wrap.querySelector('#pkScore').textContent = g.score; pkBlip(720, 0.08); haptic(14);
+        g.hoopX = 46 + Math.random() * (AW - 92); g.hoopY = 66 + Math.random() * 34;
+      }
+      // suelo / fuera
+      if (b.y > AH - 14 && b.vy > 0) { b.y = AH - 14; b.vy *= -0.5; b.vx *= 0.7; if (Math.abs(b.vy) < 40) { if (!b.scored) g.combo = 0; resetBall(); } }
+      if (b.x < -20 || b.x > AW + 20 || b.y > AH + 40) { if (!b.scored) g.combo = 0; resetBall(); }
+    }
+  }
+  function draw() {
+    ctx.clearRect(0, 0, AW, AH);
+    const grd = ctx.createLinearGradient(0, 0, 0, AH); grd.addColorStop(0, '#2a1830'); grd.addColorStop(1, '#12101f'); ctx.fillStyle = grd; ctx.fillRect(0, 0, AW, AH);
+    // skyline sencillo
+    ctx.fillStyle = 'rgba(255,255,255,.05)'; for (let i = 0; i < 7; i++) ctx.fillRect(10 + i * 30, AH - 40 - (i % 3) * 22, 22, 60);
+    // canasta
+    const hx = g.hoopX, hy = g.hoopY, boardX = hx + RIMR + 5;
+    ctx.fillStyle = '#e8ecf7'; ctx.fillRect(boardX, hy - 34, 6, 40); ctx.strokeStyle = '#9aa6c4'; ctx.strokeRect(boardX, hy - 34, 6, 40);
+    ctx.strokeStyle = '#f0801e'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(hx - RIMR, hy); ctx.lineTo(hx + RIMR, hy); ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,.5)'; ctx.lineWidth = 1;
+    for (let i = 0; i <= 6; i++) { const t = i / 6; ctx.beginPath(); ctx.moveTo(hx - RIMR + t * RIMR * 2, hy); ctx.lineTo(hx - RIMR * 0.6 + t * RIMR * 1.2, hy + 12); ctx.stroke(); }
+    // trayectoria
+    if (g.aim) {
+      const dx = g.ball.x - g.aim.x, dy = g.ball.y - g.aim.y, k = 3.4;
+      let sx = g.ball.x, sy = g.ball.y, vx = dx * k, vy = dy * k;
+      ctx.fillStyle = 'rgba(255,255,255,.5)';
+      for (let i = 0; i < 26; i++) { sx += vx * 0.02; sy += vy * 0.02; vy += GRAV * 0.02; if (i % 2 === 0) ctx.fillRect(sx - 1, sy - 1, 2, 2); }
+      ctx.strokeStyle = 'rgba(255,255,255,.3)'; ctx.beginPath(); ctx.moveTo(g.ball.x, g.ball.y); ctx.lineTo(g.aim.x, g.aim.y); ctx.stroke();
+    }
+    // balón
+    const b = g.ball; ctx.fillStyle = '#f0801e'; ctx.beginPath(); ctx.arc(b.x, b.y, BR, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#7a3d10'; ctx.lineWidth = 1; ctx.beginPath(); ctx.arc(b.x, b.y, BR, 0, 7); ctx.moveTo(b.x - BR, b.y); ctx.lineTo(b.x + BR, b.y); ctx.moveTo(b.x, b.y - BR); ctx.lineTo(b.x, b.y + BR); ctx.stroke();
+    // HUD: tiempo + combo
+    ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(8, 8, AW - 16, 6);
+    ctx.fillStyle = g.time < 10 ? '#e0507a' : accent; ctx.fillRect(8, 8, (AW - 16) * (g.time / 45), 6);
+    ctx.fillStyle = '#eaf2ff'; ctx.font = 'bold 11px system-ui'; ctx.textAlign = 'left'; ctx.fillText('⏱ ' + Math.ceil(g.time) + 's', 8, 30);
+    if (g.combo > 1) { ctx.textAlign = 'right'; ctx.fillStyle = '#ffd23e'; ctx.fillText('🔥 x' + g.combo, AW - 8, 30); }
+    if (g.popup) { ctx.globalAlpha = Math.max(0, 1 - (performance.now() - g.popup.t0) / 800); ctx.fillStyle = g.popup.col; ctx.font = 'bold 18px system-ui'; ctx.textAlign = 'center'; ctx.fillText(g.popup.txt, AW / 2, 150); ctx.globalAlpha = 1; }
+  }
+  async function showEnd() { await pkGameOver({ game: 'hoops', score: g.score, wrap, title: '¡TIEMPO!', onRetry: () => { reset(); last = performance.now(); }, onQuit: close }); }
+  const loop = (now) => { const dt = Math.min((now - last) / 1000, 0.05); last = now; try { update(dt); draw(); } catch (e) { console.warn('hoops', e); } g._raf = requestAnimationFrame(loop); };
+  g._raf = requestAnimationFrame(loop);
+}
+
+// ============ PERKYFISH (Playa) — pesca de reflejos ============
+function openPerkyFish() {
+  if (window._pkGameOpen) return; window._pkGameOpen = true;
+  const AW = 220, AH = 300, accent = (state.profile.theme && state.profile.theme.accent) || '#3e57fc';
+  const FISH = [{ n: '🐟', p: 10, w: 46, c: '#9fd3ff' }, { n: '🐠', p: 25, w: 28, c: '#ffd23e' }, { n: '🦑', p: 40, w: 12, c: '#e0507a' }, { n: '🐡', p: 60, w: 8, c: '#2dc878' }, { n: '🦈', p: 120, w: 4, c: '#b06eff' }, { n: '🥾', p: -5, w: 6, c: '#93a0bd' }];
+  const wrap = el(`
+    <div class="pk-game" id="pkGame">
+      <div class="pk-top">
+        <button class="pk-x" id="pkClose" aria-label="Salir">✕</button>
+        <div class="pk-title">PERKY&nbsp;<span>FISH</span></div>
+        <div class="pk-stat">SCORE <b id="pkScore">0</b></div>
+      </div>
+      <div class="pk-stage" id="pkStage"><canvas id="pkCanvas" width="${AW}" height="${AH}"></canvas></div>
+      <div class="pk-hint">Espera a que pique (¡!) y toca RÁPIDO para enganchar · cuanto antes, más puntos</div>
+    </div>`);
+  document.body.appendChild(wrap);
+  document.documentElement.style.overflow = 'hidden';
+  const canvas = wrap.querySelector('#pkCanvas'), ctx = canvas.getContext('2d');
+  let g, last = performance.now();
+  function reset() { g = { score: 0, time: 60, state: 'cast', wait: 0, bite: 0, cool: 0, msg: 'Preparando caña…', popup: null, bob: 0, dip: 0, over: false }; wrap.querySelector('#pkScore').textContent = '0'; cast(); }
+  function cast() { g.state = 'waiting'; g.wait = 1.2 + Math.random() * 2.8; g.msg = 'Espera el picado…'; g.dip = 0; }
+  function pick() { const tot = FISH.reduce((a, f) => a + f.w, 0); let r = Math.random() * tot; for (const f of FISH) { r -= f.w; if (r <= 0) return f; } return FISH[0]; }
+  function action() {
+    if (g.over) return;
+    if (g.state === 'waiting') { g.state = 'cool'; g.cool = 0.7; g.msg = '¡Muy pronto! 🌀'; g.popup = { txt: '¡Paciencia!', col: '#f0a13e', t0: performance.now() }; haptic(10); }
+    else if (g.state === 'bite') {
+      const react = 0.9 - g.bite; const f = pick();
+      const bonus = Math.max(0, Math.round((0.9 - react) * 34));
+      const pts = Math.max(-5, f.p + (f.p > 0 ? bonus : 0));
+      g.score = Math.max(0, g.score + pts); wrap.querySelector('#pkScore').textContent = g.score;
+      g.popup = { txt: f.n + ' ' + (pts >= 0 ? '+' : '') + pts, col: f.c, t0: performance.now(), big: true };
+      g.msg = pts >= 0 ? '¡Buena captura!' : 'Vaya… una bota';
+      pkBlip(f.p > 40 ? 900 : 660, 0.1); haptic(f.p > 40 ? 30 : 12);
+      g.state = 'cool'; g.cool = 0.8;
+    }
+  }
+  const stage = wrap.querySelector('#pkStage');
+  stage.addEventListener('pointerdown', (e) => { e.preventDefault(); action(); });
+  const onKey = (e) => { if (e.key === 'Escape') close(); else if (e.key === ' ') { e.preventDefault(); action(); } };
+  document.addEventListener('keydown', onKey);
+  const close = () => { cancelAnimationFrame(g._raf); document.removeEventListener('keydown', onKey); document.documentElement.style.overflow = ''; wrap.remove(); window._pkGameOpen = false; };
+  wrap.querySelector('#pkClose').onclick = close;
+  reset();
+
+  function update(dt) {
+    if (g.over) return;
+    g.time -= dt; if (g.time <= 0) { g.time = 0; g.over = true; showEnd(); return; }
+    g.bob += dt;
+    if (g.popup && performance.now() - g.popup.t0 > 900) g.popup = null;
+    if (g.state === 'waiting') { g.wait -= dt; if (g.wait <= 0) { g.state = 'bite'; g.bite = 0.9; g.msg = '¡PICA! ¡TOCA!'; pkBlip(880, 0.08); haptic(24); } }
+    else if (g.state === 'bite') { g.bite -= dt; g.dip = Math.min(10, g.dip + dt * 40); if (g.bite <= 0) { g.state = 'cool'; g.cool = 0.7; g.msg = 'Se escapó 🌀'; g.popup = { txt: 'Se escapó', col: '#93a0bd', t0: performance.now() }; } }
+    else if (g.state === 'cool') { g.cool -= dt; if (g.cool <= 0) cast(); }
+  }
+  function draw() {
+    ctx.clearRect(0, 0, AW, AH);
+    // cielo + mar
+    const sky = ctx.createLinearGradient(0, 0, 0, 90); sky.addColorStop(0, '#173a4a'); sky.addColorStop(1, '#1f6f86'); ctx.fillStyle = sky; ctx.fillRect(0, 0, AW, 92);
+    const sea = ctx.createLinearGradient(0, 92, 0, AH); sea.addColorStop(0, '#12839e'); sea.addColorStop(1, '#0a4a63'); ctx.fillStyle = sea; ctx.fillRect(0, 92, AW, AH - 92);
+    // olas
+    ctx.strokeStyle = 'rgba(255,255,255,.18)'; ctx.lineWidth = 1;
+    for (let r = 0; r < 5; r++) { const yy = 108 + r * 34; ctx.beginPath(); for (let x = 0; x <= AW; x += 6) ctx.lineTo(x, yy + Math.sin((x + g.bob * 60 + r * 20) / 18) * 3); ctx.stroke(); }
+    // caña + sedal desde arriba
+    const bx = AW / 2, water = 100, by = water + (g.state === 'bite' ? g.dip : Math.sin(g.bob * 2) * 2);
+    ctx.strokeStyle = 'rgba(255,255,255,.4)'; ctx.beginPath(); ctx.moveTo(bx, 0); ctx.lineTo(bx, by); ctx.stroke();
+    // flotador
+    ctx.fillStyle = g.state === 'bite' ? '#e0507a' : '#f0f4ff'; ctx.beginPath(); ctx.arc(bx, by, 5, 0, 7); ctx.fill();
+    ctx.fillStyle = '#e0507a'; ctx.fillRect(bx - 5, by - 5, 10, 2);
+    // aviso de picado
+    if (g.state === 'bite') { const s = 1 + Math.sin(g.bob * 20) * 0.15; ctx.save(); ctx.translate(bx, by - 34); ctx.scale(s, s); ctx.fillStyle = '#ffd23e'; ctx.font = 'bold 28px system-ui'; ctx.textAlign = 'center'; ctx.fillText('❗', 0, 0); ctx.restore(); }
+    // HUD
+    ctx.fillStyle = 'rgba(0,0,0,.3)'; ctx.fillRect(8, 8, AW - 16, 6);
+    ctx.fillStyle = g.time < 10 ? '#e0507a' : accent; ctx.fillRect(8, 8, (AW - 16) * (g.time / 60), 6);
+    ctx.fillStyle = '#eaf2ff'; ctx.font = 'bold 11px system-ui'; ctx.textAlign = 'left'; ctx.fillText('⏱ ' + Math.ceil(g.time) + 's', 8, 30);
+    ctx.textAlign = 'center'; ctx.fillStyle = '#cfe0ff'; ctx.font = '12px system-ui'; ctx.fillText(g.msg, AW / 2, AH - 14);
+    if (g.popup) { ctx.globalAlpha = Math.max(0, 1 - (performance.now() - g.popup.t0) / 900); ctx.fillStyle = g.popup.col; ctx.font = 'bold ' + (g.popup.big ? 26 : 18) + 'px system-ui'; ctx.fillText(g.popup.txt, AW / 2, 160); ctx.globalAlpha = 1; }
+  }
+  async function showEnd() { await pkGameOver({ game: 'fish', score: g.score, wrap, title: '¡SE ACABÓ!', onRetry: () => { reset(); last = performance.now(); }, onQuit: close }); }
+  const loop = (now) => { const dt = Math.min((now - last) / 1000, 0.05); last = now; try { update(dt); draw(); } catch (e) { console.warn('fish', e); } g._raf = requestAnimationFrame(loop); };
+  g._raf = requestAnimationFrame(loop);
+}
+
 // ---- utilidades pixel-art (rombos por tiras de 1px: bordes duros, cero antialiasing) ----
 function plzDiamond(c, cx, y0, tw, th, color) {
   c.fillStyle = color;
@@ -5145,6 +5574,18 @@ function plzDrawFurn(f, now) {
     return;
   }
 
+  if (f.t === 'hoop') {
+    // canasta de baloncesto: poste, tablero, aro naranja y red
+    plzRect(c, cx - 1, base - 30, 3, 30, '#4a5570', '#05070f');       // poste
+    plzRect(c, cx - 9, base - 44, 18, 13, '#eef2fb', '#05070f');      // tablero
+    plzRect(c, cx - 4, base - 40, 8, 6, '#c9d3ec', '#8a97b8');        // recuadro interior
+    c.fillStyle = '#f0801e'; c.fillRect(cx - 5, base - 34, 10, 2);    // aro
+    c.fillStyle = 'rgba(255,255,255,.85)';                            // red
+    for (let nx = -4; nx <= 4; nx += 2) c.fillRect(cx + nx, base - 32, 1, 4);
+    c.fillStyle = '#f0801e'; c.fillRect(cx + 2, base - 30, 4, 4);     // balón apoyado
+    return;
+  }
+
   if (f.t === 'djbooth') {
     // cabina del DJ: mesa con platos y luces al ritmo
     const on = plaza.radio && plaza.radio.playing;
@@ -5271,6 +5712,24 @@ function plzDraw(now) {
   for (const e of plaza.ents.values()) items.push({ d: e.x + e.y, draw: () => plzDrawAvatar(e, now) });
   items.sort((a, b) => a.d - b.d);
   for (const it of items) it.draw();
+
+  // indicador flotante sobre el objeto interactivo de la sala (vida + descubribilidad del minijuego)
+  const pact = PLZ_ACTIVITY[plaza.roomId];
+  if (pact) {
+    const spot = plzR.furn.find(f => f.t === pact.furn);
+    if (spot) {
+      const p = plzIso(spot.i, spot.j);
+      const bob = Math.sin(now / 380) * 2.5;
+      const yy = p.y + (pact.furn === 'sea' ? -6 : -46) + bob;
+      const pulse = 0.5 + 0.5 * Math.sin(now / 460);
+      ctx.save();
+      ctx.beginPath(); ctx.arc(p.x, yy, 12 + pulse * 2, 0, 7); ctx.fillStyle = `rgba(120,160,255,${0.10 + 0.10 * pulse})`; ctx.fill();
+      ctx.beginPath(); ctx.arc(p.x, yy, 11, 0, 7); ctx.fillStyle = 'rgba(8,10,20,.92)'; ctx.fill();
+      ctx.lineWidth = 1.5; ctx.strokeStyle = `rgba(140,180,255,${0.55 + 0.45 * pulse})`; ctx.stroke();
+      ctx.font = '13px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(pact.icon, p.x, yy + 1);
+      ctx.restore();
+    }
+  }
 
   // viñeta suave en los bordes (profundidad cinematográfica) — coordenadas de pantalla
   ctx.setTransform(1, 0, 0, 1, 0, 0);

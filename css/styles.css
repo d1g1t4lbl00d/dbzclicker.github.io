@@ -4393,3 +4393,31 @@ html { touch-action: manipulation; }
 .pk-lb-row.me .pk-pts { color: #eaffef; }
 .pk-over-actions { margin-top: 16px; display: flex; gap: 10px; }
 .pk-over-actions .btn { flex: 1; }
+
+/* ===== PerkyDance — carriles ===== */
+.pk-lanes { gap: 10px; }
+.pk-lanes .pk-btn { width: 60px; height: 56px; font-size: 22px; font-weight: 900; }
+
+/* ===== PerkyBeats — caja de ritmos ===== */
+.pb-grid { width: min(94vw, 460px); display: flex; flex-direction: column; gap: 5px; padding: 12px; border-radius: 14px;
+  background: linear-gradient(180deg, rgba(20,24,44,.7), rgba(12,15,30,.7)); border: 1px solid rgba(96,140,255,.18); box-shadow: 0 16px 50px rgba(0,0,0,.5); }
+.pb-row { display: flex; align-items: center; gap: 8px; }
+.pb-lab { flex: none; width: 52px; font-size: 10px; font-weight: 800; letter-spacing: .04em; text-align: right; font-family: 'Courier New', monospace; }
+.pb-cells { flex: 1; display: grid; grid-template-columns: repeat(16, 1fr); gap: 3px; }
+.pb-cell { aspect-ratio: 1; border: none; border-radius: 4px; background: rgba(255,255,255,.06); cursor: pointer; padding: 0;
+  transition: background .08s, transform .06s, box-shadow .08s; }
+.pb-cell.beat { background: rgba(255,255,255,.11); }
+.pb-cell.on { background: var(--cc); box-shadow: 0 0 8px color-mix(in srgb, var(--cc) 60%, transparent); }
+.pb-cell.play { outline: 2px solid rgba(255,255,255,.75); outline-offset: -1px; transform: scale(1.06); }
+.pb-cell.on.play { box-shadow: 0 0 14px var(--cc); }
+.pb-ctrl { display: flex; align-items: center; gap: 12px; margin-top: 2px; flex-wrap: wrap; justify-content: center; }
+.pb-play { width: 62px; height: 50px; font-size: 22px; }
+.pb-play.on { background: linear-gradient(180deg, #2dc878, #1ea864); color: #04150c; }
+.pb-sm { width: 50px; height: 46px; font-size: 20px; }
+.pb-tempo { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 10px; font-weight: 800; color: #8fa0c8; font-family: 'Courier New', monospace; }
+.pb-tempo input[type=range] { width: 130px; accent-color: var(--accent, #3e57fc); }
+
+@media (max-width: 480px) {
+  .pb-lab { width: 42px; font-size: 9px; }
+  .pb-cells { gap: 2px; }
+}
