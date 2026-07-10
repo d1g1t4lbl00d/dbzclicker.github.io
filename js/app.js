@@ -4118,10 +4118,10 @@ const PLZ_ROOMS = {
       { t: 'lamp', i: 0, j: 5 }, { t: 'lamp', i: 9, j: 5 },
       { t: 'bench', i: 2, j: 8, back: 'nw' }, { t: 'bench', i: 3, j: 8, back: 'nw' },
       { t: 'stool', i: 7, j: 8 }, { t: 'plant', i: 0, j: 9 }, { t: 'plant', i: 9, j: 9 },
-      { t: 'portal', i: 0, j: 3, to: 'estudio', spawn: [5, 8], label: '🎙️ Estudio', col: '#e0507a' },
-      { t: 'portal', i: 9, j: 3, to: 'azotea', spawn: [5, 8], label: '🌆 Azotea', col: '#f0a13e' },
-      { t: 'portal', i: 0, j: 7, to: 'arcade', spawn: [5, 8], label: '🎮 Arcade', col: '#2dc878' },
-      { t: 'portal', i: 9, j: 7, to: 'playa', spawn: [5, 8], label: '🌊 Playa', col: '#12c2c2' },
+      { t: 'portal', i: 0, j: 3, to: 'estudio', spawn: [5, 8], label: 'Estudio', col: '#e0507a' },
+      { t: 'portal', i: 9, j: 3, to: 'azotea', spawn: [5, 8], label: 'Azotea', col: '#f0a13e' },
+      { t: 'portal', i: 0, j: 7, to: 'arcade', spawn: [5, 8], label: 'Arcade', col: '#2dc878' },
+      { t: 'portal', i: 9, j: 7, to: 'playa', spawn: [5, 8], label: 'Playa', col: '#12c2c2' },
     ],
   },
   azotea: {
@@ -4135,7 +4135,7 @@ const PLZ_ROOMS = {
       { t: 'sofa', i: 1, j: 4, back: 'nw' }, { t: 'sofa', i: 1, j: 5, back: 'nw' },
       { t: 'pool', i: 6, j: 5 }, { t: 'pool', i: 7, j: 5 }, { t: 'pool', i: 6, j: 6 }, { t: 'pool', i: 7, j: 6 },
       { t: 'hoop', i: 4, j: 8 }, { t: 'lamp', i: 9, j: 8 }, { t: 'plant', i: 0, j: 8 },
-      { t: 'portal', i: 5, j: 9, to: 'plaza', spawn: [5, 6], label: '↓ Bajar a la Plaza', col: '#27a9ff' },
+      { t: 'portal', i: 5, j: 9, to: 'plaza', spawn: [5, 6], label: 'Plaza', col: '#27a9ff' },
     ],
   },
   estudio: {
@@ -4148,7 +4148,7 @@ const PLZ_ROOMS = {
       { t: 'rack', i: 3, j: 0 }, { t: 'rack', i: 6, j: 0 },
       { t: 'couch', i: 1, j: 5, back: 'nw' }, { t: 'couch', i: 2, j: 5, back: 'nw' }, { t: 'couch', i: 3, j: 5, back: 'nw' },
       { t: 'neon', i: 9, j: 3 }, { t: 'plant', i: 0, j: 8 },
-      { t: 'portal', i: 5, j: 9, to: 'plaza', spawn: [1, 6], label: '↓ Salir a la Plaza', col: '#27a9ff' },
+      { t: 'portal', i: 5, j: 9, to: 'plaza', spawn: [1, 6], label: 'Plaza', col: '#27a9ff' },
     ],
   },
   arcade: {
@@ -4161,7 +4161,7 @@ const PLZ_ROOMS = {
       { t: 'neon', i: 4, j: 0 }, { t: 'neon', i: 5, j: 0 },
       { t: 'stool', i: 3, j: 6 }, { t: 'stool', i: 6, j: 6 }, { t: 'table', i: 4, j: 6 },
       { t: 'plant', i: 0, j: 8 }, { t: 'plant', i: 9, j: 8 },
-      { t: 'portal', i: 5, j: 9, to: 'plaza', spawn: [1, 6], label: '↓ Salir a la Plaza', col: '#27a9ff' },
+      { t: 'portal', i: 5, j: 9, to: 'plaza', spawn: [1, 6], label: 'Plaza', col: '#27a9ff' },
     ],
   },
   playa: {
@@ -4174,7 +4174,7 @@ const PLZ_ROOMS = {
       { t: 'bar', i: 4, j: 2 }, { t: 'bar', i: 5, j: 2 }, { t: 'stool', i: 4, j: 3 }, { t: 'stool', i: 5, j: 3 },
       { t: 'umbrella', i: 2, j: 6 }, { t: 'umbrella', i: 7, j: 6 },
       { t: 'stool', i: 2, j: 7 }, { t: 'stool', i: 7, j: 7 },
-      { t: 'portal', i: 5, j: 9, to: 'plaza', spawn: [5, 6], label: '↓ Volver a la Plaza', col: '#6e2df5' },
+      { t: 'portal', i: 5, j: 9, to: 'plaza', spawn: [5, 6], label: 'Plaza', col: '#6e2df5' },
     ],
   },
 };
@@ -4182,11 +4182,11 @@ const PLZ_ROOMS = {
 // Objeto interactivo de cada sala: al tocarlo se abre su minijuego/actividad.
 // (Las funciones openPerky* están declaradas más abajo — hoisting las hace accesibles.)
 const PLZ_ACTIVITY = {
-  plaza:   { furn: 'djbooth', icon: '🕺', open: () => openPerkyDance(),    w: 13, top: 44, hint: '🎧 Toca la cabina para bailar en PerkyDance' },
-  estudio: { furn: 'djbooth', icon: '🎹', open: () => openPerkyBeats(),    w: 13, top: 44, hint: '🎹 Toca la mesa para crear beats en PerkyBeats' },
-  azotea:  { furn: 'hoop',    icon: '🏀', open: () => openPerkyHoops(),     w: 14, top: 52, hint: '🏀 Toca la canasta para jugar a PerkyHoops' },
-  arcade:  { furn: 'arcade',  icon: '🎮', open: () => openPerkyInvaders(),  w: 11, top: 40, hint: '🎮 Toca una recreativa para jugar a PerkyInvaders' },
-  playa:   { furn: 'sea',     icon: '🎣', open: () => openPerkyFish(),      w: 16, top: 22, bot: 14, hint: '🎣 Toca el mar para pescar en PerkyFish' },
+  plaza:   { furn: 'djbooth', open: () => openPerkyDance(),    w: 13, top: 44, hint: 'Toca la cabina para bailar en PerkyDance' },
+  estudio: { furn: 'djbooth', open: () => openPerkyBeats(),    w: 13, top: 44, hint: 'Toca la mesa para crear beats en PerkyBeats' },
+  azotea:  { furn: 'hoop',    open: () => openPerkyHoops(),     w: 14, top: 52, hint: 'Toca la canasta para jugar a PerkyHoops' },
+  arcade:  { furn: 'arcade',  open: () => openPerkyInvaders(),  w: 11, top: 40, hint: 'Toca una recreativa para jugar a PerkyInvaders' },
+  playa:   { furn: 'sea',     open: () => openPerkyFish(),      w: 16, top: 22, bot: 14, hint: 'Toca el mar para pescar en PerkyFish' },
 };
 
 let plaza = null;          // runtime del render (solo mientras la vista está abierta)
@@ -4233,7 +4233,7 @@ function plzPath(from, to) {
 function plzEntity(meta, id) {
   const e = {
     id, username: meta.username || 'bro', name: meta.name || meta.username || 'bro',
-    accent: meta.accent || '#3e57fc', x: meta.i ?? 5, y: meta.j ?? 5,
+    accent: meta.accent || '#3e57fc', hat: meta.hat || 'none', x: meta.i ?? 5, y: meta.j ?? 5,
     path: [], bubble: null, phase: Math.random() * 6.28, img: null, imgOk: false,
   };
   if (meta.avatar_url) {
@@ -4304,7 +4304,7 @@ function plzJoinRoom(id, si, sj) {
       if (e) e.emote = { kind: payload.kind, until: performance.now() + dur, target: payload.target || null };
       if (payload.target === state.user.id) {
         const who = e ? e.name : 'Alguien';
-        if (payload.kind === 'wave') toast(`👋 ${who} te saluda`);
+        if (payload.kind === 'wave') toast(`${who} te saluda`);
         if (payload.kind === 'fist') { toast(`🤜🤛 ${who} te la choca`); const me2 = plaza.ents.get(state.user.id); if (me2) me2.emote = { kind: 'fistback', until: performance.now() + 2600 }; haptic(20); }
       }
     })
@@ -4315,7 +4315,7 @@ function plzJoinRoom(id, si, sj) {
 function plzTrack() {
   if (!plaza || !plaza.chan) return;
   const me = plaza.me;
-  try { plaza.chan.track({ username: me.username, name: me.name, avatar_url: state.profile.avatar_url, accent: me.accent, i: Math.round(me.x), j: Math.round(me.y) }); } catch (_) {}
+  try { plaza.chan.track({ username: me.username, name: me.name, avatar_url: state.profile.avatar_url, accent: me.accent, hat: me.hat, i: Math.round(me.x), j: Math.round(me.y) }); } catch (_) {}
 }
 
 function plzSyncRoster(st) {
@@ -4326,7 +4326,7 @@ function plzSyncRoster(st) {
     const meta = metas[metas.length - 1] || {};
     let e = plaza.ents.get(uid);
     if (!e) { e = plzEntity(meta, uid); plaza.ents.set(uid, e); }
-    else if (uid !== state.user.id) { if (!e.path.length) { e.x = meta.i ?? e.x; e.y = meta.j ?? e.y; } if (meta.accent) e.accent = meta.accent; }
+    else if (uid !== state.user.id) { if (!e.path.length) { e.x = meta.i ?? e.x; e.y = meta.j ?? e.y; } if (meta.accent) e.accent = meta.accent; if (meta.hat) e.hat = meta.hat; }
   }
   // quitar a quien ya no está — PERO nunca a mí mismo (mi presencia puede tardar en sincronizar)
   for (const uid of [...plaza.ents.keys()]) if (uid !== state.user.id && !seen.has(uid)) plaza.ents.delete(uid);
@@ -4337,28 +4337,32 @@ async function renderPlaza() {
   setActiveNav('plaza');
   const main = $('main');
   main.innerHTML = `
-    <div class="main-head"><div><h2 id="plazaRoomName">La Plaza</h2><div class="sub" id="plazaRoomSub">Pasea, saluda y conecta con la escena</div></div>
-      <div style="display:flex;gap:8px;align-items:center">
-        <button class="btn sm" id="plazaDj">🎧 DJ</button>
-        <span class="plaza-live"><span class="dot-online"></span> <b id="plazaLiveN">1</b> aquí</span>
-      </div></div>
+    <div class="main-head plaza-head">
+      <div class="plaza-head-title"><h2 id="plazaRoomName">La Plaza</h2><div class="sub" id="plazaRoomSub">Pasea, saluda y conecta con la escena</div></div>
+      <div class="plaza-head-actions">
+        <span class="plaza-live" title="Personas aquí ahora"><span class="dot-online"></span> <b id="plazaLiveN">1</b></span>
+        <button class="plaza-dj" id="plazaDj" title="Poner música para la plaza"><svg fill="none" stroke="currentColor"><use href="#i-headphones"/></svg><span>DJ</span></button>
+      </div>
+    </div>
     <div class="plaza-wrap" id="plazaWrap">
       <canvas class="plaza-canvas" id="plazaCanvas"></canvas>
       <div class="plaza-np hidden" id="plazaNp"></div>
       <div class="plaza-menu hidden" id="plazaMenu"></div>
+      <div class="plaza-react-tray hidden" id="plazaReactTray"></div>
     </div>
-    <div class="plaza-bar" id="plazaBar">
-      <button class="pbar-btn" data-act="dance" title="Bailar">💃</button>
-      <button class="pbar-btn" data-act="wave" title="Saludar">👋</button>
-      <button class="pbar-btn" data-act="react" title="Reacciones">😀</button>
-      <button class="pbar-btn" data-act="custom" title="Personalizar mi avatar">🎨</button>
+    <div class="plaza-dock">
+      <div class="plaza-bar" id="plazaBar">
+        <button class="pbar-btn" data-act="dance"><svg fill="none" stroke="currentColor"><use href="#i-music"/></svg><span>Bailar</span></button>
+        <button class="pbar-btn" data-act="wave"><svg fill="none" stroke="currentColor"><use href="#i-hand"/></svg><span>Saludar</span></button>
+        <button class="pbar-btn" data-act="react"><svg fill="none" stroke="currentColor"><use href="#i-smile"/></svg><span>Reacción</span></button>
+        <button class="pbar-btn" data-act="custom"><svg fill="none" stroke="currentColor"><use href="#i-palette"/></svg><span>Estilo</span></button>
+      </div>
+      <form class="plaza-chat" id="plazaChat">
+        <input type="text" id="plazaMsg" maxlength="140" placeholder="Di algo a la plaza…" autocomplete="off" />
+        <button class="btn primary plaza-send" type="submit" aria-label="Enviar"><svg fill="none" stroke="#fff"><use href="#i-send"/></svg></button>
+      </form>
     </div>
-    <div class="plaza-react-tray hidden" id="plazaReactTray"></div>
-    <form class="plaza-chat" id="plazaChat">
-      <input type="text" id="plazaMsg" maxlength="140" placeholder="Di algo a la plaza…" autocomplete="off" />
-      <button class="btn primary" type="submit" aria-label="Hablar"><svg style="width:16px;height:16px" fill="none" stroke="#fff"><use href="#i-send"/></svg></button>
-    </form>
-    <div class="plaza-hint">Camina tocando el suelo · siéntate en bancos y taburetes · toca a alguien para interactuar · usa la barra para bailar, reaccionar o personalizarte</div>`;
+    <div class="plaza-hint">Toca el suelo para caminar · toca a alguien para saludar o ver su perfil · usa la barra para bailar, reaccionar o cambiar tu estilo</div>`;
 
   const canvas = $('plazaCanvas'), ctx = canvas.getContext('2d');
   let radioChan = null;
@@ -4371,6 +4375,7 @@ async function renderPlaza() {
   const me = plzEntity({
     username: state.profile.username, name: state.profile.display_name || state.profile.username,
     avatar_url: state.profile.avatar_url, accent: (state.profile.theme && state.profile.theme.accent) || '#3e57fc',
+    hat: (state.profile.theme && state.profile.theme.plaza_hat) || 'none',
     i: si, j: sj,
   }, state.user.id);
 
@@ -4406,12 +4411,12 @@ async function renderPlaza() {
     menuEl.innerHTML = `
       <div class="pm-head">${esc(ent.name)}</div>
       ${self ? `
-        <button data-a="dance">💃 Bailar</button>
-        <button data-a="wave">👋 Saludar</button>` : `
-        <button data-a="profile">👤 Ver perfil</button>
-        <button data-a="dm">💬 Mensaje</button>
-        <button data-a="wave">👋 Saludar</button>
-        <button data-a="fist">🤜 Chocarla</button>`}
+        <button data-a="dance"><svg fill="none" stroke="currentColor"><use href="#i-music"/></svg>Bailar</button>
+        <button data-a="wave"><svg fill="none" stroke="currentColor"><use href="#i-hand"/></svg>Saludar</button>` : `
+        <button data-a="profile"><svg fill="none" stroke="currentColor"><use href="#i-people"/></svg>Ver perfil</button>
+        <button data-a="dm"><svg fill="none" stroke="currentColor"><use href="#i-comment"/></svg>Mensaje</button>
+        <button data-a="wave"><svg fill="none" stroke="currentColor"><use href="#i-hand"/></svg>Saludar</button>
+        <button data-a="fist"><svg fill="none" stroke="currentColor"><use href="#i-hand"/></svg>Chocarla</button>`}
       <div class="pm-row">
         <button data-a="react" data-e="❤️">❤️</button>
         <button data-a="react" data-e="🔥">🔥</button>
@@ -4500,7 +4505,7 @@ async function renderPlaza() {
       if (a === 'dance') { const on = me.emote && me.emote.kind === 'dance'; if (on) { me.emote = null; sendEmote('idle'); } else sendEmote('dance'); b.classList.toggle('on', !on); }
       else if (a === 'wave') sendEmote('wave');
       else if (a === 'react') tray.classList.toggle('hidden');
-      else if (a === 'custom') openPlazaCustomizer(() => { const m2 = state.profile.theme && state.profile.theme.accent; if (m2) me.accent = m2; try { plzTrack(); } catch (_) {} });
+      else if (a === 'custom') openPlazaCustomizer(() => { const th = state.profile.theme || {}; if (th.accent) me.accent = th.accent; me.hat = th.plaza_hat || 'none'; try { plzTrack(); } catch (_) {} });
     });
   } catch (err) { console.warn('plaza bar', err); }
 
@@ -4558,7 +4563,7 @@ async function renderPlaza() {
       if (t === '__stop__') { stopPlazaRadio(); return; }
       const { error } = await sb.from('plaza_radio').update({ track_id: t.id, started_at: new Date().toISOString(), set_by: state.user.id }).eq('id', 1);
       if (error) { toast('No se pudo poner la música'); return; }
-      toast('🎧 Pinchando para toda la plaza');
+      toast('Pinchando para toda la plaza');
       sendEmote('react', '🎶');
     }, plaza.radio.playing);
   } catch (err) { console.warn('plaza radio', err); }
@@ -4591,32 +4596,55 @@ async function renderPlaza() {
 
 function plzIso(x, y) { return { x: (x - y) * PLZ.TW / 2, y: (x + y) * PLZ.TH / 2 }; }
 
-// personalizador del avatar de la Plaza (color del personaje)
+// personalizador del avatar de la Plaza (color + accesorio, con vista previa)
 function openPlazaCustomizer(onChange) {
   const COLORS = ['#3e57fc', '#27a9ff', '#6e2df5', '#e0507a', '#2dc878', '#f0a13e', '#ff5d5d', '#12c2c2', '#b06eff', '#ffd23e', '#8f99ad', '#111827'];
-  const cur = (state.profile.theme && state.profile.theme.accent) || '#3e57fc';
-  const m = openModal(`<div class="modal-head"><h3>🎨 Personaliza tu avatar</h3><button class="close">&times;</button></div>
+  let curAccent = (state.profile.theme && state.profile.theme.accent) || '#3e57fc';
+  let curHat = (state.profile.theme && state.profile.theme.plaza_hat) || 'none';
+  const m = openModal(`<div class="modal-head"><h3><svg class="mh-ic" fill="none" stroke="currentColor"><use href="#i-palette"/></svg> Personaliza tu avatar</h3><button class="close">&times;</button></div>
     <div class="modal-body">
-      <p style="color:var(--ink-soft);font-size:13px;margin-top:0">Elige el color de tu personaje en la Plaza. Tu foto de perfil es la cara.</p>
-      <div class="pcz-grid" id="pczGrid">${COLORS.map(col => `<button class="pcz-sw ${col === cur ? 'on' : ''}" data-c="${col}" style="background:${col}"></button>`).join('')}</div>
+      <div class="pcz-preview"><canvas id="pczCanvas" width="44" height="64"></canvas></div>
+      <div class="pcz-sec"><div class="pcz-lbl">Color</div>
+        <div class="pcz-grid" id="pczGrid">${COLORS.map(col => `<button class="pcz-sw ${col === curAccent ? 'on' : ''}" data-c="${col}" style="background:${col}" aria-label="Color"></button>`).join('')}</div>
+      </div>
+      <div class="pcz-sec"><div class="pcz-lbl">Accesorio</div>
+        <div class="pcz-hats" id="pczHats">${PLZ_HATS.map(h => `<button class="pcz-hat ${h === curHat ? 'on' : ''}" data-h="${h}">${PLZ_HAT_NAMES[h]}</button>`).join('')}</div>
+      </div>
     </div>`);
-  m.querySelectorAll('.pcz-sw').forEach(b => b.onclick = async () => {
-    const col = b.dataset.c;
-    m.querySelectorAll('.pcz-sw').forEach(x => x.classList.toggle('on', x === b));
-    const theme = Object.assign({}, state.profile.theme || {}, { accent: col });
+  const pc = m.querySelector('#pczCanvas'), pctx = pc.getContext('2d'); pctx.imageSmoothingEnabled = false;
+  const PW = 44, PH = 64; let prevImg = null, prevOk = false;
+  if (state.profile.avatar_url) { const im = new Image(); im.crossOrigin = 'anonymous'; im.onload = () => { prevImg = im; prevOk = true; drawPreview(); }; im.src = czUrl(state.profile.avatar_url); }
+  function drawPreview() {
+    pctx.clearRect(0, 0, PW, PH);
+    const e = { accent: curAccent, hat: curHat, name: state.profile.display_name || state.profile.username || '?', img: prevImg, imgOk: prevOk };
+    const cx = Math.round(PW / 2), by = PH - 28;
+    pctx.fillStyle = 'rgba(0,0,0,.3)'; pctx.beginPath(); pctx.ellipse(cx, PH - 8, 12, 4, 0, 0, 7); pctx.fill();
+    plzRect(pctx, cx - 5, by + 12, 4, 8, '#10142a', '#05070f'); plzRect(pctx, cx + 1, by + 12, 4, 8, '#10142a', '#05070f');
+    plzRect(pctx, cx - 7, by, 14, 13, e.accent, '#05070f'); pctx.fillStyle = 'rgba(255,255,255,.22)'; pctx.fillRect(cx - 7, by, 14, 2);
+    plzRect(pctx, cx - 10, by + 1, 3, 9, e.accent, '#05070f'); plzRect(pctx, cx + 7, by + 1, 3, 9, e.accent, '#05070f');
+    const hs = 14, hx = cx - hs / 2, hy = by - hs - 1;
+    plzRect(pctx, hx, hy, hs, hs, '#1a2138', '#05070f');
+    if (e.imgOk) { try { pctx.drawImage(e.img, hx + 1, hy + 1, hs - 2, hs - 2); } catch (_) {} }
+    else { pctx.fillStyle = e.accent; pctx.fillRect(hx + 1, hy + 1, hs - 2, hs - 2); pctx.fillStyle = '#fff'; pctx.font = '700 9px monospace'; pctx.textAlign = 'center'; pctx.textBaseline = 'middle'; pctx.fillText((e.name || '?').slice(0, 1).toUpperCase(), cx, hy + hs / 2 + 1); }
+    if (e.hat !== 'none') plzDrawHat(pctx, e, cx, hx, hy, hs, performance.now());
+  }
+  drawPreview();
+  const save = async () => {
+    const theme = Object.assign({}, state.profile.theme || {}, { accent: curAccent, plaza_hat: curHat });
     state.profile.theme = theme;
     try { await sb.from('profiles').update({ theme }).eq('id', state.user.id); } catch (_) {}
     onChange && onChange();
-    toast('Color actualizado ✓');
-  });
+  };
+  m.querySelectorAll('.pcz-sw').forEach(b => b.onclick = () => { curAccent = b.dataset.c; m.querySelectorAll('.pcz-sw').forEach(x => x.classList.toggle('on', x === b)); haptic(6); drawPreview(); save(); });
+  m.querySelectorAll('.pcz-hat').forEach(b => b.onclick = () => { curHat = b.dataset.h; m.querySelectorAll('.pcz-hat').forEach(x => x.classList.toggle('on', x === b)); haptic(6); drawPreview(); save(); });
 }
 
 // selector de pista para pinchar en la Plaza (busca por título)
 function openPlazaTrackPicker(onPick, playing) {
-  const m = openModal(`<div class="modal-head"><h3>🎧 Pon música para la plaza</h3><button class="close">&times;</button></div>
+  const m = openModal(`<div class="modal-head"><h3><svg class="mh-ic" fill="none" stroke="currentColor"><use href="#i-headphones"/></svg> Pon música para la plaza</h3><button class="close">&times;</button></div>
     <div class="modal-body">
       <p style="color:var(--ink-soft);font-size:13px;margin-top:0">Sonará <b>sincronizada</b> para todos los que estén ahora en la Plaza.</p>
-      ${playing ? `<button class="btn danger-btn" id="pdjStop" style="width:100%;margin-bottom:10px">🔇 Quitar la música (parar para todos)</button>` : ''}
+      ${playing ? `<button class="btn danger-btn" id="pdjStop" style="width:100%;margin-bottom:10px;display:flex;align-items:center;justify-content:center;gap:8px"><svg style="width:16px;height:16px" fill="none" stroke="currentColor"><use href="#i-vol-off"/></svg> Quitar la música (parar para todos)</button>` : ''}
       <div class="convo-search"><svg fill="none" stroke="currentColor"><use href="#i-search"/></svg><input type="text" id="pdjSearch" placeholder="Buscar pista o artista…" autocomplete="off"></div>
       <div id="pdjList" style="margin-top:10px;display:flex;flex-direction:column;gap:6px"></div>
     </div>`);
@@ -4931,7 +4959,7 @@ function openPerkyDance() {
           <div class="pk-pick-list" id="pkPickList"></div>
         </div>
       </div>
-      <div class="pk-now" id="pkNow">🎧 Cargando pista de UnderBro…</div>
+      <div class="pk-now" id="pkNow">Cargando pista de UnderBro…</div>
       <div class="pk-ctrl pk-lanes">
         <button class="pk-btn" data-l="0" style="color:${LC[0]}">◀</button>
         <button class="pk-btn" data-l="1" style="color:${LC[1]}">▼</button>
@@ -5555,6 +5583,54 @@ function plzRect(c, x, y, w, h, fill, outline) {
   c.fillStyle = fill; c.fillRect(Math.round(x), Math.round(y), w, h);
 }
 
+// accesorios de cabeza para el avatar de la Plaza (pixel-art)
+const PLZ_HATS = ['none', 'cap', 'beanie', 'phones', 'crown', 'band', 'halo', 'party'];
+const PLZ_HAT_NAMES = { none: 'Sin nada', cap: 'Gorra', beanie: 'Gorro', phones: 'Auriculares', crown: 'Corona', band: 'Cinta', halo: 'Aura', party: 'Fiesta' };
+function plzDrawHat(c, e, cx, hx, hy, hs, now) {
+  const acc = e.accent, E = '#05070f';
+  cx = Math.round(cx); hx = Math.round(hx); hy = Math.round(hy);
+  switch (e.hat) {
+    case 'cap':
+      plzRect(c, hx - 1, hy - 3, hs + 2, 4, acc, E);
+      plzRect(c, hx + hs - 1, hy - 1, 6, 2, acc, E);            // visera
+      c.fillStyle = 'rgba(255,255,255,.25)'; c.fillRect(hx + 2, hy - 3, 4, 1);
+      break;
+    case 'beanie':
+      plzRect(c, hx - 1, hy - 4, hs + 2, 5, acc, E);
+      c.fillStyle = 'rgba(255,255,255,.28)'; c.fillRect(hx - 1, hy, hs + 2, 2);   // doblez
+      plzRect(c, cx - 1, hy - 6, 2, 2, '#fff', E);              // pompón
+      break;
+    case 'phones':
+      plzRect(c, hx + 2, hy - 3, hs - 4, 2, '#2a3350', E);      // diadema
+      plzRect(c, hx - 2, hy + 2, 3, 6, '#2a3350', E);           // copa izq
+      plzRect(c, hx + hs - 1, hy + 2, 3, 6, '#2a3350', E);      // copa dch
+      c.fillStyle = acc; c.fillRect(hx - 2, hy + 4, 3, 2); c.fillRect(hx + hs - 1, hy + 4, 3, 2);
+      break;
+    case 'crown':
+      c.fillStyle = '#ffd23e'; for (let k = 0; k < 4; k++) c.fillRect(hx + 1 + k * 4, hy - 4 + (k % 2 ? 1 : 0), 3, 4);
+      plzRect(c, hx + 1, hy - 1, hs - 2, 2, '#ffb800', E);
+      c.fillStyle = '#ff5d5d'; c.fillRect(cx - 1, hy - 1, 2, 2);
+      break;
+    case 'band':
+      plzRect(c, hx - 1, hy + 3, hs + 2, 3, acc, E);
+      plzRect(c, hx + hs, hy + 4, 2, 5, acc, E);                // nudo colgando
+      break;
+    case 'halo': {
+      const yy = hy - 5 + Math.round(Math.sin(now / 500) * 1);
+      c.save(); c.shadowColor = 'rgba(255,229,138,.8)'; c.shadowBlur = 6; c.strokeStyle = '#ffe58a'; c.lineWidth = 1.5;
+      c.beginPath(); c.ellipse(cx, yy, 8, 3, 0, 0, 7); c.stroke(); c.restore();
+      break;
+    }
+    case 'party': {   // gorro de fiesta cónico
+      c.fillStyle = acc; c.beginPath(); c.moveTo(cx, hy - 8); c.lineTo(hx + 2, hy + 1); c.lineTo(hx + hs - 2, hy + 1); c.closePath(); c.fill();
+      c.strokeStyle = E; c.lineWidth = 1; c.stroke();
+      c.fillStyle = '#fff'; c.fillRect(cx - 1, hy - 9, 2, 2);
+      c.fillStyle = 'rgba(255,255,255,.5)'; c.fillRect(cx - 3, hy - 4, 2, 1); c.fillRect(cx + 1, hy - 1, 2, 1);
+      break;
+    }
+  }
+}
+
 function plzPrerenderFloor() {
   const off = document.createElement('canvas');
   off.width = plaza.canvas.width; off.height = plaza.canvas.height;
@@ -5998,7 +6074,9 @@ function plzDraw(now) {
       ctx.beginPath(); ctx.arc(p.x, yy, 12 + pulse * 2, 0, 7); ctx.fillStyle = `rgba(120,160,255,${0.10 + 0.10 * pulse})`; ctx.fill();
       ctx.beginPath(); ctx.arc(p.x, yy, 11, 0, 7); ctx.fillStyle = 'rgba(8,10,20,.92)'; ctx.fill();
       ctx.lineWidth = 1.5; ctx.strokeStyle = `rgba(140,180,255,${0.55 + 0.45 * pulse})`; ctx.stroke();
-      ctx.font = '13px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(pact.icon, p.x, yy + 1);
+      // triángulo de "play" (indica que se puede jugar) — sin emojis
+      ctx.beginPath(); ctx.moveTo(p.x - 3, yy - 4.5); ctx.lineTo(p.x - 3, yy + 4.5); ctx.lineTo(p.x + 5, yy); ctx.closePath();
+      ctx.fillStyle = `rgba(200,220,255,${0.75 + 0.25 * pulse})`; ctx.fill();
       ctx.restore();
     }
   }
@@ -6075,6 +6153,8 @@ function plzDrawAvatar(e, now) {
     c.fillStyle = '#fff'; c.font = '700 9px monospace'; c.textAlign = 'center'; c.textBaseline = 'middle';
     c.fillText((e.name || '?').slice(0, 1).toUpperCase(), cx, hy + hs / 2 + 1);
   }
+  // accesorio de cabeza
+  if (e.hat && e.hat !== 'none') plzDrawHat(c, e, cx, hx, hy, hs, now);
 
   // nombre (placa pixel)
   c.font = '700 7px monospace'; c.textAlign = 'center'; c.textBaseline = 'alphabetic';
