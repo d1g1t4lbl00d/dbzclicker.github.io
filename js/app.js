@@ -4684,18 +4684,19 @@ function openPlazaCustomizer(onChange) {
 
 // ===================== SALAS DE USUARIO: explorar, visitar y editar =====================
 const PLZ_EDIT_ITEMS = [
-  { t: 'plant', n: 'Planta' }, { t: 'tree', n: 'Árbol' }, { t: 'palm', n: 'Palmera' },
-  { t: 'sofa', n: 'Sofá' }, { t: 'couch', n: 'Diván' }, { t: 'bench', n: 'Banco' }, { t: 'stool', n: 'Taburete' },
-  { t: 'table', n: 'Mesa' }, { t: 'bar', n: 'Barra' }, { t: 'crate', n: 'Caja' }, { t: 'rack', n: 'Rack' },
-  { t: 'lamp', n: 'Farola' }, { t: 'neon', n: 'Neón' }, { t: 'spk', n: 'Altavoz' }, { t: 'djbooth', n: 'Cabina' },
-  { t: 'arcade', n: 'Recreativa' }, { t: 'hoop', n: 'Canasta' }, { t: 'vending', n: 'Máquina' },
-  { t: 'pool', n: 'Piscina' }, { t: 'sea', n: 'Mar' }, { t: 'umbrella', n: 'Sombrilla' }, { t: 'fountain', n: 'Fuente' },
-  { t: 'rug', n: 'Alfombra' }, { t: 'tv', n: 'Televisor' }, { t: 'books', n: 'Estantería' }, { t: 'cactus', n: 'Cactus' },
-  { t: 'barrel', n: 'Barril' }, { t: 'grill', n: 'Barbacoa' }, { t: 'disco', n: 'Bola de disco' }, { t: 'signneon', n: 'Cartel neón' },
-  { t: 'bonfire', n: 'Hoguera' }, { t: 'statue', n: 'Estatua' },
-  { t: 'jukebox', n: 'Jukebox' }, { t: 'poster', n: 'Cuadro' }, { t: 'trophy', n: 'Trofeo' }, { t: 'bush', n: 'Arbusto' },
-  { t: 'locker', n: 'Taquilla' }, { t: 'candle', n: 'Vela' }, { t: 'lava', n: 'Lámpara de lava' }, { t: 'clock', n: 'Reloj' },
+  { t: 'plant', n: 'Planta', c: 'Plantas' }, { t: 'tree', n: 'Árbol', c: 'Plantas' }, { t: 'palm', n: 'Palmera', c: 'Plantas' },
+  { t: 'cactus', n: 'Cactus', c: 'Plantas' }, { t: 'bush', n: 'Arbusto', c: 'Plantas' },
+  { t: 'sofa', n: 'Sofá', c: 'Asientos' }, { t: 'couch', n: 'Diván', c: 'Asientos' }, { t: 'bench', n: 'Banco', c: 'Asientos' }, { t: 'stool', n: 'Taburete', c: 'Asientos' },
+  { t: 'table', n: 'Mesa', c: 'Mesas' }, { t: 'bar', n: 'Barra', c: 'Mesas' },
+  { t: 'lamp', n: 'Farola', c: 'Luces' }, { t: 'neon', n: 'Neón', c: 'Luces' }, { t: 'signneon', n: 'Cartel', c: 'Luces' }, { t: 'candle', n: 'Vela', c: 'Luces' }, { t: 'lava', n: 'Lámpara', c: 'Luces' }, { t: 'bonfire', n: 'Hoguera', c: 'Luces' }, { t: 'disco', n: 'Bola disco', c: 'Luces' },
+  { t: 'spk', n: 'Altavoz', c: 'Música' }, { t: 'djbooth', n: 'Cabina', c: 'Música' }, { t: 'jukebox', n: 'Jukebox', c: 'Música' }, { t: 'rack', n: 'Rack', c: 'Música' },
+  { t: 'arcade', n: 'Recreativa', c: 'Juego' }, { t: 'hoop', n: 'Canasta', c: 'Juego' },
+  { t: 'pool', n: 'Piscina', c: 'Agua' }, { t: 'sea', n: 'Mar', c: 'Agua' }, { t: 'fountain', n: 'Fuente', c: 'Agua' }, { t: 'umbrella', n: 'Sombrilla', c: 'Agua' },
+  { t: 'rug', n: 'Alfombra', c: 'Deco' }, { t: 'tv', n: 'Televisor', c: 'Deco' }, { t: 'books', n: 'Estantería', c: 'Deco' }, { t: 'crate', n: 'Caja', c: 'Deco' },
+  { t: 'barrel', n: 'Barril', c: 'Deco' }, { t: 'grill', n: 'Barbacoa', c: 'Deco' }, { t: 'statue', n: 'Estatua', c: 'Deco' }, { t: 'vending', n: 'Máquina', c: 'Deco' },
+  { t: 'poster', n: 'Cuadro', c: 'Deco' }, { t: 'trophy', n: 'Trofeo', c: 'Deco' }, { t: 'locker', n: 'Taquilla', c: 'Deco' }, { t: 'clock', n: 'Reloj', c: 'Deco' },
 ];
+const PLZ_CATS = ['Asientos', 'Mesas', 'Plantas', 'Luces', 'Música', 'Deco', 'Agua', 'Juego'];
 const PLZ_FLOORS = [
   { a: '#161c33', b: '#121729', w: '#0d1122' }, { a: '#241b12', b: '#1c150e', w: '#161016' },
   { a: '#14182b', b: '#0f1322', w: '#0a0d18' }, { a: '#1a1030', b: '#140b26', w: '#0d0720' },
@@ -4766,47 +4767,81 @@ function plzHideEditFab() {
   const f = document.getElementById('plazaEditFab'); if (f) f.remove();
 }
 
-// ---- modo edición ----
+// ---- modo edición: catálogo visual estilo Habbo ----
 function plzEnterEdit() {
   if (!plaza || !plzR || !plzR.def.custom) return;
-  plaza.editing = true; plaza.editTool = PLZ_EDIT_ITEMS[0].t;
+  plaza.editing = true;
   plzHideEditFab();
   const dock = document.querySelector('.plaza-dock'); if (dock) dock.style.display = 'none';
   const hint = document.querySelector('.plaza-hint'); if (hint) hint.style.display = 'none';
   const old = document.getElementById('plazaEditor'); if (old) old.remove();
   const def = plzR.def;
-  if (!plzHasItem(plaza.editTool)) plaza.editTool = 'plant';
-  const floors = PLZ_FLOORS.map((f, i) => `<button class="ped-sw" data-floor="${i}" style="background:${f.a}" aria-label="Suelo"></button>`).join('');
-  const neons = PLZ_NEONS.map(c => `<button class="ped-sw ped-neon" data-neon="${c}" style="background:${c}" aria-label="Neón"></button>`).join('');
+  const ownedIn = (c) => PLZ_EDIT_ITEMS.filter(it => it.c === c && plzHasItem(it.t));
+  let cat = PLZ_CATS.find(c => ownedIn(c).length) || 'Asientos';
+  const first = ownedIn(cat)[0]; plaza.editTool = first ? first.t : 'plant';
+
   const ed = el(`<div class="plaza-editor" id="plazaEditor">
     <div class="ped-top">
       <input id="pedName" class="ped-name" maxlength="40" value="${esc(def.name)}" placeholder="Nombre de la sala">
-      <button class="btn sm" id="pedSave">Guardar</button>
-      <button class="btn sm ghost" id="pedExit">Salir</button>
+      <button class="ped-ico" id="pedInv" title="Inventario"><svg fill="none" stroke="currentColor"><use href="#i-files"/></svg></button>
+      <button class="ped-ico" id="pedShop" title="Tienda"><svg fill="none" stroke="currentColor"><use href="#i-cart"/></svg></button>
+      <button class="btn sm primary" id="pedSave">Guardar</button>
+      <button class="ped-ico" id="pedExit" title="Salir"><svg fill="none" stroke="currentColor"><use href="#i-x"/></svg></button>
     </div>
-    <div class="ped-lbl">Objetos <span>· toca una casilla para colocar</span></div>
-    <div class="ped-scroll" id="pedItems"></div>
-    <div class="ped-lbl">Suelo</div>
-    <div class="ped-scroll">${floors}</div>
-    <div class="ped-lbl">Neón</div>
-    <div class="ped-scroll">${neons}</div>
+    <div class="ped-cats" id="pedCats"></div>
+    <div class="ped-grid" id="pedGrid"></div>
   </div>`);
   const wrap = $('plazaWrap');
   wrap.parentNode.insertBefore(ed, wrap.nextSibling);
-  const itemsEl = ed.querySelector('#pedItems');
-  const renderItems = () => {
-    const owned = PLZ_EDIT_ITEMS.filter(it => plzHasItem(it.t));
-    const cnt = {}; for (const f of plzR.furn) if (f.t !== 'portal') cnt[f.t] = (cnt[f.t] || 0) + 1;
-    itemsEl.innerHTML = `<button class="ped-item ped-shop" data-shop="1"><svg fill="none" stroke="currentColor"><use href="#i-cart"/></svg> Tienda</button><button class="ped-item ped-inv" data-inv="1"><svg fill="none" stroke="currentColor"><use href="#i-files"/></svg> Inventario</button><button class="ped-item ped-erase ${plaza.editTool === 'erase' ? 'on' : ''}" data-tool="erase">Borrar</button>` +
-      owned.map(it => { const rem = PLZ_FREE_ITEMS.has(it.t) ? '' : ` <span class="ped-qty">${Math.max(0, plzQty(it.t) - (cnt[it.t] || 0))}</span>`; return `<button class="ped-item ${it.t === plaza.editTool ? 'on' : ''}" data-tool="${it.t}">${it.n}${rem}</button>`; }).join('');
-    itemsEl.querySelector('.ped-shop').onclick = () => openPlazaShop(renderItems);
-    itemsEl.querySelector('.ped-inv').onclick = () => openPlazaInventory(renderItems);
-    itemsEl.querySelectorAll('.ped-item[data-tool]').forEach(b => b.onclick = () => { plaza.editTool = b.dataset.tool; itemsEl.querySelectorAll('.ped-item').forEach(x => x.classList.toggle('on', x.dataset.tool === plaza.editTool)); haptic(5); });
+  const catsEl = ed.querySelector('#pedCats'), gridEl = ed.querySelector('#pedGrid');
+
+  const renderCats = () => {
+    catsEl.innerHTML = `<button class="ped-cat ${cat === 'erase' ? 'on' : ''}" data-cat="erase"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg>Quitar</button>`
+      + PLZ_CATS.map(c => `<button class="ped-cat ${cat === c ? 'on' : ''}" data-cat="${c}">${c}</button>`).join('')
+      + `<button class="ped-cat ${cat === 'style' ? 'on' : ''}" data-cat="style"><svg fill="none" stroke="currentColor"><use href="#i-palette"/></svg>Estilo</button>`;
+    catsEl.querySelectorAll('.ped-cat').forEach(b => b.onclick = () => { cat = b.dataset.cat; renderCats(); renderGrid(); haptic(5); const on = catsEl.querySelector('.ped-cat.on'); if (on) on.scrollIntoView({ inline: 'center', block: 'nearest' }); });
   };
-  plaza._renderPalette = renderItems;
-  renderItems();
-  ed.querySelectorAll('[data-floor]').forEach(b => b.onclick = () => { const f = PLZ_FLOORS[+b.dataset.floor]; def.floorA = f.a; def.floorB = f.b; def.wall = f.w; plzPrerenderFloor(); haptic(6); });
-  ed.querySelectorAll('[data-neon]').forEach(b => b.onclick = () => { def.neonA = b.dataset.neon; def.neonB = b.dataset.neon; plzPrerenderFloor(); haptic(6); });
+  const afterChange = () => { if (cat !== 'erase' && cat !== 'style' && !ownedIn(cat).length) cat = PLZ_CATS.find(c => ownedIn(c).length) || cat; renderCats(); renderGrid(); };
+  const renderGrid = () => {
+    gridEl.className = 'ped-grid';
+    if (cat === 'erase') {
+      plaza.editTool = 'erase';
+      gridEl.innerHTML = `<div class="ped-note"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg><div><b>Modo quitar</b><span>Toca un objeto de la sala para eliminarlo y recuperar la unidad.</span></div></div>`;
+      return;
+    }
+    if (cat === 'style') {
+      gridEl.className = 'ped-grid ped-style';
+      gridEl.innerHTML = `<div class="ped-slbl">Suelo y paredes</div><div class="ped-sw-row">${PLZ_FLOORS.map((f, i) => `<button class="ped-sw ${def.floorA === f.a ? 'on' : ''}" data-floor="${i}" style="background:linear-gradient(135deg,${f.a},${f.b})"></button>`).join('')}</div><div class="ped-slbl">Luz de neón</div><div class="ped-sw-row">${PLZ_NEONS.map(c => `<button class="ped-sw ped-neon ${def.neonA === c ? 'on' : ''}" data-neon="${c}" style="background:${c}"></button>`).join('')}</div>`;
+      gridEl.querySelectorAll('[data-floor]').forEach(b => b.onclick = () => { const f = PLZ_FLOORS[+b.dataset.floor]; def.floorA = f.a; def.floorB = f.b; def.wall = f.w; plzPrerenderFloor(); gridEl.querySelectorAll('[data-floor]').forEach(x => x.classList.toggle('on', x === b)); haptic(6); });
+      gridEl.querySelectorAll('[data-neon]').forEach(b => b.onclick = () => { def.neonA = b.dataset.neon; def.neonB = b.dataset.neon; plzPrerenderFloor(); gridEl.querySelectorAll('[data-neon]').forEach(x => x.classList.toggle('on', x === b)); haptic(6); });
+      return;
+    }
+    const owned = ownedIn(cat);
+    if (!owned.length) {
+      gridEl.innerHTML = `<div class="ped-empty"><span>No tienes muebles de «${esc(cat)}».</span><button class="btn sm primary" id="pedGoShop"><svg style="width:14px;height:14px" fill="none" stroke="#fff"><use href="#i-cart"/></svg> Ir a la Tienda</button></div>`;
+      gridEl.querySelector('#pedGoShop').onclick = () => openPlazaShop(afterChange);
+      return;
+    }
+    const cnt = {}; for (const f of plzR.furn) if (f.t !== 'portal') cnt[f.t] = (cnt[f.t] || 0) + 1;
+    if (!owned.some(it => it.t === plaza.editTool)) plaza.editTool = owned[0].t;
+    gridEl.innerHTML = '';
+    owned.forEach(it => {
+      const rem = PLZ_FREE_ITEMS.has(it.t) ? '∞' : Math.max(0, plzQty(it.t) - (cnt[it.t] || 0));
+      const card = el(`<button class="ped-card ${it.t === plaza.editTool ? 'on' : ''}" data-tool="${it.t}"><span class="ped-card-q">${rem}</span><span class="ped-card-th"></span><span class="ped-card-n">${esc(it.n)}</span></button>`);
+      try { card.querySelector('.ped-card-th').appendChild(plzFurnThumb(it.t, 54)); } catch (_) {}
+      card.onclick = () => { plaza.editTool = it.t; gridEl.querySelectorAll('.ped-card').forEach(x => x.classList.toggle('on', x.dataset.tool === it.t)); haptic(5); };
+      gridEl.appendChild(card);
+    });
+  };
+  // actualización ligera de las cantidades tras colocar/quitar (sin reconstruir miniaturas)
+  plaza._renderPalette = () => {
+    if (cat === 'erase' || cat === 'style') return;
+    const cnt = {}; for (const f of plzR.furn) if (f.t !== 'portal') cnt[f.t] = (cnt[f.t] || 0) + 1;
+    gridEl.querySelectorAll('.ped-card').forEach(card => { const t = card.dataset.tool, q = card.querySelector('.ped-card-q'); if (q) q.textContent = PLZ_FREE_ITEMS.has(t) ? '∞' : Math.max(0, plzQty(t) - (cnt[t] || 0)); });
+  };
+  renderCats(); renderGrid();
+  ed.querySelector('#pedInv').onclick = () => openPlazaInventory(afterChange);
+  ed.querySelector('#pedShop').onclick = () => openPlazaShop(afterChange);
   ed.querySelector('#pedName').oninput = (e) => { def.name = e.target.value.slice(0, 40); const h = $('plazaRoomName'); if (h) h.textContent = def.name || 'Sala'; };
   ed.querySelector('#pedSave').onclick = () => plzSaveRoom();
   ed.querySelector('#pedExit').onclick = () => plzExitEdit();
