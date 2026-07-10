@@ -4411,6 +4411,33 @@ html { touch-action: manipulation; }
 .ped-sw { flex: none; width: 40px; height: 40px; border-radius: 11px; border: 2px solid rgba(255,255,255,.12); cursor: pointer; }
 .ped-sw.ped-neon { border-radius: 50%; width: 34px; height: 34px; }
 .ped-sw:active { transform: scale(.92); }
+.ped-item { display: inline-flex; align-items: center; gap: 6px; }
+.ped-item svg { width: 15px; height: 15px; }
+.ped-item.ped-shop { color: #ffd23e; border-color: rgba(255,210,62,.35); }
+
+/* ===== moneda + tienda de objetos ===== */
+.coin { display: inline-block; width: 16px; height: 16px; border-radius: 50%; vertical-align: -3px;
+  background: radial-gradient(circle at 35% 30%, #ffe98a, #f5b000 70%, #c98700);
+  box-shadow: inset 0 0 0 1.5px rgba(255,255,255,.35), 0 1px 2px rgba(0,0,0,.3); }
+.coin.sm { width: 12px; height: 12px; vertical-align: -2px; }
+.pk-coins { margin-top: 6px; font-size: 14px; font-weight: 800; color: #ffd23e; }
+.pk-coins .coin { margin-right: 3px; }
+.shop-bal { display: flex; align-items: center; gap: 6px; font-size: 14px; color: var(--ink); margin-bottom: 12px; flex-wrap: wrap; }
+.shop-bal b { font-size: 17px; font-weight: 800; }
+.shop-tip { color: var(--ink-faint); font-size: 12px; font-weight: 600; }
+.shop-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-height: 56vh; overflow-y: auto; padding: 2px; }
+.shop-card { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 8px; border-radius: 14px;
+  border: 1px solid var(--line); background: var(--panel); }
+.shop-card.owned { opacity: .78; }
+.shop-thumb { width: 68px; height: 68px; border-radius: 11px; display: grid; place-items: center;
+  background: radial-gradient(70% 60% at 50% 30%, rgba(110,45,245,.16), transparent 60%), linear-gradient(180deg, #0c1120, #080b16); }
+.shop-thumb canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
+.shop-name { font-size: 12px; font-weight: 700; color: var(--ink); text-align: center; line-height: 1.15; }
+.shop-buy { display: inline-flex; align-items: center; justify-content: center; gap: 5px; width: 100%; padding: 7px; border-radius: 9px;
+  border: none; background: var(--accent-grad); color: #fff; font-weight: 800; font-size: 12.5px; cursor: pointer; }
+.shop-buy:disabled { background: var(--panel-2); color: var(--ink-soft); cursor: default; }
+.shop-buy:not(:disabled):active { transform: scale(.96); }
+@media (max-width: 380px) { .shop-grid { grid-template-columns: repeat(2, 1fr); } }
 
 /* La Plaza — minimapa de salas */
 /* ===== Minijuegos del arcade — shell compartido ===== */

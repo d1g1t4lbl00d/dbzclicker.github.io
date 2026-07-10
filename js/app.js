@@ -4101,7 +4101,7 @@ function openUploadModal(prefill) {
 // Render pixel-art: el canvas trabaja a baja resolución (px de arte) y CSS lo
 // escala con image-rendering:pixelated → píxeles gordos y nítidos, estilo Habbo.
 const PLZ = { COLS: 10, ROWS: 10, TW: 32, TH: 16, SPEED: 3.2, WH: 34, PADX: 10, PADT: 58, PADB: 40 };
-const PLZ_SOLID = new Set(['spk', 'tree', 'lamp', 'fountain', 'djbooth', 'plant', 'photobooth', 'vending', 'crate', 'table', 'bar', 'pool', 'rack', 'neon', 'arcade', 'sea', 'palm', 'umbrella', 'hoop']);
+const PLZ_SOLID = new Set(['spk', 'tree', 'lamp', 'fountain', 'djbooth', 'plant', 'photobooth', 'vending', 'crate', 'table', 'bar', 'pool', 'rack', 'neon', 'arcade', 'sea', 'palm', 'umbrella', 'hoop', 'tv', 'books', 'cactus', 'barrel', 'grill', 'disco', 'signneon', 'bonfire', 'statue']);
 const PLZ_DANCE_COLS = ['rgba(39,169,255,', 'rgba(110,45,245,', 'rgba(224,80,122,', 'rgba(45,200,120,'];
 
 // --- SALAS: cada una con su tema, mobiliario y portales a otras salas ---
@@ -4690,6 +4690,9 @@ const PLZ_EDIT_ITEMS = [
   { t: 'lamp', n: 'Farola' }, { t: 'neon', n: 'Neón' }, { t: 'spk', n: 'Altavoz' }, { t: 'djbooth', n: 'Cabina' },
   { t: 'arcade', n: 'Recreativa' }, { t: 'hoop', n: 'Canasta' }, { t: 'vending', n: 'Máquina' },
   { t: 'pool', n: 'Piscina' }, { t: 'sea', n: 'Mar' }, { t: 'umbrella', n: 'Sombrilla' }, { t: 'fountain', n: 'Fuente' },
+  { t: 'rug', n: 'Alfombra' }, { t: 'tv', n: 'Televisor' }, { t: 'books', n: 'Estantería' }, { t: 'cactus', n: 'Cactus' },
+  { t: 'barrel', n: 'Barril' }, { t: 'grill', n: 'Barbacoa' }, { t: 'disco', n: 'Bola de disco' }, { t: 'signneon', n: 'Cartel neón' },
+  { t: 'bonfire', n: 'Hoguera' }, { t: 'statue', n: 'Estatua' },
 ];
 const PLZ_FLOORS = [
   { a: '#161c33', b: '#121729', w: '#0d1122' }, { a: '#241b12', b: '#1c150e', w: '#161016' },
@@ -4770,7 +4773,7 @@ function plzEnterEdit() {
   const hint = document.querySelector('.plaza-hint'); if (hint) hint.style.display = 'none';
   const old = document.getElementById('plazaEditor'); if (old) old.remove();
   const def = plzR.def;
-  const items = PLZ_EDIT_ITEMS.map(it => `<button class="ped-item ${it.t === plaza.editTool ? 'on' : ''}" data-tool="${it.t}">${it.n}</button>`).join('');
+  if (!plzHasItem(plaza.editTool)) plaza.editTool = 'plant';
   const floors = PLZ_FLOORS.map((f, i) => `<button class="ped-sw" data-floor="${i}" style="background:${f.a}" aria-label="Suelo"></button>`).join('');
   const neons = PLZ_NEONS.map(c => `<button class="ped-sw ped-neon" data-neon="${c}" style="background:${c}" aria-label="Neón"></button>`).join('');
   const ed = el(`<div class="plaza-editor" id="plazaEditor">
@@ -4780,7 +4783,7 @@ function plzEnterEdit() {
       <button class="btn sm ghost" id="pedExit">Salir</button>
     </div>
     <div class="ped-lbl">Objetos <span>· toca una casilla para colocar</span></div>
-    <div class="ped-scroll" id="pedItems"><button class="ped-item ped-erase" data-tool="erase">Borrar</button>${items}</div>
+    <div class="ped-scroll" id="pedItems"></div>
     <div class="ped-lbl">Suelo</div>
     <div class="ped-scroll">${floors}</div>
     <div class="ped-lbl">Neón</div>
@@ -4788,8 +4791,15 @@ function plzEnterEdit() {
   </div>`);
   const wrap = $('plazaWrap');
   wrap.parentNode.insertBefore(ed, wrap.nextSibling);
-  const markTool = () => ed.querySelectorAll('.ped-item').forEach(b => b.classList.toggle('on', b.dataset.tool === plaza.editTool));
-  ed.querySelectorAll('.ped-item').forEach(b => b.onclick = () => { plaza.editTool = b.dataset.tool; markTool(); haptic(5); });
+  const itemsEl = ed.querySelector('#pedItems');
+  const renderItems = () => {
+    const owned = PLZ_EDIT_ITEMS.filter(it => plzHasItem(it.t));
+    itemsEl.innerHTML = `<button class="ped-item ped-shop" data-shop="1"><svg fill="none" stroke="currentColor"><use href="#i-cart"/></svg> Tienda</button><button class="ped-item ped-erase ${plaza.editTool === 'erase' ? 'on' : ''}" data-tool="erase">Borrar</button>` +
+      owned.map(it => `<button class="ped-item ${it.t === plaza.editTool ? 'on' : ''}" data-tool="${it.t}">${it.n}</button>`).join('');
+    itemsEl.querySelector('.ped-shop').onclick = () => openPlazaShop(renderItems);
+    itemsEl.querySelectorAll('.ped-item[data-tool]').forEach(b => b.onclick = () => { plaza.editTool = b.dataset.tool; itemsEl.querySelectorAll('.ped-item').forEach(x => x.classList.toggle('on', x.dataset.tool === plaza.editTool)); haptic(5); });
+  };
+  renderItems();
   ed.querySelectorAll('[data-floor]').forEach(b => b.onclick = () => { const f = PLZ_FLOORS[+b.dataset.floor]; def.floorA = f.a; def.floorB = f.b; def.wall = f.w; plzPrerenderFloor(); haptic(6); });
   ed.querySelectorAll('[data-neon]').forEach(b => b.onclick = () => { def.neonA = b.dataset.neon; def.neonB = b.dataset.neon; plzPrerenderFloor(); haptic(6); });
   ed.querySelector('#pedName').oninput = (e) => { def.name = e.target.value.slice(0, 40); const h = $('plazaRoomName'); if (h) h.textContent = def.name || 'Sala'; };
@@ -4820,6 +4830,67 @@ async function plzSaveRoom() {
     await sb.from('plaza_rooms').update({ name: def.name || 'Mi sala', data, updated_at: new Date().toISOString() }).eq('id', def.roomId);
     toast('Sala guardada');
   } catch (e) { toast('No se pudo guardar'); }
+}
+
+// ---- economía: monedas, inventario y tienda ----
+const PLZ_FREE_ITEMS = new Set(['plant', 'stool', 'crate']);
+function plzCoins() { return (state.profile && state.profile.plaza_coins) || 0; }
+function plzOwned() { return (state.profile && state.profile.plaza_items) || []; }
+function plzHasItem(t) { return PLZ_FREE_ITEMS.has(t) || plzOwned().includes(t); }
+
+// miniatura de un mueble en canvas (reutiliza plzDrawFurn con un contexto temporal)
+function plzFurnThumb(type, px) {
+  px = px || 68;
+  const cv = document.createElement('canvas'); cv.width = px; cv.height = px;
+  const c = cv.getContext('2d'); c.imageSmoothingEnabled = false;
+  const sp = plaza, sr = plzR, s = px / 48;
+  c.setTransform(s, 0, 0, s, px / 2, px * 0.82);
+  plaza = { ctx: c, radio: { playing: false }, ox: 0, oy: 0, canvas: cv };
+  plzR = { def: { neonA: '#27a9ff', neonB: '#6e2df5' } };
+  try { plzDrawFurn({ t: type, i: 0, j: 0 }, 900); } catch (_) {}
+  plaza = sp; plzR = sr;
+  return cv;
+}
+
+async function openPlazaShop(onBuy) {
+  const m = openModal(`<div class="modal-head"><h3><svg class="mh-ic" fill="none" stroke="currentColor"><use href="#i-cart"/></svg> Tienda de objetos</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <div class="shop-bal"><span class="coin"></span> <b id="shopCoins">${plzCoins()}</b> monedas <span class="shop-tip">· gánalas jugando en el arcade</span></div>
+      <div id="shopGrid" class="shop-grid"><div class="pr-empty">Cargando…</div></div>
+    </div>`);
+  const grid = m.querySelector('#shopGrid');
+  let items = [];
+  try { const { data } = await sb.from('plaza_shop').select('item,name,price,category,sort').order('sort'); items = data || []; } catch (_) {}
+  if (!items.length) { grid.innerHTML = '<div class="pr-empty">No se pudo cargar la tienda.</div>'; return; }
+  const render = () => {
+    const owned = plzOwned();
+    grid.innerHTML = '';
+    items.forEach(it => {
+      const has = PLZ_FREE_ITEMS.has(it.item) || owned.includes(it.item);
+      const card = el(`<div class="shop-card ${has ? 'owned' : ''}">
+        <div class="shop-thumb"></div>
+        <div class="shop-name">${esc(it.name)}</div>
+        <button class="shop-buy" ${has ? 'disabled' : ''}>${has ? (it.price === 0 ? 'Gratis' : 'Comprado') : `<span class="coin sm"></span> ${it.price}`}</button>
+      </div>`);
+      try { card.querySelector('.shop-thumb').appendChild(plzFurnThumb(it.item, 68)); } catch (_) {}
+      const buyBtn = card.querySelector('.shop-buy');
+      if (!has) buyBtn.onclick = async () => {
+        if (plzCoins() < it.price) { toast('Te faltan monedas · juega para ganarlas'); return; }
+        buyBtn.disabled = true;
+        try {
+          const { data: bal, error } = await sb.rpc('plaza_buy_item', { p_item: it.item });
+          if (error) throw error;
+          state.profile.plaza_coins = bal;
+          state.profile.plaza_items = [...plzOwned(), it.item];
+          m.querySelector('#shopCoins').textContent = bal;
+          haptic(12); toast('¡' + it.name + ' comprado!');
+          render(); onBuy && onBuy();
+        } catch (e) { buyBtn.disabled = false; toast((e && e.message) || 'No se pudo comprar'); }
+      };
+      grid.appendChild(card);
+    });
+  };
+  render();
 }
 
 // selector de pista para pinchar en la Plaza (busca por título)
@@ -5052,8 +5123,9 @@ function openPerkyInvaders() {
   g._raf = requestAnimationFrame(loop);
 
   async function showGameOver() {
-    let saved = false;
-    try { await sb.from('arcade_scores').insert({ game: 'perky', user_id: state.user.id, score: g.score }); saved = true; } catch (_) {}
+    try { await sb.from('arcade_scores').insert({ game: 'perky', user_id: state.user.id, score: g.score }); } catch (_) {}
+    let coins = 0;
+    try { const { data } = await sb.rpc('plaza_award_coins', { p_game: 'perky', p_score: g.score }); coins = data || 0; if (coins) state.profile.plaza_coins = (state.profile.plaza_coins || 0) + coins; } catch (_) {}
     let rows = [];
     try { const { data } = await sb.rpc('arcade_leaderboard', { p_game: 'perky', p_limit: 10 }); rows = data || []; } catch (_) {}
     const myBest = Math.max(g.score, ...rows.filter(r => r.user_id === state.user.id).map(r => r.best), 0);
@@ -5063,6 +5135,7 @@ function openPerkyInvaders() {
           <div class="pk-go">GAME OVER</div>
           <div class="pk-final">Puntuación <b>${g.score}</b></div>
           <div class="pk-best">Tu récord: ${myBest}</div>
+          ${coins ? `<div class="pk-coins"><span class="coin"></span> +${coins} monedas</div>` : ''}
           <div class="pk-lb-title">🏆 Mejores</div>
           <div class="pk-lb">${rows.length ? rows.map((r, i) => `<div class="pk-lb-row ${r.user_id === state.user.id ? 'me' : ''}"><span class="pk-rank">${['🥇', '🥈', '🥉'][i] || (i + 1)}</span><b>${esc(r.display_name || r.username || 'bro')}</b><span class="pk-pts">${r.best}</span></div>`).join('') : '<div style="color:var(--ink-soft);font-size:12px;padding:8px">Sé el primero del ranking.</div>'}</div>
           <div class="pk-over-actions"><button class="btn primary" id="pkRetry">↻ Reintentar</button><button class="btn" id="pkQuit">Salir</button></div>
@@ -5099,6 +5172,8 @@ function pkBlip(freq, dur, type) {
 async function pkGameOver({ game, score, wrap, onRetry, onQuit, title }) {
   let rows = [];
   try { await sb.from('arcade_scores').insert({ game, user_id: state.user.id, score }); } catch (_) {}
+  let coins = 0;
+  try { const { data } = await sb.rpc('plaza_award_coins', { p_game: game, p_score: score }); coins = data || 0; if (coins) state.profile.plaza_coins = (state.profile.plaza_coins || 0) + coins; } catch (_) {}
   try { const { data } = await sb.rpc('arcade_leaderboard', { p_game: game, p_limit: 10 }); rows = data || []; } catch (_) {}
   const myBest = Math.max(score, ...rows.filter(r => r.user_id === state.user.id).map(r => r.best), 0);
   const ov = el(`
@@ -5107,6 +5182,7 @@ async function pkGameOver({ game, score, wrap, onRetry, onQuit, title }) {
         <div class="pk-go">${title || 'GAME OVER'}</div>
         <div class="pk-final">Puntuación <b>${score}</b></div>
         <div class="pk-best">Tu récord: ${myBest}</div>
+        ${coins ? `<div class="pk-coins"><span class="coin"></span> +${coins} monedas</div>` : ''}
         <div class="pk-lb-title">🏆 Mejores</div>
         <div class="pk-lb">${rows.length ? rows.map((r, i) => `<div class="pk-lb-row ${r.user_id === state.user.id ? 'me' : ''}"><span class="pk-rank">${['🥇', '🥈', '🥉'][i] || (i + 1)}</span><b>${esc(r.display_name || r.username || 'bro')}</b><span class="pk-pts">${r.best}</span></div>`).join('') : '<div style="color:var(--ink-soft);font-size:12px;padding:8px">Sé el primero del ranking.</div>'}</div>
         <div class="pk-over-actions"><button class="btn primary" id="pkRetry">↻ Reintentar</button><button class="btn" id="pkQuit">Salir</button></div>
@@ -6197,6 +6273,86 @@ function plzDrawFurn(f, now) {
     c.fillStyle = 'rgba(96,140,255,.5)'; c.fillRect(cx - 8, base - 12, 16, 1); // filo neón sutil
     c.fillStyle = '#8fc0ff'; c.font = '700 6px monospace'; c.textAlign = 'center'; c.textBaseline = 'middle';
     c.fillText('UB', cx, base - 7);
+    return;
+  }
+
+  const TN = (plzR && plzR.def) ? plzR.def.neonA : '#27a9ff';   // acento de neón del tema
+
+  if (f.t === 'rug') {   // alfombra (pisable)
+    plzDiamond(c, cx, base - 1, 26, 13, '#2a1c3e');
+    plzDiamond(c, cx, base - 1, 20, 10, TN);
+    plzDiamond(c, cx, base - 1, 12, 6, '#1a1030');
+    plzDiamond(c, cx, base - 1, 5, 3, '#ffd23e');
+    return;
+  }
+  if (f.t === 'tv') {
+    plzRect(c, cx - 4, base - 4, 8, 4, '#0a0e1c', '#05070f');                 // mueble
+    plzRect(c, cx - 11, base - 20, 22, 15, '#05070f', '#0c0804');             // marco
+    plzRect(c, cx - 9, base - 18, 18, 11, '#0a1a2e', TN);
+    for (let k = 0; k < 6; k++) { c.fillStyle = ['#e0507a', '#f0a13e', '#2dc878', '#27a9ff', '#b06eff', '#ffd23e'][(k + Math.floor(now / 300)) % 6]; c.fillRect(cx - 8 + k * 3, base - 16, 3, 7); }
+    if (Math.floor(now / 600) % 5 === 0) { c.fillStyle = 'rgba(255,255,255,.6)'; c.fillRect(cx - 9, base - 18, 18, 11); }
+    return;
+  }
+  if (f.t === 'books') {
+    plzRect(c, cx - 8, base - 26, 16, 26, '#241a12', '#05070f');
+    for (let sh = 0; sh < 3; sh++) { const yy = base - 24 + sh * 8; for (let k = 0; k < 6; k++) { c.fillStyle = ['#e0507a', '#2dc878', '#27a9ff', '#f0a13e', '#b06eff', '#12c2c2'][(k + sh * 2) % 6]; c.fillRect(cx - 7 + k * 2, yy, 2, 6); } c.fillStyle = '#0c0804'; c.fillRect(cx - 8, yy + 6, 16, 1); }
+    return;
+  }
+  if (f.t === 'cactus') {
+    plzRect(c, cx - 4, base - 6, 8, 6, '#b8955a', '#05070f');                 // maceta
+    plzRect(c, cx - 2, base - 20, 4, 14, '#2a9e58', '#05070f');               // tronco
+    plzRect(c, cx - 5, base - 16, 3, 6, '#2a9e58', '#05070f');                // brazo izq
+    plzRect(c, cx + 2, base - 18, 3, 7, '#2a9e58', '#05070f');                // brazo dch
+    c.fillStyle = '#e0507a'; c.fillRect(cx - 1, base - 22, 2, 2);             // flor
+    return;
+  }
+  if (f.t === 'barrel') {
+    plzRect(c, cx - 6, base - 16, 12, 16, '#5a3f24', '#05070f');
+    c.fillStyle = '#3a2814'; c.fillRect(cx - 6, base - 13, 12, 1); c.fillRect(cx - 6, base - 5, 12, 1);
+    c.fillStyle = '#7a5a34'; c.fillRect(cx - 6, base - 16, 12, 2);
+    c.fillStyle = 'rgba(255,255,255,.15)'; c.fillRect(cx - 4, base - 16, 2, 16);
+    return;
+  }
+  if (f.t === 'grill') {
+    plzRect(c, cx - 3, base - 8, 1, 8, '#0a0e1c'); plzRect(c, cx + 2, base - 8, 1, 8, '#0a0e1c');   // patas
+    plzDiamond(c, cx, base - 10, 18, 9, '#1a1a1f');
+    plzDiamond(c, cx, base - 12, 16, 8, '#0a0a0c');
+    for (let k = 0; k < 4; k++) { c.fillStyle = (Math.floor(now / 200) + k) % 2 ? '#ff6b3d' : '#ffd23e'; c.fillRect(cx - 6 + k * 4, base - 13, 2, 2); }
+    c.fillStyle = 'rgba(255,120,40,.28)'; c.fillRect(cx - 8, base - 16, 16, 3);
+    return;
+  }
+  if (f.t === 'disco') {
+    c.strokeStyle = 'rgba(255,255,255,.3)'; c.lineWidth = 1; c.beginPath(); c.moveTo(cx, base - 40); c.lineTo(cx, base - 25); c.stroke();
+    c.save(); c.shadowColor = '#cfe0ff'; c.shadowBlur = 10; c.fillStyle = '#b7c6e8'; c.beginPath(); c.arc(cx, base - 18, 7, 0, 7); c.fill(); c.restore();
+    for (let k = 0; k < 8; k++) { const a = k / 8 * 6.28 + now / 400; c.fillStyle = k % 2 ? '#fff' : '#9fb2e6'; c.fillRect(Math.round(cx + Math.cos(a) * 4) - 1, Math.round(base - 18 + Math.sin(a) * 4) - 1, 2, 2); }
+    for (let k = 0; k < 3; k++) { const a = now / 300 + k * 2; c.fillStyle = 'rgba(255,255,255,.5)'; c.fillRect(Math.round(cx + Math.cos(a) * 12), Math.round(base - 18 + Math.sin(a) * 8), 1, 1); }
+    return;
+  }
+  if (f.t === 'signneon') {
+    plzRect(c, cx - 1, base - 14, 2, 14, '#0a0e1c');
+    c.save(); c.shadowColor = TN; c.shadowBlur = 8 + (Math.floor(now / 400) % 2 ? 4 : 0);
+    plzRect(c, cx - 10, base - 26, 20, 12, '#0a0e1c', TN);
+    c.fillStyle = TN; c.font = '700 7px monospace'; c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.fillText('BAR', cx, base - 20);
+    c.restore();
+    return;
+  }
+  if (f.t === 'bonfire') {
+    c.fillStyle = '#5a3f24'; c.fillRect(cx - 7, base - 3, 14, 3);
+    c.save(); c.translate(cx, base - 2); c.rotate(0.5); c.fillStyle = '#4a3018'; c.fillRect(-7, -1, 14, 2); c.restore();
+    const fl = Math.floor(now / 120) % 2;
+    c.save(); c.shadowColor = '#ff8a2a'; c.shadowBlur = 12;
+    c.fillStyle = '#ff6b3d'; c.beginPath(); c.moveTo(cx, base - 18 - fl); c.lineTo(cx - 6, base - 4); c.lineTo(cx + 6, base - 4); c.closePath(); c.fill();
+    c.fillStyle = '#ffd23e'; c.beginPath(); c.moveTo(cx, base - 12 - fl); c.lineTo(cx - 3, base - 4); c.lineTo(cx + 3, base - 4); c.closePath(); c.fill();
+    c.restore();
+    return;
+  }
+  if (f.t === 'statue') {
+    plzDiamond(c, cx, base - 1, 16, 8, '#3a3f4a');
+    plzRect(c, cx - 5, base - 8, 10, 7, '#c7cdd8', '#05070f');
+    plzRect(c, cx - 4, base - 22, 8, 14, '#d7dce6', '#05070f');
+    plzRect(c, cx - 3, base - 28, 6, 6, '#e7ecf6', '#05070f');
+    c.fillStyle = 'rgba(255,255,255,.4)'; c.fillRect(cx - 4, base - 22, 2, 14);
     return;
   }
 }
