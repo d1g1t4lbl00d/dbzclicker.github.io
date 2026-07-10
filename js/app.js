@@ -4101,7 +4101,7 @@ function openUploadModal(prefill) {
 // Render pixel-art: el canvas trabaja a baja resolución (px de arte) y CSS lo
 // escala con image-rendering:pixelated → píxeles gordos y nítidos, estilo Habbo.
 const PLZ = { COLS: 10, ROWS: 10, TW: 32, TH: 16, SPEED: 3.2, WH: 34, PADX: 10, PADT: 58, PADB: 40 };
-const PLZ_SOLID = new Set(['spk', 'tree', 'lamp', 'fountain', 'djbooth', 'plant', 'photobooth', 'vending', 'crate', 'table', 'bar', 'pool', 'rack', 'neon', 'arcade', 'sea', 'palm', 'umbrella', 'hoop', 'tv', 'books', 'cactus', 'barrel', 'grill', 'disco', 'signneon', 'bonfire', 'statue']);
+const PLZ_SOLID = new Set(['spk', 'tree', 'lamp', 'fountain', 'djbooth', 'plant', 'photobooth', 'vending', 'crate', 'table', 'bar', 'pool', 'rack', 'neon', 'arcade', 'sea', 'palm', 'umbrella', 'hoop', 'tv', 'books', 'cactus', 'barrel', 'grill', 'disco', 'signneon', 'bonfire', 'statue', 'jukebox', 'poster', 'trophy', 'bush', 'locker', 'candle', 'lava', 'clock']);
 const PLZ_DANCE_COLS = ['rgba(39,169,255,', 'rgba(110,45,245,', 'rgba(224,80,122,', 'rgba(45,200,120,'];
 
 // --- SALAS: cada una con su tema, mobiliario y portales a otras salas ---
@@ -4693,6 +4693,8 @@ const PLZ_EDIT_ITEMS = [
   { t: 'rug', n: 'Alfombra' }, { t: 'tv', n: 'Televisor' }, { t: 'books', n: 'Estantería' }, { t: 'cactus', n: 'Cactus' },
   { t: 'barrel', n: 'Barril' }, { t: 'grill', n: 'Barbacoa' }, { t: 'disco', n: 'Bola de disco' }, { t: 'signneon', n: 'Cartel neón' },
   { t: 'bonfire', n: 'Hoguera' }, { t: 'statue', n: 'Estatua' },
+  { t: 'jukebox', n: 'Jukebox' }, { t: 'poster', n: 'Cuadro' }, { t: 'trophy', n: 'Trofeo' }, { t: 'bush', n: 'Arbusto' },
+  { t: 'locker', n: 'Taquilla' }, { t: 'candle', n: 'Vela' }, { t: 'lava', n: 'Lámpara de lava' }, { t: 'clock', n: 'Reloj' },
 ];
 const PLZ_FLOORS = [
   { a: '#161c33', b: '#121729', w: '#0d1122' }, { a: '#241b12', b: '#1c150e', w: '#161016' },
@@ -5254,7 +5256,7 @@ function openPerkyDance() {
     ctx.globalAlpha = 0.9; ctx.fillStyle = '#fff'; ctx.font = 'bold 11px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(GLYPH[i], x, y + 0.5); ctx.globalAlpha = 1; ctx.textBaseline = 'alphabetic';
   }
   let g = null, last = performance.now(), closed = false;
-  let srcNode = null, gainNode = null, audioBuf = null, builtOnsets = null, track = null;
+  let audioEl = null, audioBuf = null, builtOnsets = null, track = null;
 
   // silenciar el reproductor de la app mientras se juega
   let resumeApp = false;
@@ -5329,17 +5331,18 @@ function openPerkyDance() {
     wrap.querySelector('#pkScore').textContent = '0';
     return st;
   }
-  function stopAudio() { try { if (srcNode) { srcNode.onended = null; srcNode.stop(); srcNode.disconnect(); } } catch (_) {} try { if (gainNode) gainNode.disconnect(); } catch (_) {} srcNode = null; gainNode = null; }
+  function stopAudio() { if (g && g._audioTimer) { clearTimeout(g._audioTimer); g._audioTimer = null; } try { if (audioEl) audioEl.pause(); } catch (_) {} }
   function playSynced() {
     stopAudio();
-    const clipDur = Math.min(audioBuf.duration, MAXCLIP);
+    const clipDur = Math.min((audioBuf && audioBuf.duration) || 90, MAXCLIP);
     g = newState(chartFromOnsets(builtOnsets), clipDur, true);
-    gainNode = ac.createGain(); gainNode.connect(ac.destination);
-    srcNode = ac.createBufferSource(); srcNode.buffer = audioBuf; srcNode.connect(gainNode);
-    g.audioStart = ac.currentTime + LEAD;
-    const endAt = g.audioStart + clipDur;
-    try { gainNode.gain.setValueAtTime(1, Math.max(ac.currentTime, endAt - 1.2)); gainNode.gain.linearRampToValueAtTime(0.0001, endAt); } catch (_) {}
-    try { srcNode.start(g.audioStart, 0, clipDur + 0.25); } catch (_) { try { srcNode.start(g.audioStart); } catch (__) {} }
+    g.startPerf = performance.now(); g.audioStarted = false;
+    // el audio va por un elemento <audio> (canal multimedia): suena aunque el iPhone esté en silencio.
+    // arranca tras el lead-in para que las notas entren antes que el sonido.
+    g._audioTimer = setTimeout(() => {
+      if (closed || !audioEl) return;
+      try { audioEl.currentTime = 0; audioEl.volume = 1; const pr = audioEl.play(); if (pr && pr.then) pr.then(() => { g.audioStarted = true; }).catch(() => { g.audioStarted = true; }); else g.audioStarted = true; } catch (_) { g.audioStarted = true; }
+    }, LEAD * 1000);
     hideLoad(); setNow(track); last = performance.now(); startLoop();
   }
   function playFallback() {
@@ -5349,6 +5352,17 @@ function openPerkyDance() {
   async function startWith(chosen) {
     hidePicker(); const ld = wrap.querySelector('#pkLoad'); if (ld) ld.style.display = '';
     audioBuf = null; builtOnsets = null; track = chosen || null;
+    // preparar y DESBLOQUEAR el elemento de audio dentro del gesto (imprescindible en iOS)
+    try { if (audioEl) audioEl.pause(); } catch (_) {}
+    audioEl = null;
+    if (track && track.audio_url) {
+      try {
+        const a = new Audio(); a.preload = 'auto'; a.playsInline = true; a.setAttribute('playsinline', ''); a.src = czUrl(track.audio_url); a.volume = 0;
+        a.style.display = 'none'; document.body.appendChild(a);   // en el DOM → reproducción más fiable en iOS
+        const pr = a.play(); if (pr && pr.then) pr.then(() => { try { a.pause(); a.currentTime = 0; } catch (_) {} }).catch(() => {});
+        audioEl = a;
+      } catch (_) {}
+    }
     if (track && ac) {
       try {
         setLoad('Cargando «' + (track.title || 'pista') + '»…');
@@ -5415,12 +5429,17 @@ function openPerkyDance() {
   const onKeyUp = (e) => { const k = e.key.toLowerCase(); if (k in KEYMAP) release(KEYMAP[k]); };
   document.addEventListener('keydown', onKey); document.addEventListener('keyup', onKeyUp);
 
-  const close = () => { closed = true; if (g && g._raf) cancelAnimationFrame(g._raf); stopAudio(); document.removeEventListener('keydown', onKey); document.removeEventListener('keyup', onKeyUp); document.documentElement.style.overflow = ''; try { if (resumeApp && typeof audio !== 'undefined' && audio) audio.play(); } catch (_) {} wrap.remove(); window._pkGameOpen = false; };
+  const close = () => { closed = true; if (g && g._raf) cancelAnimationFrame(g._raf); stopAudio(); try { if (audioEl) { audioEl.src = ''; audioEl.remove(); } } catch (_) {} document.removeEventListener('keydown', onKey); document.removeEventListener('keyup', onKeyUp); document.documentElement.style.overflow = ''; try { if (resumeApp && typeof audio !== 'undefined' && audio) audio.play(); } catch (_) {} wrap.remove(); window._pkGameOpen = false; };
   wrap.querySelector('#pkClose').onclick = close;
 
   function update(dt) {
     if (!g || g.over) return;
-    if (g.synced && g.audioStart) g.t = ac.currentTime - g.audioStart; else g.t += dt;
+    if (g.synced) {
+      // reloj sincronizado con el elemento <audio> una vez suena; antes, reloj manual (lead-in)
+      if (g.audioStarted && audioEl && !audioEl.paused && audioEl.currentTime > 0.03) g.t = audioEl.currentTime;
+      else g.t = (performance.now() - g.startPerf) / 1000 - LEAD;
+      if (g.audioStarted && audioEl && audioEl.currentTime >= g.clipDur) { try { audioEl.pause(); } catch (_) {} }
+    } else g.t += dt;
     for (const n of g.chart) if (!n.hit && g.t > n.t + 0.18) { n.hit = true; n.done = true; g.combo = 0; g.fever = false; g.feverTier = 1; g.judge = { txt: 'MISS', col: '#e0507a', t: g.t }; g.judgePop = 1; }
     // notas largas: puntúan mientras mantengas el carril
     for (const n of g.chart) {
@@ -6353,6 +6372,69 @@ function plzDrawFurn(f, now) {
     plzRect(c, cx - 4, base - 22, 8, 14, '#d7dce6', '#05070f');
     plzRect(c, cx - 3, base - 28, 6, 6, '#e7ecf6', '#05070f');
     c.fillStyle = 'rgba(255,255,255,.4)'; c.fillRect(cx - 4, base - 22, 2, 14);
+    return;
+  }
+  if (f.t === 'jukebox') {
+    plzRect(c, cx - 8, base - 26, 16, 26, '#2a1436', '#05070f');
+    plzRect(c, cx - 8, base - 30, 16, 6, '#3a1c4a', '#05070f');
+    c.fillStyle = '#ffd23e'; c.fillRect(cx - 7, base - 29, 14, 2);
+    plzRect(c, cx - 6, base - 22, 12, 8, '#0a0e1c', TN);
+    for (let k = 0; k < 4; k++) { c.fillStyle = (Math.floor(now / 250) + k) % 3 ? '#e0507a' : '#2dc878'; c.fillRect(cx - 6, base - 21 + k * 2, 12, 1); }
+    for (let k = 0; k < 4; k++) { c.fillStyle = ['#e0507a', '#f0a13e', '#27a9ff', '#2dc878'][k]; c.fillRect(cx - 6 + k * 4, base - 11, 2, 2); }
+    return;
+  }
+  if (f.t === 'poster') {
+    plzRect(c, cx - 1, base - 8, 2, 8, '#0a0e1c');
+    plzRect(c, cx - 9, base - 26, 18, 18, '#0c0804', '#05070f');
+    const rg = c.createLinearGradient(cx - 8, base - 24, cx + 8, base - 10); rg.addColorStop(0, TN); rg.addColorStop(1, '#e0507a');
+    c.fillStyle = rg; c.fillRect(cx - 7, base - 24, 14, 14);
+    c.fillStyle = 'rgba(255,255,255,.55)'; c.fillRect(cx - 5, base - 20, 4, 4);
+    return;
+  }
+  if (f.t === 'trophy') {
+    plzRect(c, cx - 4, base - 4, 8, 4, '#3a2814', '#05070f');
+    c.save(); c.shadowColor = '#ffd23e'; c.shadowBlur = 6;
+    c.fillStyle = '#ffd23e'; c.fillRect(cx - 5, base - 16, 10, 8); c.fillRect(cx - 2, base - 8, 4, 4);
+    c.fillRect(cx - 7, base - 15, 2, 4); c.fillRect(cx + 5, base - 15, 2, 4);
+    c.restore();
+    c.fillStyle = 'rgba(255,255,255,.5)'; c.fillRect(cx - 3, base - 15, 2, 5);
+    return;
+  }
+  if (f.t === 'bush') {
+    plzDiamond(c, cx, base - 2, 20, 10, '#0e2018');
+    c.fillStyle = '#1f7a44'; c.beginPath(); c.arc(cx - 4, base - 8, 5, 0, 7); c.arc(cx + 4, base - 8, 5, 0, 7); c.arc(cx, base - 12, 6, 0, 7); c.fill();
+    c.fillStyle = '#2a9e58'; c.beginPath(); c.arc(cx - 3, base - 9, 3, 0, 7); c.arc(cx + 3, base - 11, 3, 0, 7); c.fill();
+    c.fillStyle = '#e0507a'; c.fillRect(cx - 4, base - 10, 1, 1); c.fillRect(cx + 3, base - 12, 1, 1);
+    return;
+  }
+  if (f.t === 'locker') {
+    plzRect(c, cx - 8, base - 28, 16, 28, '#1a2438', '#05070f');
+    c.fillStyle = '#0a0e1c'; c.fillRect(cx, base - 28, 1, 28);
+    for (const dx of [-8, 0]) { c.fillStyle = '#2a3450'; c.fillRect(cx + dx + 2, base - 24, 4, 2); c.fillStyle = TN; c.fillRect(cx + dx + 3, base - 14, 1, 2); }
+    return;
+  }
+  if (f.t === 'candle') {
+    plzDiamond(c, cx, base - 1, 10, 5, '#1a1a1f');
+    plzRect(c, cx - 2, base - 12, 4, 10, '#e8e2d0', '#05070f');
+    const fl = Math.floor(now / 150) % 2;
+    c.save(); c.shadowColor = '#ffb347'; c.shadowBlur = 8;
+    c.fillStyle = '#ffd23e'; c.beginPath(); c.moveTo(cx, base - 18 - fl); c.lineTo(cx - 2, base - 12); c.lineTo(cx + 2, base - 12); c.closePath(); c.fill();
+    c.restore();
+    return;
+  }
+  if (f.t === 'lava') {
+    plzRect(c, cx - 4, base - 4, 8, 4, '#2a3450', '#05070f');
+    plzRect(c, cx - 3, base - 24, 6, 20, '#0a1020', TN);
+    const b1 = Math.round(Math.sin(now / 600) * 4), b2 = Math.round(Math.cos(now / 500) * 4);
+    c.fillStyle = '#e0507a'; c.beginPath(); c.arc(cx, base - 12 + b1, 2.5, 0, 7); c.arc(cx, base - 18 + b2, 2, 0, 7); c.fill();
+    plzRect(c, cx - 4, base - 28, 8, 4, '#2a3450', '#05070f');
+    return;
+  }
+  if (f.t === 'clock') {
+    plzRect(c, cx - 1, base - 10, 2, 10, '#0a0e1c');
+    c.fillStyle = '#e8ecf6'; c.beginPath(); c.arc(cx, base - 18, 7, 0, 7); c.fill();
+    c.strokeStyle = '#0a0e1c'; c.lineWidth = 1; c.stroke();
+    const a = now / 1000; c.beginPath(); c.moveTo(cx, base - 18); c.lineTo(cx + Math.cos(a) * 4, base - 18 + Math.sin(a) * 4); c.moveTo(cx, base - 18); c.lineTo(cx + Math.cos(a / 12) * 3, base - 18 + Math.sin(a / 12) * 3); c.stroke();
     return;
   }
 }

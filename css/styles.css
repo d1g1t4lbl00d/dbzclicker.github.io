@@ -1790,10 +1790,12 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
   .right .chat-form { padding-bottom: calc(12px + env(safe-area-inset-bottom,0px)); }
   .drawer-backdrop { z-index: 66; }
 
-  /* MODAL como hoja inferior, respetando safe-area */
-  .modal { border-radius: var(--r-xl) var(--r-xl) 0 0; align-self: flex-end; max-height: 90vh; width: 100%; }
+  /* MODAL como hoja inferior (sube desde abajo, bajo el área de escritura), respetando safe-area */
+  .modal { border-radius: var(--r-xl) var(--r-xl) 0 0; align-self: flex-end; max-height: 88vh; width: 100%; padding-top: 6px; animation: sheetUp .28s var(--ease); }
+  .modal::before { content: ''; display: block; width: 40px; height: 4px; border-radius: 999px; background: var(--line); margin: 4px auto 0; }
   .modal-backdrop { place-items: end center; padding: 0; }
   .modal-body { padding-bottom: calc(24px + env(safe-area-inset-bottom,0px)); }
+  @keyframes sheetUp { from { transform: translateY(100%); } to { transform: none; } }
 }
 @media (max-width: 380px) {
   .track .t-foot .act:not(.like) span { display: none; }
