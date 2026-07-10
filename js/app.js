@@ -4907,10 +4907,11 @@ async function pkGameOver({ game, score, wrap, onRetry, onQuit, title }) {
   return ov;
 }
 
-// ============ PERKYDANCE (Plaza) — juego de ritmo de 4 carriles ============
+// ============ PERKYDANCE (Plaza) — juego de ritmo sincronizado con una pista real ============
 function openPerkyDance() {
   if (window._pkGameOpen) return; window._pkGameOpen = true;
-  const AW = 220, AH = 320, LANES = 4, LW = AW / LANES, HITY = 270, LEAD = 1.5;
+  const ac = pkAC();                     // resume dentro del gesto de apertura
+  const AW = 220, AH = 320, LW = AW / 4, HITY = 270, LEAD = 1.6, MAXCLIP = 95;
   const LC = ['#27a9ff', '#6e2df5', '#e0507a', '#2dc878'];
   const GLYPH = ['◀', '▼', '▲', '▶'];
   const KEYMAP = { arrowleft: 0, a: 0, arrowdown: 1, s: 1, arrowup: 2, k: 2, arrowright: 3, l: 3 };
@@ -4921,7 +4922,11 @@ function openPerkyDance() {
         <div class="pk-title">PERKY&nbsp;<span>DANCE</span></div>
         <div class="pk-stat">SCORE <b id="pkScore">0</b></div>
       </div>
-      <div class="pk-stage" id="pkStage"><canvas id="pkCanvas" width="${AW}" height="${AH}"></canvas></div>
+      <div class="pk-stage" id="pkStage">
+        <canvas id="pkCanvas" width="${AW}" height="${AH}"></canvas>
+        <div class="pk-load" id="pkLoad"><div class="pk-spin"></div><div class="pk-load-txt" id="pkLoadTxt">Buscando una pista…</div></div>
+      </div>
+      <div class="pk-now" id="pkNow">🎧 Cargando pista de UnderBro…</div>
       <div class="pk-ctrl pk-lanes">
         <button class="pk-btn" data-l="0" style="color:${LC[0]}">◀</button>
         <button class="pk-btn" data-l="1" style="color:${LC[1]}">▼</button>
@@ -4935,28 +4940,109 @@ function openPerkyDance() {
   const canvas = wrap.querySelector('#pkCanvas'), ctx = canvas.getContext('2d');
   const DPR = Math.min(2, Math.max(1, Math.round(window.devicePixelRatio || 1))); canvas.width = AW * DPR; canvas.height = AH * DPR; ctx.scale(DPR, DPR);
   const speed = (HITY + 20) / LEAD;
-  let g, last = performance.now();
+  let g = null, last = performance.now(), closed = false;
+  let srcNode = null, gainNode = null, audioBuf = null, builtOnsets = null, track = null;
 
-  function buildChart() {
-    const chart = [];
-    for (let s = 6; s < 132; s++) {
-      const t = LEAD + 0.6 + s * 0.26;
-      if (s % 2 === 0) chart.push({ lane: (s * 3 + (s >> 2)) % 4, t, hit: false });
+  // silenciar el reproductor de la app mientras se juega
+  let resumeApp = false;
+  try { if (typeof audio !== 'undefined' && audio && !audio.paused) { resumeApp = true; audio.pause(); } } catch (_) {}
+
+  const setLoad = (t) => { const e = wrap.querySelector('#pkLoadTxt'); if (e) e.textContent = t; };
+  const hideLoad = () => { const e = wrap.querySelector('#pkLoad'); if (e) e.style.display = 'none'; };
+  const setNow = (tr) => { const e = wrap.querySelector('#pkNow'); if (!e) return; e.innerHTML = tr ? `♫ <b>${esc(tr.title || 'Pista')}</b>${tr.profiles ? ' — ' + esc(tr.profiles.display_name || tr.profiles.username || '') : ''}` : '🎶 Modo sin música (no pude cargar audio)'; };
+
+  // ---- selección y análisis de la pista ----
+  async function pickTrack() {
+    try {
+      const { data } = await sb.from('tracks').select('id,title,audio_url,cover_url,profiles:user_id(username,display_name)').not('audio_url', 'is', null).order('plays', { ascending: false }).limit(60);
+      if (data && data.length) return data[Math.floor(Math.random() * data.length)];
+    } catch (_) {}
+    return null;
+  }
+  // detección de onsets por energía (spectral-flux simplificado sobre RMS)
+  function detectOnsets(buf, maxDur) {
+    const sr = buf.sampleRate, N = Math.min(buf.length, Math.floor(sr * maxDur));
+    const c0 = buf.getChannelData(0), c1 = buf.numberOfChannels > 1 ? buf.getChannelData(1) : null;
+    const hop = 512, frames = Math.floor(N / hop);
+    const env = new Float32Array(frames);
+    for (let i = 0; i < frames; i++) { let s = 0; const b = i * hop; for (let j = 0; j < hop; j++) { let v = c0[b + j] || 0; if (c1) v = (v + (c1[b + j] || 0)) * 0.5; s += v * v; } env[i] = Math.sqrt(s / hop); }
+    const flux = new Float32Array(frames);
+    for (let i = 1; i < frames; i++) { const d = env[i] - env[i - 1]; flux[i] = d > 0 ? d : 0; }
+    const W = 6, cand = [];
+    for (let i = 2; i < frames - 2; i++) {
+      if (flux[i] <= flux[i - 1] || flux[i] < flux[i + 1]) continue;
+      let mean = 0, cnt = 0; for (let k = i - W; k <= i + W; k++) { if (k >= 0 && k < frames) { mean += flux[k]; cnt++; } } mean /= cnt;
+      if (flux[i] > mean * 1.5 + 0.006) cand.push({ t: i * hop / sr, s: flux[i] });
+    }
+    // selección voraz por fuerza con separación mínima (evita ráfagas)
+    cand.sort((a, b) => b.s - a.s);
+    const picked = [], MIN = 0.19;
+    for (const c of cand) { let ok = true; for (const p of picked) if (Math.abs(p.t - c.t) < MIN) { ok = false; break; } if (ok) picked.push(c); }
+    picked.sort((a, b) => a.t - b.t);
+    return picked;
+  }
+  function chartFromOnsets(onsets) {
+    let prev = -1; const chart = [];
+    onsets.forEach((o, i) => { let lane = (i * 3 + Math.floor(o.s * 40)) % 4; if (lane === prev) lane = (lane + 1) % 4; prev = lane; chart.push({ lane, t: o.t, hit: false }); });
+    return chart;
+  }
+  function proceduralChart() {
+    const chart = []; let prev = -1;
+    for (let s = 2; s < 130; s++) {
+      const t = 0.5 + s * 0.28; if (t > 34) break;
+      if (s % 2 === 0) { let l = (s * 3 + (s >> 2)) % 4; if (l === prev) l = (l + 1) % 4; prev = l; chart.push({ lane: l, t, hit: false }); }
       else if ((s * 7) % 3 === 0) chart.push({ lane: (s * 5 + 1) % 4, t, hit: false });
       if (s % 8 === 7) chart.push({ lane: (s * 2 + 2) % 4, t, hit: false });
     }
     return chart;
   }
-  function reset() {
-    g = { t: -LEAD, score: 0, combo: 0, maxCombo: 0, chart: buildChart(), judge: null, judgePop: 0, comboPop: 0, flash: [0, 0, 0, 0], pop: [0, 0, 0, 0], parts: [], over: false, ended: 0 };
-    g.lastT = g.chart[g.chart.length - 1].t;
+  function newState(chart, clipDur, synced) {
+    const st = { t: -LEAD, score: 0, combo: 0, maxCombo: 0, chart, judge: null, judgePop: 0, comboPop: 0, flash: [0, 0, 0, 0], pop: [0, 0, 0, 0], parts: [], over: false, synced, clipDur, audioStart: 0 };
+    st.lastT = chart.length ? chart[chart.length - 1].t : clipDur;
     wrap.querySelector('#pkScore').textContent = '0';
+    return st;
   }
-  reset();
+  function stopAudio() { try { if (srcNode) { srcNode.onended = null; srcNode.stop(); srcNode.disconnect(); } } catch (_) {} try { if (gainNode) gainNode.disconnect(); } catch (_) {} srcNode = null; gainNode = null; }
+  function playSynced() {
+    stopAudio();
+    const clipDur = Math.min(audioBuf.duration, MAXCLIP);
+    g = newState(chartFromOnsets(builtOnsets), clipDur, true);
+    gainNode = ac.createGain(); gainNode.connect(ac.destination);
+    srcNode = ac.createBufferSource(); srcNode.buffer = audioBuf; srcNode.connect(gainNode);
+    g.audioStart = ac.currentTime + LEAD;
+    const endAt = g.audioStart + clipDur;
+    try { gainNode.gain.setValueAtTime(1, Math.max(ac.currentTime, endAt - 1.2)); gainNode.gain.linearRampToValueAtTime(0.0001, endAt); } catch (_) {}
+    try { srcNode.start(g.audioStart, 0, clipDur + 0.25); } catch (_) { try { srcNode.start(g.audioStart); } catch (__) {} }
+    hideLoad(); setNow(track); last = performance.now(); startLoop();
+  }
+  function playFallback() {
+    g = newState(proceduralChart(), 34, false);
+    hideLoad(); setNow(null); last = performance.now(); startLoop();
+  }
+  async function init() {
+    setLoad('Buscando una pista…');
+    track = await pickTrack();
+    if (track && ac) {
+      try {
+        setLoad('Cargando «' + (track.title || 'pista') + '»…');
+        const res = await fetch(czUrl(track.audio_url)); const ab = await res.arrayBuffer();
+        if (closed) return;
+        setLoad('Analizando el ritmo…'); await new Promise(r => setTimeout(r, 0));
+        audioBuf = await ac.decodeAudioData(ab);
+        if (closed) return;
+        builtOnsets = detectOnsets(audioBuf, MAXCLIP);
+        if (builtOnsets.length >= 12) { playSynced(); return; }
+      } catch (e) { console.warn('perkydance audio', e); }
+    }
+    if (closed) return;
+    playFallback();
+  }
+  init();
+
   function burst(x, y, col, n) { for (let i = 0; i < n; i++) { const a = Math.random() * 7, sp = 40 + Math.random() * 120; g.parts.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 40, life: 0.5 + Math.random() * 0.25, t: 0, col, r: 1.5 + Math.random() * 2 }); } }
 
   function tap(lane) {
-    if (g.over) return;
+    if (!g || g.over) return;
     g.flash[lane] = 1; haptic(4);
     let best = null, bd = 1;
     for (const n of g.chart) { if (n.hit || n.lane !== lane) continue; const d = Math.abs(n.t - g.t); if (d < bd) { bd = d; best = n; } }
@@ -4984,18 +5070,19 @@ function openPerkyDance() {
   };
   document.addEventListener('keydown', onKey);
 
-  const close = () => { cancelAnimationFrame(g._raf); document.removeEventListener('keydown', onKey); document.documentElement.style.overflow = ''; wrap.remove(); window._pkGameOpen = false; };
+  const close = () => { closed = true; if (g && g._raf) cancelAnimationFrame(g._raf); stopAudio(); document.removeEventListener('keydown', onKey); document.documentElement.style.overflow = ''; try { if (resumeApp && typeof audio !== 'undefined' && audio) audio.play(); } catch (_) {} wrap.remove(); window._pkGameOpen = false; };
   wrap.querySelector('#pkClose').onclick = close;
 
   function update(dt) {
-    if (g.over) return;
-    g.t += dt;
+    if (!g || g.over) return;
+    if (g.synced && g.audioStart) g.t = ac.currentTime - g.audioStart; else g.t += dt;
     for (const n of g.chart) if (!n.hit && g.t > n.t + 0.18) { n.hit = true; g.combo = 0; g.judge = { txt: 'MISS', col: '#e0507a', t: g.t }; g.judgePop = 1; }
     for (let i = 0; i < 4; i++) { g.flash[i] = Math.max(0, g.flash[i] - dt * 4); g.pop[i] = Math.max(0, g.pop[i] - dt * 4); }
     g.judgePop = Math.max(0, g.judgePop - dt * 3); g.comboPop = Math.max(0, g.comboPop - dt * 5);
     for (const p of g.parts) { p.t += dt; p.vy += 260 * dt; p.x += p.vx * dt; p.y += p.vy * dt; }
     g.parts = g.parts.filter(p => p.t < p.life);
-    if (g.t > g.lastT + 1.8) { g.over = true; showEnd(); }
+    const endT = g.synced ? g.clipDur : g.lastT;
+    if (g.t > endT + 1.6) { g.over = true; showEnd(); }
   }
   function draw() {
     ctx.clearRect(0, 0, AW, AH);
@@ -5042,10 +5129,13 @@ function openPerkyDance() {
     ctx.textBaseline = 'alphabetic'; ctx.globalAlpha = 1;
   }
   async function showEnd() {
-    await pkGameOver({ game: 'dance', score: g.score, wrap, title: '¡FIN DEL TEMA!', onRetry: () => { reset(); last = performance.now(); }, onQuit: close });
+    stopAudio();
+    await pkGameOver({ game: 'dance', score: g.score, wrap, title: '¡FIN DEL TEMA!', onRetry: () => { audioBuf && builtOnsets && builtOnsets.length >= 12 ? playSynced() : playFallback(); }, onQuit: close });
   }
-  const loop = (now) => { const dt = Math.min((now - last) / 1000, 0.05); last = now; try { update(dt); draw(); } catch (e) { console.warn('dance', e); } g._raf = requestAnimationFrame(loop); };
-  g._raf = requestAnimationFrame(loop);
+  function startLoop() {
+    const loop = (now) => { if (closed) return; const dt = Math.min((now - last) / 1000, 0.05); last = now; try { update(dt); draw(); } catch (e) { console.warn('dance', e); } g._raf = requestAnimationFrame(loop); };
+    g._raf = requestAnimationFrame(loop);
+  }
 }
 
 // ============ PERKYBEATS (Estudio) — caja de ritmos WebAudio ============
