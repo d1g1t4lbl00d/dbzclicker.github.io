@@ -4796,11 +4796,14 @@ function plzEnterEdit() {
   const itemsEl = ed.querySelector('#pedItems');
   const renderItems = () => {
     const owned = PLZ_EDIT_ITEMS.filter(it => plzHasItem(it.t));
-    itemsEl.innerHTML = `<button class="ped-item ped-shop" data-shop="1"><svg fill="none" stroke="currentColor"><use href="#i-cart"/></svg> Tienda</button><button class="ped-item ped-erase ${plaza.editTool === 'erase' ? 'on' : ''}" data-tool="erase">Borrar</button>` +
-      owned.map(it => `<button class="ped-item ${it.t === plaza.editTool ? 'on' : ''}" data-tool="${it.t}">${it.n}</button>`).join('');
+    const cnt = {}; for (const f of plzR.furn) if (f.t !== 'portal') cnt[f.t] = (cnt[f.t] || 0) + 1;
+    itemsEl.innerHTML = `<button class="ped-item ped-shop" data-shop="1"><svg fill="none" stroke="currentColor"><use href="#i-cart"/></svg> Tienda</button><button class="ped-item ped-inv" data-inv="1"><svg fill="none" stroke="currentColor"><use href="#i-files"/></svg> Inventario</button><button class="ped-item ped-erase ${plaza.editTool === 'erase' ? 'on' : ''}" data-tool="erase">Borrar</button>` +
+      owned.map(it => { const rem = PLZ_FREE_ITEMS.has(it.t) ? '' : ` <span class="ped-qty">${Math.max(0, plzQty(it.t) - (cnt[it.t] || 0))}</span>`; return `<button class="ped-item ${it.t === plaza.editTool ? 'on' : ''}" data-tool="${it.t}">${it.n}${rem}</button>`; }).join('');
     itemsEl.querySelector('.ped-shop').onclick = () => openPlazaShop(renderItems);
+    itemsEl.querySelector('.ped-inv').onclick = () => openPlazaInventory(renderItems);
     itemsEl.querySelectorAll('.ped-item[data-tool]').forEach(b => b.onclick = () => { plaza.editTool = b.dataset.tool; itemsEl.querySelectorAll('.ped-item').forEach(x => x.classList.toggle('on', x.dataset.tool === plaza.editTool)); haptic(5); });
   };
+  plaza._renderPalette = renderItems;
   renderItems();
   ed.querySelectorAll('[data-floor]').forEach(b => b.onclick = () => { const f = PLZ_FLOORS[+b.dataset.floor]; def.floorA = f.a; def.floorB = f.b; def.wall = f.w; plzPrerenderFloor(); haptic(6); });
   ed.querySelectorAll('[data-neon]').forEach(b => b.onclick = () => { def.neonA = b.dataset.neon; def.neonB = b.dataset.neon; plzPrerenderFloor(); haptic(6); });
@@ -4809,7 +4812,7 @@ function plzEnterEdit() {
   ed.querySelector('#pedExit').onclick = () => plzExitEdit();
 }
 function plzExitEdit() {
-  plaza && (plaza.editing = false);
+  if (plaza) { plaza.editing = false; plaza._renderPalette = null; }
   const ed = document.getElementById('plazaEditor'); if (ed) ed.remove();
   const dock = document.querySelector('.plaza-dock'); if (dock) dock.style.display = '';
   const hint = document.querySelector('.plaza-hint'); if (hint) hint.style.display = '';
@@ -4820,10 +4823,16 @@ function plzEditTap(fi, fj) {
   const furn = plzR.furn;
   if (furn.some(f => f.t === 'portal' && f.i === fi && f.j === fj)) return;   // no tocar la salida
   const idx = furn.findIndex(f => f.i === fi && f.j === fj && f.t !== 'portal');
-  if (plaza.editTool === 'erase') { if (idx >= 0) { furn.splice(idx, 1); plzRecompute(); haptic(10); } return; }
+  if (plaza.editTool === 'erase') { if (idx >= 0) { furn.splice(idx, 1); plzRecompute(); if (plaza._renderPalette) plaza._renderPalette(); haptic(10); } return; }
+  const tool = plaza.editTool;
+  // límite por unidades del inventario (cada unidad comprada = un objeto colocable)
+  if (!PLZ_FREE_ITEMS.has(tool)) {
+    const placed = furn.filter(f => f.t === tool && !(f.i === fi && f.j === fj)).length;
+    if (placed >= plzQty(tool)) { toast('No te quedan «' + (PLZ_ITEM_NAME[tool] || tool) + '» · compra más en la Tienda'); haptic(20); return; }
+  }
   if (idx >= 0) furn.splice(idx, 1);   // reemplaza lo que hubiera
-  furn.push({ t: plaza.editTool, i: fi, j: fj });
-  plzRecompute(); haptic(6);
+  furn.push({ t: tool, i: fi, j: fj });
+  plzRecompute(); if (plaza._renderPalette) plaza._renderPalette(); haptic(6);
 }
 async function plzSaveRoom() {
   const def = plzR && plzR.def; if (!def || !def.custom) return;
@@ -4834,11 +4843,16 @@ async function plzSaveRoom() {
   } catch (e) { toast('No se pudo guardar'); }
 }
 
-// ---- economía: monedas, inventario y tienda ----
+// ---- economía: monedas, inventario (por unidades) y tienda ----
 const PLZ_FREE_ITEMS = new Set(['plant', 'stool', 'crate']);
+const PLZ_ITEM_NAME = {};   // t -> nombre legible (se rellena con PLZ_EDIT_ITEMS)
 function plzCoins() { return (state.profile && state.profile.plaza_coins) || 0; }
-function plzOwned() { return (state.profile && state.profile.plaza_items) || []; }
-function plzHasItem(t) { return PLZ_FREE_ITEMS.has(t) || plzOwned().includes(t); }
+function plzInv() { return (state.profile && state.profile.plaza_inv) || {}; }
+function plzQty(t) { return PLZ_FREE_ITEMS.has(t) ? Infinity : (plzInv()[t] || 0); }
+function plzOwned() { const inv = plzInv(); return Object.keys(inv).filter(k => inv[k] > 0); }
+function plzHasItem(t) { return PLZ_FREE_ITEMS.has(t) || (plzInv()[t] || 0) > 0; }
+function plzAddInv(t, n) { const inv = Object.assign({}, plzInv()); inv[t] = (inv[t] || 0) + (n || 1); if (state.profile) state.profile.plaza_inv = inv; }
+PLZ_EDIT_ITEMS.forEach(it => PLZ_ITEM_NAME[it.t] = it.n);
 
 // miniatura de un mueble en canvas (reutiliza plzDrawFurn con un contexto temporal)
 function plzFurnThumb(type, px) {
@@ -4857,33 +4871,34 @@ function plzFurnThumb(type, px) {
 async function openPlazaShop(onBuy) {
   const m = openModal(`<div class="modal-head"><h3><svg class="mh-ic" fill="none" stroke="currentColor"><use href="#i-cart"/></svg> Tienda de objetos</h3><button class="close">&times;</button></div>
     <div class="modal-body">
-      <div class="shop-bal"><span class="coin"></span> <b id="shopCoins">${plzCoins()}</b> monedas <span class="shop-tip">· gánalas jugando en el arcade</span></div>
+      <div class="shop-bal"><span class="coin"></span> <b id="shopCoins">${plzCoins()}</b> monedas <span class="shop-tip">· gánalas jugando</span><button class="btn sm ghost shop-inv-btn" id="shopInv">Mi inventario</button></div>
       <div id="shopGrid" class="shop-grid"><div class="pr-empty">Cargando…</div></div>
     </div>`);
+  m.querySelector('#shopInv').onclick = () => { m.remove(); openPlazaInventory(); };
   const grid = m.querySelector('#shopGrid');
   let items = [];
   try { const { data } = await sb.from('plaza_shop').select('item,name,price,category,sort').order('sort'); items = data || []; } catch (_) {}
   if (!items.length) { grid.innerHTML = '<div class="pr-empty">No se pudo cargar la tienda.</div>'; return; }
   const render = () => {
-    const owned = plzOwned();
     grid.innerHTML = '';
     items.forEach(it => {
-      const has = PLZ_FREE_ITEMS.has(it.item) || owned.includes(it.item);
-      const card = el(`<div class="shop-card ${has ? 'owned' : ''}">
+      const free = it.price === 0 || PLZ_FREE_ITEMS.has(it.item);
+      const qty = plzInv()[it.item] || 0;
+      const card = el(`<div class="shop-card ${qty > 0 ? 'owned' : ''}">
+        ${qty > 0 ? `<span class="shop-qty">×${qty}</span>` : ''}
         <div class="shop-thumb"></div>
         <div class="shop-name">${esc(it.name)}</div>
-        <button class="shop-buy" ${has ? 'disabled' : ''}>${has ? (it.price === 0 ? 'Gratis' : 'Comprado') : `<span class="coin sm"></span> ${it.price}`}</button>
+        <button class="shop-buy" ${free ? 'disabled' : ''}>${free ? 'Gratis' : `<span class="coin sm"></span> ${it.price}`}</button>
       </div>`);
       try { card.querySelector('.shop-thumb').appendChild(plzFurnThumb(it.item, 68)); } catch (_) {}
       const buyBtn = card.querySelector('.shop-buy');
-      if (!has) buyBtn.onclick = async () => {
+      if (!free) buyBtn.onclick = async () => {
         if (plzCoins() < it.price) { toast('Te faltan monedas · juega para ganarlas'); return; }
         buyBtn.disabled = true;
         try {
           const { data: bal, error } = await sb.rpc('plaza_buy_item', { p_item: it.item });
           if (error) throw error;
-          state.profile.plaza_coins = bal;
-          state.profile.plaza_items = [...plzOwned(), it.item];
+          state.profile.plaza_coins = bal; plzAddInv(it.item, 1);
           m.querySelector('#shopCoins').textContent = bal;
           haptic(12); toast('¡' + it.name + ' comprado!');
           render(); onBuy && onBuy();
@@ -4893,6 +4908,22 @@ async function openPlazaShop(onBuy) {
     });
   };
   render();
+}
+
+// inventario del usuario: objetos comprados con miniaturas y cantidad
+function openPlazaInventory(onGo) {
+  const inv = plzInv();
+  const owned = Object.keys(inv).filter(k => inv[k] > 0).sort((a, b) => inv[b] - inv[a]);
+  const m = openModal(`<div class="modal-head"><h3><svg class="mh-ic" fill="none" stroke="currentColor"><use href="#i-files"/></svg> Mi inventario</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <div class="shop-bal"><span class="coin"></span> <b>${plzCoins()}</b> monedas</div>
+      ${owned.length
+      ? `<div class="shop-grid">${owned.map(t => `<div class="shop-card owned" data-t="${t}"><span class="shop-qty">×${inv[t]}</span><div class="shop-thumb"></div><div class="shop-name">${esc(PLZ_ITEM_NAME[t] || t)}</div></div>`).join('')}</div>`
+      : '<div class="pr-empty">Aún no tienes objetos. Cómpralos en la Tienda con las monedas que ganes jugando.</div>'}
+      <button class="btn primary" id="invShop" style="width:100%;margin-top:12px;display:flex;align-items:center;justify-content:center;gap:8px"><svg style="width:16px;height:16px" fill="none" stroke="#fff"><use href="#i-cart"/></svg> Ir a la Tienda</button>
+    </div>`);
+  m.querySelectorAll('.shop-card[data-t]').forEach(card => { try { card.querySelector('.shop-thumb').appendChild(plzFurnThumb(card.dataset.t, 68)); } catch (_) {} });
+  m.querySelector('#invShop').onclick = () => { m.remove(); openPlazaShop(onGo); };
 }
 
 // selector de pista para pinchar en la Plaza (busca por título)

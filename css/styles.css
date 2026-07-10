@@ -4428,9 +4428,14 @@ html { touch-action: manipulation; }
 .shop-bal b { font-size: 17px; font-weight: 800; }
 .shop-tip { color: var(--ink-faint); font-size: 12px; font-weight: 600; }
 .shop-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-height: 56vh; overflow-y: auto; padding: 2px; }
-.shop-card { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 8px; border-radius: 14px;
+.shop-card { position: relative; display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 10px 8px; border-radius: 14px;
   border: 1px solid var(--line); background: var(--panel); }
-.shop-card.owned { opacity: .78; }
+.shop-card.owned { border-color: color-mix(in srgb, var(--accent) 40%, var(--line)); }
+.shop-qty { position: absolute; top: 6px; right: 6px; z-index: 1; background: var(--accent-grad); color: #fff; font-size: 11px; font-weight: 800; padding: 2px 7px; border-radius: 999px; box-shadow: 0 2px 6px rgba(0,0,0,.35); }
+.shop-inv-btn { margin-left: auto; }
+.ped-qty { display: inline-block; min-width: 15px; text-align: center; background: rgba(255,255,255,.16); border-radius: 999px; padding: 0 5px; font-size: 10px; font-weight: 800; }
+.ped-item.on .ped-qty { background: rgba(255,255,255,.3); }
+.ped-item.ped-inv { color: #8fc0ff; border-color: rgba(96,140,255,.35); }
 .shop-thumb { width: 68px; height: 68px; border-radius: 11px; display: grid; place-items: center;
   background: radial-gradient(70% 60% at 50% 30%, rgba(110,45,245,.16), transparent 60%), linear-gradient(180deg, #0c1120, #080b16); }
 .shop-thumb canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
