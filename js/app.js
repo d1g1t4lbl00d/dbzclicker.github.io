@@ -4122,6 +4122,7 @@ const PLZ_ROOMS = {
       { t: 'portal', i: 9, j: 3, to: 'azotea', spawn: [5, 8], label: 'Azotea', col: '#f0a13e' },
       { t: 'portal', i: 0, j: 7, to: 'arcade', spawn: [5, 8], label: 'Arcade', col: '#2dc878' },
       { t: 'portal', i: 9, j: 7, to: 'playa', spawn: [5, 8], label: 'Playa', col: '#12c2c2' },
+      { t: 'portal', i: 5, j: 5, to: '__rooms__', label: 'Salas', col: '#ffd23e' },
     ],
   },
   azotea: {
@@ -4193,10 +4194,28 @@ let plaza = null;          // runtime del render (solo mientras la vista está a
 let plazaChan = null;      // canal del contador (badge del menú)
 let plazaCount = 0;
 let plzR = null;           // sala activa computada { def, furn, blocked, seats, dance, portals }
+const plzCustomRooms = {}; // cache de salas de usuario: id -> { def, furn }
+
+// convierte un registro de plaza_rooms en una def de sala utilizable y la cachea
+function plzRoomFromRecord(rec) {
+  const d = rec.data || {};
+  const owner = rec.profiles ? (rec.profiles.display_name || rec.profiles.username) : '';
+  const furn = Array.isArray(d.furn) ? d.furn.slice() : [];
+  if (!furn.some(f => f.t === 'portal')) furn.push({ t: 'portal', i: 5, j: 9, to: 'plaza', spawn: [5, 6], label: 'Salir', col: '#27a9ff' });
+  const def = {
+    name: rec.name || 'Sala', sub: d.sub || (owner ? 'de ' + owner : 'Sala de la comunidad'),
+    floorA: d.floorA || '#161c33', floorB: d.floorB || '#121729', wall: d.wall || '#0d1122',
+    neonA: d.neonA || '#27a9ff', neonB: d.neonB || '#6e2df5', sign: (d.sign || rec.name || 'ROOM').toString().toUpperCase().slice(0, 10),
+    dance: d.dance || [], custom: true, ownerId: rec.owner_id, roomId: rec.id, furn,
+  };
+  plzCustomRooms[rec.id] = { def, furn };
+  return def;
+}
 
 function plzComputeRoom(id) {
-  const def = PLZ_ROOMS[id] || PLZ_ROOMS.plaza;
-  const furn = def.furn;
+  const custom = plzCustomRooms[id];
+  const def = custom ? custom.def : (PLZ_ROOMS[id] || PLZ_ROOMS.plaza);
+  const furn = custom ? custom.furn : def.furn;
   return {
     id, def, furn,
     blocked: new Set(furn.filter(f => PLZ_SOLID.has(f.t)).map(f => f.i + ',' + f.j)),
@@ -4204,6 +4223,14 @@ function plzComputeRoom(id) {
     portals: new Map(furn.filter(f => f.t === 'portal').map(f => [f.i + ',' + f.j, f])),
     dance: def.dance || [],
   };
+}
+// recomputa colisiones/asientos/portales tras editar el mobiliario en caliente
+function plzRecompute() {
+  if (!plzR) return;
+  const furn = plzR.furn;
+  plzR.blocked = new Set(furn.filter(f => PLZ_SOLID.has(f.t)).map(f => f.i + ',' + f.j));
+  plzR.seats = new Map(furn.filter(f => f.t === 'bench' || f.t === 'stool' || f.t === 'sofa' || f.t === 'couch').map(f => [f.i + ',' + f.j, f]));
+  plzR.portals = new Map(furn.filter(f => f.t === 'portal').map(f => [f.i + ',' + f.j, f]));
 }
 
 const plzKey = (i, j) => i + ',' + j;
@@ -4260,6 +4287,12 @@ function initPlazaWatch() {
 // entra en una sala: cambia el canal de tiempo real, mobiliario y suelo
 function plzJoinRoom(id, si, sj) {
   if (!plaza) return;
+  // limpiar estado de edición al cambiar de sala
+  plaza.editing = false;
+  const edPanel = document.getElementById('plazaEditor'); if (edPanel) edPanel.remove();
+  plzHideEditFab();
+  const dk = document.querySelector('.plaza-dock'); if (dk) dk.style.display = '';
+  const ht = document.querySelector('.plaza-hint'); if (ht) ht.style.display = '';
   // salir del canal de la sala anterior
   if (plaza.chan) { try { plaza.chan.untrack(); } catch (_) {} try { sb.removeChannel(plaza.chan); } catch (_) {} plaza.chan = null; }
   plzR = plzComputeRoom(id);
@@ -4450,6 +4483,12 @@ async function renderPlaza() {
     const s = r.width / canvas.width;
     const rx = (e.clientX - r.left) / s - plaza.ox, ry = (e.clientY - r.top) / s - plaza.oy;
     closeMenu();
+    // modo edición de sala: colocar/quitar objetos en la casilla tocada
+    if (plaza.editing) {
+      const efi = Math.floor((rx / (PLZ.TW / 2) + ry / (PLZ.TH / 2)) / 2);
+      const efj = Math.floor((ry / (PLZ.TH / 2) - rx / (PLZ.TW / 2)) / 2);
+      plzEditTap(efi, efj); return;
+    }
     // ¿ha tocado el objeto interactivo de la sala? → abre su minijuego
     const act = PLZ_ACTIVITY[plaza.roomId];
     if (act) {
@@ -4586,7 +4625,11 @@ async function renderPlaza() {
       e.x = t.i; e.y = t.j; e.path.shift();
       if (isMe && !e.path.length) {
         const portal = plzR.portals.get(plzKey(t.i, t.j));
-        if (portal) { toast('Entrando en ' + (PLZ_ROOMS[portal.to] ? PLZ_ROOMS[portal.to].name : '…')); plzJoinRoom(portal.to, portal.spawn[0], portal.spawn[1]); return; }
+        if (portal) {
+          if (portal.to === '__rooms__') { openPlazaRoomsBrowser(); plzTrack(); return; }
+          toast('Entrando en ' + (PLZ_ROOMS[portal.to] ? PLZ_ROOMS[portal.to].name : '…'));
+          plzJoinRoom(portal.to, portal.spawn[0], portal.spawn[1]); return;
+        }
         plzTrack();
         try { localStorage.setItem('ub_plaza_pos_' + plaza.roomId, JSON.stringify({ i: t.i, j: t.j })); } catch (_) {}
       }
@@ -4637,6 +4680,146 @@ function openPlazaCustomizer(onChange) {
   };
   m.querySelectorAll('.pcz-sw').forEach(b => b.onclick = () => { curAccent = b.dataset.c; m.querySelectorAll('.pcz-sw').forEach(x => x.classList.toggle('on', x === b)); haptic(6); drawPreview(); save(); });
   m.querySelectorAll('.pcz-hat').forEach(b => b.onclick = () => { curHat = b.dataset.h; m.querySelectorAll('.pcz-hat').forEach(x => x.classList.toggle('on', x === b)); haptic(6); drawPreview(); save(); });
+}
+
+// ===================== SALAS DE USUARIO: explorar, visitar y editar =====================
+const PLZ_EDIT_ITEMS = [
+  { t: 'plant', n: 'Planta' }, { t: 'tree', n: 'Árbol' }, { t: 'palm', n: 'Palmera' },
+  { t: 'sofa', n: 'Sofá' }, { t: 'couch', n: 'Diván' }, { t: 'bench', n: 'Banco' }, { t: 'stool', n: 'Taburete' },
+  { t: 'table', n: 'Mesa' }, { t: 'bar', n: 'Barra' }, { t: 'crate', n: 'Caja' }, { t: 'rack', n: 'Rack' },
+  { t: 'lamp', n: 'Farola' }, { t: 'neon', n: 'Neón' }, { t: 'spk', n: 'Altavoz' }, { t: 'djbooth', n: 'Cabina' },
+  { t: 'arcade', n: 'Recreativa' }, { t: 'hoop', n: 'Canasta' }, { t: 'vending', n: 'Máquina' },
+  { t: 'pool', n: 'Piscina' }, { t: 'sea', n: 'Mar' }, { t: 'umbrella', n: 'Sombrilla' }, { t: 'fountain', n: 'Fuente' },
+];
+const PLZ_FLOORS = [
+  { a: '#161c33', b: '#121729', w: '#0d1122' }, { a: '#241b12', b: '#1c150e', w: '#161016' },
+  { a: '#14182b', b: '#0f1322', w: '#0a0d18' }, { a: '#1a1030', b: '#140b26', w: '#0d0720' },
+  { a: '#c9a86a', b: '#bd9a58', w: '#1a3a4a' }, { a: '#12281f', b: '#0e2018', w: '#08140f' },
+];
+const PLZ_NEONS = ['#27a9ff', '#6e2df5', '#e0507a', '#2dc878', '#f0a13e', '#12c2c2', '#ffd23e', '#ff5d5d'];
+
+async function plzOpenRoom(rec) {
+  if (!plaza) return;
+  plzRoomFromRecord(rec);
+  plzHideEditFab();
+  plzJoinRoom(rec.id, 5, 8);
+  try { sb.rpc('plaza_room_visited', { p_room: rec.id }); } catch (_) {}
+  if (rec.owner_id === state.user.id) plzShowEditFab();
+}
+
+function openPlazaRoomsBrowser() {
+  const m = openModal(`<div class="modal-head"><h3><svg class="mh-ic" fill="none" stroke="currentColor"><use href="#i-plaza"/></svg> Salas de la comunidad</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <div class="seg pr-tabs" id="prTabs"><button class="on" data-t="explore">Explorar</button><button data-t="mine">Mis salas</button></div>
+      <button class="btn primary" id="prCreate" style="width:100%;margin:12px 0;display:flex;align-items:center;justify-content:center;gap:8px"><svg style="width:16px;height:16px" fill="none" stroke="#fff"><use href="#i-plus"/></svg> Crear una sala</button>
+      <div id="prList" class="pr-list"></div>
+    </div>`);
+  const listEl = m.querySelector('#prList');
+  let tab = 'explore';
+  const load = async () => {
+    listEl.innerHTML = '<div class="pr-empty">Cargando…</div>';
+    let q = sb.from('plaza_rooms').select('id,name,visits,updated_at,owner_id,data,is_public,profiles:owner_id(username,display_name,avatar_url)');
+    q = tab === 'mine' ? q.eq('owner_id', state.user.id).order('updated_at', { ascending: false })
+      : q.eq('is_public', true).order('visits', { ascending: false }).limit(40);
+    const { data, error } = await q;
+    if (error) { listEl.innerHTML = '<div class="pr-empty">No se pudieron cargar las salas.</div>'; return; }
+    if (!data || !data.length) { listEl.innerHTML = `<div class="pr-empty">${tab === 'mine' ? 'Aún no has creado ninguna sala. ¡Crea la primera!' : 'Todavía no hay salas públicas. ¡Sé el primero!'}</div>`; return; }
+    listEl.innerHTML = '';
+    data.forEach(r => {
+      const who = r.profiles ? (r.profiles.display_name || r.profiles.username || 'bro') : 'bro';
+      const n = Array.isArray(r.data && r.data.furn) ? r.data.furn.filter(f => f.t !== 'portal').length : 0;
+      const mine = r.owner_id === state.user.id;
+      const row = el(`<div class="pr-row">
+        <button class="pr-enter" data-id="${r.id}"><span class="pr-ic" style="color:${esc((r.data && r.data.neonA) || '#27a9ff')}"><svg fill="none" stroke="currentColor"><use href="#i-plaza"/></svg></span><span class="pr-meta"><b>${esc(r.name || 'Sala')}</b><span>${esc(who)} · ${n} objetos · ${r.visits || 0} visitas</span></span></button>
+        ${mine ? `<button class="pr-del" data-del="${r.id}" aria-label="Borrar"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg></button>` : ''}</div>`);
+      row.querySelector('.pr-enter').onclick = () => { m.remove(); plzOpenRoom(r); };
+      const db = row.querySelector('.pr-del'); if (db) db.onclick = async () => { if (!confirm('¿Borrar «' + (r.name || 'esta sala') + '»?')) return; try { await sb.from('plaza_rooms').delete().eq('id', r.id); } catch (_) {} load(); };
+      listEl.appendChild(row);
+    });
+  };
+  m.querySelectorAll('#prTabs button').forEach(b => b.onclick = () => { tab = b.dataset.t; m.querySelectorAll('#prTabs button').forEach(x => x.classList.toggle('on', x === b)); load(); });
+  m.querySelector('#prCreate').onclick = async () => {
+    const name = (prompt('Ponle nombre a tu sala:', 'Mi sala') || '').trim().slice(0, 40);
+    if (!name) return;
+    const data = { floorA: '#161c33', floorB: '#121729', wall: '#0d1122', neonA: '#27a9ff', neonB: '#6e2df5', furn: [] };
+    const { data: rec, error } = await sb.from('plaza_rooms').insert({ owner_id: state.user.id, name, data }).select('id,name,visits,owner_id,data,profiles:owner_id(username,display_name,avatar_url)').single();
+    if (error) { toast(error.message || 'No se pudo crear la sala'); return; }
+    m.remove(); await plzOpenRoom(rec); plzEnterEdit();
+  };
+  load();
+}
+
+// ---- botón flotante para editar tu propia sala ----
+function plzShowEditFab() {
+  const wrap = $('plazaWrap'); if (!wrap) return;
+  plzHideEditFab();
+  const fab = el(`<button class="plaza-editfab" id="plazaEditFab"><svg fill="none" stroke="currentColor"><use href="#i-tools"/></svg> Editar sala</button>`);
+  fab.onclick = () => plzEnterEdit();
+  wrap.appendChild(fab);
+}
+function plzHideEditFab() {
+  const f = document.getElementById('plazaEditFab'); if (f) f.remove();
+}
+
+// ---- modo edición ----
+function plzEnterEdit() {
+  if (!plaza || !plzR || !plzR.def.custom) return;
+  plaza.editing = true; plaza.editTool = PLZ_EDIT_ITEMS[0].t;
+  plzHideEditFab();
+  const dock = document.querySelector('.plaza-dock'); if (dock) dock.style.display = 'none';
+  const hint = document.querySelector('.plaza-hint'); if (hint) hint.style.display = 'none';
+  const old = document.getElementById('plazaEditor'); if (old) old.remove();
+  const def = plzR.def;
+  const items = PLZ_EDIT_ITEMS.map(it => `<button class="ped-item ${it.t === plaza.editTool ? 'on' : ''}" data-tool="${it.t}">${it.n}</button>`).join('');
+  const floors = PLZ_FLOORS.map((f, i) => `<button class="ped-sw" data-floor="${i}" style="background:${f.a}" aria-label="Suelo"></button>`).join('');
+  const neons = PLZ_NEONS.map(c => `<button class="ped-sw ped-neon" data-neon="${c}" style="background:${c}" aria-label="Neón"></button>`).join('');
+  const ed = el(`<div class="plaza-editor" id="plazaEditor">
+    <div class="ped-top">
+      <input id="pedName" class="ped-name" maxlength="40" value="${esc(def.name)}" placeholder="Nombre de la sala">
+      <button class="btn sm" id="pedSave">Guardar</button>
+      <button class="btn sm ghost" id="pedExit">Salir</button>
+    </div>
+    <div class="ped-lbl">Objetos <span>· toca una casilla para colocar</span></div>
+    <div class="ped-scroll" id="pedItems"><button class="ped-item ped-erase" data-tool="erase">Borrar</button>${items}</div>
+    <div class="ped-lbl">Suelo</div>
+    <div class="ped-scroll">${floors}</div>
+    <div class="ped-lbl">Neón</div>
+    <div class="ped-scroll">${neons}</div>
+  </div>`);
+  const wrap = $('plazaWrap');
+  wrap.parentNode.insertBefore(ed, wrap.nextSibling);
+  const markTool = () => ed.querySelectorAll('.ped-item').forEach(b => b.classList.toggle('on', b.dataset.tool === plaza.editTool));
+  ed.querySelectorAll('.ped-item').forEach(b => b.onclick = () => { plaza.editTool = b.dataset.tool; markTool(); haptic(5); });
+  ed.querySelectorAll('[data-floor]').forEach(b => b.onclick = () => { const f = PLZ_FLOORS[+b.dataset.floor]; def.floorA = f.a; def.floorB = f.b; def.wall = f.w; plzPrerenderFloor(); haptic(6); });
+  ed.querySelectorAll('[data-neon]').forEach(b => b.onclick = () => { def.neonA = b.dataset.neon; def.neonB = b.dataset.neon; plzPrerenderFloor(); haptic(6); });
+  ed.querySelector('#pedName').oninput = (e) => { def.name = e.target.value.slice(0, 40); const h = $('plazaRoomName'); if (h) h.textContent = def.name || 'Sala'; };
+  ed.querySelector('#pedSave').onclick = () => plzSaveRoom();
+  ed.querySelector('#pedExit').onclick = () => plzExitEdit();
+}
+function plzExitEdit() {
+  plaza && (plaza.editing = false);
+  const ed = document.getElementById('plazaEditor'); if (ed) ed.remove();
+  const dock = document.querySelector('.plaza-dock'); if (dock) dock.style.display = '';
+  const hint = document.querySelector('.plaza-hint'); if (hint) hint.style.display = '';
+  if (plzR && plzR.def.custom && plzR.def.ownerId === state.user.id) plzShowEditFab();
+}
+function plzEditTap(fi, fj) {
+  if (fi < 0 || fj < 0 || fi >= PLZ.COLS || fj >= PLZ.ROWS) return;
+  const furn = plzR.furn;
+  if (furn.some(f => f.t === 'portal' && f.i === fi && f.j === fj)) return;   // no tocar la salida
+  const idx = furn.findIndex(f => f.i === fi && f.j === fj && f.t !== 'portal');
+  if (plaza.editTool === 'erase') { if (idx >= 0) { furn.splice(idx, 1); plzRecompute(); haptic(10); } return; }
+  if (idx >= 0) furn.splice(idx, 1);   // reemplaza lo que hubiera
+  furn.push({ t: plaza.editTool, i: fi, j: fj });
+  plzRecompute(); haptic(6);
+}
+async function plzSaveRoom() {
+  const def = plzR && plzR.def; if (!def || !def.custom) return;
+  const data = { sub: def.sub, floorA: def.floorA, floorB: def.floorB, wall: def.wall, neonA: def.neonA, neonB: def.neonB, sign: (def.name || 'ROOM').toUpperCase().slice(0, 10), dance: def.dance, furn: plzR.furn.filter(f => f.t !== 'portal') };
+  try {
+    await sb.from('plaza_rooms').update({ name: def.name || 'Mi sala', data, updated_at: new Date().toISOString() }).eq('id', def.roomId);
+    toast('Sala guardada');
+  } catch (e) { toast('No se pudo guardar'); }
 }
 
 // selector de pista para pinchar en la Plaza (busca por título)
