@@ -4997,7 +4997,7 @@ function openPerkyDance() {
     return chart;
   }
   function newState(chart, clipDur, synced) {
-    const st = { t: -LEAD, score: 0, combo: 0, maxCombo: 0, chart, judge: null, judgePop: 0, comboPop: 0, flash: [0, 0, 0, 0], pop: [0, 0, 0, 0], parts: [], over: false, synced, clipDur, audioStart: 0 };
+    const st = { t: -LEAD, score: 0, combo: 0, maxCombo: 0, chart, judge: null, judgePop: 0, comboPop: 0, flash: [0, 0, 0, 0], pop: [0, 0, 0, 0], parts: [], over: false, synced, clipDur, audioStart: 0, fever: false, feverTier: 1, feverPop: 0 };
     st.lastT = chart.length ? chart[chart.length - 1].t : clipDur;
     wrap.querySelector('#pkScore').textContent = '0';
     return st;
@@ -5053,9 +5053,17 @@ function openPerkyDance() {
       else if (bd < 0.10) { pts = 200; txt = 'GREAT'; col = '#2dc878'; }
       else { pts = 100; txt = 'GOOD'; col = '#27a9ff'; }
       g.combo++; g.maxCombo = Math.max(g.maxCombo, g.combo);
-      g.score += pts + g.combo * 2; g.judge = { txt, col, t: g.t }; g.judgePop = 1; g.comboPop = 1; g.pop[lane] = 1;
+      const tier = g.combo >= 50 ? 4 : g.combo >= 35 ? 3 : g.combo >= 20 ? 2 : 1;
+      g.score += (pts + g.combo * 2) * tier; g.judge = { txt, col, t: g.t }; g.judgePop = 1; g.comboPop = 1; g.pop[lane] = 1;
       burst(lane * LW + LW / 2, HITY, col, bd < 0.05 ? 14 : 9);
-      pkBlip(560 + Math.min(g.combo, 24) * 16, 0.06, 'square');
+      // entrada / subida de frenesí
+      if (tier > g.feverTier) {
+        g.feverPop = 1; g.judge = { txt: tier === 2 ? '¡FRENESÍ!' : '×' + tier + ' ¡A TOPE!', col: '#ffd23e', t: g.t };
+        for (let i = 0; i < 4; i++) burst(i * LW + LW / 2, HITY, LC[i], 10);
+        pkBlip(360, 0.14, 'sawtooth'); pkBlip(720, 0.16, 'square'); haptic(40);
+      }
+      g.feverTier = tier; g.fever = tier >= 2;
+      pkBlip((g.fever ? 700 : 560) + Math.min(g.combo, 24) * 16, 0.06, g.fever ? 'sawtooth' : 'square');
       wrap.querySelector('#pkScore').textContent = g.score;
     }
   }
@@ -5076,9 +5084,11 @@ function openPerkyDance() {
   function update(dt) {
     if (!g || g.over) return;
     if (g.synced && g.audioStart) g.t = ac.currentTime - g.audioStart; else g.t += dt;
-    for (const n of g.chart) if (!n.hit && g.t > n.t + 0.18) { n.hit = true; g.combo = 0; g.judge = { txt: 'MISS', col: '#e0507a', t: g.t }; g.judgePop = 1; }
+    for (const n of g.chart) if (!n.hit && g.t > n.t + 0.18) { n.hit = true; g.combo = 0; g.fever = false; g.feverTier = 1; g.judge = { txt: 'MISS', col: '#e0507a', t: g.t }; g.judgePop = 1; }
     for (let i = 0; i < 4; i++) { g.flash[i] = Math.max(0, g.flash[i] - dt * 4); g.pop[i] = Math.max(0, g.pop[i] - dt * 4); }
-    g.judgePop = Math.max(0, g.judgePop - dt * 3); g.comboPop = Math.max(0, g.comboPop - dt * 5);
+    g.judgePop = Math.max(0, g.judgePop - dt * 3); g.comboPop = Math.max(0, g.comboPop - dt * 5); g.feverPop = Math.max(0, g.feverPop - dt * 2);
+    // lluvia de chispas de colores durante el frenesí
+    if (g.fever && Math.random() < 0.5 + g.feverTier * 0.15) { const lane = Math.floor(Math.random() * 4); g.parts.push({ x: 6 + Math.random() * (AW - 12), y: -4, vx: (Math.random() - 0.5) * 30, vy: 60 + Math.random() * 80, life: 0.9 + Math.random() * 0.6, t: 0, col: LC[lane], r: 1 + Math.random() * 2 }); }
     for (const p of g.parts) { p.t += dt; p.vy += 260 * dt; p.x += p.vx * dt; p.y += p.vy * dt; }
     g.parts = g.parts.filter(p => p.t < p.life);
     const endT = g.synced ? g.clipDur : g.lastT;
@@ -5090,6 +5100,8 @@ function openPerkyDance() {
     // pulso de fondo al ritmo
     const pulse = 0.5 + 0.5 * Math.sin(g.t * 4);
     ctx.globalAlpha = 0.05 + 0.05 * pulse; ctx.fillStyle = '#6e2df5'; ctx.fillRect(0, 0, AW, AH); ctx.globalAlpha = 1;
+    // baño de color del modo frenesí
+    if (g.fever) { const hue = (g.t * 150) % 360; ctx.globalAlpha = 0.07 + 0.06 * (0.5 + 0.5 * Math.sin(g.t * 9)) + g.feverPop * 0.15; ctx.fillStyle = 'hsl(' + hue + ',90%,55%)'; ctx.fillRect(0, 0, AW, AH); ctx.globalAlpha = 1; }
     // carriles con haz de luz sobre la línea
     for (let i = 0; i < 4; i++) {
       const x0 = i * LW; ctx.fillStyle = i % 2 ? 'rgba(255,255,255,.015)' : 'rgba(255,255,255,.035)'; ctx.fillRect(x0, 0, LW, AH);
@@ -5122,6 +5134,18 @@ function openPerkyDance() {
     // partículas
     for (const p of g.parts) { ctx.globalAlpha = Math.max(0, 1 - p.t / p.life); ctx.fillStyle = p.col; ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill(); }
     ctx.globalAlpha = 1;
+    // medidor de frenesí (arriba): se llena con el combo y se vuelve arcoíris en frenesí
+    const gauge = g.fever ? 1 : Math.min(1, g.combo / 20);
+    ctx.fillStyle = 'rgba(0,0,0,.32)'; ctx.fillRect(8, 7, AW - 16, 5);
+    if (g.fever) { const hue = (g.t * 170) % 360; ctx.save(); ctx.shadowColor = 'hsl(' + hue + ',100%,60%)'; ctx.shadowBlur = 12; ctx.fillStyle = 'hsl(' + hue + ',100%,63%)'; ctx.fillRect(8, 7, AW - 16, 5); ctx.restore(); }
+    else if (gauge > 0) { ctx.fillStyle = '#6e8bff'; ctx.fillRect(8, 7, (AW - 16) * gauge, 5); }
+    // marco luminoso + banner de frenesí
+    if (g.fever) {
+      const hue = (g.t * 150) % 360, col = 'hsl(' + hue + ',100%,62%)';
+      ctx.save(); ctx.strokeStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 16; ctx.lineWidth = 3; ctx.globalAlpha = 0.55 + 0.35 * Math.sin(g.t * 9); ctx.strokeRect(2, 2, AW - 4, AH - 4); ctx.restore();
+      const s = 1 + 0.08 * Math.sin(g.t * 11) + g.feverPop * 0.5;
+      ctx.save(); ctx.translate(AW / 2, 66); ctx.scale(s, s); ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 18; ctx.font = 'bold 17px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('★ FRENESÍ ×' + g.feverTier + ' ★', 0, 0); ctx.restore(); ctx.textBaseline = 'alphabetic';
+    }
     // combo con pop
     if (g.combo > 1) { const s = 1 + g.comboPop * 0.4; ctx.save(); ctx.translate(AW / 2, 128); ctx.scale(s, s); ctx.fillStyle = '#fff'; ctx.shadowColor = 'rgba(120,160,255,.8)'; ctx.shadowBlur = 12; ctx.font = 'bold 30px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(g.combo, 0, 0); ctx.restore(); ctx.fillStyle = '#93a3c8'; ctx.font = 'bold 10px system-ui'; ctx.textAlign = 'center'; ctx.fillText('COMBO', AW / 2, 150); }
     // juicio con pop
