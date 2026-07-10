@@ -4945,7 +4945,7 @@ function openPerkyDance() {
   const canvas = wrap.querySelector('#pkCanvas'), ctx = canvas.getContext('2d');
   const DPR = Math.min(2, Math.max(1, Math.round(window.devicePixelRatio || 1))); canvas.width = AW * DPR; canvas.height = AH * DPR; ctx.scale(DPR, DPR);
   // ---- autopista en perspectiva estilo Guitar Hero ----
-  const YTOP = 46, YHIT = 262, MARG = 14, LANEW = (AW - MARG * 2) / 4, CX = AW / 2, DNEAR = 1, DFAR = 8.5;
+  const YTOP = 46, YHIT = 262, MARG = 14, LANEW = (AW - MARG * 2) / 4, CX = AW / 2, DNEAR = 1, DFAR = 4.6;
   const proj = (z) => { const zz = z < 0 ? 0 : z; const D = DNEAR + zz * (DFAR - DNEAR); const sc = DNEAR / D; return { y: YTOP + (YHIT - YTOP) * sc, sc }; };
   const laneCX = (i, sc) => CX + (MARG + (i + 0.5) * LANEW - CX) * sc;   // centro del carril i
   const edgeX = (i, sc) => CX + (MARG + i * LANEW - CX) * sc;           // borde/divisor i (0..4)
@@ -5164,23 +5164,24 @@ function openPerkyDance() {
     const hz = ctx.createRadialGradient(CX, YTOP, 3, CX, YTOP, 130); hz.addColorStop(0, 'rgba(90,110,225,.22)'); hz.addColorStop(1, 'transparent'); ctx.fillStyle = hz; ctx.fillRect(0, 0, AW, YHIT);
     // baño de color del modo frenesí
     if (g.fever) { const hue = (g.t * 150) % 360; ctx.globalAlpha = 0.07 + 0.06 * (0.5 + 0.5 * Math.sin(g.t * 9)) + g.feverPop * 0.15; ctx.fillStyle = 'hsl(' + hue + ',90%,55%)'; ctx.fillRect(0, 0, AW, AH); ctx.globalAlpha = 1; }
-    const top = proj(1);
+    const top = proj(1), TY = top.y;   // borde lejano REAL de la autopista (mismo proyector que las notas)
     // ---- mástil en perspectiva ----
-    ctx.beginPath(); ctx.moveTo(edgeX(0, 1), YHIT); ctx.lineTo(edgeX(4, 1), YHIT); ctx.lineTo(edgeX(4, top.sc), YTOP); ctx.lineTo(edgeX(0, top.sc), YTOP); ctx.closePath();
-    const fb = ctx.createLinearGradient(0, YTOP, 0, YHIT); fb.addColorStop(0, 'rgba(34,30,60,.4)'); fb.addColorStop(1, 'rgba(20,18,40,.82)'); ctx.fillStyle = fb; ctx.fill();
+    ctx.beginPath(); ctx.moveTo(edgeX(0, 1), YHIT); ctx.lineTo(edgeX(4, 1), YHIT); ctx.lineTo(edgeX(4, top.sc), TY); ctx.lineTo(edgeX(0, top.sc), TY); ctx.closePath();
+    const fb = ctx.createLinearGradient(0, TY, 0, YHIT); fb.addColorStop(0, 'rgba(34,30,60,.4)'); fb.addColorStop(1, 'rgba(20,18,40,.82)'); ctx.fillStyle = fb; ctx.fill();
     // carriles alternos + haz de luz al pulsar
     for (let i = 0; i < 4; i++) {
-      ctx.beginPath(); ctx.moveTo(edgeX(i, 1), YHIT); ctx.lineTo(edgeX(i + 1, 1), YHIT); ctx.lineTo(edgeX(i + 1, top.sc), YTOP); ctx.lineTo(edgeX(i, top.sc), YTOP); ctx.closePath();
-      ctx.fillStyle = i % 2 ? 'rgba(255,255,255,.02)' : 'rgba(255,255,255,.05)'; ctx.fill();
+      ctx.beginPath(); ctx.moveTo(edgeX(i, 1), YHIT); ctx.lineTo(edgeX(i + 1, 1), YHIT); ctx.lineTo(edgeX(i + 1, top.sc), TY); ctx.lineTo(edgeX(i, top.sc), TY); ctx.closePath();
+      ctx.fillStyle = i % 2 ? 'rgba(255,255,255,.015)' : 'rgba(255,255,255,.035)'; ctx.fill();
+      ctx.save(); ctx.globalAlpha = 0.07; ctx.fillStyle = LC[i]; ctx.fill(); ctx.restore();   // tinte del color del carril (identifica el carril desde lejos)
       const glow = Math.max(g.flash[i], g.pop[i]);
-      if (glow > 0) { ctx.save(); ctx.clip(); ctx.globalAlpha = glow * 0.5; const lg = ctx.createLinearGradient(0, YTOP, 0, YHIT); lg.addColorStop(0, 'transparent'); lg.addColorStop(1, LC[i]); ctx.fillStyle = lg; ctx.fillRect(0, YTOP, AW, YHIT - YTOP); ctx.restore(); ctx.globalAlpha = 1; }
+      if (glow > 0) { ctx.save(); ctx.clip(); ctx.globalAlpha = glow * 0.5; const lg = ctx.createLinearGradient(0, TY, 0, YHIT); lg.addColorStop(0, 'transparent'); lg.addColorStop(1, LC[i]); ctx.fillStyle = lg; ctx.fillRect(0, TY, AW, YHIT - TY); ctx.restore(); ctx.globalAlpha = 1; }
     }
     // líneas de traste horizontales que se acercan
     const SP = 0.5, frac = SP - (g.t % SP);
     for (let k = 0; k < 11; k++) { const d = frac + k * SP, z = d / LEAD; if (z < 0 || z > 1) continue; const p = proj(z); ctx.globalAlpha = 0.08 + 0.22 * (1 - z); ctx.strokeStyle = 'rgba(200,210,255,.9)'; ctx.lineWidth = Math.max(0.5, 1.3 * p.sc); ctx.beginPath(); ctx.moveTo(edgeX(0, p.sc), p.y); ctx.lineTo(edgeX(4, p.sc), p.y); ctx.stroke(); }
     ctx.globalAlpha = 1;
     // divisores de carril (convergen al punto de fuga)
-    for (let i = 0; i <= 4; i++) { ctx.strokeStyle = (i === 0 || i === 4) ? 'rgba(150,170,255,.28)' : 'rgba(255,255,255,.09)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(edgeX(i, 1), YHIT); ctx.lineTo(edgeX(i, top.sc), YTOP); ctx.stroke(); }
+    for (let i = 0; i <= 4; i++) { ctx.strokeStyle = (i === 0 || i === 4) ? 'rgba(150,170,255,.28)' : 'rgba(255,255,255,.09)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(edgeX(i, 1), YHIT); ctx.lineTo(edgeX(i, top.sc), TY); ctx.stroke(); }
 
     // ---- notas (dibujando de lejos a cerca) ----
     const notes = g.chart.filter(n => !n.done).sort((a, b) => (b.t - a.t));
@@ -5189,7 +5190,7 @@ function openPerkyDance() {
       // cola de nota larga
       if (n.dur > 0) {
         const zEnd = (n.t + n.dur - g.t) / LEAD;
-        if (!(zc > 1.06 && zEnd > 1.06) && (n.t + n.dur) > g.t - 0.05) {
+        if (!(zc > 1.0 && zEnd > 1.0) && (n.t + n.dur) > g.t - 0.05) {
           const a = proj(Math.min(Math.max(zc, -0.02), 1)), b2 = proj(Math.min(zEnd, 1));
           const xA = laneCX(n.lane, a.sc), xB = laneCX(n.lane, b2.sc), wA = 7 * a.sc, wB = 7 * b2.sc;
           ctx.save(); ctx.shadowColor = LC[n.lane]; ctx.shadowBlur = n.holding ? 16 : 8;
@@ -5200,7 +5201,7 @@ function openPerkyDance() {
         }
       }
       // cabeza (gema)
-      if (!n.hit && zc >= -0.02 && zc <= 1.06) { const p = proj(zc); drawGem(laneCX(n.lane, p.sc), p.y, 12 * p.sc, LC[n.lane]); }
+      if (!n.hit && zc >= -0.02 && zc <= 1.0) { const p = proj(zc); drawGem(laneCX(n.lane, p.sc), p.y, 12 * p.sc, LC[n.lane]); }
       // sostenido en curso: gema anclada en la línea de golpeo
       if (n.dur > 0 && n.holding) drawGem(laneCX(n.lane, 1), YHIT, 12, LC[n.lane], true);
     }
