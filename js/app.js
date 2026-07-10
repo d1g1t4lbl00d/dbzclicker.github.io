@@ -5926,6 +5926,38 @@ function plzRect(c, x, y, w, h, fill, outline) {
   if (outline) { c.fillStyle = outline; c.fillRect(Math.round(x) - 1, Math.round(y) - 1, w + 2, h + 2); }
   c.fillStyle = fill; c.fillRect(Math.round(x), Math.round(y), w, h);
 }
+// aclara (f>1) u oscurece (f<1) un color hex #rrggbb
+function _shade(hex, f) {
+  if (typeof hex !== 'string' || hex[0] !== '#') return hex;
+  const n = parseInt(hex.slice(1), 16); if (isNaN(n)) return hex;
+  const cl = (v) => Math.max(0, Math.min(255, Math.round(v * f)));
+  return 'rgb(' + cl((n >> 16) & 255) + ',' + cl((n >> 8) & 255) + ',' + cl(n & 255) + ')';
+}
+// caja isométrica (2:1) con cara superior clara, laterales sombreadas y contorno — estilo Habbo.
+// (cx, y) = punto frontal-inferior; w = ancho del footprint; h = altura.
+function plzBox(c, cx, y, w, h, base, opt) {
+  opt = opt || {};
+  cx = Math.round(cx); y = Math.round(y);
+  const hw = Math.round(w / 2), q = Math.round(w / 4), E = opt.edge || '#05070f';
+  const top = opt.top || _shade(base, 1.26), left = opt.left || base, right = opt.right || _shade(base, 0.68);
+  const F = [cx, y], R = [cx + hw, y - q], B = [cx, y - 2 * q], L = [cx - hw, y - q];
+  const Ft = [cx, y - h], Rt = [cx + hw, y - q - h], Bt = [cx, y - 2 * q - h], Lt = [cx - hw, y - q - h];
+  const face = (pts, fill) => {
+    c.beginPath(); c.moveTo(pts[0][0], pts[0][1]);
+    for (let i = 1; i < pts.length; i++) c.lineTo(pts[i][0], pts[i][1]);
+    c.closePath(); c.fillStyle = fill; c.fill();
+    if (E) { c.strokeStyle = E; c.lineWidth = 1; c.lineJoin = 'round'; c.stroke(); }
+  };
+  face([L, F, Ft, Lt], left);      // cara frontal-izquierda
+  face([F, R, Rt, Ft], right);     // cara frontal-derecha
+  face([Lt, Bt, Rt, Ft], top);     // cara superior
+  if (opt.gloss) { c.globalAlpha = 0.18; c.fillStyle = '#fff'; c.beginPath(); c.moveTo(Lt[0], Lt[1]); c.lineTo(Bt[0], Bt[1]); c.lineTo(cx, y - q * 1.2 - h); c.closePath(); c.fill(); c.globalAlpha = 1; }
+}
+// prisma isométrico plano (para tapetes/superficies): solo la cara superior en diamante
+function plzTile(c, cx, y, w, colTop, colSide, h) {
+  h = h || 0;
+  plzBox(c, cx, y, w, Math.max(1, h), colSide || _shade(colTop, 0.7), { top: colTop, edge: '#05070f' });
+}
 
 // accesorios de cabeza para el avatar de la Plaza (pixel-art)
 const PLZ_HATS = ['none', 'cap', 'beanie', 'phones', 'crown', 'band', 'halo', 'party'];
@@ -6133,21 +6165,14 @@ function plzDrawFurn(f, now) {
   }
 
   if (f.t === 'bench') {
-    // banco metálico oscuro con listones de acento (respaldo hacia atrás: no tapa al sentado)
-    plzRect(c, cx - 10, base - 6, 3, 6, '#0a0e1c'); plzRect(c, cx + 7, base - 6, 3, 6, '#0a0e1c');   // patas
-    plzRect(c, cx - 12, base - 10, 24, 5, '#182038', '#05070f');                                      // asiento
-    c.fillStyle = 'rgba(96,140,255,.55)'; c.fillRect(cx - 12, base - 10, 24, 1);                      // filo neón
-    const bx = f.back === 'nw' ? -14 : 12;                                                            // respaldo
-    plzRect(c, cx + (f.back === 'nw' ? -14 : 12), base - 22, 2, 13, '#101527', '#05070f');
-    plzRect(c, cx + bx - (f.back === 'nw' ? 0 : 8), base - 21, 10, 2, '#182038');
-    plzRect(c, cx + bx - (f.back === 'nw' ? 0 : 8), base - 17, 10, 2, '#182038');
+    plzBox(c, cx, base, 24, 5, '#22304e', { gloss: true });                    // asiento iso
+    plzBox(c, cx - 2, base - 4, 20, 7, '#171f36');                             // respaldo detrás
+    c.fillStyle = 'rgba(96,140,255,.5)'; c.fillRect(cx - 9, base - 9, 12, 1);
     return;
   }
 
   if (f.t === 'stool') {
-    plzRect(c, cx - 2, base - 8, 4, 6, '#0a0e1c');                             // pie central
-    plzRect(c, cx - 6, base - 12, 12, 5, '#182038', '#05070f');                // asiento
-    c.fillStyle = 'rgba(110,45,245,.6)'; c.fillRect(cx - 6, base - 12, 12, 1); // filo violeta
+    plzBox(c, cx, base, 12, 8, '#3a2a66', { top: '#7a45c0' });                 // taburete iso
     return;
   }
 
@@ -6174,23 +6199,21 @@ function plzDrawFurn(f, now) {
   }
 
   if (f.t === 'bar') {
-    // barra de bar con botellas de neón
-    plzRect(c, cx - 12, base - 16, 24, 16, '#1a1208', '#05070f');
-    c.fillStyle = 'rgba(240,161,62,.6)'; c.fillRect(cx - 12, base - 16, 24, 1);
-    for (let k = -8; k <= 6; k += 4) { c.fillStyle = ['#e0507a', '#2dc878', '#27a9ff'][((k + 8) / 4) % 3]; c.fillRect(cx + k, base - 24, 2, 8); }
-    plzRect(c, cx - 12, base - 6, 24, 3, '#2a1c0e');
+    plzBox(c, cx, base, 26, 15, '#3a2a14', { gloss: true });                   // barra iso (madera)
+    for (let k = -8; k <= 6; k += 4) { c.fillStyle = ['#e0507a', '#2dc878', '#27a9ff'][((k + 8) / 4) % 3]; c.fillRect(cx + k, base - 24, 2, 8); }   // botellas de neón
+    c.fillStyle = 'rgba(255,255,255,.12)'; c.fillRect(cx - 10, base - 15, 10, 1);
     return;
   }
 
   if (f.t === 'sofa' || f.t === 'couch') {
-    // sofá chill (asiento): respaldo hacia atrás
+    // sofá isométrico: base + respaldo + cojines + reposabrazos
     const warm = f.t === 'sofa';
-    plzRect(c, cx - 11, base - 6, 3, 6, '#0a0e1c'); plzRect(c, cx + 8, base - 6, 3, 6, '#0a0e1c');
-    plzRect(c, cx - 12, base - 11, 24, 6, warm ? '#2a1d2e' : '#171d33', '#05070f');
-    c.fillStyle = warm ? 'rgba(240,161,62,.5)' : 'rgba(110,45,245,.5)'; c.fillRect(cx - 12, base - 11, 24, 1);
-    plzRect(c, cx + (f.back === 'nw' ? -14 : 12), base - 22, 2, 13, '#0e1220', '#05070f');   // respaldo
-    plzRect(c, cx - 13, base - 12, 3, 7, warm ? '#33243a' : '#1c2340');                       // reposabrazos
-    plzRect(c, cx + 10, base - 12, 3, 7, warm ? '#33243a' : '#1c2340');
+    const body = warm ? '#8a5560' : '#3d4a78';
+    plzBox(c, cx, base + 2, 24, 5, _shade(body, 0.8));                 // base/patas
+    plzBox(c, cx, base - 3, 24, 7, body, { gloss: true });            // asiento
+    plzBox(c, cx - 2, base - 9, 20, 9, _shade(body, 1.05));          // respaldo (detrás)
+    plzBox(c, cx - 7, base - 9, 7, 5, _shade(body, 1.15));           // cojín izq
+    plzBox(c, cx + 4, base - 9, 7, 5, _shade(body, 1.15));           // cojín dch
     return;
   }
 
@@ -6204,9 +6227,8 @@ function plzDrawFurn(f, now) {
   }
 
   if (f.t === 'rack') {
-    // rack de equipo de estudio con luces
-    plzRect(c, cx - 7, base - 32, 14, 32, '#0a0e1c', '#05070f');
-    for (let r = 0; r < 5; r++) { plzRect(c, cx - 5, base - 29 + r * 6, 10, 4, '#141b30'); c.fillStyle = (Math.floor(now / 300) + r) % 3 === 0 ? '#2dc878' : '#0e2a1c'; c.fillRect(cx + 3, base - 28 + r * 6, 1, 1); }
+    plzBox(c, cx, base, 14, 32, '#161d33', { gloss: true });                   // rack iso
+    for (let r = 0; r < 5; r++) { c.fillStyle = '#0a0e1c'; c.fillRect(cx - 5, base - 29 + r * 6, 10, 4); c.fillStyle = (Math.floor(now / 300) + r) % 3 === 0 ? '#2dc878' : '#0e2a1c'; c.fillRect(cx + 3, base - 28 + r * 6, 1, 1); }
     return;
   }
 
@@ -6224,13 +6246,12 @@ function plzDrawFurn(f, now) {
   }
 
   if (f.t === 'arcade') {
-    // recreativa: mueble con pantalla que parpadea
-    plzRect(c, cx - 7, base - 34, 14, 34, '#160c2a', '#05070f');
-    plzRect(c, cx - 6, base - 32, 12, 10, '#05070f', (plzR && plzR.def) ? plzR.def.neonA : '#2dc878');  // marco pantalla
+    plzBox(c, cx, base, 15, 34, '#2a1250', { gloss: true });                   // mueble iso
+    plzRect(c, cx - 6, base - 32, 12, 10, '#05070f', (plzR && plzR.def) ? plzR.def.neonA : '#2dc878');  // pantalla
     const cols = ['#2dc878', '#e0507a', '#27a9ff', '#ffd23e'];
     for (let px = -4; px <= 3; px += 2) for (let py = 0; py < 6; py += 2) { c.fillStyle = (Math.floor(now / 200) + px + py) % 4 === 0 ? cols[(px + py + Math.floor(now / 400)) % 4] : '#0a0e1c'; c.fillRect(cx + px, base - 30 + py, 2, 2); }
-    plzRect(c, cx - 6, base - 20, 12, 4, '#0a0e1c');                 // panel de controles
-    c.fillStyle = '#e0507a'; c.fillRect(cx - 3, base - 19, 2, 2); c.fillStyle = '#2dc878'; c.fillRect(cx + 2, base - 19, 2, 2);  // botones
+    plzRect(c, cx - 6, base - 19, 12, 4, '#0a0e1c');                 // panel de controles
+    c.fillStyle = '#e0507a'; c.fillRect(cx - 3, base - 18, 2, 2); c.fillStyle = '#2dc878'; c.fillRect(cx + 2, base - 18, 2, 2);
     return;
   }
 
@@ -6313,11 +6334,12 @@ function plzDrawFurn(f, now) {
   }
 
   if (f.t === 'table') {
-    plzRect(c, cx - 2, base - 12, 4, 12, '#0a0e1c');                           // pata alta
-    plzDiamond(c, cx, base - 15, 22, 11, '#182038');                          // tablero redondo
-    plzDiamond(c, cx, base - 16, 18, 9, '#20294a');
-    c.fillStyle = '#e0507a'; c.fillRect(cx - 2, base - 20, 3, 4);              // vasito
-    c.fillStyle = '#2dc878'; c.fillRect(cx + 3, base - 19, 2, 3);
+    plzBox(c, cx, base, 8, 11, '#2a3350');                                     // pedestal iso
+    plzDiamond(c, cx, base - 15, 24, 12, '#0a0e1c');                           // borde del tablero
+    plzDiamond(c, cx, base - 16, 20, 10, '#2b3660');                           // tablero
+    plzDiamond(c, cx, base - 17, 13, 6, _shade('#2b3660', 1.3));               // brillo
+    c.fillStyle = '#e0507a'; c.fillRect(cx - 3, base - 21, 3, 4);              // vasito
+    c.fillStyle = '#2dc878'; c.fillRect(cx + 2, base - 20, 2, 3);
     return;
   }
 
@@ -6344,20 +6366,18 @@ function plzDrawFurn(f, now) {
   }
 
   if (f.t === 'vending') {
-    plzRect(c, cx - 8, base - 30, 16, 30, '#0c1424', '#05070f');               // cuerpo
+    plzBox(c, cx, base, 16, 30, '#16233c', { gloss: true });                   // cuerpo iso
     plzRect(c, cx - 6, base - 27, 8, 16, '#0a1a2e', '#27a9ff');                // escaparate iluminado
     for (let r = 0; r < 3; r++) for (let k = 0; k < 2; k++) { c.fillStyle = ['#e0507a', '#2dc878', '#f0a13e'][r]; c.fillRect(cx - 5 + k * 4, base - 25 + r * 5, 2, 3); }
-    plzRect(c, cx + 3, base - 27, 3, 20, '#101b30');                          // panel botones
+    plzRect(c, cx + 3, base - 27, 3, 20, '#0e1830');                          // panel botones
     c.fillStyle = (Math.floor(now / 500) % 2) ? '#2dc878' : '#0e2a1c'; c.fillRect(cx + 4, base - 25, 1, 1);
     return;
   }
 
   if (f.t === 'crate') {
-    plzRect(c, cx - 8, base - 12, 16, 12, '#241a12', '#0c0804');               // caja de madera
-    c.strokeStyle = '#3a2a1a'; c.lineWidth = 1; c.strokeRect(cx - 8, base - 12, 16, 6);
-    c.fillStyle = 'rgba(96,140,255,.5)'; c.fillRect(cx - 8, base - 12, 16, 1); // filo neón sutil
-    c.fillStyle = '#8fc0ff'; c.font = '700 6px monospace'; c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.fillText('UB', cx, base - 7);
+    plzBox(c, cx, base, 18, 13, '#8a5e2c', { edge: '#2a1a0c' });               // caja de madera iso
+    c.fillStyle = 'rgba(0,0,0,.22)'; c.fillRect(cx - 8, base - 7, 7, 1); c.fillRect(cx + 1, base - 6, 7, 1);   // veta
+    c.fillStyle = 'rgba(255,255,255,.14)'; c.fillRect(cx - 8, base - 12, 8, 1);
     return;
   }
 
@@ -6379,8 +6399,8 @@ function plzDrawFurn(f, now) {
     return;
   }
   if (f.t === 'books') {
-    plzRect(c, cx - 8, base - 26, 16, 26, '#241a12', '#05070f');
-    for (let sh = 0; sh < 3; sh++) { const yy = base - 24 + sh * 8; for (let k = 0; k < 6; k++) { c.fillStyle = ['#e0507a', '#2dc878', '#27a9ff', '#f0a13e', '#b06eff', '#12c2c2'][(k + sh * 2) % 6]; c.fillRect(cx - 7 + k * 2, yy, 2, 6); } c.fillStyle = '#0c0804'; c.fillRect(cx - 8, yy + 6, 16, 1); }
+    plzBox(c, cx, base, 16, 26, '#3a2818', { edge: '#1a1008' });               // estantería iso
+    for (let sh = 0; sh < 3; sh++) { const yy = base - 23 + sh * 7; for (let k = 0; k < 7; k++) { c.fillStyle = ['#e0507a', '#2dc878', '#27a9ff', '#f0a13e', '#b06eff', '#12c2c2', '#ffd23e'][(k + sh * 2) % 7]; c.fillRect(cx - 7 + k * 2, yy, 2, 5); } c.fillStyle = '#1a1008'; c.fillRect(cx - 8, yy + 5, 16, 1); }
     return;
   }
   if (f.t === 'cactus') {
@@ -6391,11 +6411,14 @@ function plzDrawFurn(f, now) {
     c.fillStyle = '#e0507a'; c.fillRect(cx - 1, base - 22, 2, 2);             // flor
     return;
   }
-  if (f.t === 'barrel') {
-    plzRect(c, cx - 6, base - 16, 12, 16, '#5a3f24', '#05070f');
-    c.fillStyle = '#3a2814'; c.fillRect(cx - 6, base - 13, 12, 1); c.fillRect(cx - 6, base - 5, 12, 1);
-    c.fillStyle = '#7a5a34'; c.fillRect(cx - 6, base - 16, 12, 2);
-    c.fillStyle = 'rgba(255,255,255,.15)'; c.fillRect(cx - 4, base - 16, 2, 16);
+  if (f.t === 'barrel') {   // barril cilíndrico con sombreado y tapa elíptica
+    plzRect(c, cx - 6, base - 15, 12, 15, '#05070f');
+    c.fillStyle = _shade('#6a4a2a', 1.2); c.fillRect(cx - 5, base - 15, 4, 15);
+    c.fillStyle = '#6a4a2a'; c.fillRect(cx - 1, base - 15, 4, 15);
+    c.fillStyle = _shade('#6a4a2a', 0.7); c.fillRect(cx + 3, base - 15, 2, 15);
+    c.fillStyle = '#2a1c0e'; c.fillRect(cx - 6, base - 11, 12, 1); c.fillRect(cx - 6, base - 5, 12, 1);   // aros
+    c.fillStyle = '#8a6a3a'; c.beginPath(); c.ellipse(cx, base - 15, 6, 2.4, 0, 0, 7); c.fill();
+    c.strokeStyle = '#2a1c0e'; c.lineWidth = 1; c.beginPath(); c.ellipse(cx, base - 15, 6, 2.4, 0, 0, 7); c.stroke();
     return;
   }
   if (f.t === 'grill') {
@@ -6433,20 +6456,20 @@ function plzDrawFurn(f, now) {
     return;
   }
   if (f.t === 'statue') {
-    plzDiamond(c, cx, base - 1, 16, 8, '#3a3f4a');
-    plzRect(c, cx - 5, base - 8, 10, 7, '#c7cdd8', '#05070f');
-    plzRect(c, cx - 4, base - 22, 8, 14, '#d7dce6', '#05070f');
-    plzRect(c, cx - 3, base - 28, 6, 6, '#e7ecf6', '#05070f');
-    c.fillStyle = 'rgba(255,255,255,.4)'; c.fillRect(cx - 4, base - 22, 2, 14);
+    plzBox(c, cx, base, 16, 7, '#3a3f4a');                                     // base iso
+    plzBox(c, cx, base - 6, 10, 6, '#aeb6c4');                                 // pedestal iso
+    plzRect(c, cx - 4, base - 24, 8, 15, '#d7dce6', '#05070f');                // cuerpo
+    plzRect(c, cx - 3, base - 30, 6, 6, '#e7ecf6', '#05070f');                 // cabeza
+    c.fillStyle = 'rgba(255,255,255,.45)'; c.fillRect(cx - 4, base - 24, 2, 15);
+    c.fillStyle = 'rgba(0,0,0,.22)'; c.fillRect(cx + 2, base - 24, 2, 15);
     return;
   }
   if (f.t === 'jukebox') {
-    plzRect(c, cx - 8, base - 26, 16, 26, '#2a1436', '#05070f');
-    plzRect(c, cx - 8, base - 30, 16, 6, '#3a1c4a', '#05070f');
-    c.fillStyle = '#ffd23e'; c.fillRect(cx - 7, base - 29, 14, 2);
-    plzRect(c, cx - 6, base - 22, 12, 8, '#0a0e1c', TN);
-    for (let k = 0; k < 4; k++) { c.fillStyle = (Math.floor(now / 250) + k) % 3 ? '#e0507a' : '#2dc878'; c.fillRect(cx - 6, base - 21 + k * 2, 12, 1); }
-    for (let k = 0; k < 4; k++) { c.fillStyle = ['#e0507a', '#f0a13e', '#27a9ff', '#2dc878'][k]; c.fillRect(cx - 6 + k * 4, base - 11, 2, 2); }
+    plzBox(c, cx, base, 16, 26, '#3a1c4a', { gloss: true });                   // cuerpo iso
+    c.fillStyle = '#ffd23e'; c.fillRect(cx - 6, base - 28, 12, 2);             // banda dorada
+    plzRect(c, cx - 5, base - 22, 10, 7, '#0a0e1c', TN);                       // pantalla
+    for (let k = 0; k < 4; k++) { c.fillStyle = (Math.floor(now / 250) + k) % 3 ? '#e0507a' : '#2dc878'; c.fillRect(cx - 5, base - 21 + k * 1.6, 10, 1); }
+    for (let k = 0; k < 4; k++) { c.fillStyle = ['#e0507a', '#f0a13e', '#27a9ff', '#2dc878'][k]; c.fillRect(cx - 6 + k * 4, base - 10, 2, 2); }
     return;
   }
   if (f.t === 'poster') {
@@ -6474,9 +6497,10 @@ function plzDrawFurn(f, now) {
     return;
   }
   if (f.t === 'locker') {
-    plzRect(c, cx - 8, base - 28, 16, 28, '#1a2438', '#05070f');
-    c.fillStyle = '#0a0e1c'; c.fillRect(cx, base - 28, 1, 28);
-    for (const dx of [-8, 0]) { c.fillStyle = '#2a3450'; c.fillRect(cx + dx + 2, base - 24, 4, 2); c.fillStyle = TN; c.fillRect(cx + dx + 3, base - 14, 1, 2); }
+    plzBox(c, cx, base, 16, 28, '#2a3752', { gloss: true });                   // taquilla iso
+    c.fillStyle = 'rgba(0,0,0,.3)'; c.fillRect(cx - 1, base - 26, 1, 22);      // divisor
+    c.fillStyle = '#3a4a68'; c.fillRect(cx - 5, base - 24, 4, 2); c.fillRect(cx + 2, base - 24, 4, 2);
+    c.fillStyle = TN; c.fillRect(cx - 4, base - 15, 1, 2); c.fillRect(cx + 3, base - 15, 1, 2);
     return;
   }
   if (f.t === 'candle') {
