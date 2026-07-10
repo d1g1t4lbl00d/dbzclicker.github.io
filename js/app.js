@@ -6312,17 +6312,14 @@ function plzDrawFurn(f, now) {
   }
 
   if (f.t === 'djbooth') {
-    // cabina del DJ: mesa con platos y luces al ritmo
+    // cabina del DJ isométrica con platos y luces al ritmo
     const on = plaza.radio && plaza.radio.playing;
-    plzRect(c, cx - 11, base - 14, 22, 14, '#0c1120', '#05070f');              // frontal
-    plzRect(c, cx - 11, base - 17, 22, 4, '#141b30', '#05070f');               // tapa
-    // tira LED frontal al ritmo
-    for (let k = -9; k <= 8; k += 3) { c.fillStyle = (on && (Math.floor(now / 130) + k) % 3 === 0) ? '#2dc878' : '#1b2340'; c.fillRect(cx + k, base - 6, 2, 2); }
-    // dos platos que giran
-    for (const px of [-6, 4]) {
-      plzRect(c, cx + px, base - 21, 6, 4, '#0a0e1c', '#27a9ff');
+    plzBox(c, cx, base, 22, 13, '#161d33', { gloss: true });                   // cuerpo iso
+    for (let k = -9; k <= 8; k += 3) { c.fillStyle = (on && (Math.floor(now / 130) + k) % 3 === 0) ? '#2dc878' : '#1b2340'; c.fillRect(cx + k, base - 6, 2, 2); }   // tira LED
+    for (const px of [-6, 4]) {   // dos platos sobre la mesa
+      plzRect(c, cx + px, base - 18, 6, 4, '#0a0e1c', '#27a9ff');
       const ang = now / (on ? 200 : 600);
-      c.fillStyle = '#6e8cff'; c.fillRect(cx + px + 2 + Math.round(Math.cos(ang) * 1.5), base - 20 + Math.round(Math.sin(ang) * 1), 1, 1);
+      c.fillStyle = '#6e8cff'; c.fillRect(cx + px + 2 + Math.round(Math.cos(ang) * 1.5), base - 17 + Math.round(Math.sin(ang) * 1), 1, 1);
     }
     return;
   }
@@ -6680,6 +6677,9 @@ function plzDrawAvatar(e, now) {
     c.fillStyle = '#fff'; c.font = '700 9px monospace'; c.textAlign = 'center'; c.textBaseline = 'middle';
     c.fillText((e.name || '?').slice(0, 1).toUpperCase(), cx, hy + hs / 2 + 1);
   }
+  // marco 3D de la cabeza (bisel)
+  c.fillStyle = 'rgba(255,255,255,.16)'; c.fillRect(hx, hy, hs, 1);
+  c.fillStyle = 'rgba(0,0,0,.28)'; c.fillRect(hx, hy + hs - 1, hs, 1); c.fillRect(hx + hs - 1, hy, 1, hs);
   // accesorio de cabeza
   if (e.hat && e.hat !== 'none') plzDrawHat(c, e, cx, hx, hy, hs, now);
 
