@@ -6019,19 +6019,22 @@ function plzPrerenderFloor() {
   const D = (plzR && plzR.def) || PLZ_ROOMS.plaza;   // tema de la sala activa
 
   // paredes traseras: columnas verticales de 1px (perfectamente crujientes)
-  const wallCols = (a, b, base) => {
+  // iso: la pared trasera va iluminada y la izquierda en sombra → esquina con profundidad
+  const wallCols = (a, b, base, lit) => {
     const dx = b.x - a.x, dy = b.y - a.y, n = Math.abs(Math.round(dx));
+    const c1 = lit ? base : _shade(base, 0.72), c2 = lit ? _shade(base, 1.28) : _shade(base, 0.95), foot = _shade(base, 0.5);
     for (let s = 0; s <= n; s++) {
       const x = Math.round(a.x + Math.sign(dx) * s);
       const y = Math.round(a.y + dy * (s / n));
-      c.fillStyle = (Math.floor(s / 8) % 2) ? base : '#101527';
+      c.fillStyle = (Math.floor(s / 8) % 2) ? c1 : c2;                 // panelado sutil
       c.fillRect(x, y - WH, 1, WH);
-      c.fillStyle = s < n / 2 ? D.neonA : D.neonB;   // filo de neón según el tema
+      c.fillStyle = s < n / 2 ? D.neonA : D.neonB;                     // filo de neón (arriba)
       c.fillRect(x, y - WH, 1, 2);
+      c.fillStyle = foot; c.fillRect(x, y - 3, 1, 3);                  // rodapié
     }
   };
-  wallCols(TL, TR, D.wall);
-  wallCols(TL, LL, D.wall);
+  wallCols(TL, TR, D.wall, true);    // trasera (iluminada)
+  wallCols(TL, LL, D.wall, false);   // izquierda (en sombra)
 
   // skyline pixel + estrellas en las paredes traseras (ciudad nocturna)
   const skyline = (a, b) => {
@@ -6073,12 +6076,21 @@ function plzPrerenderFloor() {
   const centerX = (TR.x + LL.x) / 2, topY = TL.y;
   for (let d = 4; d >= 1; d--) plzDiamond(c, centerX, topY + d, roomTW, roomTH, d > 2 ? '#04060d' : '#080b16');
 
-  // suelo: baldosas rombo con canto oscuro, en los colores del tema
+  // suelo: baldosas rombo con junta oscura visible y ligera bisel (estilo Habbo)
   for (let i = 0; i < PLZ.COLS; i++) for (let j = 0; j < PLZ.ROWS; j++) {
     const p = plzIso(i, j);
-    plzDiamond(c, p.x, p.y + 1, PLZ.TW, PLZ.TH, '#0a0e1c');                       // canto
-    plzDiamond(c, p.x, p.y, PLZ.TW, PLZ.TH, (i + j) % 2 ? D.floorA : D.floorB);   // cara
+    plzDiamond(c, p.x, p.y + 1, PLZ.TW, PLZ.TH, '#0a0e1c');                       // junta/canto
+    const fc = (i + j) % 2 ? D.floorA : D.floorB;
+    plzDiamond(c, p.x, p.y, PLZ.TW - 2, PLZ.TH - 1, fc);                          // cara con junta alrededor
+    plzDiamond(c, p.x, p.y - 1, PLZ.TW - 8, Math.max(2, PLZ.TH - 6), _shade(fc, 1.14));  // brillo superior (bisel)
   }
+  // luz cenital suave sobre el centro de la sala
+  const cx0 = (TR.x + LL.x) / 2, cy0 = topY + roomTH / 2;
+  const lg = c.createRadialGradient(cx0, cy0, 8, cx0, cy0, roomTW * 0.55);
+  lg.addColorStop(0, 'rgba(255,255,255,.07)'); lg.addColorStop(.6, 'rgba(255,255,255,.02)'); lg.addColorStop(1, 'transparent');
+  c.save(); c.beginPath();
+  c.moveTo(TL.x, TL.y); c.lineTo(TR.x, TR.y); c.lineTo(BR.x, BR.y); c.lineTo(LL.x, LL.y); c.closePath(); c.clip();
+  c.fillStyle = lg; c.fillRect(cx0 - roomTW, cy0 - roomTH, roomTW * 2, roomTH * 2); c.restore();
 
   plaza.floor = off;
 }
@@ -6643,17 +6655,21 @@ function plzDrawAvatar(e, now) {
     plzRect(c, cx + 1, by + 12, 4, 8 + (lo === 1 ? 1 : 0), '#10142a', '#05070f');
   }
 
-  // cuerpo plano con el acento del usuario + brazos
+  // cuerpo con el acento del usuario + sombreado lateral (volumen) + brazos
   plzRect(c, cx - 7, by, 14, 13, e.accent, '#05070f');
-  c.fillStyle = 'rgba(255,255,255,.22)'; c.fillRect(cx - 7, by, 14, 2);       // brillo superior
+  c.fillStyle = _shade(e.accent, 1.24); c.fillRect(cx - 7, by, 3, 13);        // luz (izquierda)
+  c.fillStyle = _shade(e.accent, 0.7); c.fillRect(cx + 5, by, 2, 13);         // sombra (derecha)
+  c.fillStyle = 'rgba(255,255,255,.28)'; c.fillRect(cx - 7, by, 14, 2);       // brillo superior
+  c.fillStyle = 'rgba(0,0,0,.22)'; c.fillRect(cx - 7, by + 11, 14, 2);        // sombra inferior
   // brazos: alzados al saludar/bailar/chocar
   const ek = e.emote && e.emote.until > now ? e.emote.kind : null;
   const raiseR = (ek === 'wave') || (ek === 'fist') || (ek === 'fistback') || dancing;
   const raiseL = dancing;
   const alt = dancing ? (Math.floor(now / 240) % 2) : 0;
   const alen = seated ? 7 : 9;
-  if (raiseL && alt) plzRect(c, cx - 10, by - 6, 3, alen, e.accent, '#05070f'); else plzRect(c, cx - 10, by + 1, 3, alen, e.accent, '#05070f');
-  if (raiseR && !alt) plzRect(c, cx + 7, by - 6, 3, alen, e.accent, '#05070f'); else plzRect(c, cx + 7, by + 1, 3, alen, e.accent, '#05070f');
+  const armL = _shade(e.accent, 1.12), armR = _shade(e.accent, 0.78);
+  if (raiseL && alt) plzRect(c, cx - 10, by - 6, 3, alen, armL, '#05070f'); else plzRect(c, cx - 10, by + 1, 3, alen, armL, '#05070f');
+  if (raiseR && !alt) plzRect(c, cx + 7, by - 6, 3, alen, armR, '#05070f'); else plzRect(c, cx + 7, by + 1, 3, alen, armR, '#05070f');
 
   // cabeza: foto de perfil pixelada en cuadrado con contorno
   const hs = 14, hx = cx - hs / 2, hy = by - hs - 1;
