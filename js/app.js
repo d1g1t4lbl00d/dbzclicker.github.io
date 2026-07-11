@@ -806,7 +806,6 @@ async function ensureProfile() {
 
 function renderMe() {
   if (!state.profile) return;
-  plzUpdateCoinsHub();
   $('meName').innerHTML = esc(state.profile.display_name || state.profile.username) + verifiedBadge(state.profile) + displayBadgeHtml(state.profile) +
     (state.profile.is_admin ? ' <span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c;padding:1px 7px">MOD</span>' : '');
   $('meAvatar').outerHTML = avatarHTML(state.profile).replace('class="avatar ', 'id="meAvatar" class="avatar ');
@@ -978,7 +977,6 @@ function bindUI() {
   $('btnNotif').onclick = () => switchView('notifications');
   { const b = $('btnMessages'); if (b) b.onclick = () => { switchView('messages'); hideDrawers(); }; }
   $('meChip').onclick = () => openProfile(state.user.id);
-  { const cc = $('coinsChip'); if (cc) cc.onclick = () => openPlazaShop(); }
   $('menuToggle').onclick = () => { const open = $('sidebar').classList.toggle('open'); $('drawerBackdrop').classList.toggle('show', open); };
   $('btnChatToggle').onclick = toggleRight;
   // plegar paneles en escritorio (menú lateral y chat) para ver la feed a pantalla completa
@@ -4430,6 +4428,7 @@ async function renderPlaza() {
     <div class="main-head plaza-head">
       <div class="plaza-head-title"><h2 id="plazaRoomName">La Plaza</h2><div class="sub" id="plazaRoomSub">Pasea, saluda y conecta con la escena</div></div>
       <div class="plaza-head-actions">
+        <button class="coins-chip" id="coinsChip" title="Tus monedas · toca para la tienda" aria-label="Monedas"><span class="coin"></span><b id="coinsChipN">${plzCoins()}</b></button>
         <span class="plaza-live" title="Personas aquí ahora"><span class="dot-online"></span> <b id="plazaLiveN">1</b></span>
         <button class="plaza-dj" id="plazaDj" title="Poner música para la plaza"><svg fill="none" stroke="currentColor"><use href="#i-headphones"/></svg><span>DJ</span></button>
       </div>
@@ -4694,6 +4693,10 @@ async function renderPlaza() {
       sendEmote('react', '🎶');
     }, plaza.radio.playing);
   } catch (err) { console.warn('plaza radio', err); }
+
+  // monedas: visibles solo dentro de la plaza y sus salas
+  { const cc = $('coinsChip'); if (cc) cc.onclick = () => openPlazaShop(); }
+  plzUpdateCoinsHub();
 
   function plzLeave() {
     try { plazaChan.untrack(); } catch (_) {}                                  // salir del conteo del mundo
@@ -5035,7 +5038,7 @@ function plzHasItem(t) { return PLZ_FREE_ITEMS.has(t) || (plzInv()[t] || 0) > 0;
 function plzAddInv(t, n) { const inv = Object.assign({}, plzInv()); inv[t] = (inv[t] || 0) + (n || 1); if (state.profile) state.profile.plaza_inv = inv; }
 // puede entrar en el editor de objetos: admin o usuario con permiso de editor
 function plzCanCreate() { return !!(state.profile && (state.profile.is_admin || state.profile.plaza_creator)); }
-// contador de monedas siempre visible en la cabecera
+// contador de monedas de la plaza (solo visible dentro de la plaza y sus salas)
 function plzUpdateCoinsHub() {
   const n = document.getElementById('coinsChipN'); if (!n) return;
   const v = plzCoins(), prev = parseInt(n.textContent, 10) || 0;
