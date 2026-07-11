@@ -5478,9 +5478,13 @@ function openPlazaSpriteEditor(onDone, existing) {
     } catch (e) { pubBtn.disabled = false; pubBtn.textContent = ed0 ? 'Guardar cambios' : 'Publicar en la tienda'; toast((e && e.message) || 'No se pudo guardar'); }
   };
 
-  // arranque
+  // arranque + reajuste del zoom cuando el panel del lienzo obtiene/cambia su tamaño
   setCur(curColor); renderRecent(); renderSteps(); renderFoot(); updoBtns();
-  requestAnimationFrame(() => { fitZoom(); sizeCanvas(); redraw(); });
+  const refit = () => { fitZoom(); sizeCanvas(); drawGrid(); };
+  requestAnimationFrame(() => { refit(); requestAnimationFrame(refit); });
+  let ro = null; try { ro = new ResizeObserver(() => { if (document.body.contains(m)) refit(); }); ro.observe(view); } catch (_) {}
+  const onResize = () => { if (!document.body.contains(m)) { window.removeEventListener('resize', onResize); if (ro) ro.disconnect(); return; } refit(); };
+  window.addEventListener('resize', onResize);
 }
 
 // selector de pista para pinchar en la Plaza (busca por título)

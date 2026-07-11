@@ -4549,10 +4549,12 @@ button.shop-card { font: inherit; text-align: center; cursor: pointer; -webkit-t
 .spr-publish { width: 100%; }
 @media (max-width: 420px) { .spr-side { width: 96px; } .spr-tool svg { width: 16px; height: 16px; } }
 
-/* ===== Editor PRO (layout de escritorio a 3 paneles) ===== */
-.modal.spr2-modal { width: min(1120px, 96vw); max-width: 96vw; }
-.spr2-body { padding: 16px 18px; }
-.spr2 { display: grid; grid-template-columns: 58px minmax(0, 1fr) 312px; gap: 14px; align-items: stretch; }
+/* ===== Editor PRO (layout de escritorio a 3 paneles, casi pantalla completa) ===== */
+.modal.spr2-modal { width: 98vw; max-width: 98vw; height: 96vh; max-height: 96vh; overflow: hidden; display: flex; flex-direction: column; }
+.spr2-modal .modal-head { flex: none; }
+.spr2-modal .spr2-body { flex: 1 1 auto; min-height: 0; display: flex; }
+.spr2-body { padding: 14px 18px 18px; }
+.spr2 { display: grid; grid-template-columns: 64px minmax(0, 1fr) 340px; grid-template-rows: minmax(0, 1fr); gap: 16px; align-items: stretch; flex: 1 1 auto; min-height: 0; width: 100%; }
 .spr2-tools { display: flex; flex-direction: column; gap: 8px; }
 .spr2-toolgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
 .spr2-tool { display: grid; place-items: center; aspect-ratio: 1; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); color: var(--ink-soft); cursor: pointer; transition: transform .08s, border-color .12s; }
@@ -4567,10 +4569,10 @@ button.shop-card { font: inherit; text-align: center; cursor: pointer; -webkit-t
 .spr2-segb svg { width: 16px; height: 16px; }
 .spr2-segb.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)); }
 .spr2-segb:active { transform: scale(.94); }
-.spr2-canvas { position: relative; min-height: 300px; border-radius: 12px; border: 1px solid var(--line); overflow: auto;
+.spr2-canvas { position: relative; min-height: 0; height: 100%; border-radius: 12px; border: 1px solid var(--line); overflow: auto;
   background: linear-gradient(180deg, #0c1120, #080b16); display: grid; place-items: center; padding: 8px; }
-.spr2-canvas .spr-canvas { image-rendering: pixelated; image-rendering: crisp-edges; touch-action: none; cursor: crosshair; }
-.spr2-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; overflow-y: auto; max-height: 78vh; padding-right: 2px; }
+.spr2-canvas .spr-canvas { image-rendering: pixelated; image-rendering: crisp-edges; touch-action: none; cursor: crosshair; width: auto; max-width: none; height: auto; max-height: none; }
+.spr2-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; overflow-y: auto; height: 100%; max-height: 100%; padding-right: 4px; }
 .spr2-side .spr-preview { flex: none; }
 .spr2-colors { display: flex; flex-direction: column; gap: 8px; }
 .spr2-cur { display: flex; align-items: center; gap: 8px; }
@@ -4585,14 +4587,15 @@ button.shop-card { font: inherit; text-align: center; cursor: pointer; -webkit-t
 .spr2-sizerow .spr-steps { flex: 1; }
 .spr2-off { opacity: .3; pointer-events: none; }
 @media (max-width: 860px) {
-  .modal.spr2-modal { width: 100%; }
-  .spr2 { grid-template-columns: 1fr; }
+  .modal.spr2-modal { width: 100%; height: auto; max-height: 88vh; overflow-y: auto; display: block; }
+  .spr2-modal .spr2-body { display: block; }
+  .spr2 { grid-template-columns: 1fr; grid-template-rows: none; height: auto; min-height: 0; }
   .spr2-tools { flex-direction: row; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
   .spr2-toolgrid { grid-template-columns: repeat(4, 34px); }
   .spr2-lbl { width: 100%; margin-top: 0; }
   .spr2-seg { grid-auto-columns: 44px; }
-  .spr2-canvas { min-height: 240px; max-height: 46vh; }
-  .spr2-side { max-height: none; overflow: visible; }
+  .spr2-canvas { min-height: 240px; height: auto; max-height: 46vh; }
+  .spr2-side { height: auto; max-height: none; overflow: visible; }
 }
 
 /* La Plaza — minimapa de salas */
