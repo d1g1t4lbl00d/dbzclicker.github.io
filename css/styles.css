@@ -4616,39 +4616,17 @@ html { touch-action: manipulation; }
 .pk-lanes .pk-btn:nth-child(3) { border-color: rgba(224,80,122,.4); }
 .pk-lanes .pk-btn:nth-child(4) { border-color: rgba(45,200,120,.4); }
 
-/* ===== PerkyBeats — caja de ritmos ===== */
-.pb-grid {
-  position: relative; width: min(94vw, 464px); display: flex; flex-direction: column; gap: 5px; padding: 14px; border-radius: 16px; z-index: 1;
-  background:
-    radial-gradient(120% 80% at 50% -10%, rgba(120,90,255,.12), transparent 60%),
-    linear-gradient(180deg, rgba(24,28,50,.8), rgba(12,15,30,.85));
-  border: 1px solid rgba(120,150,255,.22);
-  box-shadow: 0 18px 54px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.05), 0 0 30px rgba(110,80,255,.1);
+/* ===== PerkyPads — batería en vivo ===== */
+.pk-pads { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; width: min(94vw, 380px); z-index: 1; }
+.pk-pad {
+  position: relative; aspect-ratio: 1; border-radius: 16px; cursor: pointer; padding: 0;
+  border: 1px solid color-mix(in srgb, var(--pc) 40%, transparent);
+  background: radial-gradient(120% 120% at 50% 18%, color-mix(in srgb, var(--pc) 26%, #0c1120), #0a0e1c);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  box-shadow: 0 6px 16px rgba(0,0,0,.42), inset 0 1px 0 rgba(255,255,255,.06);
+  transition: transform .05s, box-shadow .09s, background .09s; -webkit-tap-highlight-color: transparent;
 }
-.pb-row { display: flex; align-items: center; gap: 8px; }
-.pb-lab { flex: none; width: 54px; font-size: 10px; font-weight: 800; letter-spacing: .04em; text-align: right; font-family: 'Courier New', monospace; text-shadow: 0 0 8px currentColor; }
-.pb-cells { flex: 1; display: grid; grid-template-columns: repeat(16, 1fr); gap: 3px; }
-.pb-cell {
-  aspect-ratio: 1; border: 1px solid rgba(255,255,255,.04); border-radius: 5px; background: rgba(255,255,255,.05); cursor: pointer; padding: 0;
-  transition: background .1s, transform .07s, box-shadow .1s;
-}
-.pb-cell.beat { background: rgba(255,255,255,.1); border-color: rgba(255,255,255,.09); }
-.pb-cell.on {
-  background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--cc) 60%, #fff), var(--cc) 75%);
-  border-color: color-mix(in srgb, var(--cc) 70%, transparent);
-  box-shadow: 0 0 10px color-mix(in srgb, var(--cc) 65%, transparent), inset 0 1px 0 rgba(255,255,255,.35);
-}
-.pb-cell.play { outline: 2px solid rgba(255,255,255,.85); outline-offset: -1px; transform: scale(1.12); z-index: 2; }
-.pb-cell.play:not(.on) { background: rgba(255,255,255,.16); box-shadow: 0 0 12px rgba(255,255,255,.25); }
-.pb-cell.on.play { box-shadow: 0 0 18px var(--cc), 0 0 6px #fff; }
-.pb-ctrl { display: flex; align-items: center; gap: 12px; margin-top: 4px; flex-wrap: wrap; justify-content: center; position: relative; z-index: 1; }
-.pb-play { width: 64px; height: 52px; font-size: 22px; }
-.pb-play.on { background: linear-gradient(180deg, #37e08c, #1ea864); color: #04150c; border-color: rgba(120,255,190,.5); box-shadow: 0 6px 20px rgba(45,200,120,.45), inset 0 1px 0 rgba(255,255,255,.3); }
-.pb-sm { width: 50px; height: 46px; font-size: 20px; }
-.pb-tempo { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 10px; font-weight: 800; color: #93a3c8; font-family: 'Courier New', monospace; }
-.pb-tempo input[type=range] { width: 130px; accent-color: var(--accent, #3e57fc); }
-
-@media (max-width: 480px) {
-  .pb-lab { width: 42px; font-size: 9px; }
-  .pb-cells { gap: 2px; }
-}
+.pk-pad-n { font-family: 'Courier New', monospace; font-weight: 800; font-size: 12px; letter-spacing: .06em; color: var(--pc); text-shadow: 0 0 10px color-mix(in srgb, var(--pc) 50%, transparent); }
+.pk-pad-key { position: absolute; top: 6px; right: 9px; font-size: 10px; font-weight: 800; color: rgba(255,255,255,.38); }
+.pk-pad.hit { transform: scale(.93); background: radial-gradient(120% 120% at 50% 18%, var(--pc), #0c1120); box-shadow: 0 0 20px var(--pc), inset 0 1px 0 rgba(255,255,255,.25); }
+.pk-pad.hit .pk-pad-n { color: #fff; }

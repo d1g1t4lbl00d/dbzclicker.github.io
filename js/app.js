@@ -4122,7 +4122,7 @@ const PLZ_ROOMS = {
       { t: 'portal', i: 9, j: 3, to: 'azotea', spawn: [5, 8], label: 'Azotea', col: '#f0a13e' },
       { t: 'portal', i: 0, j: 7, to: 'arcade', spawn: [5, 8], label: 'Arcade', col: '#2dc878' },
       { t: 'portal', i: 9, j: 7, to: 'playa', spawn: [5, 8], label: 'Playa', col: '#12c2c2' },
-      { t: 'portal', i: 5, j: 5, to: '__rooms__', label: 'Salas', col: '#ffd23e' },
+      { t: 'portal', i: 8, j: 8, to: '__rooms__', label: 'Salas', col: '#ffd23e' },
     ],
   },
   azotea: {
@@ -4184,7 +4184,7 @@ const PLZ_ROOMS = {
 // (Las funciones openPerky* están declaradas más abajo — hoisting las hace accesibles.)
 const PLZ_ACTIVITY = {
   plaza:   { furn: 'djbooth', open: () => openPerkyDance(),    w: 13, top: 44, hint: 'Toca la cabina para bailar en PerkyDance' },
-  estudio: { furn: 'djbooth', open: () => openPerkyBeats(),    w: 13, top: 44, hint: 'Toca la mesa para crear beats en PerkyBeats' },
+  estudio: { furn: 'djbooth', open: () => openPerkyPads(),     w: 13, top: 44, hint: 'Toca la mesa para tocar la batería en PerkyPads' },
   azotea:  { furn: 'hoop',    open: () => openPerkyHoops(),     w: 14, top: 52, hint: 'Toca la canasta para jugar a PerkyHoops' },
   arcade:  { furn: 'arcade',  open: () => openPerkyInvaders(),  w: 11, top: 40, hint: 'Toca una recreativa para jugar a PerkyInvaders' },
   playa:   { furn: 'sea',     open: () => openPerkyFish(),      w: 16, top: 22, bot: 14, hint: 'Toca el mar para pescar en PerkyFish' },
@@ -5614,80 +5614,58 @@ function openPerkyDance() {
 }
 
 // ============ PERKYBEATS (Estudio) — caja de ritmos WebAudio ============
-function openPerkyBeats() {
+// ============ PERKYPADS (Estudio) — batería en vivo (sin secuenciador) ============
+function openPerkyPads() {
   if (window._pkGameOpen) return; window._pkGameOpen = true;
-  const TRACKS = [
-    { k: 'kick', n: 'BOMBO', c: '#e0507a' }, { k: 'snare', n: 'CAJA', c: '#f0a13e' },
-    { k: 'hat', n: 'HI-HAT', c: '#27a9ff' }, { k: 'clap', n: 'CLAP', c: '#2dc878' },
-    { k: 'tom', n: 'TOM', c: '#b06eff' }, { k: 'bass', n: 'BAJO', c: '#12c2c2' },
+  const PADS = [
+    { k: 'kick', n: 'BOMBO', c: '#e0507a' }, { k: 'snare', n: 'CAJA', c: '#f0a13e' }, { k: 'hat', n: 'HI-HAT', c: '#27a9ff' },
+    { k: 'openhat', n: 'HAT OP', c: '#2dc878' }, { k: 'clap', n: 'CLAP', c: '#b06eff' }, { k: 'tom', n: 'TOM', c: '#12c2c2' },
+    { k: 'tom2', n: 'TOM AG', c: '#6e8cff' }, { k: 'bass', n: 'BAJO', c: '#ffd23e' }, { k: 'sub', n: 'SUB', c: '#ff6b81' },
+    { k: 'perc', n: 'PERC', c: '#4cc678' }, { k: 'cowbell', n: 'COWBELL', c: '#f0a13e' }, { k: 'crash', n: 'CRASH', c: '#cfe0ff' },
   ];
-  const STEPS = 16;
-  const pat = TRACKS.map(() => Array(STEPS).fill(false));
-  [0, 4, 8, 12].forEach(s => pat[0][s] = true);
-  [4, 12].forEach(s => pat[1][s] = true);
-  [0, 2, 4, 6, 8, 10, 12, 14].forEach(s => pat[2][s] = true);
-  let bpm = 110, playing = false, cur = 0, nextT = 0, timer = null, ac = null;
-
-  const rows = TRACKS.map((tr, ti) => `
-    <div class="pb-row">
-      <span class="pb-lab" style="color:${tr.c}">${tr.n}</span>
-      <div class="pb-cells">${Array.from({ length: STEPS }, (_, s) => `<button class="pb-cell${pat[ti][s] ? ' on' : ''}${s % 4 === 0 ? ' beat' : ''}" data-tr="${ti}" data-st="${s}" style="--cc:${tr.c}"></button>`).join('')}</div>
-    </div>`).join('');
+  const KEYS = ['1', '2', '3', 'q', 'w', 'e', 'a', 's', 'd', 'z', 'x', 'c'];
+  let ac = pkAC();
   const wrap = el(`
     <div class="pk-game" id="pkGame">
       <div class="pk-top">
         <button class="pk-x" id="pkClose" aria-label="Salir">✕</button>
-        <div class="pk-title">PERKY&nbsp;<span>BEATS</span></div>
-        <div class="pk-stat" id="pkBpmLab">${bpm} BPM</div>
+        <div class="pk-title">PERKY&nbsp;<span>PADS</span></div>
+        <div class="pk-stat">BATERÍA</div>
       </div>
-      <div class="pb-grid" id="pbGrid">${rows}</div>
-      <div class="pb-ctrl">
-        <button class="pk-btn pb-play" id="pbPlay">▶</button>
-        <label class="pb-tempo">BPM<input type="range" id="pbBpm" min="70" max="170" value="${bpm}"></label>
-        <button class="pk-btn pb-sm" id="pbRand" title="Aleatorio">🎲</button>
-        <button class="pk-btn pb-sm" id="pbClear" title="Vaciar">🗑️</button>
-      </div>
-      <div class="pk-hint">Toca las celdas para crear tu ritmo · dale a ▶ para reproducir</div>
+      <div class="pk-pads" id="pkPads">${PADS.map((p, i) => `<button class="pk-pad" data-i="${i}" style="--pc:${p.c}"><span class="pk-pad-key">${KEYS[i].toUpperCase()}</span><span class="pk-pad-n">${p.n}</span></button>`).join('')}</div>
+      <div class="pk-hint">Toca los pads para tocar la batería en directo · o usa el teclado</div>
     </div>`);
   document.body.appendChild(wrap);
   document.documentElement.style.overflow = 'hidden';
-  const grid = wrap.querySelector('#pbGrid');
+  const padsEl = wrap.querySelector('#pkPads');
 
   function voice(k, t) {
-    const out = ac.createGain(); out.gain.value = 0.8; out.connect(ac.destination);
+    const out = ac.createGain(); out.gain.value = 0.85; out.connect(ac.destination);
+    const noise = () => { const s = ac.createBufferSource(); s.buffer = pkNoise(ac); return s; };
     if (k === 'kick') { const o = ac.createOscillator(), g = ac.createGain(); o.frequency.setValueAtTime(150, t); o.frequency.exponentialRampToValueAtTime(48, t + 0.13); g.gain.setValueAtTime(1, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.15); o.connect(g).connect(out); o.start(t); o.stop(t + 0.16); }
+    else if (k === 'sub') { const o = ac.createOscillator(), g = ac.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(90, t); o.frequency.exponentialRampToValueAtTime(40, t + 0.3); g.gain.setValueAtTime(0.9, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.4); o.connect(g).connect(out); o.start(t); o.stop(t + 0.42); }
     else if (k === 'bass') { const o = ac.createOscillator(), g = ac.createGain(), lp = ac.createBiquadFilter(); o.type = 'sawtooth'; o.frequency.setValueAtTime(72, t); lp.type = 'lowpass'; lp.frequency.value = 640; g.gain.setValueAtTime(0.6, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.26); o.connect(lp).connect(g).connect(out); o.start(t); o.stop(t + 0.28); }
     else if (k === 'tom') { const o = ac.createOscillator(), g = ac.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(230, t); o.frequency.exponentialRampToValueAtTime(92, t + 0.2); g.gain.setValueAtTime(0.7, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.22); o.connect(g).connect(out); o.start(t); o.stop(t + 0.23); }
-    else { const s = ac.createBufferSource(); s.buffer = pkNoise(ac); const bp = ac.createBiquadFilter(), g = ac.createGain();
+    else if (k === 'tom2') { const o = ac.createOscillator(), g = ac.createGain(); o.type = 'sine'; o.frequency.setValueAtTime(330, t); o.frequency.exponentialRampToValueAtTime(140, t + 0.18); g.gain.setValueAtTime(0.7, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.2); o.connect(g).connect(out); o.start(t); o.stop(t + 0.21); }
+    else if (k === 'cowbell') { for (const f of [560, 845]) { const o = ac.createOscillator(), g = ac.createGain(); o.type = 'square'; o.frequency.value = f; g.gain.setValueAtTime(0.22, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.18); o.connect(g).connect(out); o.start(t); o.stop(t + 0.2); } }
+    else if (k === 'perc') { const o = ac.createOscillator(), g = ac.createGain(); o.type = 'square'; o.frequency.setValueAtTime(420, t); o.frequency.exponentialRampToValueAtTime(180, t + 0.06); g.gain.setValueAtTime(0.4, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.09); o.connect(g).connect(out); o.start(t); o.stop(t + 0.1); }
+    else { const s = noise(), bp = ac.createBiquadFilter(), g = ac.createGain();
       if (k === 'hat') { bp.type = 'highpass'; bp.frequency.value = 7000; g.gain.setValueAtTime(0.3, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.05); s.connect(bp).connect(g).connect(out); s.start(t); s.stop(t + 0.06); }
+      else if (k === 'openhat') { bp.type = 'highpass'; bp.frequency.value = 6000; g.gain.setValueAtTime(0.26, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.3); s.connect(bp).connect(g).connect(out); s.start(t); s.stop(t + 0.32); }
+      else if (k === 'crash') { bp.type = 'highpass'; bp.frequency.value = 4000; g.gain.setValueAtTime(0.34, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.6); s.connect(bp).connect(g).connect(out); s.start(t); s.stop(t + 0.62); }
       else if (k === 'snare') { bp.type = 'highpass'; bp.frequency.value = 1800; g.gain.setValueAtTime(0.55, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.16); s.connect(bp).connect(g).connect(out); s.start(t); s.stop(t + 0.17); const o = ac.createOscillator(), og = ac.createGain(); o.type = 'triangle'; o.frequency.value = 190; og.gain.setValueAtTime(0.32, t); og.gain.exponentialRampToValueAtTime(0.001, t + 0.09); o.connect(og).connect(out); o.start(t); o.stop(t + 0.1); }
       else if (k === 'clap') { bp.type = 'bandpass'; bp.frequency.value = 1200; bp.Q.value = 1.2; g.gain.setValueAtTime(0.5, t); g.gain.exponentialRampToValueAtTime(0.001, t + 0.13); s.connect(bp).connect(g).connect(out); s.start(t); s.stop(t + 0.14); } }
   }
-  function highlight(step) {
-    grid.querySelectorAll('.pb-cell.play').forEach(c => c.classList.remove('play'));
-    grid.querySelectorAll('.pb-cell[data-st="' + step + '"]').forEach(c => c.classList.add('play'));
-  }
-  function tick() {
-    const now = ac.currentTime;
-    while (nextT < now + 0.12) {
-      const step = cur;
-      for (let ti = 0; ti < TRACKS.length; ti++) if (pat[ti][step]) voice(TRACKS[ti].k, nextT);
-      setTimeout(() => { if (playing) highlight(step); }, Math.max(0, (nextT - now) * 1000));
-      nextT += (60 / bpm) / 4; cur = (cur + 1) % STEPS;
-    }
-  }
-  const playBtn = wrap.querySelector('#pbPlay');
-  function play() { ac = pkAC(); if (!ac) { toast('Audio no disponible'); return; } playing = true; cur = 0; nextT = ac.currentTime + 0.06; timer = setInterval(tick, 25); playBtn.textContent = '⏸'; playBtn.classList.add('on'); }
-  function stop() { playing = false; if (timer) clearInterval(timer); timer = null; grid.querySelectorAll('.pb-cell.play').forEach(c => c.classList.remove('play')); playBtn.textContent = '▶'; playBtn.classList.remove('on'); }
-  playBtn.onclick = () => { playing ? stop() : play(); haptic(6); };
-  grid.addEventListener('pointerdown', (e) => { const cell = e.target.closest('.pb-cell'); if (!cell) return; const ti = +cell.dataset.tr, st = +cell.dataset.st; pat[ti][st] = !pat[ti][st]; cell.classList.toggle('on', pat[ti][st]); if (pat[ti][st]) { if (!ac) ac = pkAC(); if (ac) voice(TRACKS[ti].k, ac.currentTime); } haptic(4); });
-  wrap.querySelector('#pbBpm').addEventListener('input', (e) => { bpm = +e.target.value; wrap.querySelector('#pkBpmLab').textContent = bpm + ' BPM'; });
-  wrap.querySelector('#pbClear').onclick = () => { pat.forEach(r => r.fill(false)); grid.querySelectorAll('.pb-cell').forEach(c => c.classList.remove('on')); haptic(8); };
-  wrap.querySelector('#pbRand').onclick = () => { const dens = [0.4, 0.25, 0.55, 0.2, 0.15, 0.3]; pat.forEach((r, ti) => r.forEach((_, s) => r[s] = Math.random() < dens[ti])); grid.querySelectorAll('.pb-cell').forEach(c => c.classList.toggle('on', pat[+c.dataset.tr][+c.dataset.st])); haptic(10); };
-
-  const onKey = (e) => { if (e.key === 'Escape') close(); else if (e.key === ' ') { e.preventDefault(); playing ? stop() : play(); } };
+  const hit = (i) => {
+    if (!ac) ac = pkAC(); if (!ac) return;
+    try { voice(PADS[i].k, ac.currentTime); } catch (_) {}
+    const b = padsEl.querySelector('.pk-pad[data-i="' + i + '"]'); if (b) { b.classList.add('hit'); setTimeout(() => b.classList.remove('hit'), 110); }
+    haptic(7);
+  };
+  padsEl.querySelectorAll('.pk-pad').forEach(b => b.addEventListener('pointerdown', (e) => { e.preventDefault(); hit(+b.dataset.i); }));
+  const onKey = (e) => { if (e.key === 'Escape') { close(); return; } const i = KEYS.indexOf(e.key.toLowerCase()); if (i >= 0 && !e.repeat) { e.preventDefault(); hit(i); } };
   document.addEventListener('keydown', onKey);
-  const close = () => { stop(); document.removeEventListener('keydown', onKey); document.documentElement.style.overflow = ''; wrap.remove(); window._pkGameOpen = false; };
+  const close = () => { document.removeEventListener('keydown', onKey); document.documentElement.style.overflow = ''; wrap.remove(); window._pkGameOpen = false; };
   wrap.querySelector('#pkClose').onclick = close;
 }
 
@@ -5938,10 +5916,10 @@ function _shade(hex, f) {
 function plzBox(c, cx, y, w, h, base, opt) {
   opt = opt || {};
   cx = Math.round(cx); y = Math.round(y);
-  const hw = Math.round(w / 2), q = Math.round(w / 4), E = opt.edge || '#05070f';
+  const hw = Math.round(w / 2), dp = Math.round(opt.d != null ? opt.d : w / 2), q = Math.round(dp / 2), E = opt.edge || '#05070f';
   const top = opt.top || _shade(base, 1.26), left = opt.left || base, right = opt.right || _shade(base, 0.68);
-  const F = [cx, y], R = [cx + hw, y - q], B = [cx, y - 2 * q], L = [cx - hw, y - q];
-  const Ft = [cx, y - h], Rt = [cx + hw, y - q - h], Bt = [cx, y - 2 * q - h], Lt = [cx - hw, y - q - h];
+  const F = [cx, y], R = [cx + hw, y - q], B = [cx, y - dp], L = [cx - hw, y - q];
+  const Ft = [cx, y - h], Rt = [cx + hw, y - q - h], Bt = [cx, y - dp - h], Lt = [cx - hw, y - q - h];
   const face = (pts, fill) => {
     c.beginPath(); c.moveTo(pts[0][0], pts[0][1]);
     for (let i = 1; i < pts.length; i++) c.lineTo(pts[i][0], pts[i][1]);
@@ -6177,9 +6155,9 @@ function plzDrawFurn(f, now) {
   }
 
   if (f.t === 'bench') {
-    plzBox(c, cx, base, 24, 5, '#22304e', { gloss: true });                    // asiento iso
-    plzBox(c, cx - 2, base - 4, 20, 7, '#171f36');                             // respaldo detrás
-    c.fillStyle = 'rgba(96,140,255,.5)'; c.fillRect(cx - 9, base - 9, 12, 1);
+    plzBox(c, cx, base - 3, 24, 11, '#1b2542', { d: 4 });                      // respaldo fino (detrás)
+    plzBox(c, cx, base, 24, 5, '#26324c', { gloss: true });                    // asiento
+    c.fillStyle = 'rgba(96,140,255,.5)'; c.fillRect(cx - 9, base - 12, 12, 1); // filo de neón en el respaldo
     return;
   }
 
@@ -6218,14 +6196,14 @@ function plzDrawFurn(f, now) {
   }
 
   if (f.t === 'sofa' || f.t === 'couch') {
-    // sofá isométrico: base + respaldo + cojines + reposabrazos
+    // sofá isométrico real: respaldo (losa fina detrás) + asiento + reposabrazos
     const warm = f.t === 'sofa';
     const body = warm ? '#8a5560' : '#3d4a78';
-    plzBox(c, cx, base + 2, 24, 5, _shade(body, 0.8));                 // base/patas
-    plzBox(c, cx, base - 3, 24, 7, body, { gloss: true });            // asiento
-    plzBox(c, cx - 2, base - 9, 20, 9, _shade(body, 1.05));          // respaldo (detrás)
-    plzBox(c, cx - 7, base - 9, 7, 5, _shade(body, 1.15));           // cojín izq
-    plzBox(c, cx + 4, base - 9, 7, 5, _shade(body, 1.15));           // cojín dch
+    plzBox(c, cx, base - 4, 24, 13, _shade(body, 0.88), { d: 4 });             // respaldo alto y fino (detrás)
+    plzBox(c, cx, base, 24, 6, body, { gloss: true });                         // asiento (base ancha baja)
+    c.fillStyle = 'rgba(0,0,0,.18)'; c.fillRect(cx - 9, base - 5, 18, 1);      // hendidura del cojín
+    plzBox(c, cx - 10, base, 5, 8, _shade(body, 1.08), { d: 12 });             // reposabrazos izq
+    plzBox(c, cx + 10, base, 5, 8, _shade(body, 1.08), { d: 12 });             // reposabrazos dch
     return;
   }
 
