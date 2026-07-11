@@ -5264,6 +5264,7 @@ function openPlazaSpriteEditor(onDone, existing) {
             <button class="spr2-tool" id="sprFlipH" title="Voltear horizontal"><svg fill="none" stroke="currentColor"><use href="#i-flip-h"/></svg></button>
             <button class="spr2-tool" id="sprFlipV" title="Voltear vertical"><svg fill="none" stroke="currentColor"><use href="#i-flip-v"/></svg></button>
             <button class="spr2-tool" id="sprRotate" title="Rotar 90° (solo cuadrado)"><svg fill="none" stroke="currentColor"><use href="#i-rotate"/></svg></button>
+            <button class="spr2-tool on" id="sprGrid" title="Mostrar/ocultar rejilla"><svg fill="none" stroke="currentColor"><use href="#i-grid"/></svg></button>
             <button class="spr2-tool spr2-clear" id="sprClear" title="Vaciar"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg></button>
           </div>
           <div class="spr2-lbl">Zoom</div>
@@ -5272,6 +5273,7 @@ function openPlazaSpriteEditor(onDone, existing) {
             <button class="spr2-segb" id="sprZoomFit" title="Ajustar"><svg fill="none" stroke="currentColor"><use href="#i-fit"/></svg></button>
             <button class="spr2-segb" id="sprZoomIn" title="Acercar (+)"><svg fill="none" stroke="currentColor"><use href="#i-zoom-in"/></svg></button>
           </div>
+          <div class="spr2-zoompct" id="sprZoomPct">100%</div>
         </div>
         <div class="spr2-canvas" id="sprView"><canvas id="sprCv" class="spr-canvas"></canvas></div>
         <div class="spr2-side">
@@ -5324,11 +5326,12 @@ function openPlazaSpriteEditor(onDone, existing) {
       gctx.fillRect(x * cs, y * cs, cs, cs);
     }
     if (preview) { gctx.fillStyle = preview.erase ? 'rgba(20,26,44,.95)' : preview.color; for (const [x, y] of preview.cells) if (x >= 0 && y >= 0 && x < w && y < h) gctx.fillRect(x * cs, y * cs, cs, cs); }
-    if (cs >= 5) {
+    if (showGrid && cs >= 5) {
       gctx.strokeStyle = 'rgba(255,255,255,.05)'; gctx.lineWidth = 1;
       for (let x = 0; x <= w; x++) { gctx.beginPath(); gctx.moveTo(x * cs + .5, 0); gctx.lineTo(x * cs + .5, h * cs); gctx.stroke(); }
       for (let y = 0; y <= h; y++) { gctx.beginPath(); gctx.moveTo(0, y * cs + .5); gctx.lineTo(w * cs, y * cs + .5); gctx.stroke(); }
     }
+    if (!showGrid) return;
     gctx.strokeStyle = 'rgba(120,160,255,.35)'; gctx.lineWidth = 1;
     for (let bx = 0; bx <= bw; bx++) { const X = bx * SPR_BLK * cs + .5; gctx.beginPath(); gctx.moveTo(X, 0); gctx.lineTo(X, h * cs); gctx.stroke(); }
     for (let by = 0; by <= bh; by++) { const Y = by * SPR_BLK * cs + .5; gctx.beginPath(); gctx.moveTo(0, Y); gctx.lineTo(w * cs, Y); gctx.stroke(); }
@@ -5369,39 +5372,52 @@ function openPlazaSpriteEditor(onDone, existing) {
   function floodFill(gx, gy, col) { const target = cells[gy * w + gx] || null; if (target === col) return; const st = [[gx, gy]]; while (st.length) { const [x, y] = st.pop(); if (x < 0 || y < 0 || x >= w || y >= h) continue; const k = y * w + x; if ((cells[k] || null) !== target) continue; cells[k] = col; st.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]); } }
 
   const cellAt = (ev) => { const r = gcv.getBoundingClientRect(); return [Math.floor((ev.clientX - r.left) / r.width * w), Math.floor((ev.clientY - r.top) / r.height * h)]; };
-  let painting = false, start = null;
+  let painting = false, start = null, lastPaint = null, panning = false, panFrom = null, spaceDown = false, showGrid = true;
+  // limita el punto final a horizontal/vertical/45° (para líneas rectas con Shift)
+  const constrain45 = (sx, sy, ex, ey) => { const dx = ex - sx, dy = ey - sy, adx = Math.abs(dx), ady = Math.abs(dy); if (adx > ady * 2) return [ex, sy]; if (ady > adx * 2) return [sx, ey]; const d = Math.min(adx, ady); return [sx + Math.sign(dx) * d, sy + Math.sign(dy) * d]; };
   const freehand = (t) => t === 'pencil' || t === 'erase';
   const shapeTool = (t) => t === 'line' || t === 'rect' || t === 'rectf' || t === 'ellipse';
   const shapeCells = (sx, sy, ex, ey) => tool === 'line' ? lineCells(sx, sy, ex, ey) : tool === 'ellipse' ? ellipseCells(sx, sy, ex, ey) : rectCells(sx, sy, ex, ey, tool === 'rectf');
 
+  gcv.addEventListener('contextmenu', (ev) => ev.preventDefault());   // clic derecho = cuentagotas
   gcv.addEventListener('pointerdown', (ev) => {
     ev.preventDefault(); try { gcv.setPointerCapture(ev.pointerId); } catch (_) {}
+    // arrastrar para desplazar: botón central, o Espacio + clic
+    if (ev.button === 1 || spaceDown) { panning = true; panFrom = { x: ev.clientX, y: ev.clientY, sl: view.scrollLeft, st: view.scrollTop }; return; }
     const [x, y] = cellAt(ev);
+    // clic derecho = cuentagotas rápido
+    if (ev.button === 2) { const c = cells[y * w + x]; if (c) setCur(c); return; }
     if (tool === 'pick') { const c = cells[y * w + x]; if (c) { setCur(c); } return; }
     if (tool === 'fill') { snapshot(); floodFill(x, y, curColor); pushRecent(curColor); redraw(); return; }
+    // Shift + lápiz = línea recta desde el último punto pintado
+    if (tool === 'pencil' && ev.shiftKey && lastPaint) { snapshot(); paintList(lineCells(lastPaint[0], lastPaint[1], x, y), curColor); pushRecent(curColor); lastPaint = [x, y]; redraw(); return; }
     painting = true; start = [x, y];
-    if (freehand(tool)) { snapshot(); const col = tool === 'erase' ? null : curColor; const list = []; stamp(list, x, y); paintList(list, col); if (tool !== 'erase') pushRecent(curColor); redraw(); }
+    if (freehand(tool)) { snapshot(); const col = tool === 'erase' ? null : curColor; const list = []; stamp(list, x, y); paintList(list, col); if (tool !== 'erase') { pushRecent(curColor); lastPaint = [x, y]; } redraw(); }
   });
   gcv.addEventListener('pointermove', (ev) => {
+    if (panning) { view.scrollLeft = panFrom.sl - (ev.clientX - panFrom.x); view.scrollTop = panFrom.st - (ev.clientY - panFrom.y); return; }
     if (!painting) return;
     const [x, y] = cellAt(ev);
-    if (freehand(tool)) { const col = tool === 'erase' ? null : curColor; const list = []; stamp(list, x, y); if (start) list.push(...lineCells(start[0], start[1], x, y)); start = [x, y]; paintList(list, col); redraw(); }
-    else if (shapeTool(tool)) { preview = { cells: shapeCells(start[0], start[1], x, y), color: curColor, erase: false }; drawGrid(); }
+    if (freehand(tool)) { const col = tool === 'erase' ? null : curColor; const list = []; stamp(list, x, y); if (start) list.push(...lineCells(start[0], start[1], x, y)); start = [x, y]; if (tool !== 'erase') lastPaint = [x, y]; paintList(list, col); redraw(); }
+    else if (shapeTool(tool)) { let ex = x, ey = y; if (ev.shiftKey && tool === 'line') { [ex, ey] = constrain45(start[0], start[1], x, y); } preview = { cells: shapeCells(start[0], start[1], ex, ey), color: curColor, erase: false, ex, ey }; drawGrid(); }
   });
   const endStroke = (ev) => {
+    if (panning) { panning = false; return; }
     if (!painting) return; painting = false;
-    if (shapeTool(tool) && start) { const [x, y] = ev ? cellAt(ev) : start; snapshot(); paintList(shapeCells(start[0], start[1], x, y), curColor); pushRecent(curColor); preview = null; redraw(); }
+    if (shapeTool(tool) && start) { let [x, y] = ev ? cellAt(ev) : start; if (ev && ev.shiftKey && tool === 'line') [x, y] = constrain45(start[0], start[1], x, y); snapshot(); paintList(shapeCells(start[0], start[1], x, y), curColor); pushRecent(curColor); lastPaint = [x, y]; preview = null; redraw(); }
     else redraw();
     start = null;
   };
-  gcv.addEventListener('pointerup', endStroke); gcv.addEventListener('pointercancel', () => { painting = false; preview = null; redraw(); });
-  // zoom con rueda
-  view.addEventListener('wheel', (ev) => { if (!ev.ctrlKey && !ev.metaKey && Math.abs(ev.deltaY) < 2) return; ev.preventDefault(); zoom(ev.deltaY < 0 ? 1 : -1); }, { passive: false });
+  gcv.addEventListener('pointerup', endStroke); gcv.addEventListener('pointercancel', () => { painting = false; panning = false; preview = null; redraw(); });
+  // rueda = zoom (el lienzo se desplaza con las barras o arrastrando con espacio/botón central)
+  view.addEventListener('wheel', (ev) => { ev.preventDefault(); zoom(ev.deltaY < 0 ? 1 : -1); }, { passive: false });
 
-  function zoom(dir) { const nc = Math.max(2, Math.min(48, cs + dir * Math.max(1, Math.round(cs * 0.25)))); if (nc === cs) return; cs = nc; sizeCanvas(); drawGrid(); }
+  const zoomPct = () => { const el2 = m.querySelector('#sprZoomPct'); if (el2) el2.textContent = Math.round(cs / SPR_BLK * 100) + '%'; };
+  function zoom(dir) { const nc = Math.max(2, Math.min(64, cs + dir * Math.max(1, Math.round(cs * 0.25)))); if (nc === cs) return; cs = nc; sizeCanvas(); drawGrid(); zoomPct(); }
   m.querySelector('#sprZoomIn').onclick = () => zoom(1);
   m.querySelector('#sprZoomOut').onclick = () => zoom(-1);
-  m.querySelector('#sprZoomFit').onclick = () => { fitZoom(); sizeCanvas(); drawGrid(); };
+  m.querySelector('#sprZoomFit').onclick = () => { fitZoom(); sizeCanvas(); drawGrid(); zoomPct(); };
+  m.querySelector('#sprGrid').onclick = () => { showGrid = !showGrid; m.querySelector('#sprGrid').classList.toggle('on', showGrid); drawGrid(); };
 
   // ---- tamaño (bloques) + huella ----
   function resize(nbw, nbh) {
@@ -5440,11 +5456,19 @@ function openPlazaSpriteEditor(onDone, existing) {
   m.querySelector('#sprSolid').onchange = (e) => { propSolid = e.target.checked; };
   m.querySelectorAll('.spr-abtn').forEach(b => b.onclick = () => { propAnim = b.dataset.a; m.querySelectorAll('.spr-abtn').forEach(x => x.classList.toggle('on', x === b)); haptic(3); drawPreview(performance.now()); });
 
+  // mueve todo el dibujo una casilla (flechas)
+  const nudge = (ddx, ddy) => { snapshot(); const nc = new Array(w * h).fill(null); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const v = cells[y * w + x]; if (!v) continue; const nx = x + ddx, ny = y + ddy; if (nx >= 0 && nx < w && ny >= 0 && ny < h) nc[ny * w + nx] = v; } cells = nc; redraw(); };
   // ---- atajos de teclado ----
   const keymap = { b: 'pencil', l: 'line', r: 'rect', f: 'rectf', o: 'ellipse', g: 'fill', i: 'pick', e: 'erase' };
+  const onKeyUp = (ev) => { if (ev.key === ' ') { spaceDown = false; view.style.cursor = ''; } };
   const onKey = (ev) => {
-    if (!document.body.contains(m)) { document.removeEventListener('keydown', onKey); return; }
+    if (!document.body.contains(m)) { document.removeEventListener('keydown', onKey); document.removeEventListener('keyup', onKeyUp); return; }
     const tag = (ev.target.tagName || '').toLowerCase(); if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+    if (ev.key === ' ') { ev.preventDefault(); spaceDown = true; view.style.cursor = 'grab'; return; }
+    if (ev.key === 'ArrowLeft') { ev.preventDefault(); return nudge(-1, 0); }
+    if (ev.key === 'ArrowRight') { ev.preventDefault(); return nudge(1, 0); }
+    if (ev.key === 'ArrowUp') { ev.preventDefault(); return nudge(0, -1); }
+    if (ev.key === 'ArrowDown') { ev.preventDefault(); return nudge(0, 1); }
     const k = ev.key.toLowerCase();
     if ((ev.ctrlKey || ev.metaKey) && k === 'z') { ev.preventDefault(); ev.shiftKey ? doRedo() : doUndo(); return; }
     if ((ev.ctrlKey || ev.metaKey) && k === 'y') { ev.preventDefault(); doRedo(); return; }
@@ -5455,6 +5479,7 @@ function openPlazaSpriteEditor(onDone, existing) {
     else if (k === '-') { zoom(-1); }
     else if (k === '1' || k === '2' || k === '3') { const b = m.querySelector(`#sprBrush .spr2-segb[data-b="${k}"]`); if (b) b.click(); }
   };
+  document.addEventListener('keyup', onKeyUp);
   document.addEventListener('keydown', onKey);
   m.querySelector('.close').addEventListener('click', () => document.removeEventListener('keydown', onKey));
 
@@ -5482,7 +5507,7 @@ function openPlazaSpriteEditor(onDone, existing) {
 
   // arranque + reajuste del zoom cuando el panel del lienzo obtiene/cambia su tamaño
   setCur(curColor); renderRecent(); renderSteps(); renderFoot(); updoBtns();
-  const refit = () => { fitZoom(); sizeCanvas(); drawGrid(); };
+  const refit = () => { fitZoom(); sizeCanvas(); drawGrid(); zoomPct(); };
   requestAnimationFrame(() => { refit(); requestAnimationFrame(refit); });
   let ro = null; try { ro = new ResizeObserver(() => { if (document.body.contains(m)) refit(); }); ro.observe(view); } catch (_) {}
   const onResize = () => { if (!document.body.contains(m)) { window.removeEventListener('resize', onResize); if (ro) ro.disconnect(); return; } refit(); };
