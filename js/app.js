@@ -4962,6 +4962,8 @@ function plzQty(t) { return PLZ_FREE_ITEMS.has(t) ? Infinity : (plzInv()[t] || 0
 function plzOwned() { const inv = plzInv(); return Object.keys(inv).filter(k => inv[k] > 0); }
 function plzHasItem(t) { return PLZ_FREE_ITEMS.has(t) || (plzInv()[t] || 0) > 0; }
 function plzAddInv(t, n) { const inv = Object.assign({}, plzInv()); inv[t] = (inv[t] || 0) + (n || 1); if (state.profile) state.profile.plaza_inv = inv; }
+// puede entrar en el editor de objetos: admin o usuario con permiso de editor
+function plzCanCreate() { return !!(state.profile && (state.profile.is_admin || state.profile.plaza_creator)); }
 PLZ_EDIT_ITEMS.forEach(it => PLZ_ITEM_NAME[it.t] = it.n);
 
 // miniatura de un mueble en canvas (reutiliza plzDrawFurn con un contexto temporal)
@@ -4988,27 +4990,37 @@ function plzFurnThumb(type, px) {
 
 async function openPlazaShop(onBuy) {
   const admin = !!(state.profile && state.profile.is_admin);
+  const canCreate = plzCanCreate();
   const m = openModal(`<div class="modal-head"><h3><svg class="mh-ic" fill="none" stroke="currentColor"><use href="#i-cart"/></svg> Tienda de objetos</h3><button class="close">&times;</button></div>
     <div class="modal-body">
       <div class="shop-bal"><span class="coin"></span> <b id="shopCoins">${plzCoins()}</b> monedas <span class="shop-tip">· gánalas jugando</span><button class="btn sm ghost shop-inv-btn" id="shopInv">Mi inventario</button></div>
-      ${admin ? `<button class="btn primary" id="shopCreate" style="width:100%;margin:0 0 12px;display:flex;align-items:center;justify-content:center;gap:8px"><svg style="width:16px;height:16px" fill="none" stroke="#fff"><use href="#i-palette"/></svg> Crear objeto (dibujar sprite)</button>` : ''}
+      ${canCreate ? `<button class="btn primary" id="shopCreate" style="width:100%;margin:0 0 12px;display:flex;align-items:center;justify-content:center;gap:8px"><svg style="width:16px;height:16px" fill="none" stroke="#fff"><use href="#i-palette"/></svg> Crear objeto (dibujar sprite)</button>` : ''}
       <div id="shopGrid" class="shop-grid"><div class="pr-empty">Cargando…</div></div>
     </div>`);
   m.querySelector('#shopInv').onclick = () => { m.remove(); openPlazaInventory(); };
   const grid = m.querySelector('#shopGrid');
   await plzLoadCustomItems(true);   // que las miniaturas custom estén disponibles y frescas
   let items = [];
-  const load = async () => { try { const { data } = await sb.from('plaza_shop').select('item,name,price,category,sort,custom').order('sort'); items = data || []; } catch (_) {} };
+  const load = async () => { try { const { data } = await sb.from('plaza_shop').select('item,name,price,category,sort,custom,created_by').order('sort'); items = data || []; } catch (_) {} };
   await load();
   if (!items.length) { grid.innerHTML = '<div class="pr-empty">No se pudo cargar la tienda.</div>'; return; }
+  // recarga un objeto en el editor para modificarlo y guarda con plaza_update_item
+  const editItem = async (it) => {
+    let sprite = null;
+    try { const { data } = await sb.from('plaza_shop').select('sprite').eq('item', it.item).single(); sprite = data && data.sprite; } catch (_) {}
+    if (!sprite) { toast('No se pudo cargar el sprite'); return; }
+    openPlazaSpriteEditor(async () => { await plzLoadCustomItems(true); await load(); render(); onBuy && onBuy(); plzRecompute && plzR && plzRecompute(); },
+      { item: it.item, name: it.name, price: it.price, category: it.category, sprite });
+  };
   const render = () => {
     grid.innerHTML = '';
     items.forEach(it => {
       const free = it.price === 0 || PLZ_FREE_ITEMS.has(it.item);
       const qty = plzInv()[it.item] || 0;
+      const canEdit = it.custom && (admin || (it.created_by && it.created_by === state.user.id));
       const card = el(`<div class="shop-card ${qty > 0 ? 'owned' : ''}">
         ${qty > 0 ? `<span class="shop-qty">×${qty}</span>` : ''}
-        ${admin && it.custom ? `<button class="shop-del" title="Borrar objeto" aria-label="Borrar"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg></button>` : ''}
+        ${canEdit ? `<div class="shop-adm"><button class="shop-edit" title="Editar objeto" aria-label="Editar"><svg fill="none" stroke="currentColor"><use href="#i-brush"/></svg></button><button class="shop-del" title="Borrar objeto" aria-label="Borrar"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg></button></div>` : ''}
         <div class="shop-thumb"></div>
         <div class="shop-name">${esc(it.name)}</div>
         <button class="shop-buy" ${free ? 'disabled' : ''}>${free ? 'Gratis' : `<span class="coin sm"></span> ${it.price}`}</button>
@@ -5027,6 +5039,8 @@ async function openPlazaShop(onBuy) {
           render(); onBuy && onBuy();
         } catch (e) { buyBtn.disabled = false; toast((e && e.message) || 'No se pudo comprar'); }
       };
+      const editBtn = card.querySelector('.shop-edit');
+      if (editBtn) editBtn.onclick = () => editItem(it);
       const delBtn = card.querySelector('.shop-del');
       if (delBtn) delBtn.onclick = async () => {
         if (!confirm('¿Borrar «' + it.name + '» de la tienda? Los que ya lo compraron lo conservan.')) return;
@@ -5080,16 +5094,30 @@ function openPlazaInventory(onGo) {
 // le asigna propiedades y lo publica en la tienda. Cada bloque = 16 px de arte.
 const SPR_PAL = ['#000000', '#0a0e1c', '#1b2542', '#3d4a78', '#8f99ad', '#e8ecf6', '#ffffff', '#27a9ff', '#8fc0ff', '#6e2df5', '#b06eff', '#e0507a', '#ff5d5d', '#f0a13e', '#ffd23e', '#2dc878', '#12c2c2', '#8a5560', '#c9a86a', '#3a2814'];
 const SPR_BLK = 16;   // píxeles de arte por bloque
-function openPlazaSpriteEditor(onDone) {
-  if (!state.profile || !state.profile.is_admin) { toast('Solo el admin puede crear objetos'); return; }
+function openPlazaSpriteEditor(onDone, existing) {
+  if (!plzCanCreate()) { toast('No tienes permiso para crear objetos'); return; }
+  const ed0 = existing || null;       // si viene, editamos un objeto ya publicado
   let bw = 1, bh = 1;                 // tamaño en bloques (ancho × alto)
+  let propSit = false, propSolid = true, propAnim = 'none';
+  let initCells = null;
+  if (ed0 && ed0.sprite) {
+    const s = ed0.sprite;
+    propSit = !!s.sit; propSolid = !!s.solid; propAnim = s.anim || 'none';
+    const sw = s.w || 16, sh = s.h || 16;
+    bw = Math.max(1, Math.min(4, s.fw || Math.round(sw / SPR_BLK) || 1));
+    bh = Math.max(1, Math.min(4, Math.round(sh / SPR_BLK) || 1));
+    const pal = Array.isArray(s.pal) ? s.pal : [], data = Array.isArray(s.data) ? s.data : [];
+    const oc = new Array(sw * sh).fill(null);
+    for (let k = 0; k < sw * sh; k++) { const v = data[k] | 0; if (v) oc[k] = pal[v - 1] || null; }
+    initCells = { oc, sw, sh };
+  }
   let w = bw * SPR_BLK, h = bh * SPR_BLK;
   let cells = new Array(w * h).fill(null);
+  if (initCells) { const { oc, sw, sh } = initCells, dx = Math.floor((w - sw) / 2), dy = h - sh; for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) { const v = oc[y * sw + x]; if (!v) continue; const nx = x + dx, ny = y + dy; if (nx >= 0 && nx < w && ny >= 0 && ny < h) cells[ny * w + nx] = v; } }
   let curColor = SPR_PAL[7], tool = 'paint', mirror = false;
-  let propSit = false, propSolid = true, propAnim = 'none';
   const undo = [], redo = [];
 
-  const m = openModal(`<div class="modal-head"><h3><svg class="mh-ic" fill="none" stroke="currentColor"><use href="#i-palette"/></svg> Crear objeto</h3><button class="close">&times;</button></div>
+  const m = openModal(`<div class="modal-head"><h3><svg class="mh-ic" fill="none" stroke="currentColor"><use href="#i-palette"/></svg> ${ed0 ? 'Editar objeto' : 'Crear objeto'}</h3><button class="close">&times;</button></div>
     <div class="modal-body spr-body">
       <div class="spr-sizes-row">
         <div class="spr-size-ctl"><span class="spr-lbl">Ancho</span><div class="spr-steps" id="sprBW"></div></div>
@@ -5114,20 +5142,20 @@ function openPlazaSpriteEditor(onDone) {
       </div>
       <div class="spr-pal" id="sprPal">${SPR_PAL.map((c, i) => `<button class="spr-sw ${i === 7 ? 'on' : ''}" data-c="${c}" style="background:${c}" aria-label="Color"></button>`).join('')}<label class="spr-sw spr-sw-custom" title="Color libre" style="background:conic-gradient(from 0deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)"><input type="color" id="sprPick" value="#27a9ff"></label></div>
       <div class="spr-props">
-        <label class="spr-prop"><input type="checkbox" id="sprSit"> <span><b>Sentable</b><small>Los avatares pueden sentarse encima (una plaza por casilla de ancho)</small></span></label>
-        <label class="spr-prop"><input type="checkbox" id="sprSolid" checked> <span><b>Sólido</b><small>Bloquea el paso (desactívalo para que sea pisable)</small></span></label>
+        <label class="spr-prop"><input type="checkbox" id="sprSit" ${propSit ? 'checked' : ''}> <span><b>Sentable</b><small>Los avatares pueden sentarse encima (una plaza por casilla de ancho)</small></span></label>
+        <label class="spr-prop"><input type="checkbox" id="sprSolid" ${propSolid ? 'checked' : ''}> <span><b>Sólido</b><small>Bloquea el paso (desactívalo para que sea pisable)</small></span></label>
         <div class="spr-prop spr-anim"><span><b>Animación / luz</b></span><div class="spr-anim-btns" id="sprAnim">
-          <button class="spr-abtn on" data-a="none">Ninguna</button><button class="spr-abtn" data-a="glow">Brillo</button><button class="spr-abtn" data-a="blink">Parpadeo</button><button class="spr-abtn" data-a="float">Flotar</button>
+          ${[['none', 'Ninguna'], ['glow', 'Brillo'], ['blink', 'Parpadeo'], ['float', 'Flotar']].map(([a, l]) => `<button class="spr-abtn ${propAnim === a ? 'on' : ''}" data-a="${a}">${l}</button>`).join('')}
         </div></div>
       </div>
       <div class="spr-meta">
-        <input id="sprName" class="spr-input" maxlength="40" placeholder="Nombre del objeto">
+        <input id="sprName" class="spr-input" maxlength="40" placeholder="Nombre del objeto" value="${ed0 ? esc(ed0.name || '') : ''}">
         <div class="spr-meta-row">
-          <label class="spr-mlbl"><span class="coin sm"></span><input id="sprPrice" class="spr-input spr-price" type="number" min="0" step="5" value="20" placeholder="Precio"></label>
-          <select id="sprCat" class="spr-input spr-cat">${PLZ_CATS.map(c => `<option value="${c}"${c === 'Deco' ? ' selected' : ''}>${c}</option>`).join('')}</select>
+          <label class="spr-mlbl"><span class="coin sm"></span><input id="sprPrice" class="spr-input spr-price" type="number" min="0" step="5" value="${ed0 ? (ed0.price || 0) : 20}" placeholder="Precio"></label>
+          <select id="sprCat" class="spr-input spr-cat">${PLZ_CATS.map(c => `<option value="${c}"${c === (ed0 ? ed0.category : 'Deco') ? ' selected' : ''}>${c}</option>`).join('')}</select>
         </div>
       </div>
-      <button class="btn primary spr-publish" id="sprPublish">Publicar en la tienda</button>
+      <button class="btn primary spr-publish" id="sprPublish">${ed0 ? 'Guardar cambios' : 'Publicar en la tienda'}</button>
     </div>`);
 
   const gcv = m.querySelector('#sprCv'), gctx = gcv.getContext('2d');
@@ -5254,15 +5282,21 @@ function openPlazaSpriteEditor(onDone) {
     if (!name) { toast('Ponle un nombre al objeto'); m.querySelector('#sprName').focus(); return; }
     const price = Math.max(0, parseInt(m.querySelector('#sprPrice').value, 10) || 0);
     const cat = m.querySelector('#sprCat').value;
-    pubBtn.disabled = true; pubBtn.textContent = 'Publicando…';
+    pubBtn.disabled = true; pubBtn.textContent = ed0 ? 'Guardando…' : 'Publicando…';
     try {
-      const { data: item, error } = await sb.rpc('plaza_create_item', { p_name: name, p_price: price, p_category: cat, p_sprite: sprite });
-      if (error) throw error;
+      let item = ed0 && ed0.item;
+      if (ed0) {
+        const { error } = await sb.rpc('plaza_update_item', { p_item: ed0.item, p_name: name, p_price: price, p_category: cat, p_sprite: sprite });
+        if (error) throw error;
+      } else {
+        const { data, error } = await sb.rpc('plaza_create_item', { p_name: name, p_price: price, p_category: cat, p_sprite: sprite });
+        if (error) throw error; item = data;
+      }
       PLZ_CUSTOM[item] = { w, h, pal: sprite.pal, data: sprite.data, fw: bw, fd: 1, solid: propSolid, sit: propSit, anim: propAnim, name, category: cat };
       PLZ_ITEM_NAME[item] = name;
-      haptic(14); toast('¡«' + name + '» publicado en la tienda!');
+      haptic(14); toast(ed0 ? 'Cambios guardados' : '¡«' + name + '» publicado en la tienda!');
       m.remove(); onDone && onDone();
-    } catch (e) { pubBtn.disabled = false; pubBtn.textContent = 'Publicar en la tienda'; toast((e && e.message) || 'No se pudo publicar'); }
+    } catch (e) { pubBtn.disabled = false; pubBtn.textContent = ed0 ? 'Guardar cambios' : 'Publicar en la tienda'; toast((e && e.message) || 'No se pudo guardar'); }
   };
   updoBtns();
 }
@@ -8932,6 +8966,7 @@ async function openProfile(userId) {
           ${!isMe ? `<button class="btn" id="msgBtn"><svg fill="none" stroke="currentColor"><use href="#i-mail"/></svg> Mensaje</button>` : ''}
           ${(!isMe && state.profile.is_admin && !prof.is_admin) ? `<button class="btn" id="banBtn" style="border-color:#e3b7b0;color:#c0533f">${prof.banned?'Desbanear':'Banear usuario'}</button>` : ''}
           ${(!isMe && state.profile.is_admin) ? `<button class="btn" id="verifyBtn"><svg fill="none" stroke="currentColor"><use href="#i-verify"/></svg> ${prof.verified?'Quitar verificación':'Verificar'}</button>` : ''}
+          ${(!isMe && state.profile.is_admin && !prof.is_admin) ? `<button class="btn" id="creatorBtn"><svg fill="none" stroke="currentColor"><use href="#i-palette"/></svg> ${prof.plaza_creator?'Quitar permiso de editor':'Dar permiso de editor'}</button>` : ''}
           ${(!isMe && state.profile.is_admin && !prof.is_admin) ? `<button class="btn danger-btn" id="delUserBtn"><svg fill="none" stroke="#fff"><use href="#i-trash"/></svg> Eliminar usuario</button>` : ''}
           ${!isMe ? `<button class="btn" id="blockBtn">${state.blocked.has(prof.id) ? 'Desbloquear' : 'Bloquear'}</button>` : ''}
           ${!isMe ? `<button class="btn" id="reportBtn"><svg fill="none" stroke="currentColor"><use href="#i-bell"/></svg> Reportar</button>` : ''}
@@ -9074,6 +9109,17 @@ async function openProfile(userId) {
     prof.verified = newVal;
     verifyBtn.textContent = newVal ? 'Quitar verificación' : 'Verificar';
     toast(newVal ? '✔ Usuario verificado' : 'Verificación quitada');
+  };
+  const creatorBtn = $('creatorBtn');
+  if (creatorBtn) creatorBtn.onclick = async () => {
+    const newVal = !prof.plaza_creator;
+    creatorBtn.disabled = true;
+    const { error } = await sb.rpc('plaza_set_creator', { p_user: userId, p_on: newVal });
+    creatorBtn.disabled = false;
+    if (error) { toast((error && error.message) || 'No se pudo actualizar'); return; }
+    prof.plaza_creator = newVal;
+    creatorBtn.innerHTML = `<svg fill="none" stroke="currentColor"><use href="#i-palette"/></svg> ${newVal ? 'Quitar permiso de editor' : 'Dar permiso de editor'}`;
+    toast(newVal ? 'Permiso de editor concedido' : 'Permiso de editor retirado');
   };
   if (!isMe) $('followBtn').onclick = () => toggleFollow(userId, $('followBtn'));
 }
