@@ -806,6 +806,7 @@ async function ensureProfile() {
 
 function renderMe() {
   if (!state.profile) return;
+  plzUpdateCoinsHub();
   $('meName').innerHTML = esc(state.profile.display_name || state.profile.username) + verifiedBadge(state.profile) + displayBadgeHtml(state.profile) +
     (state.profile.is_admin ? ' <span class="t-genre" style="background:#fdeede;border-color:#f3d9b0;color:#b07a2c;padding:1px 7px">MOD</span>' : '');
   $('meAvatar').outerHTML = avatarHTML(state.profile).replace('class="avatar ', 'id="meAvatar" class="avatar ');
@@ -977,6 +978,7 @@ function bindUI() {
   $('btnNotif').onclick = () => switchView('notifications');
   { const b = $('btnMessages'); if (b) b.onclick = () => { switchView('messages'); hideDrawers(); }; }
   $('meChip').onclick = () => openProfile(state.user.id);
+  { const cc = $('coinsChip'); if (cc) cc.onclick = () => openPlazaShop(); }
   $('menuToggle').onclick = () => { const open = $('sidebar').classList.toggle('open'); $('drawerBackdrop').classList.toggle('show', open); };
   $('btnChatToggle').onclick = toggleRight;
   // plegar paneles en escritorio (menú lateral y chat) para ver la feed a pantalla completa
@@ -4133,6 +4135,12 @@ function plzFurnTiles(f) {
   for (let di = 0; di < fw; di++) for (let dj = 0; dj < fd; dj++) t.push([f.i + di, f.j + dj]);
   return t;
 }
+// centro horizontal (px de arte) de un mueble según su huella — para voltearlo
+function plzFurnCenterX(f) {
+  const cu = PLZ_CUSTOM[f.t];
+  if (cu) { const fw = cu.fw || 1, fd = cu.fd || 1; return Math.round(((f.i + (fw - 1) / 2) - (f.j + (fd - 1) / 2)) * PLZ.TW / 2); }
+  return Math.round(plzIso(f.i, f.j).x);
+}
 // mueble (no portal) cuya huella contiene la casilla (i,j) — para reemplazar/borrar
 function plzFindFurnAt(furn, fi, fj) {
   for (let k = furn.length - 1; k >= 0; k--) {
@@ -4522,6 +4530,28 @@ async function renderPlaza() {
       else if (a === 'react') sendEmote('react', b.dataset.e, self ? null : ent.id);
     });
   };
+  // ---- menú al tocar un objeto de tu sala en modo edición ----
+  const objIco = (name) => `<svg fill="none" stroke="currentColor"><use href="#i-${name}"/></svg>`;
+  const openObjMenu = (f, cssX, cssY) => {
+    const name = PLZ_ITEM_NAME[f.t] || f.t;
+    menuEl.innerHTML = `<div class="pm-head">${esc(name)}</div>
+      <button data-a="move">${objIco('tools')}Mover</button>
+      <button data-a="flip">${objIco('mirror')}Girar</button>
+      <button data-a="pick">${objIco('files')}Recoger</button>
+      <button data-a="sell" class="pm-sell">${objIco('cart')}Vender</button>`;
+    menuEl.classList.remove('hidden');
+    const mw = menuEl.offsetWidth || 150, mh = menuEl.offsetHeight || 160;
+    menuEl.style.left = Math.max(6, Math.min(cssX - mw / 2, $('plazaWrap').clientWidth - mw - 6)) + 'px';
+    menuEl.style.top = Math.max(6, Math.min(cssY - mh - 14, $('plazaWrap').clientHeight - mh - 6)) + 'px';
+    menuEl.querySelectorAll('button').forEach(b => b.onclick = (ev) => {
+      ev.stopPropagation(); closeMenu(); haptic(8);
+      const a = b.dataset.a;
+      if (a === 'move') { plaza.moving = f; toast('Toca dónde colocarlo'); }
+      else if (a === 'flip') { f.flip = !f.flip; haptic(6); }
+      else if (a === 'pick') plzPickFurn(f);
+      else if (a === 'sell') plzSellFurn(f);
+    });
+  };
   document.addEventListener('pointerdown', function pmOut(e) {
     if (!plaza) { document.removeEventListener('pointerdown', pmOut); return; }
     if (!menuEl.contains(e.target) && e.target !== canvas) closeMenu();
@@ -4533,10 +4563,16 @@ async function renderPlaza() {
     const s = r.width / canvas.width;
     const rx = (e.clientX - r.left) / s - plaza.ox, ry = (e.clientY - r.top) / s - plaza.oy;
     closeMenu();
-    // modo edición de sala: colocar/quitar objetos en la casilla tocada
+    // modo edición de sala: colocar/quitar objetos, o abrir el menú de un objeto ya puesto
     if (plaza.editing) {
       const efi = Math.floor((rx / (PLZ.TW / 2) + ry / (PLZ.TH / 2)) / 2);
       const efj = Math.floor((ry / (PLZ.TH / 2) - rx / (PLZ.TW / 2)) / 2);
+      if (plaza.moving) { plzMoveTo(plaza.moving, efi, efj); plaza.moving = null; return; }   // recolocar
+      // tocar un objeto existente (con herramienta de colocar) → menú mover/girar/recoger/vender
+      if (plaza.editTool !== 'erase' && efi >= 0 && efj >= 0 && efi < PLZ.COLS && efj < PLZ.ROWS) {
+        const k = plzFindFurnAt(plzR.furn, efi, efj);
+        if (k >= 0) { openObjMenu(plzR.furn[k], (e.clientX - r.left), (e.clientY - r.top)); haptic(6); return; }
+      }
       plzEditTap(efi, efj); return;
     }
     // ¿ha tocado el objeto interactivo de la sala? → abre su minijuego
@@ -4911,7 +4947,7 @@ function plzEnterEdit() {
   ed.querySelector('#pedExit').onclick = () => plzExitEdit();
 }
 function plzExitEdit() {
-  if (plaza) { plaza.editing = false; plaza._renderPalette = null; plaza._pickTool = null; }
+  if (plaza) { plaza.editing = false; plaza._renderPalette = null; plaza._pickTool = null; plaza.moving = null; }
   const ed = document.getElementById('plazaEditor'); if (ed) ed.remove();
   const dock = document.querySelector('.plaza-dock'); if (dock) dock.style.display = '';
   const hint = document.querySelector('.plaza-hint'); if (hint) hint.style.display = '';
@@ -4946,6 +4982,37 @@ function plzEditTap(fi, fj) {
   furn.push({ t: tool, i: fi, j: fj });
   plzRecompute(); if (plaza._renderPalette) plaza._renderPalette(); haptic(6);
 }
+// recolocar un objeto ya puesto (modo "mover") en una casilla nueva, validando la huella
+function plzMoveTo(f, fi, fj) {
+  const furn = plzR.furn; if (furn.indexOf(f) < 0) return;
+  const { fw, fd } = plzFurnFoot(f.t);
+  const tiles = [];
+  for (let di = 0; di < fw; di++) for (let dj = 0; dj < fd; dj++) tiles.push([fi + di, fj + dj]);
+  if (tiles.some(([ti, tj]) => ti < 0 || tj < 0 || ti >= PLZ.COLS || tj >= PLZ.ROWS)) { toast('No cabe ahí'); haptic(20); return; }
+  if (tiles.some(([ti, tj]) => furn.some(o => o.t === 'portal' && o.i === ti && o.j === tj))) { toast('Ahí está la salida'); haptic(20); return; }
+  for (const [ti, tj] of tiles) { const k = plzFindFurnAt(furn, ti, tj); if (k >= 0 && furn[k] !== f) { toast('Ahí ya hay algo'); haptic(20); return; } }
+  f.i = fi; f.j = fj; plzRecompute(); haptic(8);
+}
+// recoger un objeto: lo quita de la sala y su unidad vuelve a estar disponible en el inventario
+function plzPickFurn(f) {
+  const idx = plzR.furn.indexOf(f); if (idx < 0) return;
+  plzR.furn.splice(idx, 1); plzRecompute(); if (plaza._renderPalette) plaza._renderPalette(); haptic(10); toast('Recogido · vuelve a tu inventario');
+}
+// vender un objeto: recupera la mitad del precio y lo quita del inventario y de la sala
+async function plzSellFurn(f) {
+  const name = PLZ_ITEM_NAME[f.t] || f.t;
+  if (!confirm('¿Vender «' + name + '»? Recuperas la mitad de su precio y se quita de tu inventario.')) return;
+  const before = plzCoins();
+  try {
+    const { data: bal, error } = await sb.rpc('plaza_sell_item', { p_item: f.t });
+    if (error) throw error;
+    state.profile.plaza_coins = bal;
+    const inv = Object.assign({}, plzInv()); inv[f.t] = Math.max(0, (inv[f.t] || 0) - 1); state.profile.plaza_inv = inv;
+    const idx = plzR.furn.indexOf(f); if (idx >= 0) plzR.furn.splice(idx, 1);
+    plzRecompute(); if (plaza._renderPalette) plaza._renderPalette(); plzUpdateCoinsHub();
+    haptic(14); toast('Vendido · +' + Math.max(0, bal - before) + ' monedas');
+  } catch (e) { toast((e && e.message) || 'No se pudo vender'); }
+}
 async function plzSaveRoom() {
   const def = plzR && plzR.def; if (!def || !def.custom) return;
   const data = { sub: def.sub, floorA: def.floorA, floorB: def.floorB, wall: def.wall, neonA: def.neonA, neonB: def.neonB, sign: (def.name || 'ROOM').toUpperCase().slice(0, 10), dance: def.dance, furn: plzR.furn.filter(f => f.t !== 'portal') };
@@ -4966,6 +5033,13 @@ function plzHasItem(t) { return PLZ_FREE_ITEMS.has(t) || (plzInv()[t] || 0) > 0;
 function plzAddInv(t, n) { const inv = Object.assign({}, plzInv()); inv[t] = (inv[t] || 0) + (n || 1); if (state.profile) state.profile.plaza_inv = inv; }
 // puede entrar en el editor de objetos: admin o usuario con permiso de editor
 function plzCanCreate() { return !!(state.profile && (state.profile.is_admin || state.profile.plaza_creator)); }
+// contador de monedas siempre visible en la cabecera
+function plzUpdateCoinsHub() {
+  const n = document.getElementById('coinsChipN'); if (!n) return;
+  const v = plzCoins(), prev = parseInt(n.textContent, 10) || 0;
+  n.textContent = v;
+  if (v > prev) { const c = document.getElementById('coinsChip'); if (c) { c.classList.remove('coin-bump'); void c.offsetWidth; c.classList.add('coin-bump'); } }
+}
 PLZ_EDIT_ITEMS.forEach(it => PLZ_ITEM_NAME[it.t] = it.n);
 
 // tipos base que son asientos (para sembrar la propiedad al rasterizar)
@@ -5079,7 +5153,7 @@ async function openPlazaShop(onBuy) {
         try {
           const { data: bal, error } = await sb.rpc('plaza_buy_item', { p_item: it.item });
           if (error) throw error;
-          state.profile.plaza_coins = bal; plzAddInv(it.item, 1);
+          state.profile.plaza_coins = bal; plzAddInv(it.item, 1); plzUpdateCoinsHub();
           m.querySelector('#shopCoins').textContent = bal;
           haptic(12); toast('¡' + it.name + ' comprado!');
           render(); onBuy && onBuy();
@@ -5472,15 +5546,16 @@ function openPerkyInvaders() {
   // ---- lógica ----
   function update(dt) {
     if (g.over) return;
+    const f = dt * 60;   // factor de fotograma: el movimiento va a la misma velocidad a cualquier FPS
     g.t += dt; g.fireCd -= dt;
-    // mover nave
+    // mover nave (independiente de los FPS)
     let vx = 0; if (leftHeld) vx -= 1; if (rightHeld) vx += 1;
-    if (g.targetX != null) g.px += Math.max(-3, Math.min(3, (g.targetX - g.px) * 0.35));
-    g.px += vx * 2.4; g.px = Math.max(10, Math.min(AW - 10, g.px));
+    if (g.targetX != null) g.px += (g.targetX - g.px) * Math.min(1, 0.35 * f);
+    g.px += vx * 2.4 * f; g.px = Math.max(10, Math.min(AW - 10, g.px));
     // auto-fire
     if (g.fireCd <= 0) { fire(); g.fireCd = 0.42; }
     // balas
-    g.bullets.forEach(b => b.y -= 3.2); g.bullets = g.bullets.filter(b => b.y > -4);
+    g.bullets.forEach(b => b.y -= 3.2 * f); g.bullets = g.bullets.filter(b => b.y > -4);
     // marcha de invasores
     const alive = g.aliens.filter(a => a.alive);
     const speed = g.stepEvery * (alive.length / 40) ** 0.9;
@@ -5500,11 +5575,11 @@ function openPerkyInvaders() {
       if (alive.some(a => a.y > 196)) return gameOver();
     }
     // bombas
-    g.bombs.forEach(b => b.y += 1.8); g.bombs = g.bombs.filter(b => b.y < AH);
+    g.bombs.forEach(b => b.y += 1.8 * f); g.bombs = g.bombs.filter(b => b.y < AH);
     // UFO bonus
     g.ufoT -= dt;
     if (!g.ufo && g.ufoT <= 0) { g.ufo = { x: -12, y: 16 }; g.ufoT = 10 + Math.random() * 12; }
-    if (g.ufo) { g.ufo.x += 1.1; if (g.ufo.x > AW + 12) g.ufo = null; }
+    if (g.ufo) { g.ufo.x += 1.1 * f; if (g.ufo.x > AW + 12) g.ufo = null; }
     if (g.invuln > 0) g.invuln -= dt;
 
     // colisiones bala→invasor / UFO / escudo
@@ -5544,32 +5619,27 @@ function openPerkyInvaders() {
     // estrellas (dos capas, con parpadeo)
     for (let s = 0; s < 30; s++) { const sx = (s * 61) % AW, sy = (s * 37 + Math.floor(g.t * 10)) % AH; ctx.fillStyle = 'rgba(150,180,255,' + (0.25 + 0.5 * Math.abs(Math.sin(g.t * 3 + s))).toFixed(2) + ')'; ctx.fillRect(sx, sy, 1, 1); }
     for (let s = 0; s < 12; s++) { const sx = (s * 97 + 13) % AW, sy = (s * 53 + Math.floor(g.t * 22)) % AH; ctx.fillStyle = 'rgba(255,255,255,.55)'; ctx.fillRect(sx, sy, 1, 1); }
-    // UFO con brillo
-    if (g.ufo) { ctx.save(); ctx.shadowColor = '#ffd23e'; ctx.shadowBlur = 6; px(g.ufo.x - 8, g.ufo.y - 2, 16, 4, '#ffd23e'); px(g.ufo.x - 4, g.ufo.y - 5, 8, 3, '#fff2b0'); ctx.restore(); px(g.ufo.x - 6, g.ufo.y + 2, 2, 1, '#e0507a'); px(g.ufo.x + 4, g.ufo.y + 2, 2, 1, '#27a9ff'); }
-    // invasores con leve halo de neón
+    // UFO (con un realce de color, sin blur para ir fluido en móvil)
+    if (g.ufo) { px(g.ufo.x - 8, g.ufo.y - 2, 16, 4, '#ffd23e'); px(g.ufo.x - 4, g.ufo.y - 5, 8, 3, '#fff2b0'); px(g.ufo.x - 6, g.ufo.y + 2, 2, 1, '#e0507a'); px(g.ufo.x + 4, g.ufo.y + 2, 2, 1, '#27a9ff'); }
+    // invasores (sin shadowBlur por invasor: era el mayor coste de render en móvil)
     const bmp = g.frame ? A2 : A1;
-    ctx.save(); ctx.shadowBlur = 4;
-    for (const a of g.aliens) if (a.alive) { ctx.shadowColor = ROWCOL[a.r]; drawBmp(bmp, a.x, a.y, ROWCOL[a.r]); }
-    ctx.restore();
+    for (const a of g.aliens) if (a.alive) drawBmp(bmp, a.x, a.y, ROWCOL[a.r]);
     // escudos
     for (const cells of g.shields) for (const cel of cells) if (cel.on) px(cel.x, cel.y, 2, 2, '#2dc878');
     // suelo de neón
     px(0, AH - 2, AW, 1, 'rgba(45,200,120,.4)');
-    // balas y bombas con brillo
-    ctx.save(); ctx.shadowBlur = 5;
-    ctx.shadowColor = '#bfe0ff'; for (const b of g.bullets) px(b.x - 1, b.y - 4, 2, 6, '#eaf2ff');
-    ctx.shadowColor = '#ff6b81'; for (const b of g.bombs) px(b.x - 1, b.y, 2, 5, '#ff6b81');
-    ctx.restore();
-    // nave (parpadea si invulnerable) con motor y halo
+    // balas y bombas
+    for (const b of g.bullets) px(b.x - 1, b.y - 4, 2, 6, '#eaf2ff');
+    for (const b of g.bombs) px(b.x - 1, b.y, 2, 5, '#ff6b81');
+    // nave (parpadea si invulnerable) con motor
     if (!(g.invuln > 0 && Math.floor(g.t * 12) % 2)) {
-      ctx.save(); ctx.shadowColor = accent; ctx.shadowBlur = 8;
-      px(g.px - 9, 220, 18, 5, accent); px(g.px - 4, 216, 8, 4, accent); px(g.px - 1, 212, 2, 4, '#eaf2ff'); ctx.restore();
+      px(g.px - 9, 220, 18, 5, accent); px(g.px - 4, 216, 8, 4, accent); px(g.px - 1, 212, 2, 4, '#eaf2ff');
       const fl = 1 + Math.floor(g.t * 20) % 2; px(g.px - 2, 225, 4, fl + 1, '#ffb347'); px(g.px - 1, 225, 2, fl + 2, '#fff2b0');
     }
     // explosiones: anillo + núcleo
     for (const e of g.boom) { const k = e.t / 0.35; ctx.globalAlpha = 1 - k; ctx.strokeStyle = e.col; ctx.lineWidth = 1.4; ctx.beginPath(); ctx.arc(e.x, e.y, 2 + k * 10, 0, 7); ctx.stroke(); const s = 2 + e.t * 14; px(e.x - s / 2, e.y - s / 2, s, s, e.col); ctx.globalAlpha = 1; }
     // HUD: vidas + oleada
-    for (let i = 0; i < g.lives; i++) { ctx.save(); ctx.shadowColor = accent; ctx.shadowBlur = 4; px(6 + i * 8, 6, 6, 3, accent); ctx.restore(); }
+    for (let i = 0; i < g.lives; i++) px(6 + i * 8, 6, 6, 3, accent);
     ctx.fillStyle = '#8fa0c8'; ctx.font = '6px monospace'; ctx.textAlign = 'right'; ctx.fillText('OLA ' + g.wave, AW - 6, 10);
   }
 
@@ -5584,7 +5654,7 @@ function openPerkyInvaders() {
   async function showGameOver() {
     try { await sb.from('arcade_scores').insert({ game: 'perky', user_id: state.user.id, score: g.score }); } catch (_) {}
     let coins = 0;
-    try { const { data } = await sb.rpc('plaza_award_coins', { p_game: 'perky', p_score: g.score }); coins = data || 0; if (coins) state.profile.plaza_coins = (state.profile.plaza_coins || 0) + coins; } catch (_) {}
+    try { const { data } = await sb.rpc('plaza_award_coins', { p_game: 'perky', p_score: g.score }); coins = data || 0; if (coins) { state.profile.plaza_coins = (state.profile.plaza_coins || 0) + coins; plzUpdateCoinsHub(); } } catch (_) {}
     let rows = [];
     try { const { data } = await sb.rpc('arcade_leaderboard', { p_game: 'perky', p_limit: 10 }); rows = data || []; } catch (_) {}
     const myBest = Math.max(g.score, ...rows.filter(r => r.user_id === state.user.id).map(r => r.best), 0);
@@ -5632,7 +5702,7 @@ async function pkGameOver({ game, score, wrap, onRetry, onQuit, title }) {
   let rows = [];
   try { await sb.from('arcade_scores').insert({ game, user_id: state.user.id, score }); } catch (_) {}
   let coins = 0;
-  try { const { data } = await sb.rpc('plaza_award_coins', { p_game: game, p_score: score }); coins = data || 0; if (coins) state.profile.plaza_coins = (state.profile.plaza_coins || 0) + coins; } catch (_) {}
+  try { const { data } = await sb.rpc('plaza_award_coins', { p_game: game, p_score: score }); coins = data || 0; if (coins) { state.profile.plaza_coins = (state.profile.plaza_coins || 0) + coins; plzUpdateCoinsHub(); } } catch (_) {}
   try { const { data } = await sb.rpc('arcade_leaderboard', { p_game: game, p_limit: 10 }); rows = data || []; } catch (_) {}
   const myBest = Math.max(score, ...rows.filter(r => r.user_id === state.user.id).map(r => r.best), 0);
   const ov = el(`
@@ -6985,7 +7055,13 @@ function plzDraw(now) {
 
   // mobiliario + avatares, ordenados por profundidad (pintor)
   const items = [];
-  for (const f of plzR.furn) { const ft = plzFurnFoot(f.t); items.push({ d: f.i + f.j + (ft.fw - 1) + (ft.fd - 1) - 0.15, draw: () => plzDrawFurn(f, now) }); }
+  for (const f of plzR.furn) {
+    const ft = plzFurnFoot(f.t);
+    const draw = f.flip
+      ? () => { const cx = plzFurnCenterX(f); ctx.save(); ctx.translate(2 * cx, 0); ctx.scale(-1, 1); plzDrawFurn(f, now); ctx.restore(); }
+      : () => plzDrawFurn(f, now);
+    items.push({ d: f.i + f.j + (ft.fw - 1) + (ft.fd - 1) - 0.15, draw });
+  }
   for (const e of plaza.ents.values()) items.push({ d: e.x + e.y, draw: () => plzDrawAvatar(e, now) });
   items.sort((a, b) => a.d - b.d);
   for (const it of items) it.draw();
