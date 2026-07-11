@@ -4869,6 +4869,13 @@ function plzEnterEdit() {
     const cnt = {}; for (const f of plzR.furn) if (f.t !== 'portal') cnt[f.t] = (cnt[f.t] || 0) + 1;
     gridEl.querySelectorAll('.ped-card').forEach(card => { const t = card.dataset.tool, q = card.querySelector('.ped-card-q'); if (q) q.textContent = PLZ_FREE_ITEMS.has(t) ? '∞' : Math.max(0, plzQty(t) - (cnt[t] || 0)); });
   };
+  // seleccionar un objeto desde el inventario: cambia a su categoría y lo deja listo para colocar
+  plaza._pickTool = (t) => {
+    const it = plzAllEditItems().find(x => x.t === t);
+    if (it && PLZ_CATS.includes(it.c)) cat = it.c;
+    plaza.editTool = t;
+    renderCats(); renderGrid();
+  };
   renderCats(); renderGrid();
   ed.querySelector('#pedInv').onclick = () => openPlazaInventory(afterChange);
   ed.querySelector('#pedShop').onclick = () => openPlazaShop(afterChange);
@@ -4877,7 +4884,7 @@ function plzEnterEdit() {
   ed.querySelector('#pedExit').onclick = () => plzExitEdit();
 }
 function plzExitEdit() {
-  if (plaza) { plaza.editing = false; plaza._renderPalette = null; }
+  if (plaza) { plaza.editing = false; plaza._renderPalette = null; plaza._pickTool = null; }
   const ed = document.getElementById('plazaEditor'); if (ed) ed.remove();
   const dock = document.querySelector('.plaza-dock'); if (dock) dock.style.display = '';
   const hint = document.querySelector('.plaza-hint'); if (hint) hint.style.display = '';
@@ -4992,15 +4999,29 @@ async function openPlazaShop(onBuy) {
 function openPlazaInventory(onGo) {
   const inv = plzInv();
   const owned = Object.keys(inv).filter(k => inv[k] > 0).sort((a, b) => inv[b] - inv[a]);
+  // en modo edición se pueden colocar los objetos directamente desde aquí
+  const editing = !!(plaza && plaza.editing);
+  // cuántos de cada tipo quedan por colocar (los ya puestos en la sala descuentan)
+  const cnt = {};
+  if (editing && plzR) for (const f of plzR.furn) if (f.t !== 'portal') cnt[f.t] = (cnt[f.t] || 0) + 1;
   const m = openModal(`<div class="modal-head"><h3><svg class="mh-ic" fill="none" stroke="currentColor"><use href="#i-files"/></svg> Mi inventario</h3><button class="close">&times;</button></div>
     <div class="modal-body">
       <div class="shop-bal"><span class="coin"></span> <b>${plzCoins()}</b> monedas</div>
+      ${editing ? '<div class="inv-tip">Toca un objeto para colocarlo en la sala.</div>' : ''}
       ${owned.length
-      ? `<div class="shop-grid">${owned.map(t => `<div class="shop-card owned" data-t="${t}"><span class="shop-qty">×${inv[t]}</span><div class="shop-thumb"></div><div class="shop-name">${esc(PLZ_ITEM_NAME[t] || t)}</div></div>`).join('')}</div>`
+      ? `<div class="shop-grid">${owned.map(t => { const rem = editing ? Math.max(0, inv[t] - (cnt[t] || 0)) : inv[t]; return `<${editing ? 'button' : 'div'} class="shop-card owned${editing ? ' inv-place' : ''}${editing && rem <= 0 ? ' inv-out' : ''}" data-t="${t}"><span class="shop-qty">×${editing ? rem : inv[t]}</span><div class="shop-thumb"></div><div class="shop-name">${esc(PLZ_ITEM_NAME[t] || t)}</div>${editing ? '<span class="inv-place-lbl">Colocar</span>' : ''}</${editing ? 'button' : 'div'}>`; }).join('')}</div>`
       : '<div class="pr-empty">Aún no tienes objetos. Cómpralos en la Tienda con las monedas que ganes jugando.</div>'}
       <button class="btn primary" id="invShop" style="width:100%;margin-top:12px;display:flex;align-items:center;justify-content:center;gap:8px"><svg style="width:16px;height:16px" fill="none" stroke="#fff"><use href="#i-cart"/></svg> Ir a la Tienda</button>
     </div>`);
-  m.querySelectorAll('.shop-card[data-t]').forEach(card => { try { card.querySelector('.shop-thumb').appendChild(plzFurnThumb(card.dataset.t, 68)); } catch (_) {} });
+  m.querySelectorAll('.shop-card[data-t]').forEach(card => {
+    try { card.querySelector('.shop-thumb').appendChild(plzFurnThumb(card.dataset.t, 68)); } catch (_) {}
+    if (editing) card.onclick = () => {
+      const t = card.dataset.t;
+      if (plaza._pickTool) plaza._pickTool(t); else plaza.editTool = t;
+      haptic(8); m.remove();
+      toast('Toca el suelo para colocar «' + (PLZ_ITEM_NAME[t] || t) + '»');
+    };
+  });
   m.querySelector('#invShop').onclick = () => { m.remove(); openPlazaShop(onGo); };
 }
 

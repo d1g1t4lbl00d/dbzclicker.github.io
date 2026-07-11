@@ -4461,6 +4461,14 @@ html { touch-action: manipulation; }
 .shop-buy:disabled { background: var(--panel-2); color: var(--ink-soft); cursor: default; }
 .shop-buy:not(:disabled):active { transform: scale(.96); }
 @media (max-width: 380px) { .shop-grid { grid-template-columns: repeat(2, 1fr); } }
+.inv-tip { font-size: 12.5px; color: var(--ink-soft); margin: 2px 0 10px; }
+button.shop-card { font: inherit; text-align: center; cursor: pointer; -webkit-tap-highlight-color: transparent; }
+.inv-place { transition: transform .08s ease, border-color .12s ease; }
+.inv-place:active { transform: scale(.95); }
+.inv-place .inv-place-lbl { display: inline-flex; align-items: center; justify-content: center; width: 100%; padding: 6px; border-radius: 9px;
+  background: var(--accent-grad); color: #fff; font-weight: 800; font-size: 12px; }
+.inv-place.inv-out { opacity: .55; }
+.inv-place.inv-out .inv-place-lbl { background: var(--panel-2); color: var(--ink-soft); }
 .shop-del { position: absolute; top: 6px; left: 6px; z-index: 1; width: 24px; height: 24px; display: grid; place-items: center;
   border: none; border-radius: 8px; background: rgba(192,83,63,.9); color: #fff; cursor: pointer; box-shadow: 0 2px 6px rgba(0,0,0,.35); }
 .shop-del svg { width: 13px; height: 13px; }
