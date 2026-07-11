@@ -4112,7 +4112,7 @@ let plzCustomLoaded = false;
 async function plzLoadCustomItems(force) {
   if (plzCustomLoaded && !force) return;
   try {
-    const { data } = await sb.from('plaza_shop').select('item,name,category,sprite').eq('custom', true);
+    const { data } = await sb.from('plaza_shop').select('item,name,category,sprite').not('sprite', 'is', null);
     (data || []).forEach(r => {
       const s = r.sprite || {};
       PLZ_CUSTOM[r.item] = {
@@ -4749,7 +4749,9 @@ const PLZ_EDIT_ITEMS = [
 const PLZ_CATS = ['Asientos', 'Mesas', 'Plantas', 'Luces', 'Música', 'Deco', 'Agua', 'Juego'];
 // catálogo editable = muebles base + objetos custom publicados (colocados por categoría)
 function plzAllEditItems() {
-  const custom = Object.keys(PLZ_CUSTOM).map(t => ({ t, n: PLZ_CUSTOM[t].name || t, c: PLZ_CATS.includes(PLZ_CUSTOM[t].category) ? PLZ_CUSTOM[t].category : 'Deco' }));
+  // solo los objetos custom de verdad (id 'c_…'); los base editados ya están en PLZ_EDIT_ITEMS
+  const custom = Object.keys(PLZ_CUSTOM).filter(t => t[0] === 'c' && t[1] === '_')
+    .map(t => ({ t, n: PLZ_CUSTOM[t].name || t, c: PLZ_CATS.includes(PLZ_CUSTOM[t].category) ? PLZ_CUSTOM[t].category : 'Deco' }));
   return PLZ_EDIT_ITEMS.concat(custom);
 }
 const PLZ_FLOORS = [
@@ -4966,6 +4968,46 @@ function plzAddInv(t, n) { const inv = Object.assign({}, plzInv()); inv[t] = (in
 function plzCanCreate() { return !!(state.profile && (state.profile.is_admin || state.profile.plaza_creator)); }
 PLZ_EDIT_ITEMS.forEach(it => PLZ_ITEM_NAME[it.t] = it.n);
 
+// tipos base que son asientos (para sembrar la propiedad al rasterizar)
+const PLZ_BASE_SEATS = new Set(['bench', 'stool', 'sofa', 'couch']);
+let plzRasterMode = false;   // al rasterizar un mueble base, no dibujamos su sombra de contacto
+
+// convierte un mueble base (dibujado por código) en un sprite de píxeles editable.
+// Renderiza el mueble a 1:1, recorta a su contenido y cuantiza los colores.
+function plzRasterizeToSprite(type) {
+  const S = 96, cv = document.createElement('canvas'); cv.width = S; cv.height = S;
+  const c = cv.getContext('2d'); c.imageSmoothingEnabled = false;
+  const ox = S / 2, oy = S - 24;   // apoya el mueble cerca del borde inferior
+  const sp = plaza, sr = plzR;
+  plaza = { ctx: c, radio: { playing: false }, ox: 0, oy: 0, canvas: cv };
+  plzR = { def: { neonA: '#27a9ff', neonB: '#6e2df5' } };
+  c.setTransform(1, 0, 0, 1, ox, oy);
+  plzRasterMode = true;
+  try { plzDrawFurn({ t: type, i: 0, j: 0 }, 900); } catch (_) {}
+  plzRasterMode = false;
+  plaza = sp; plzR = sr;
+  const img = c.getImageData(0, 0, S, S).data;
+  // recuadro del contenido
+  let minX = S, maxX = -1, minY = S, maxY = -1;
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) { if (img[(y * S + x) * 4 + 3] > 40) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; } }
+  if (maxX < 0) return { w: 16, h: 16, pal: [], data: [], fw: 1, fd: 1, solid: PLZ_SOLID.has(type), sit: PLZ_BASE_SEATS.has(type), anim: 'none' };
+  const cw = maxX - minX + 1, ch = maxY - minY + 1;
+  const bw = Math.max(1, Math.min(4, Math.ceil(cw / SPR_BLK))), bh = Math.max(1, Math.min(4, Math.ceil(ch / SPR_BLK)));
+  const w = bw * SPR_BLK, h = bh * SPR_BLK;
+  const dx = Math.floor((w - cw) / 2), dy = h - ch;   // centrar en x, apoyar abajo
+  const q = (v) => Math.min(255, Math.round(v / 17) * 17);   // cuantiza para limitar la paleta
+  const hex = (r, g, b) => '#' + [r, g, b].map(n => n.toString(16).padStart(2, '0')).join('');
+  const palMap = new Map(), pal = [], data = new Array(w * h).fill(0);
+  for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
+    const i = ((minY + y) * S + (minX + x)) * 4;
+    if (img[i + 3] < 60) continue;
+    const col = hex(q(img[i]), q(img[i + 1]), q(img[i + 2]));
+    let idx = palMap.get(col); if (idx == null) { pal.push(col); idx = pal.length; palMap.set(col, idx); }
+    data[(y + dy) * w + (x + dx)] = idx;
+  }
+  return { w, h, pal, data, fw: 1, fd: 1, solid: PLZ_SOLID.has(type), sit: PLZ_BASE_SEATS.has(type), anim: 'none' };
+}
+
 // miniatura de un mueble en canvas (reutiliza plzDrawFurn con un contexto temporal)
 function plzFurnThumb(type, px) {
   px = px || 68;
@@ -5004,12 +5046,14 @@ async function openPlazaShop(onBuy) {
   const load = async () => { try { const { data } = await sb.from('plaza_shop').select('item,name,price,category,sort,custom,created_by').order('sort'); items = data || []; } catch (_) {} };
   await load();
   if (!items.length) { grid.innerHTML = '<div class="pr-empty">No se pudo cargar la tienda.</div>'; return; }
-  // recarga un objeto en el editor para modificarlo y guarda con plaza_update_item
+  // abre el editor con el objeto cargado y guarda con plaza_update_item.
+  // Para objetos base (dibujados por código) los rasteriza a píxeles para poder editarlos.
   const editItem = async (it) => {
     let sprite = null;
     try { const { data } = await sb.from('plaza_shop').select('sprite').eq('item', it.item).single(); sprite = data && data.sprite; } catch (_) {}
-    if (!sprite) { toast('No se pudo cargar el sprite'); return; }
-    openPlazaSpriteEditor(async () => { await plzLoadCustomItems(true); await load(); render(); onBuy && onBuy(); plzRecompute && plzR && plzRecompute(); },
+    if (!sprite) { try { sprite = plzRasterizeToSprite(it.item); } catch (_) {} }
+    if (!sprite) { toast('No se pudo cargar el objeto'); return; }
+    openPlazaSpriteEditor(async () => { await plzLoadCustomItems(true); await load(); render(); onBuy && onBuy(); if (plzR) plzRecompute(); },
       { item: it.item, name: it.name, price: it.price, category: it.category, sprite });
   };
   const render = () => {
@@ -5017,10 +5061,12 @@ async function openPlazaShop(onBuy) {
     items.forEach(it => {
       const free = it.price === 0 || PLZ_FREE_ITEMS.has(it.item);
       const qty = plzInv()[it.item] || 0;
-      const canEdit = it.custom && (admin || (it.created_by && it.created_by === state.user.id));
+      const mine = it.custom && it.created_by && it.created_by === state.user.id;
+      const canEdit = admin || mine;                 // admin edita cualquiera; editor los suyos
+      const canDelete = it.custom && (admin || mine); // los objetos base no se borran
       const card = el(`<div class="shop-card ${qty > 0 ? 'owned' : ''}">
         ${qty > 0 ? `<span class="shop-qty">×${qty}</span>` : ''}
-        ${canEdit ? `<div class="shop-adm"><button class="shop-edit" title="Editar objeto" aria-label="Editar"><svg fill="none" stroke="currentColor"><use href="#i-brush"/></svg></button><button class="shop-del" title="Borrar objeto" aria-label="Borrar"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg></button></div>` : ''}
+        ${(canEdit || canDelete) ? `<div class="pobj-tools">${canEdit ? `<button class="pobj-edit" title="Editar objeto" aria-label="Editar"><svg fill="none" stroke="currentColor"><use href="#i-brush"/></svg></button>` : ''}${canDelete ? `<button class="pobj-del" title="Borrar objeto" aria-label="Borrar"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg></button>` : ''}</div>` : ''}
         <div class="shop-thumb"></div>
         <div class="shop-name">${esc(it.name)}</div>
         <button class="shop-buy" ${free ? 'disabled' : ''}>${free ? 'Gratis' : `<span class="coin sm"></span> ${it.price}`}</button>
@@ -5039,9 +5085,9 @@ async function openPlazaShop(onBuy) {
           render(); onBuy && onBuy();
         } catch (e) { buyBtn.disabled = false; toast((e && e.message) || 'No se pudo comprar'); }
       };
-      const editBtn = card.querySelector('.shop-edit');
+      const editBtn = card.querySelector('.pobj-edit');
       if (editBtn) editBtn.onclick = () => editItem(it);
-      const delBtn = card.querySelector('.shop-del');
+      const delBtn = card.querySelector('.pobj-del');
       if (delBtn) delBtn.onclick = async () => {
         if (!confirm('¿Borrar «' + it.name + '» de la tienda? Los que ya lo compraron lo conservan.')) return;
         try { const { error } = await sb.rpc('plaza_delete_item', { p_item: it.item }); if (error) throw error; delete PLZ_CUSTOM[it.item]; await load(); render(); haptic(10); toast('Objeto borrado'); onBuy && onBuy(); }
@@ -5104,7 +5150,7 @@ function openPlazaSpriteEditor(onDone, existing) {
     const s = ed0.sprite;
     propSit = !!s.sit; propSolid = !!s.solid; propAnim = s.anim || 'none';
     const sw = s.w || 16, sh = s.h || 16;
-    bw = Math.max(1, Math.min(4, s.fw || Math.round(sw / SPR_BLK) || 1));
+    bw = Math.max(1, Math.min(4, Math.round(sw / SPR_BLK) || 1));   // tamaño del lienzo desde el ancho real
     bh = Math.max(1, Math.min(4, Math.round(sh / SPR_BLK) || 1));
     const pal = Array.isArray(s.pal) ? s.pal : [], data = Array.isArray(s.data) ? s.data : [];
     const oc = new Array(sw * sh).fill(null);
@@ -5114,6 +5160,8 @@ function openPlazaSpriteEditor(onDone, existing) {
   let w = bw * SPR_BLK, h = bh * SPR_BLK;
   let cells = new Array(w * h).fill(null);
   if (initCells) { const { oc, sw, sh } = initCells, dx = Math.floor((w - sw) / 2), dy = h - sh; for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) { const v = oc[y * sw + x]; if (!v) continue; const nx = x + dx, ny = y + dy; if (nx >= 0 && nx < w && ny >= 0 && ny < h) cells[ny * w + nx] = v; } }
+  // huella en casillas del suelo (independiente del lienzo). Por defecto = ancho del lienzo.
+  let fw = ed0 && ed0.sprite ? Math.max(1, Math.min(bw, ed0.sprite.fw || 1)) : bw;
   let curColor = SPR_PAL[7], tool = 'paint', mirror = false;
   const undo = [], redo = [];
 
@@ -5123,6 +5171,7 @@ function openPlazaSpriteEditor(onDone, existing) {
         <div class="spr-size-ctl"><span class="spr-lbl">Ancho</span><div class="spr-steps" id="sprBW"></div></div>
         <div class="spr-size-ctl"><span class="spr-lbl">Alto</span><div class="spr-steps" id="sprBH"></div></div>
       </div>
+      <div class="spr-sizes-row"><div class="spr-size-ctl"><span class="spr-lbl">Ocupa (casillas del suelo)</span><div class="spr-steps" id="sprFW"></div></div></div>
       <div class="spr-foot" id="sprFoot"></div>
       <div class="spr-stage">
         <div class="spr-canvas-wrap"><canvas id="sprCv" class="spr-canvas"></canvas></div>
@@ -5185,7 +5234,7 @@ function openPlazaSpriteEditor(onDone, existing) {
   function drawPreview(now) {
     pctx.setTransform(1, 0, 0, 1, 0, 0);
     pctx.clearRect(0, 0, pcv.width, pcv.height);
-    const fw = bw, fd = 1, TW = PLZ.TW, TH = PLZ.TH;
+    const fd = 1, TW = PLZ.TW, TH = PLZ.TH;   // usa la huella real (fw) del estado
     const isoX = (i, j) => (i - j) * TW / 2, isoY = (i, j) => (i + j) * TH / 2;
     // bbox de las baldosas y del sprite (mundo, arte 1:1)
     let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
@@ -5214,19 +5263,21 @@ function openPlazaSpriteEditor(onDone, existing) {
 
   // redimensiona conservando el dibujo (centrado en horizontal, apoyado abajo)
   function resize(nbw, nbh) {
-    const ow = w, oh = h, oc = cells;
+    const ow = w, oh = h, oc = cells, followed = (fw === bw);
     bw = nbw; bh = nbh; w = bw * SPR_BLK; h = bh * SPR_BLK;
+    fw = followed ? bw : Math.min(fw, bw);   // la huella sigue al ancho salvo que la hayas fijado
     const nc = new Array(w * h).fill(null);
     const dx = Math.floor((w - ow) / 2), dy = h - oh;   // centrar en x, alinear abajo
     for (let y = 0; y < oh; y++) for (let x = 0; x < ow; x++) { const v = oc[y * ow + x]; if (!v) continue; const nx = x + dx, ny = y + dy; if (nx >= 0 && nx < w && ny >= 0 && ny < h) nc[ny * w + nx] = v; }
     cells = nc; undo.length = 0; redo.length = 0; updoBtns(); sizeGrid(); renderSteps(); renderFoot(); redraw();
   }
   const renderSteps = () => {
-    const mk = (host, val, set) => { host.innerHTML = ''; for (let n = 1; n <= 4; n++) { const b = el(`<button class="spr-step ${n === val ? 'on' : ''}">${n}</button>`); b.onclick = () => { if (n !== (host.id === 'sprBW' ? bw : bh)) set(n); }; host.appendChild(b); } };
-    mk(m.querySelector('#sprBW'), bw, (n) => resize(n, bh));
-    mk(m.querySelector('#sprBH'), bh, (n) => resize(bw, n));
+    const mk = (host, max, val, set) => { host.innerHTML = ''; for (let n = 1; n <= 4; n++) { const b = el(`<button class="spr-step ${n === val ? 'on' : ''} ${n > max ? 'spr-off' : ''}">${n}</button>`); if (n <= max) b.onclick = () => set(n); host.appendChild(b); } };
+    mk(m.querySelector('#sprBW'), 4, bw, (n) => { if (n !== bw) resize(n, bh); });
+    mk(m.querySelector('#sprBH'), 4, bh, (n) => { if (n !== bh) resize(bw, n); });
+    mk(m.querySelector('#sprFW'), bw, fw, (n) => { fw = n; renderSteps(); renderFoot(); drawPreview(performance.now()); });   // la huella no puede pasar del ancho del lienzo
   };
-  const renderFoot = () => { m.querySelector('#sprFoot').textContent = bw > 1 ? `Ocupa ${bw} casillas del suelo · ${w}×${h}px` : `Ocupa 1 casilla · ${w}×${h}px`; };
+  const renderFoot = () => { m.querySelector('#sprFoot').textContent = (fw > 1 ? `Ocupa ${fw} casillas del suelo` : 'Ocupa 1 casilla') + ` · lienzo ${w}×${h}px`; };
   renderSteps(); renderFoot(); sizeGrid(); redraw();
 
   function floodFill(gx, gy, col) {
@@ -5272,7 +5323,7 @@ function openPlazaSpriteEditor(onDone, existing) {
   function buildSprite() {
     const palMap = new Map(), pal = [], data = new Array(w * h).fill(0);
     for (let k = 0; k < w * h; k++) { const col = cells[k]; if (!col) continue; let idx = palMap.get(col); if (idx == null) { pal.push(col); idx = pal.length; palMap.set(col, idx); } data[k] = idx; }
-    return { v: 2, w, h, pal, data, fw: bw, fd: 1, solid: propSolid, sit: propSit, anim: propAnim };
+    return { v: 2, w, h, pal, data, fw, fd: 1, solid: propSolid, sit: propSit, anim: propAnim };
   }
   const pubBtn = m.querySelector('#sprPublish');
   pubBtn.onclick = async () => {
@@ -5292,7 +5343,7 @@ function openPlazaSpriteEditor(onDone, existing) {
         const { data, error } = await sb.rpc('plaza_create_item', { p_name: name, p_price: price, p_category: cat, p_sprite: sprite });
         if (error) throw error; item = data;
       }
-      PLZ_CUSTOM[item] = { w, h, pal: sprite.pal, data: sprite.data, fw: bw, fd: 1, solid: propSolid, sit: propSit, anim: propAnim, name, category: cat };
+      PLZ_CUSTOM[item] = { w, h, pal: sprite.pal, data: sprite.data, fw, fd: 1, solid: propSolid, sit: propSit, anim: propAnim, name, category: cat };
       PLZ_ITEM_NAME[item] = name;
       haptic(14); toast(ed0 ? 'Cambios guardados' : '¡«' + name + '» publicado en la tienda!');
       m.remove(); onDone && onDone();
@@ -6487,7 +6538,7 @@ function plzDrawFurn(f, now) {
   const p = plzIso(f.i, f.j);
   const cx = Math.round(p.x), base = Math.round(p.y + PLZ.TH / 2);
   // sombra de contacto bajo cada mueble (da volumen y asienta la pieza en el suelo)
-  if (f.t !== 'portal' && f.t !== 'pool') plzDiamond(c, cx, base - Math.round(PLZ.TH / 2) + 2, PLZ.TW - 8, PLZ.TH - 4, 'rgba(0,0,0,.28)');
+  if (!plzRasterMode && f.t !== 'portal' && f.t !== 'pool') plzDiamond(c, cx, base - Math.round(PLZ.TH / 2) + 2, PLZ.TW - 8, PLZ.TH - 4, 'rgba(0,0,0,.28)');
 
   if (f.t === 'spk') {
     plzRect(c, cx - 7, base - 30, 14, 30, '#0c101f', '#05070f');
