@@ -4426,6 +4426,7 @@ async function renderPlaza() {
   setActiveNav('plaza');
   const main = $('main');
   main.innerHTML = `
+    <div class="plaza-view">
     <div class="main-head plaza-head">
       <div class="plaza-head-title"><h2 id="plazaRoomName">La Plaza</h2><div class="sub" id="plazaRoomSub">Pasea, saluda y conecta con la escena</div></div>
       <div class="plaza-head-actions">
@@ -4451,7 +4452,8 @@ async function renderPlaza() {
         <button class="btn primary plaza-send" type="submit" aria-label="Enviar"><svg fill="none" stroke="#fff"><use href="#i-send"/></svg></button>
       </form>
     </div>
-    <div class="plaza-hint">Toca el suelo para caminar · toca a alguien para saludar o ver su perfil · usa la barra para bailar, reaccionar o cambiar tu estilo</div>`;
+    <div class="plaza-hint">Toca el suelo para caminar · toca a alguien para saludar o ver su perfil · usa la barra para bailar, reaccionar o cambiar tu estilo</div>
+    </div>`;
 
   const canvas = $('plazaCanvas'), ctx = canvas.getContext('2d');
   let radioChan = null;
@@ -5209,22 +5211,23 @@ function openPlazaInventory(onGo) {
   m.querySelector('#invShop').onclick = () => { m.remove(); openPlazaShop(onGo); };
 }
 
-// ===================== EDITOR DE SPRITES (solo admin) =====================
-// Dibuja un objeto en una rejilla de píxeles, elige su tamaño en bloques (ancho/alto),
-// le asigna propiedades y lo publica en la tienda. Cada bloque = 16 px de arte.
+// ===================== EDITOR DE SPRITES PRO (solo admin / editores) =====================
+// Editor de arte pixel con layout de escritorio a 3 paneles: herramientas | lienzo | ajustes.
+// Herramientas: lápiz, línea, rectángulo, rectángulo relleno, elipse, relleno, cuentagotas,
+// borrador, simetría; tamaño de pincel; zoom/scroll; deshacer/rehacer; voltear/rotar;
+// paleta + color libre + hex + recientes; atajos de teclado. Cada bloque = 16 px de arte.
 const SPR_PAL = ['#000000', '#0a0e1c', '#1b2542', '#3d4a78', '#8f99ad', '#e8ecf6', '#ffffff', '#27a9ff', '#8fc0ff', '#6e2df5', '#b06eff', '#e0507a', '#ff5d5d', '#f0a13e', '#ffd23e', '#2dc878', '#12c2c2', '#8a5560', '#c9a86a', '#3a2814'];
 const SPR_BLK = 16;   // píxeles de arte por bloque
+let SPR_RECENT = [];  // colores usados recientemente (persisten en la sesión)
 function openPlazaSpriteEditor(onDone, existing) {
   if (!plzCanCreate()) { toast('No tienes permiso para crear objetos'); return; }
-  const ed0 = existing || null;       // si viene, editamos un objeto ya publicado
-  let bw = 1, bh = 1;                 // tamaño en bloques (ancho × alto)
-  let propSit = false, propSolid = true, propAnim = 'none';
-  let initCells = null;
+  const ed0 = existing || null;
+  let bw = 1, bh = 1, propSit = false, propSolid = true, propAnim = 'none', initCells = null;
   if (ed0 && ed0.sprite) {
     const s = ed0.sprite;
     propSit = !!s.sit; propSolid = !!s.solid; propAnim = s.anim || 'none';
     const sw = s.w || 16, sh = s.h || 16;
-    bw = Math.max(1, Math.min(4, Math.round(sw / SPR_BLK) || 1));   // tamaño del lienzo desde el ancho real
+    bw = Math.max(1, Math.min(4, Math.round(sw / SPR_BLK) || 1));
     bh = Math.max(1, Math.min(4, Math.round(sh / SPR_BLK) || 1));
     const pal = Array.isArray(s.pal) ? s.pal : [], data = Array.isArray(s.data) ? s.data : [];
     const oc = new Array(sw * sh).fill(null);
@@ -5234,59 +5237,79 @@ function openPlazaSpriteEditor(onDone, existing) {
   let w = bw * SPR_BLK, h = bh * SPR_BLK;
   let cells = new Array(w * h).fill(null);
   if (initCells) { const { oc, sw, sh } = initCells, dx = Math.floor((w - sw) / 2), dy = h - sh; for (let y = 0; y < sh; y++) for (let x = 0; x < sw; x++) { const v = oc[y * sw + x]; if (!v) continue; const nx = x + dx, ny = y + dy; if (nx >= 0 && nx < w && ny >= 0 && ny < h) cells[ny * w + nx] = v; } }
-  // huella en casillas del suelo (independiente del lienzo). Por defecto = ancho del lienzo.
   let fw = ed0 && ed0.sprite ? Math.max(1, Math.min(bw, ed0.sprite.fw || 1)) : bw;
-  let curColor = SPR_PAL[7], tool = 'paint', mirror = false;
+  let curColor = SPR_PAL[7], tool = 'pencil', brush = 1, mirror = false, cs = 16;
   const undo = [], redo = [];
 
+  const TOOLS = [
+    ['pencil', 'brush', 'Lápiz (B)'], ['line', 'line', 'Línea (L)'], ['rect', 'rect', 'Rectángulo (R)'],
+    ['rectf', 'rect-fill', 'Rect. relleno (F)'], ['ellipse', 'ellipse', 'Elipse (O)'], ['fill', 'bucket', 'Relleno (G)'],
+    ['pick', 'eyedropper', 'Cuentagotas (I)'], ['erase', 'eraser', 'Borrador (E)'],
+  ];
   const m = openModal(`<div class="modal-head"><h3><svg class="mh-ic" fill="none" stroke="currentColor"><use href="#i-palette"/></svg> ${ed0 ? 'Editar objeto' : 'Crear objeto'}</h3><button class="close">&times;</button></div>
-    <div class="modal-body spr-body">
-      <div class="spr-sizes-row">
-        <div class="spr-size-ctl"><span class="spr-lbl">Ancho</span><div class="spr-steps" id="sprBW"></div></div>
-        <div class="spr-size-ctl"><span class="spr-lbl">Alto</span><div class="spr-steps" id="sprBH"></div></div>
-      </div>
-      <div class="spr-sizes-row"><div class="spr-size-ctl"><span class="spr-lbl">Ocupa (casillas del suelo)</span><div class="spr-steps" id="sprFW"></div></div></div>
-      <div class="spr-foot" id="sprFoot"></div>
-      <div class="spr-stage">
-        <div class="spr-canvas-wrap"><canvas id="sprCv" class="spr-canvas"></canvas></div>
-        <div class="spr-side">
-          <div class="spr-preview"><canvas id="sprPrev" width="120" height="120"></canvas><span class="spr-preview-lbl">En la sala</span></div>
-          <div class="spr-tools" id="sprTools">
-            <button class="spr-tool on" data-tool="paint" title="Pincel"><svg fill="none" stroke="currentColor"><use href="#i-brush"/></svg></button>
-            <button class="spr-tool" data-tool="fill" title="Relleno"><svg fill="none" stroke="currentColor"><use href="#i-bucket"/></svg></button>
-            <button class="spr-tool" data-tool="pick" title="Cuentagotas"><svg fill="none" stroke="currentColor"><use href="#i-eyedropper"/></svg></button>
-            <button class="spr-tool" data-tool="erase" title="Borrador"><svg fill="none" stroke="currentColor"><use href="#i-eraser"/></svg></button>
-            <button class="spr-tool" id="sprMirror" title="Simetría"><svg fill="none" stroke="currentColor"><use href="#i-mirror"/></svg></button>
-            <button class="spr-tool" id="sprUndo" title="Deshacer"><svg fill="none" stroke="currentColor"><use href="#i-undo"/></svg></button>
-            <button class="spr-tool" id="sprRedo" title="Rehacer"><svg fill="none" stroke="currentColor"><use href="#i-redo"/></svg></button>
-            <button class="spr-tool spr-clear" id="sprClear" title="Vaciar"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg></button>
+    <div class="modal-body spr2-body">
+      <div class="spr2">
+        <div class="spr2-tools">
+          <div class="spr2-toolgrid">${TOOLS.map(([t, ic, ti], i) => `<button class="spr2-tool ${t === 'pencil' ? 'on' : ''}" data-tool="${t}" title="${ti}"><svg fill="none" stroke="currentColor"><use href="#i-${ic}"/></svg></button>`).join('')}</div>
+          <div class="spr2-lbl">Pincel</div>
+          <div class="spr2-seg" id="sprBrush">${[1, 2, 3].map(n => `<button class="spr2-segb ${n === 1 ? 'on' : ''}" data-b="${n}">${n}px</button>`).join('')}</div>
+          <div class="spr2-lbl">Acciones</div>
+          <div class="spr2-toolgrid">
+            <button class="spr2-tool" id="sprMirror" title="Simetría (X)"><svg fill="none" stroke="currentColor"><use href="#i-mirror"/></svg></button>
+            <button class="spr2-tool" id="sprUndo" title="Deshacer (Ctrl+Z)"><svg fill="none" stroke="currentColor"><use href="#i-undo"/></svg></button>
+            <button class="spr2-tool" id="sprRedo" title="Rehacer (Ctrl+Y)"><svg fill="none" stroke="currentColor"><use href="#i-redo"/></svg></button>
+            <button class="spr2-tool" id="sprFlipH" title="Voltear horizontal"><svg fill="none" stroke="currentColor"><use href="#i-flip-h"/></svg></button>
+            <button class="spr2-tool" id="sprFlipV" title="Voltear vertical"><svg fill="none" stroke="currentColor"><use href="#i-flip-v"/></svg></button>
+            <button class="spr2-tool" id="sprRotate" title="Rotar 90° (solo cuadrado)"><svg fill="none" stroke="currentColor"><use href="#i-rotate"/></svg></button>
+            <button class="spr2-tool spr2-clear" id="sprClear" title="Vaciar"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg></button>
+          </div>
+          <div class="spr2-lbl">Zoom</div>
+          <div class="spr2-seg" id="sprZoom">
+            <button class="spr2-segb" id="sprZoomOut" title="Alejar (−)"><svg fill="none" stroke="currentColor"><use href="#i-zoom-out"/></svg></button>
+            <button class="spr2-segb" id="sprZoomFit" title="Ajustar"><svg fill="none" stroke="currentColor"><use href="#i-fit"/></svg></button>
+            <button class="spr2-segb" id="sprZoomIn" title="Acercar (+)"><svg fill="none" stroke="currentColor"><use href="#i-zoom-in"/></svg></button>
           </div>
         </div>
-      </div>
-      <div class="spr-pal" id="sprPal">${SPR_PAL.map((c, i) => `<button class="spr-sw ${i === 7 ? 'on' : ''}" data-c="${c}" style="background:${c}" aria-label="Color"></button>`).join('')}<label class="spr-sw spr-sw-custom" title="Color libre" style="background:conic-gradient(from 0deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)"><input type="color" id="sprPick" value="#27a9ff"></label></div>
-      <div class="spr-props">
-        <label class="spr-prop"><input type="checkbox" id="sprSit" ${propSit ? 'checked' : ''}> <span><b>Sentable</b><small>Los avatares pueden sentarse encima (una plaza por casilla de ancho)</small></span></label>
-        <label class="spr-prop"><input type="checkbox" id="sprSolid" ${propSolid ? 'checked' : ''}> <span><b>Sólido</b><small>Bloquea el paso (desactívalo para que sea pisable)</small></span></label>
-        <div class="spr-prop spr-anim"><span><b>Animación / luz</b></span><div class="spr-anim-btns" id="sprAnim">
-          ${[['none', 'Ninguna'], ['glow', 'Brillo'], ['blink', 'Parpadeo'], ['float', 'Flotar']].map(([a, l]) => `<button class="spr-abtn ${propAnim === a ? 'on' : ''}" data-a="${a}">${l}</button>`).join('')}
-        </div></div>
-      </div>
-      <div class="spr-meta">
-        <input id="sprName" class="spr-input" maxlength="40" placeholder="Nombre del objeto" value="${ed0 ? esc(ed0.name || '') : ''}">
-        <div class="spr-meta-row">
-          <label class="spr-mlbl"><span class="coin sm"></span><input id="sprPrice" class="spr-input spr-price" type="number" min="0" step="5" value="${ed0 ? (ed0.price || 0) : 20}" placeholder="Precio"></label>
-          <select id="sprCat" class="spr-input spr-cat">${PLZ_CATS.map(c => `<option value="${c}"${c === (ed0 ? ed0.category : 'Deco') ? ' selected' : ''}>${c}</option>`).join('')}</select>
+        <div class="spr2-canvas" id="sprView"><canvas id="sprCv" class="spr-canvas"></canvas></div>
+        <div class="spr2-side">
+          <div class="spr-preview"><canvas id="sprPrev" width="132" height="132"></canvas><span class="spr-preview-lbl">En la sala</span></div>
+          <div class="spr2-colors">
+            <div class="spr2-cur"><span class="spr2-cur-sw" id="sprCurSw"></span><input id="sprHex" class="spr2-hex" maxlength="7" value="${curColor}"></div>
+            <div class="spr-pal" id="sprPal">${SPR_PAL.map((c, i) => `<button class="spr-sw ${i === 7 ? 'on' : ''}" data-c="${c}" style="background:${c}" aria-label="Color"></button>`).join('')}<label class="spr-sw spr-sw-custom" title="Color libre" style="background:conic-gradient(from 0deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)"><input type="color" id="sprPick" value="#27a9ff"></label></div>
+            <div class="spr2-recent-lbl">Recientes</div>
+            <div class="spr2-recent" id="sprRecent"></div>
+          </div>
+          <div class="spr2-sizes">
+            <div class="spr2-sizerow"><span class="spr-lbl">Ancho</span><div class="spr-steps" id="sprBW"></div></div>
+            <div class="spr2-sizerow"><span class="spr-lbl">Alto</span><div class="spr-steps" id="sprBH"></div></div>
+            <div class="spr2-sizerow"><span class="spr-lbl">Ocupa</span><div class="spr-steps" id="sprFW"></div></div>
+            <div class="spr-foot" id="sprFoot"></div>
+          </div>
+          <div class="spr-props">
+            <label class="spr-prop"><input type="checkbox" id="sprSit" ${propSit ? 'checked' : ''}> <span><b>Sentable</b><small>Los avatares se sientan encima (una plaza por casilla de ancho)</small></span></label>
+            <label class="spr-prop"><input type="checkbox" id="sprSolid" ${propSolid ? 'checked' : ''}> <span><b>Sólido</b><small>Bloquea el paso (desactívalo para que sea pisable)</small></span></label>
+            <div class="spr-prop spr-anim"><span><b>Animación / luz</b></span><div class="spr-anim-btns" id="sprAnim">${[['none', 'Ninguna'], ['glow', 'Brillo'], ['blink', 'Parpadeo'], ['float', 'Flotar']].map(([a, l]) => `<button class="spr-abtn ${propAnim === a ? 'on' : ''}" data-a="${a}">${l}</button>`).join('')}</div></div>
+          </div>
+          <div class="spr-meta">
+            <input id="sprName" class="spr-input" maxlength="40" placeholder="Nombre del objeto" value="${ed0 ? esc(ed0.name || '') : ''}">
+            <div class="spr-meta-row">
+              <label class="spr-mlbl"><span class="coin sm"></span><input id="sprPrice" class="spr-input spr-price" type="number" min="0" step="5" value="${ed0 ? (ed0.price || 0) : 20}" placeholder="Precio"></label>
+              <select id="sprCat" class="spr-input spr-cat">${PLZ_CATS.map(c => `<option value="${c}"${c === (ed0 ? ed0.category : 'Deco') ? ' selected' : ''}>${c}</option>`).join('')}</select>
+            </div>
+          </div>
+          <button class="btn primary spr-publish" id="sprPublish">${ed0 ? 'Guardar cambios' : 'Publicar en la tienda'}</button>
         </div>
       </div>
-      <button class="btn primary spr-publish" id="sprPublish">${ed0 ? 'Guardar cambios' : 'Publicar en la tienda'}</button>
     </div>`);
+  m.classList.add('spr2-modal');
 
   const gcv = m.querySelector('#sprCv'), gctx = gcv.getContext('2d');
+  const view = m.querySelector('#sprView');
   const pcv = m.querySelector('#sprPrev'), pctx = pcv.getContext('2d'); pctx.imageSmoothingEnabled = false;
-  let cs = 16;
-  const sizeGrid = () => { cs = Math.max(6, Math.floor(288 / Math.max(w, h))); gcv.width = w * cs; gcv.height = h * cs; };
-  const snapshot = () => { undo.push(cells.slice()); if (undo.length > 50) undo.shift(); redo.length = 0; updoBtns(); };
-  const updoBtns = () => { const u = m.querySelector('#sprUndo'), r = m.querySelector('#sprRedo'); if (u) u.classList.toggle('spr-off', !undo.length); if (r) r.classList.toggle('spr-off', !redo.length); };
+  let preview = null;   // {cells:[[x,y]], color, erase} durante el arrastre de una forma
+
+  const fitZoom = () => { const vw = view.clientWidth - 16, vh = view.clientHeight - 16; cs = Math.max(2, Math.floor(Math.min(vw / w, vh / h))); };
+  const sizeCanvas = () => { gcv.width = w * cs; gcv.height = h * cs; gcv.style.width = (w * cs) + 'px'; gcv.style.height = (h * cs) + 'px'; };
 
   function drawGrid() {
     gctx.clearRect(0, 0, gcv.width, gcv.height);
@@ -5295,135 +5318,166 @@ function openPlazaSpriteEditor(onDone, existing) {
       gctx.fillStyle = col || ((x + y) % 2 ? '#1a2036' : '#141a2c');
       gctx.fillRect(x * cs, y * cs, cs, cs);
     }
-    gctx.strokeStyle = 'rgba(255,255,255,.05)'; gctx.lineWidth = 1;
-    for (let x = 0; x <= w; x++) { gctx.beginPath(); gctx.moveTo(x * cs + .5, 0); gctx.lineTo(x * cs + .5, h * cs); gctx.stroke(); }
-    for (let y = 0; y <= h; y++) { gctx.beginPath(); gctx.moveTo(0, y * cs + .5); gctx.lineTo(w * cs, y * cs + .5); gctx.stroke(); }
-    // líneas de bloque (más marcadas) para ver los límites de cada casilla
+    if (preview) { gctx.fillStyle = preview.erase ? 'rgba(20,26,44,.95)' : preview.color; for (const [x, y] of preview.cells) if (x >= 0 && y >= 0 && x < w && y < h) gctx.fillRect(x * cs, y * cs, cs, cs); }
+    if (cs >= 5) {
+      gctx.strokeStyle = 'rgba(255,255,255,.05)'; gctx.lineWidth = 1;
+      for (let x = 0; x <= w; x++) { gctx.beginPath(); gctx.moveTo(x * cs + .5, 0); gctx.lineTo(x * cs + .5, h * cs); gctx.stroke(); }
+      for (let y = 0; y <= h; y++) { gctx.beginPath(); gctx.moveTo(0, y * cs + .5); gctx.lineTo(w * cs, y * cs + .5); gctx.stroke(); }
+    }
     gctx.strokeStyle = 'rgba(120,160,255,.35)'; gctx.lineWidth = 1;
     for (let bx = 0; bx <= bw; bx++) { const X = bx * SPR_BLK * cs + .5; gctx.beginPath(); gctx.moveTo(X, 0); gctx.lineTo(X, h * cs); gctx.stroke(); }
     for (let by = 0; by <= bh; by++) { const Y = by * SPR_BLK * cs + .5; gctx.beginPath(); gctx.moveTo(0, Y); gctx.lineTo(w * cs, Y); gctx.stroke(); }
     if (mirror) { gctx.strokeStyle = 'rgba(255,210,62,.6)'; gctx.beginPath(); gctx.moveTo(w * cs / 2 + .5, 0); gctx.lineTo(w * cs / 2 + .5, h * cs); gctx.stroke(); }
   }
-  // vista previa isométrica: dibuja la huella (fw×1 casillas) y el sprite encima
   function drawPreview(now) {
-    pctx.setTransform(1, 0, 0, 1, 0, 0);
-    pctx.clearRect(0, 0, pcv.width, pcv.height);
-    const fd = 1, TW = PLZ.TW, TH = PLZ.TH;   // usa la huella real (fw) del estado
-    const isoX = (i, j) => (i - j) * TW / 2, isoY = (i, j) => (i + j) * TH / 2;
-    // bbox de las baldosas y del sprite (mundo, arte 1:1)
-    let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
-    const acc = (x, y) => { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; };
-    for (let di = 0; di < fw; di++) for (let dj = 0; dj < fd; dj++) { const x = isoX(di, dj), y = isoY(di, dj); acc(x - TW / 2, y - TH / 2); acc(x + TW / 2, y + TH / 2); }
-    const cx = ((fw - 1) / 2 - (fd - 1) / 2) * TW / 2, base = (fw - 1 + fd - 1) * TH / 2 + TH / 2;
-    acc(cx - w / 2, base - h); acc(cx + w / 2, base);
-    const bboxW = maxX - minX, bboxH = maxY - minY;
-    const s = Math.min((pcv.width - 10) / bboxW, (pcv.height - 10) / bboxH);
+    pctx.setTransform(1, 0, 0, 1, 0, 0); pctx.clearRect(0, 0, pcv.width, pcv.height);
+    const fd = 1, TW = PLZ.TW, TH = PLZ.TH, isoX = (i, j) => (i - j) * TW / 2, isoY = (i, j) => (i + j) * TH / 2;
+    let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9; const acc = (x, y) => { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; };
+    for (let di = 0; di < fw; di++) { const x = isoX(di, 0), y = isoY(di, 0); acc(x - TW / 2, y - TH / 2); acc(x + TW / 2, y + TH / 2); }
+    const cx = ((fw - 1) / 2) * TW / 2, base = (fw - 1) * TH / 2 + TH / 2; acc(cx - w / 2, base - h); acc(cx + w / 2, base);
+    const s = Math.min((pcv.width - 12) / (maxX - minX), (pcv.height - 12) / (maxY - minY));
     pctx.setTransform(s, 0, 0, s, pcv.width / 2 - s * (minX + maxX) / 2, pcv.height / 2 - s * (minY + maxY) / 2);
-    // baldosas de la huella
-    for (let di = 0; di < fw; di++) for (let dj = 0; dj < fd; dj++) {
-      const x = isoX(di, dj), y = isoY(di, dj);
-      plzDiamond(pctx, x, y + 1, TW, TH, '#0a0e1c');
-      plzDiamond(pctx, x, y, TW - 2, TH - 1, (di + dj) % 2 ? '#1b2340' : '#161c33');
-    }
-    // sprite
-    const spr = { w, h, pal: null, data: null, anim: propAnim };
-    // construir pal/data al vuelo desde cells
+    for (let di = 0; di < fw; di++) { const x = isoX(di, 0), y = isoY(di, 0); plzDiamond(pctx, x, y + 1, TW, TH, '#0a0e1c'); plzDiamond(pctx, x, y, TW - 2, TH - 1, di % 2 ? '#1b2340' : '#161c33'); }
     const palMap = new Map(), pal = [], data = new Array(w * h).fill(0);
     for (let k = 0; k < w * h; k++) { const col = cells[k]; if (!col) continue; let idx = palMap.get(col); if (idx == null) { pal.push(col); idx = pal.length; palMap.set(col, idx); } data[k] = idx; }
-    spr.pal = pal; spr.data = data;
-    plzDrawCustomSprite(pctx, spr, cx, base, now || 900);
+    plzDrawCustomSprite(pctx, { w, h, pal, data, anim: propAnim }, cx, base, now || 900);
   }
   const redraw = () => { drawGrid(); drawPreview(performance.now()); };
 
-  // redimensiona conservando el dibujo (centrado en horizontal, apoyado abajo)
+  // ---- historial ----
+  const snapshot = () => { undo.push(cells.slice()); if (undo.length > 80) undo.shift(); redo.length = 0; updoBtns(); };
+  const updoBtns = () => { const u = m.querySelector('#sprUndo'), r = m.querySelector('#sprRedo'); if (u) u.classList.toggle('spr2-off', !undo.length); if (r) r.classList.toggle('spr2-off', !redo.length); };
+  const doUndo = () => { if (!undo.length) return; redo.push(cells.slice()); cells = undo.pop(); updoBtns(); redraw(); haptic(4); };
+  const doRedo = () => { if (!redo.length) return; undo.push(cells.slice()); cells = redo.pop(); updoBtns(); redraw(); haptic(4); };
+
+  // ---- color ----
+  const setCur = (c) => { curColor = c; const sw = m.querySelector('#sprCurSw'); if (sw) sw.style.background = c; const hx = m.querySelector('#sprHex'); if (hx && document.activeElement !== hx) hx.value = c; m.querySelectorAll('.spr-sw[data-c]').forEach(b => b.classList.toggle('on', b.dataset.c === c)); };
+  const pushRecent = (c) => { SPR_RECENT = [c, ...SPR_RECENT.filter(x => x !== c)].slice(0, 10); renderRecent(); };
+  const renderRecent = () => { const host = m.querySelector('#sprRecent'); if (!host) return; host.innerHTML = SPR_RECENT.length ? SPR_RECENT.map(c => `<button class="spr-sw" data-rc="${c}" style="background:${c}"></button>`).join('') : '<span class="spr2-recent-empty">—</span>'; host.querySelectorAll('[data-rc]').forEach(b => b.onclick = () => { setCur(b.dataset.rc); haptic(3); }); };
+
+  // ---- pintar / formas ----
+  const stamp = (arr, cx, cy) => { const r0 = Math.floor((brush - 1) / 2), r1 = brush - 1 - r0; for (let yy = cy - r0; yy <= cy + r1; yy++) for (let xx = cx - r0; xx <= cx + r1; xx++) arr.push([xx, yy]); };
+  const lineCells = (x0, y0, x1, y1) => { const out = []; let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, err = dx + dy, x = x0, y = y0; for (;;) { stamp(out, x, y); if (x === x1 && y === y1) break; const e2 = 2 * err; if (e2 >= dy) { err += dy; x += sx; } if (e2 <= dx) { err += dx; y += sy; } } return out; };
+  const rectCells = (x0, y0, x1, y1, fill) => { const out = [], ax = Math.min(x0, x1), bx = Math.max(x0, x1), ay = Math.min(y0, y1), by = Math.max(y0, y1); for (let y = ay; y <= by; y++) for (let x = ax; x <= bx; x++) { if (fill || x === ax || x === bx || y === ay || y === by) out.push([x, y]); } return out; };
+  const ellipseCells = (x0, y0, x1, y1) => { const out = [], ax = Math.min(x0, x1), bx = Math.max(x0, x1), ay = Math.min(y0, y1), by = Math.max(y0, y1); const rx = (bx - ax) / 2, ry = (by - ay) / 2, ccx = (ax + bx) / 2, ccy = (ay + by) / 2; for (let y = ay; y <= by; y++) for (let x = ax; x <= bx; x++) { const nx = (x - ccx) / (rx || .5), ny = (y - ccy) / (ry || .5), d = nx * nx + ny * ny; if (d <= 1) { const inx = (Math.abs(x - ccx) + 1) / (rx || .5), iny = (Math.abs(y - ccy) + 1) / (ry || .5); if (inx * inx + (ny * ny) > 1 || (nx * nx) + iny * iny > 1) out.push([x, y]); } } return out; };
+  const paintList = (list, col) => { for (const [x, y] of list) { if (x < 0 || y < 0 || x >= w || y >= h) continue; cells[y * w + x] = col; if (mirror) { const mx = w - 1 - x; if (mx >= 0 && mx < w) cells[y * w + mx] = col; } } };
+  function floodFill(gx, gy, col) { const target = cells[gy * w + gx] || null; if (target === col) return; const st = [[gx, gy]]; while (st.length) { const [x, y] = st.pop(); if (x < 0 || y < 0 || x >= w || y >= h) continue; const k = y * w + x; if ((cells[k] || null) !== target) continue; cells[k] = col; st.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]); } }
+
+  const cellAt = (ev) => { const r = gcv.getBoundingClientRect(); return [Math.floor((ev.clientX - r.left) / r.width * w), Math.floor((ev.clientY - r.top) / r.height * h)]; };
+  let painting = false, start = null;
+  const freehand = (t) => t === 'pencil' || t === 'erase';
+  const shapeTool = (t) => t === 'line' || t === 'rect' || t === 'rectf' || t === 'ellipse';
+  const shapeCells = (sx, sy, ex, ey) => tool === 'line' ? lineCells(sx, sy, ex, ey) : tool === 'ellipse' ? ellipseCells(sx, sy, ex, ey) : rectCells(sx, sy, ex, ey, tool === 'rectf');
+
+  gcv.addEventListener('pointerdown', (ev) => {
+    ev.preventDefault(); try { gcv.setPointerCapture(ev.pointerId); } catch (_) {}
+    const [x, y] = cellAt(ev);
+    if (tool === 'pick') { const c = cells[y * w + x]; if (c) { setCur(c); } return; }
+    if (tool === 'fill') { snapshot(); floodFill(x, y, curColor); pushRecent(curColor); redraw(); return; }
+    painting = true; start = [x, y];
+    if (freehand(tool)) { snapshot(); const col = tool === 'erase' ? null : curColor; const list = []; stamp(list, x, y); paintList(list, col); if (tool !== 'erase') pushRecent(curColor); redraw(); }
+  });
+  gcv.addEventListener('pointermove', (ev) => {
+    if (!painting) return;
+    const [x, y] = cellAt(ev);
+    if (freehand(tool)) { const col = tool === 'erase' ? null : curColor; const list = []; stamp(list, x, y); if (start) list.push(...lineCells(start[0], start[1], x, y)); start = [x, y]; paintList(list, col); redraw(); }
+    else if (shapeTool(tool)) { preview = { cells: shapeCells(start[0], start[1], x, y), color: curColor, erase: false }; drawGrid(); }
+  });
+  const endStroke = (ev) => {
+    if (!painting) return; painting = false;
+    if (shapeTool(tool) && start) { const [x, y] = ev ? cellAt(ev) : start; snapshot(); paintList(shapeCells(start[0], start[1], x, y), curColor); pushRecent(curColor); preview = null; redraw(); }
+    else redraw();
+    start = null;
+  };
+  gcv.addEventListener('pointerup', endStroke); gcv.addEventListener('pointercancel', () => { painting = false; preview = null; redraw(); });
+  // zoom con rueda
+  view.addEventListener('wheel', (ev) => { if (!ev.ctrlKey && !ev.metaKey && Math.abs(ev.deltaY) < 2) return; ev.preventDefault(); zoom(ev.deltaY < 0 ? 1 : -1); }, { passive: false });
+
+  function zoom(dir) { const nc = Math.max(2, Math.min(48, cs + dir * Math.max(1, Math.round(cs * 0.25)))); if (nc === cs) return; cs = nc; sizeCanvas(); drawGrid(); }
+  m.querySelector('#sprZoomIn').onclick = () => zoom(1);
+  m.querySelector('#sprZoomOut').onclick = () => zoom(-1);
+  m.querySelector('#sprZoomFit').onclick = () => { fitZoom(); sizeCanvas(); drawGrid(); };
+
+  // ---- tamaño (bloques) + huella ----
   function resize(nbw, nbh) {
     const ow = w, oh = h, oc = cells, followed = (fw === bw);
-    bw = nbw; bh = nbh; w = bw * SPR_BLK; h = bh * SPR_BLK;
-    fw = followed ? bw : Math.min(fw, bw);   // la huella sigue al ancho salvo que la hayas fijado
-    const nc = new Array(w * h).fill(null);
-    const dx = Math.floor((w - ow) / 2), dy = h - oh;   // centrar en x, alinear abajo
+    bw = nbw; bh = nbh; w = bw * SPR_BLK; h = bh * SPR_BLK; fw = followed ? bw : Math.min(fw, bw);
+    const nc = new Array(w * h).fill(null); const dx = Math.floor((w - ow) / 2), dy = h - oh;
     for (let y = 0; y < oh; y++) for (let x = 0; x < ow; x++) { const v = oc[y * ow + x]; if (!v) continue; const nx = x + dx, ny = y + dy; if (nx >= 0 && nx < w && ny >= 0 && ny < h) nc[ny * w + nx] = v; }
-    cells = nc; undo.length = 0; redo.length = 0; updoBtns(); sizeGrid(); renderSteps(); renderFoot(); redraw();
+    cells = nc; undo.length = 0; redo.length = 0; updoBtns(); fitZoom(); sizeCanvas(); renderSteps(); renderFoot(); redraw();
   }
   const renderSteps = () => {
-    const mk = (host, max, val, set) => { host.innerHTML = ''; for (let n = 1; n <= 4; n++) { const b = el(`<button class="spr-step ${n === val ? 'on' : ''} ${n > max ? 'spr-off' : ''}">${n}</button>`); if (n <= max) b.onclick = () => set(n); host.appendChild(b); } };
+    const mk = (host, max, val, set) => { host.innerHTML = ''; for (let n = 1; n <= 4; n++) { const b = el(`<button class="spr-step ${n === val ? 'on' : ''} ${n > max ? 'spr2-off' : ''}">${n}</button>`); if (n <= max) b.onclick = () => set(n); host.appendChild(b); } };
     mk(m.querySelector('#sprBW'), 4, bw, (n) => { if (n !== bw) resize(n, bh); });
     mk(m.querySelector('#sprBH'), 4, bh, (n) => { if (n !== bh) resize(bw, n); });
-    mk(m.querySelector('#sprFW'), bw, fw, (n) => { fw = n; renderSteps(); renderFoot(); drawPreview(performance.now()); });   // la huella no puede pasar del ancho del lienzo
+    mk(m.querySelector('#sprFW'), bw, fw, (n) => { fw = n; renderSteps(); renderFoot(); drawPreview(performance.now()); });
   };
-  const renderFoot = () => { m.querySelector('#sprFoot').textContent = (fw > 1 ? `Ocupa ${fw} casillas del suelo` : 'Ocupa 1 casilla') + ` · lienzo ${w}×${h}px`; };
-  renderSteps(); renderFoot(); sizeGrid(); redraw();
+  const renderFoot = () => { m.querySelector('#sprFoot').textContent = (fw > 1 ? `Ocupa ${fw} casillas` : 'Ocupa 1 casilla') + ` · ${w}×${h}px`; };
 
-  function floodFill(gx, gy, col) {
-    const target = cells[gy * w + gx] || null; if (target === col) return;
-    const st = [[gx, gy]];
-    while (st.length) { const [x, y] = st.pop(); if (x < 0 || y < 0 || x >= w || y >= h) continue; const k = y * w + x; if ((cells[k] || null) !== target) continue; cells[k] = col; st.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]); }
-  }
-  const selectSwatch = () => m.querySelectorAll('.spr-sw[data-c]').forEach(b => b.classList.toggle('on', b.dataset.c === curColor));
-  function put(gx, gy) {
-    if (gx < 0 || gy < 0 || gx >= w || gy >= h) return;
-    const k = gy * w + gx;
-    if (tool === 'erase') cells[k] = null;
-    else if (tool === 'fill') floodFill(gx, gy, curColor);
-    else cells[k] = curColor;
-  }
-  function apply(gx, gy) {
-    if (gx < 0 || gy < 0 || gx >= w || gy >= h) return;
-    if (tool === 'pick') { const c = cells[gy * w + gx]; if (c) { curColor = c; selectSwatch(); } return; }
-    put(gx, gy);
-    if (mirror) put(w - 1 - gx, gy);   // simetría horizontal
-    redraw();
-  }
-  const cellAt = (ev) => { const r = gcv.getBoundingClientRect(); return [Math.floor((ev.clientX - r.left) / r.width * w), Math.floor((ev.clientY - r.top) / r.height * h)]; };
-  let painting = false, stroked = false;
-  gcv.addEventListener('pointerdown', (ev) => { ev.preventDefault(); if (tool !== 'pick') { snapshot(); stroked = true; } painting = true; try { gcv.setPointerCapture(ev.pointerId); } catch (_) {} const [x, y] = cellAt(ev); apply(x, y); });
-  gcv.addEventListener('pointermove', (ev) => { if (!painting || tool === 'fill' || tool === 'pick') return; const [x, y] = cellAt(ev); apply(x, y); });
-  const endStroke = () => { painting = false; if (stroked) { stroked = false; drawPreview(performance.now()); } };
-  gcv.addEventListener('pointerup', endStroke);
-  gcv.addEventListener('pointercancel', endStroke);
+  // ---- transformaciones del lienzo ----
+  const applyTransform = (fn) => { snapshot(); const nc = new Array(w * h).fill(null); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const v = cells[y * w + x]; if (!v) continue; const [nx, ny] = fn(x, y); nc[ny * w + nx] = v; } cells = nc; redraw(); haptic(6); };
+  const flipH = () => applyTransform((x, y) => [w - 1 - x, y]);
+  const flipV = () => applyTransform((x, y) => [x, h - 1 - y]);
+  const rotate = () => { if (bw !== bh) { toast('Solo se puede rotar un lienzo cuadrado'); return; } applyTransform((x, y) => [h - 1 - y, x]); };
 
-  m.querySelectorAll('.spr-sw[data-c]').forEach(b => b.onclick = () => { curColor = b.dataset.c; if (tool === 'erase' || tool === 'pick' || tool === 'fill') setTool('paint'); selectSwatch(); haptic(4); });
-  m.querySelector('#sprPick').oninput = (e) => { curColor = e.target.value; m.querySelectorAll('.spr-sw[data-c]').forEach(x => x.classList.remove('on')); if (tool === 'erase' || tool === 'pick') setTool('paint'); haptic(4); };
-  function setTool(t) { tool = t; m.querySelectorAll('.spr-tool[data-tool]').forEach(x => x.classList.toggle('on', x.dataset.tool === t)); }
-  m.querySelectorAll('.spr-tool[data-tool]').forEach(b => b.onclick = () => { setTool(b.dataset.tool); haptic(4); });
-  m.querySelector('#sprMirror').onclick = () => { mirror = !mirror; m.querySelector('#sprMirror').classList.toggle('on', mirror); haptic(5); drawGrid(); };
-  m.querySelector('#sprUndo').onclick = () => { if (!undo.length) return; redo.push(cells.slice()); cells = undo.pop(); updoBtns(); redraw(); haptic(5); };
-  m.querySelector('#sprRedo').onclick = () => { if (!redo.length) return; undo.push(cells.slice()); cells = redo.pop(); updoBtns(); redraw(); haptic(5); };
+  // ---- eventos ----
+  m.querySelectorAll('.spr2-tool[data-tool]').forEach(b => b.onclick = () => setTool(b.dataset.tool));
+  function setTool(t) { tool = t; m.querySelectorAll('.spr2-tool[data-tool]').forEach(x => x.classList.toggle('on', x.dataset.tool === t)); haptic(3); }
+  m.querySelectorAll('#sprBrush .spr2-segb').forEach(b => b.onclick = () => { brush = +b.dataset.b; m.querySelectorAll('#sprBrush .spr2-segb').forEach(x => x.classList.toggle('on', x === b)); haptic(3); });
+  m.querySelectorAll('.spr-sw[data-c]').forEach(b => b.onclick = () => { setCur(b.dataset.c); if (tool === 'pick' || tool === 'erase') setTool('pencil'); haptic(3); });
+  m.querySelector('#sprPick').oninput = (e) => { setCur(e.target.value); if (tool === 'pick' || tool === 'erase') setTool('pencil'); };
+  m.querySelector('#sprHex').onchange = (e) => { let v = e.target.value.trim(); if (!v.startsWith('#')) v = '#' + v; if (/^#[0-9a-fA-F]{6}$/.test(v)) { setCur(v.toLowerCase()); } else { e.target.value = curColor; } };
+  m.querySelector('#sprMirror').onclick = () => { mirror = !mirror; m.querySelector('#sprMirror').classList.toggle('on', mirror); haptic(4); drawGrid(); };
+  m.querySelector('#sprUndo').onclick = doUndo; m.querySelector('#sprRedo').onclick = doRedo;
+  m.querySelector('#sprFlipH').onclick = flipH; m.querySelector('#sprFlipV').onclick = flipV; m.querySelector('#sprRotate').onclick = rotate;
   m.querySelector('#sprClear').onclick = () => { if (cells.some(Boolean) && !confirm('¿Vaciar el lienzo?')) return; snapshot(); cells = new Array(w * h).fill(null); redraw(); };
   m.querySelector('#sprSit').onchange = (e) => { propSit = e.target.checked; drawPreview(performance.now()); };
   m.querySelector('#sprSolid').onchange = (e) => { propSolid = e.target.checked; };
-  m.querySelectorAll('.spr-abtn').forEach(b => b.onclick = () => { propAnim = b.dataset.a; m.querySelectorAll('.spr-abtn').forEach(x => x.classList.toggle('on', x === b)); haptic(4); drawPreview(performance.now()); });
+  m.querySelectorAll('.spr-abtn').forEach(b => b.onclick = () => { propAnim = b.dataset.a; m.querySelectorAll('.spr-abtn').forEach(x => x.classList.toggle('on', x === b)); haptic(3); drawPreview(performance.now()); });
 
-  function buildSprite() {
-    const palMap = new Map(), pal = [], data = new Array(w * h).fill(0);
-    for (let k = 0; k < w * h; k++) { const col = cells[k]; if (!col) continue; let idx = palMap.get(col); if (idx == null) { pal.push(col); idx = pal.length; palMap.set(col, idx); } data[k] = idx; }
-    return { v: 2, w, h, pal, data, fw, fd: 1, solid: propSolid, sit: propSit, anim: propAnim };
-  }
+  // ---- atajos de teclado ----
+  const keymap = { b: 'pencil', l: 'line', r: 'rect', f: 'rectf', o: 'ellipse', g: 'fill', i: 'pick', e: 'erase' };
+  const onKey = (ev) => {
+    if (!document.body.contains(m)) { document.removeEventListener('keydown', onKey); return; }
+    const tag = (ev.target.tagName || '').toLowerCase(); if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+    const k = ev.key.toLowerCase();
+    if ((ev.ctrlKey || ev.metaKey) && k === 'z') { ev.preventDefault(); ev.shiftKey ? doRedo() : doUndo(); return; }
+    if ((ev.ctrlKey || ev.metaKey) && k === 'y') { ev.preventDefault(); doRedo(); return; }
+    if (ev.ctrlKey || ev.metaKey) return;
+    if (keymap[k]) { setTool(keymap[k]); }
+    else if (k === 'x') { m.querySelector('#sprMirror').click(); }
+    else if (k === '+' || k === '=') { zoom(1); }
+    else if (k === '-') { zoom(-1); }
+    else if (k === '1' || k === '2' || k === '3') { const b = m.querySelector(`#sprBrush .spr2-segb[data-b="${k}"]`); if (b) b.click(); }
+  };
+  document.addEventListener('keydown', onKey);
+  m.querySelector('.close').addEventListener('click', () => document.removeEventListener('keydown', onKey));
+
+  // ---- publicar ----
+  function buildSprite() { const palMap = new Map(), pal = [], data = new Array(w * h).fill(0); for (let k = 0; k < w * h; k++) { const col = cells[k]; if (!col) continue; let idx = palMap.get(col); if (idx == null) { pal.push(col); idx = pal.length; palMap.set(col, idx); } data[k] = idx; } return { v: 2, w, h, pal, data, fw, fd: 1, solid: propSolid, sit: propSit, anim: propAnim }; }
   const pubBtn = m.querySelector('#sprPublish');
   pubBtn.onclick = async () => {
     const sprite = buildSprite();
     if (!sprite.pal.length) { toast('Dibuja algo primero'); return; }
     const name = m.querySelector('#sprName').value.trim();
     if (!name) { toast('Ponle un nombre al objeto'); m.querySelector('#sprName').focus(); return; }
-    const price = Math.max(0, parseInt(m.querySelector('#sprPrice').value, 10) || 0);
-    const cat = m.querySelector('#sprCat').value;
+    const price = Math.max(0, parseInt(m.querySelector('#sprPrice').value, 10) || 0), cat = m.querySelector('#sprCat').value;
     pubBtn.disabled = true; pubBtn.textContent = ed0 ? 'Guardando…' : 'Publicando…';
     try {
       let item = ed0 && ed0.item;
-      if (ed0) {
-        const { error } = await sb.rpc('plaza_update_item', { p_item: ed0.item, p_name: name, p_price: price, p_category: cat, p_sprite: sprite });
-        if (error) throw error;
-      } else {
-        const { data, error } = await sb.rpc('plaza_create_item', { p_name: name, p_price: price, p_category: cat, p_sprite: sprite });
-        if (error) throw error; item = data;
-      }
+      if (ed0) { const { error } = await sb.rpc('plaza_update_item', { p_item: ed0.item, p_name: name, p_price: price, p_category: cat, p_sprite: sprite }); if (error) throw error; }
+      else { const { data, error } = await sb.rpc('plaza_create_item', { p_name: name, p_price: price, p_category: cat, p_sprite: sprite }); if (error) throw error; item = data; }
       PLZ_CUSTOM[item] = { w, h, pal: sprite.pal, data: sprite.data, fw, fd: 1, solid: propSolid, sit: propSit, anim: propAnim, name, category: cat };
       PLZ_ITEM_NAME[item] = name;
+      document.removeEventListener('keydown', onKey);
       haptic(14); toast(ed0 ? 'Cambios guardados' : '¡«' + name + '» publicado en la tienda!');
       m.remove(); onDone && onDone();
     } catch (e) { pubBtn.disabled = false; pubBtn.textContent = ed0 ? 'Guardar cambios' : 'Publicar en la tienda'; toast((e && e.message) || 'No se pudo guardar'); }
   };
-  updoBtns();
+
+  // arranque
+  setCur(curColor); renderRecent(); renderSteps(); renderFoot(); updoBtns();
+  requestAnimationFrame(() => { fitZoom(); sizeCanvas(); redraw(); });
 }
 
 // selector de pista para pinchar en la Plaza (busca por título)

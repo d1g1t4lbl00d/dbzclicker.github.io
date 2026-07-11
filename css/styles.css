@@ -4271,6 +4271,16 @@ html { touch-action: manipulation; }
     linear-gradient(180deg, #0a0e1d, #070a15);
 }
 .plaza-canvas { display: block; width: 100%; height: auto; touch-action: manipulation; cursor: pointer; image-rendering: pixelated; image-rendering: crisp-edges; }
+/* En ordenador la Plaza cabe entera en la pantalla: el lienzo se ajusta a la altura
+   disponible y el dock/chat quedan siempre visibles, sin scroll de página. */
+@media (min-width: 721px) {
+  .plaza-view { display: flex; flex-direction: column; height: calc(100dvh - var(--topbar-h) - 44px - var(--player-h)); min-height: 420px; }
+  .plaza-view .plaza-head { flex: none; }
+  .plaza-view .plaza-wrap { flex: 1 1 auto; min-height: 0; display: grid; place-items: center; }
+  .plaza-view .plaza-canvas { width: auto; height: 100%; max-width: 100%; max-height: 100%; }
+  .plaza-view .plaza-dock { flex: none; }
+  .plaza-view .plaza-hint { flex: none; }
+}
 /* cabecera */
 .plaza-head { align-items: flex-start; gap: 10px; }
 .plaza-head-title { min-width: 0; }
@@ -4538,6 +4548,52 @@ button.shop-card { font: inherit; text-align: center; cursor: pointer; -webkit-t
 .spr-cat { flex: 1; }
 .spr-publish { width: 100%; }
 @media (max-width: 420px) { .spr-side { width: 96px; } .spr-tool svg { width: 16px; height: 16px; } }
+
+/* ===== Editor PRO (layout de escritorio a 3 paneles) ===== */
+.modal.spr2-modal { width: min(1120px, 96vw); max-width: 96vw; }
+.spr2-body { padding: 16px 18px; }
+.spr2 { display: grid; grid-template-columns: 58px minmax(0, 1fr) 312px; gap: 14px; align-items: stretch; }
+.spr2-tools { display: flex; flex-direction: column; gap: 8px; }
+.spr2-toolgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+.spr2-tool { display: grid; place-items: center; aspect-ratio: 1; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); color: var(--ink-soft); cursor: pointer; transition: transform .08s, border-color .12s; }
+.spr2-tool svg { width: 18px; height: 18px; }
+.spr2-tool.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)); }
+.spr2-tool.spr2-clear { color: #c0533f; }
+.spr2-tool.spr2-off { opacity: .32; pointer-events: none; }
+.spr2-tool:active { transform: scale(.92); }
+.spr2-lbl { font-size: 10px; font-weight: 800; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-soft); margin-top: 4px; }
+.spr2-seg { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; }
+.spr2-segb { display: grid; place-items: center; padding: 6px 0; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); color: var(--ink-soft); font-weight: 700; font-size: 11px; cursor: pointer; }
+.spr2-segb svg { width: 16px; height: 16px; }
+.spr2-segb.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)); }
+.spr2-segb:active { transform: scale(.94); }
+.spr2-canvas { position: relative; min-height: 300px; border-radius: 12px; border: 1px solid var(--line); overflow: auto;
+  background: linear-gradient(180deg, #0c1120, #080b16); display: grid; place-items: center; padding: 8px; }
+.spr2-canvas .spr-canvas { image-rendering: pixelated; image-rendering: crisp-edges; touch-action: none; cursor: crosshair; }
+.spr2-side { display: flex; flex-direction: column; gap: 12px; min-width: 0; overflow-y: auto; max-height: 78vh; padding-right: 2px; }
+.spr2-side .spr-preview { flex: none; }
+.spr2-colors { display: flex; flex-direction: column; gap: 8px; }
+.spr2-cur { display: flex; align-items: center; gap: 8px; }
+.spr2-cur-sw { width: 34px; height: 34px; border-radius: 9px; border: 1px solid rgba(255,255,255,.25); flex: none; box-shadow: inset 0 0 0 1px rgba(0,0,0,.35); }
+.spr2-hex { flex: 1; min-width: 0; padding: 8px 10px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); color: var(--ink); font: 600 13px/1 ui-monospace, monospace; text-transform: lowercase; }
+.spr2-recent-lbl, .spr2-recent-empty { font-size: 11px; color: var(--ink-soft); font-weight: 700; }
+.spr2-recent { display: grid; grid-template-columns: repeat(10, 1fr); gap: 5px; min-height: 20px; }
+.spr2-recent .spr-sw { aspect-ratio: 1; border-radius: 6px; }
+.spr2-sizes { display: flex; flex-direction: column; gap: 7px; border-top: 1px solid var(--line); padding-top: 10px; }
+.spr2-sizerow { display: flex; align-items: center; gap: 10px; }
+.spr2-sizerow .spr-lbl { width: 52px; flex: none; }
+.spr2-sizerow .spr-steps { flex: 1; }
+.spr2-off { opacity: .3; pointer-events: none; }
+@media (max-width: 860px) {
+  .modal.spr2-modal { width: 100%; }
+  .spr2 { grid-template-columns: 1fr; }
+  .spr2-tools { flex-direction: row; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+  .spr2-toolgrid { grid-template-columns: repeat(4, 34px); }
+  .spr2-lbl { width: 100%; margin-top: 0; }
+  .spr2-seg { grid-auto-columns: 44px; }
+  .spr2-canvas { min-height: 240px; max-height: 46vh; }
+  .spr2-side { max-height: none; overflow: visible; }
+}
 
 /* La Plaza — minimapa de salas */
 /* ===== Minijuegos del arcade — shell compartido ===== */
