@@ -4483,7 +4483,7 @@ button.shop-card { font: inherit; text-align: center; cursor: pointer; -webkit-t
   background: radial-gradient(70% 60% at 50% 30%, rgba(110,45,245,.16), transparent 60%), linear-gradient(180deg, #0c1120, #080b16); }
 .spr-preview canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
 .spr-preview-lbl { position: absolute; bottom: 4px; right: 6px; font-size: 10px; font-weight: 700; color: var(--ink-soft); }
-.spr-tools { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.spr-tools { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
 .spr-tool { display: grid; place-items: center; aspect-ratio: 1; border-radius: 9px; border: 1px solid var(--line);
   background: var(--panel-2); color: var(--ink-soft); cursor: pointer; }
 .spr-tool svg { width: 18px; height: 18px; }
@@ -4496,8 +4496,17 @@ button.shop-card { font: inherit; text-align: center; cursor: pointer; -webkit-t
 .spr-sw:active { transform: scale(.9); }
 .spr-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .spr-lbl { font-size: 12px; font-weight: 700; color: var(--ink-soft); }
-.spr-size { padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); color: var(--ink-soft); font-weight: 700; font-size: 12px; cursor: pointer; }
-.spr-size.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--panel-2)); }
+.spr-tool.spr-off { opacity: .32; pointer-events: none; }
+.spr-sw-custom { position: relative; overflow: hidden; display: grid; place-items: center; }
+.spr-sw-custom input[type=color] { position: absolute; inset: -4px; opacity: 0; width: 200%; height: 200%; border: none; padding: 0; cursor: pointer; }
+/* selector de tamaño en bloques (ancho / alto) */
+.spr-sizes-row { display: flex; gap: 10px; }
+.spr-size-ctl { flex: 1; display: flex; flex-direction: column; gap: 5px; }
+.spr-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 5px; }
+.spr-step { padding: 7px 0; border-radius: 8px; border: 1px solid var(--line); background: var(--panel-2); color: var(--ink-soft); font-weight: 800; font-size: 13px; cursor: pointer; }
+.spr-step.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 16%, var(--panel-2)); }
+.spr-step:active { transform: scale(.94); }
+.spr-foot { font-size: 12px; font-weight: 700; color: var(--accent); text-align: center; }
 .spr-props { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line); padding-top: 10px; }
 .spr-prop { display: flex; align-items: flex-start; gap: 9px; font-size: 13px; color: var(--ink); }
 .spr-prop input[type=checkbox] { margin-top: 2px; width: 17px; height: 17px; accent-color: var(--accent); flex: none; }

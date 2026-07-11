@@ -4105,7 +4105,8 @@ const PLZ_SOLID = new Set(['spk', 'tree', 'lamp', 'fountain', 'djbooth', 'plant'
 const PLZ_DANCE_COLS = ['rgba(39,169,255,', 'rgba(110,45,245,', 'rgba(224,80,122,', 'rgba(45,200,120,'];
 
 // --- objetos custom: sprites de píxeles dibujados por el admin y publicados en la tienda ---
-// registro item-id -> { w, h, pal:[hex], data:[índice de paleta por celda, 0=transparente], solid, sit, anim, name, category }
+// registro item-id -> { w, h, pal:[hex], data:[índice de paleta por celda, 0=transparente],
+//                       fw, fd (huella en casillas), solid, sit, anim, name, category }
 const PLZ_CUSTOM = {};
 let plzCustomLoaded = false;
 async function plzLoadCustomItems(force) {
@@ -4116,6 +4117,7 @@ async function plzLoadCustomItems(force) {
       const s = r.sprite || {};
       PLZ_CUSTOM[r.item] = {
         w: s.w || 16, h: s.h || 16, pal: Array.isArray(s.pal) ? s.pal : [], data: Array.isArray(s.data) ? s.data : [],
+        fw: Math.max(1, Math.min(4, s.fw || 1)), fd: Math.max(1, Math.min(4, s.fd || 1)),
         solid: !!s.solid, sit: !!s.sit, anim: s.anim || 'none', name: r.name, category: r.category || 'Deco',
       };
       PLZ_ITEM_NAME[r.item] = r.name;
@@ -4123,8 +4125,26 @@ async function plzLoadCustomItems(force) {
     plzCustomLoaded = true;
   } catch (_) {}
 }
-// colisión y asiento son propiedades del objeto (custom) o del tipo base
-function plzIsSolid(t) { const cu = PLZ_CUSTOM[t]; return cu ? cu.solid : PLZ_SOLID.has(t); }
+// huella (en casillas) de un mueble: los custom pueden ocupar varias; los base ocupan 1×1
+function plzFurnFoot(t) { const cu = PLZ_CUSTOM[t]; return cu ? { fw: cu.fw || 1, fd: cu.fd || 1 } : { fw: 1, fd: 1 }; }
+// lista de casillas [i,j] que ocupa un mueble colocado (ancla = esquina posterior-izquierda)
+function plzFurnTiles(f) {
+  const { fw, fd } = plzFurnFoot(f.t); const t = [];
+  for (let di = 0; di < fw; di++) for (let dj = 0; dj < fd; dj++) t.push([f.i + di, f.j + dj]);
+  return t;
+}
+// mueble (no portal) cuya huella contiene la casilla (i,j) — para reemplazar/borrar
+function plzFindFurnAt(furn, fi, fj) {
+  for (let k = furn.length - 1; k >= 0; k--) {
+    const f = furn[k]; if (f.t === 'portal') continue;
+    const { fw, fd } = plzFurnFoot(f.t);
+    if (fi >= f.i && fi < f.i + fw && fj >= f.j && fj < f.j + fd) return k;
+  }
+  return -1;
+}
+// colisión y asiento son propiedades del objeto (custom) o del tipo base.
+// Un asiento nunca bloquea el paso (hay que poder caminar hasta él para sentarse).
+function plzIsSolid(t) { const cu = PLZ_CUSTOM[t]; return cu ? (cu.solid && !cu.sit) : PLZ_SOLID.has(t); }
 function plzIsSeat(f) { const cu = PLZ_CUSTOM[f.t]; if (cu) return cu.sit; return f.t === 'bench' || f.t === 'stool' || f.t === 'sofa' || f.t === 'couch'; }
 
 // --- SALAS: cada una con su tema, mobiliario y portales a otras salas ---
@@ -4239,21 +4259,26 @@ function plzComputeRoom(id) {
   const custom = plzCustomRooms[id];
   const def = custom ? custom.def : (PLZ_ROOMS[id] || PLZ_ROOMS.plaza);
   const furn = custom ? custom.furn : def.furn;
-  return {
-    id, def, furn,
-    blocked: new Set(furn.filter(f => plzIsSolid(f.t)).map(f => f.i + ',' + f.j)),
-    seats: new Map(furn.filter(f => plzIsSeat(f)).map(f => [f.i + ',' + f.j, f])),
-    portals: new Map(furn.filter(f => f.t === 'portal').map(f => [f.i + ',' + f.j, f])),
-    dance: def.dance || [],
-  };
+  return { id, def, furn, dance: def.dance || [], ...plzCollisions(furn) };
+}
+// construye colisiones/asientos/portales considerando la huella de cada mueble
+function plzCollisions(furn) {
+  const blocked = new Set(), seats = new Map(), portals = new Map();
+  for (const f of furn) {
+    if (f.t === 'portal') { portals.set(f.i + ',' + f.j, f); continue; }
+    const solid = plzIsSolid(f.t), seat = plzIsSeat(f);
+    if (!solid && !seat) continue;
+    for (const [ti, tj] of plzFurnTiles(f)) {
+      if (solid) blocked.add(ti + ',' + tj);
+      if (seat) seats.set(ti + ',' + tj, f);
+    }
+  }
+  return { blocked, seats, portals };
 }
 // recomputa colisiones/asientos/portales tras editar el mobiliario en caliente
 function plzRecompute() {
   if (!plzR) return;
-  const furn = plzR.furn;
-  plzR.blocked = new Set(furn.filter(f => plzIsSolid(f.t)).map(f => f.i + ',' + f.j));
-  plzR.seats = new Map(furn.filter(f => plzIsSeat(f)).map(f => [f.i + ',' + f.j, f]));
-  plzR.portals = new Map(furn.filter(f => f.t === 'portal').map(f => [f.i + ',' + f.j, f]));
+  Object.assign(plzR, plzCollisions(plzR.furn));
 }
 
 const plzKey = (i, j) => i + ',' + j;
@@ -4893,16 +4918,29 @@ function plzExitEdit() {
 function plzEditTap(fi, fj) {
   if (fi < 0 || fj < 0 || fi >= PLZ.COLS || fj >= PLZ.ROWS) return;
   const furn = plzR.furn;
-  if (furn.some(f => f.t === 'portal' && f.i === fi && f.j === fj)) return;   // no tocar la salida
-  const idx = furn.findIndex(f => f.i === fi && f.j === fj && f.t !== 'portal');
-  if (plaza.editTool === 'erase') { if (idx >= 0) { furn.splice(idx, 1); plzRecompute(); if (plaza._renderPalette) plaza._renderPalette(); haptic(10); } return; }
+  // borrar: elimina el mueble cuya huella contiene la casilla tocada
+  if (plaza.editTool === 'erase') {
+    const k = plzFindFurnAt(furn, fi, fj);
+    if (k >= 0) { furn.splice(k, 1); plzRecompute(); if (plaza._renderPalette) plaza._renderPalette(); haptic(10); }
+    return;
+  }
   const tool = plaza.editTool;
-  // límite por unidades del inventario (cada unidad comprada = un objeto colocable)
+  const { fw, fd } = plzFurnFoot(tool);
+  // casillas que ocuparía (ancla = casilla tocada, la huella crece hacia +i/+j)
+  const tiles = [];
+  for (let di = 0; di < fw; di++) for (let dj = 0; dj < fd; dj++) tiles.push([fi + di, fj + dj]);
+  if (tiles.some(([ti, tj]) => ti >= PLZ.COLS || tj >= PLZ.ROWS)) { toast('No cabe aquí · déjale sitio hacia el fondo'); haptic(20); return; }
+  if (tiles.some(([ti, tj]) => furn.some(f => f.t === 'portal' && f.i === ti && f.j === tj))) { toast('Ahí está la salida'); haptic(20); return; }
+  // muebles que se solapan con la nueva huella → se reemplazan
+  const removeIdx = new Set();
+  for (const [ti, tj] of tiles) { const k = plzFindFurnAt(furn, ti, tj); if (k >= 0) removeIdx.add(k); }
+  // límite por unidades del inventario (cada unidad = un objeto colocable), sin contar los que se reemplazan
   if (!PLZ_FREE_ITEMS.has(tool)) {
-    const placed = furn.filter(f => f.t === tool && !(f.i === fi && f.j === fj)).length;
+    let placed = 0;
+    for (let k = 0; k < furn.length; k++) if (furn[k].t === tool && !removeIdx.has(k)) placed++;
     if (placed >= plzQty(tool)) { toast('No te quedan «' + (PLZ_ITEM_NAME[tool] || tool) + '» · compra más en la Tienda'); haptic(20); return; }
   }
-  if (idx >= 0) furn.splice(idx, 1);   // reemplaza lo que hubiera
+  [...removeIdx].sort((a, b) => b - a).forEach(k => furn.splice(k, 1));
   furn.push({ t: tool, i: fi, j: fj });
   plzRecompute(); if (plaza._renderPalette) plaza._renderPalette(); haptic(6);
 }
@@ -4931,6 +4969,14 @@ function plzFurnThumb(type, px) {
   px = px || 68;
   const cv = document.createElement('canvas'); cv.width = px; cv.height = px;
   const c = cv.getContext('2d'); c.imageSmoothingEnabled = false;
+  const cu = PLZ_CUSTOM[type];
+  if (cu) {
+    // objeto custom: escala para que quepa entero (ancho o alto), centrado
+    const pad = 6, s = Math.max(1, Math.min((px - pad * 2) / Math.max(1, cu.w), (px - pad * 2) / Math.max(1, cu.h)));
+    c.setTransform(s, 0, 0, s, px / 2, px - pad);
+    try { plzDrawCustomSprite(c, cu, 0, 0, 900); } catch (_) {}
+    return cv;
+  }
   const sp = plaza, sr = plzR, s = px / 48;
   c.setTransform(s, 0, 0, s, px / 2, px * 0.82);
   plaza = { ctx: c, radio: { playing: false }, ox: 0, oy: 0, canvas: cv };
@@ -5030,34 +5076,45 @@ function openPlazaInventory(onGo) {
 }
 
 // ===================== EDITOR DE SPRITES (solo admin) =====================
-// Dibuja un objeto en una rejilla de píxeles, le asigna propiedades y lo publica en la tienda.
+// Dibuja un objeto en una rejilla de píxeles, elige su tamaño en bloques (ancho/alto),
+// le asigna propiedades y lo publica en la tienda. Cada bloque = 16 px de arte.
 const SPR_PAL = ['#000000', '#0a0e1c', '#1b2542', '#3d4a78', '#8f99ad', '#e8ecf6', '#ffffff', '#27a9ff', '#8fc0ff', '#6e2df5', '#b06eff', '#e0507a', '#ff5d5d', '#f0a13e', '#ffd23e', '#2dc878', '#12c2c2', '#8a5560', '#c9a86a', '#3a2814'];
-const SPR_SIZES = [12, 16, 20, 24];
+const SPR_BLK = 16;   // píxeles de arte por bloque
 function openPlazaSpriteEditor(onDone) {
   if (!state.profile || !state.profile.is_admin) { toast('Solo el admin puede crear objetos'); return; }
-  let w = 16, h = 16, cells = new Array(w * h).fill(null);
-  let curColor = SPR_PAL[7], tool = 'paint';
+  let bw = 1, bh = 1;                 // tamaño en bloques (ancho × alto)
+  let w = bw * SPR_BLK, h = bh * SPR_BLK;
+  let cells = new Array(w * h).fill(null);
+  let curColor = SPR_PAL[7], tool = 'paint', mirror = false;
   let propSit = false, propSolid = true, propAnim = 'none';
+  const undo = [], redo = [];
 
   const m = openModal(`<div class="modal-head"><h3><svg class="mh-ic" fill="none" stroke="currentColor"><use href="#i-palette"/></svg> Crear objeto</h3><button class="close">&times;</button></div>
     <div class="modal-body spr-body">
+      <div class="spr-sizes-row">
+        <div class="spr-size-ctl"><span class="spr-lbl">Ancho</span><div class="spr-steps" id="sprBW"></div></div>
+        <div class="spr-size-ctl"><span class="spr-lbl">Alto</span><div class="spr-steps" id="sprBH"></div></div>
+      </div>
+      <div class="spr-foot" id="sprFoot"></div>
       <div class="spr-stage">
         <div class="spr-canvas-wrap"><canvas id="sprCv" class="spr-canvas"></canvas></div>
         <div class="spr-side">
-          <div class="spr-preview"><canvas id="sprPrev" width="104" height="104"></canvas><span class="spr-preview-lbl">Vista</span></div>
+          <div class="spr-preview"><canvas id="sprPrev" width="120" height="120"></canvas><span class="spr-preview-lbl">En la sala</span></div>
           <div class="spr-tools" id="sprTools">
             <button class="spr-tool on" data-tool="paint" title="Pincel"><svg fill="none" stroke="currentColor"><use href="#i-brush"/></svg></button>
             <button class="spr-tool" data-tool="fill" title="Relleno"><svg fill="none" stroke="currentColor"><use href="#i-bucket"/></svg></button>
             <button class="spr-tool" data-tool="pick" title="Cuentagotas"><svg fill="none" stroke="currentColor"><use href="#i-eyedropper"/></svg></button>
             <button class="spr-tool" data-tool="erase" title="Borrador"><svg fill="none" stroke="currentColor"><use href="#i-eraser"/></svg></button>
+            <button class="spr-tool" id="sprMirror" title="Simetría"><svg fill="none" stroke="currentColor"><use href="#i-mirror"/></svg></button>
+            <button class="spr-tool" id="sprUndo" title="Deshacer"><svg fill="none" stroke="currentColor"><use href="#i-undo"/></svg></button>
+            <button class="spr-tool" id="sprRedo" title="Rehacer"><svg fill="none" stroke="currentColor"><use href="#i-redo"/></svg></button>
             <button class="spr-tool spr-clear" id="sprClear" title="Vaciar"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg></button>
           </div>
         </div>
       </div>
-      <div class="spr-pal" id="sprPal">${SPR_PAL.map((c, i) => `<button class="spr-sw ${i === 7 ? 'on' : ''}" data-c="${c}" style="background:${c}" aria-label="Color"></button>`).join('')}</div>
-      <div class="spr-row spr-sizes"><span class="spr-lbl">Tamaño</span>${SPR_SIZES.map(s => `<button class="spr-size ${s === 16 ? 'on' : ''}" data-s="${s}">${s}×${s}</button>`).join('')}</div>
+      <div class="spr-pal" id="sprPal">${SPR_PAL.map((c, i) => `<button class="spr-sw ${i === 7 ? 'on' : ''}" data-c="${c}" style="background:${c}" aria-label="Color"></button>`).join('')}<label class="spr-sw spr-sw-custom" title="Color libre" style="background:conic-gradient(from 0deg,#f00,#ff0,#0f0,#0ff,#00f,#f0f,#f00)"><input type="color" id="sprPick" value="#27a9ff"></label></div>
       <div class="spr-props">
-        <label class="spr-prop"><input type="checkbox" id="sprSit"> <span><b>Sentable</b><small>Los avatares pueden sentarse encima</small></span></label>
+        <label class="spr-prop"><input type="checkbox" id="sprSit"> <span><b>Sentable</b><small>Los avatares pueden sentarse encima (una plaza por casilla de ancho)</small></span></label>
         <label class="spr-prop"><input type="checkbox" id="sprSolid" checked> <span><b>Sólido</b><small>Bloquea el paso (desactívalo para que sea pisable)</small></span></label>
         <div class="spr-prop spr-anim"><span><b>Animación / luz</b></span><div class="spr-anim-btns" id="sprAnim">
           <button class="spr-abtn on" data-a="none">Ninguna</button><button class="spr-abtn" data-a="glow">Brillo</button><button class="spr-abtn" data-a="blink">Parpadeo</button><button class="spr-abtn" data-a="float">Flotar</button>
@@ -5075,8 +5132,10 @@ function openPlazaSpriteEditor(onDone) {
 
   const gcv = m.querySelector('#sprCv'), gctx = gcv.getContext('2d');
   const pcv = m.querySelector('#sprPrev'), pctx = pcv.getContext('2d'); pctx.imageSmoothingEnabled = false;
-  let cs = 18;
-  const sizeGrid = () => { cs = Math.max(8, Math.floor(288 / w)); gcv.width = w * cs; gcv.height = h * cs; };
+  let cs = 16;
+  const sizeGrid = () => { cs = Math.max(6, Math.floor(288 / Math.max(w, h))); gcv.width = w * cs; gcv.height = h * cs; };
+  const snapshot = () => { undo.push(cells.slice()); if (undo.length > 50) undo.shift(); redo.length = 0; updoBtns(); };
+  const updoBtns = () => { const u = m.querySelector('#sprUndo'), r = m.querySelector('#sprRedo'); if (u) u.classList.toggle('spr-off', !undo.length); if (r) r.classList.toggle('spr-off', !redo.length); };
 
   function drawGrid() {
     gctx.clearRect(0, 0, gcv.width, gcv.height);
@@ -5085,58 +5144,107 @@ function openPlazaSpriteEditor(onDone) {
       gctx.fillStyle = col || ((x + y) % 2 ? '#1a2036' : '#141a2c');
       gctx.fillRect(x * cs, y * cs, cs, cs);
     }
-    gctx.strokeStyle = 'rgba(255,255,255,.06)'; gctx.lineWidth = 1;
+    gctx.strokeStyle = 'rgba(255,255,255,.05)'; gctx.lineWidth = 1;
     for (let x = 0; x <= w; x++) { gctx.beginPath(); gctx.moveTo(x * cs + .5, 0); gctx.lineTo(x * cs + .5, h * cs); gctx.stroke(); }
     for (let y = 0; y <= h; y++) { gctx.beginPath(); gctx.moveTo(0, y * cs + .5); gctx.lineTo(w * cs, y * cs + .5); gctx.stroke(); }
+    // líneas de bloque (más marcadas) para ver los límites de cada casilla
+    gctx.strokeStyle = 'rgba(120,160,255,.35)'; gctx.lineWidth = 1;
+    for (let bx = 0; bx <= bw; bx++) { const X = bx * SPR_BLK * cs + .5; gctx.beginPath(); gctx.moveTo(X, 0); gctx.lineTo(X, h * cs); gctx.stroke(); }
+    for (let by = 0; by <= bh; by++) { const Y = by * SPR_BLK * cs + .5; gctx.beginPath(); gctx.moveTo(0, Y); gctx.lineTo(w * cs, Y); gctx.stroke(); }
+    if (mirror) { gctx.strokeStyle = 'rgba(255,210,62,.6)'; gctx.beginPath(); gctx.moveTo(w * cs / 2 + .5, 0); gctx.lineTo(w * cs / 2 + .5, h * cs); gctx.stroke(); }
   }
-  function drawPreview() {
+  // vista previa isométrica: dibuja la huella (fw×1 casillas) y el sprite encima
+  function drawPreview(now) {
+    pctx.setTransform(1, 0, 0, 1, 0, 0);
     pctx.clearRect(0, 0, pcv.width, pcv.height);
-    const sc = Math.max(1, Math.floor(Math.min((pcv.width - 14) / w, (pcv.height - 20) / h)));
-    const sw = w * sc, sh = h * sc, ox = Math.round((pcv.width - sw) / 2), oy = pcv.height - sh - 8;
-    pctx.fillStyle = 'rgba(0,0,0,.28)'; pctx.beginPath(); pctx.ellipse(pcv.width / 2, pcv.height - 8, sw * 0.42, sc * 1.3, 0, 0, 7); pctx.fill();
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const col = cells[y * w + x]; if (!col) continue; pctx.fillStyle = col; pctx.fillRect(ox + x * sc, oy + y * sc, sc, sc); }
+    const fw = bw, fd = 1, TW = PLZ.TW, TH = PLZ.TH;
+    const isoX = (i, j) => (i - j) * TW / 2, isoY = (i, j) => (i + j) * TH / 2;
+    // bbox de las baldosas y del sprite (mundo, arte 1:1)
+    let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9;
+    const acc = (x, y) => { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; };
+    for (let di = 0; di < fw; di++) for (let dj = 0; dj < fd; dj++) { const x = isoX(di, dj), y = isoY(di, dj); acc(x - TW / 2, y - TH / 2); acc(x + TW / 2, y + TH / 2); }
+    const cx = ((fw - 1) / 2 - (fd - 1) / 2) * TW / 2, base = (fw - 1 + fd - 1) * TH / 2 + TH / 2;
+    acc(cx - w / 2, base - h); acc(cx + w / 2, base);
+    const bboxW = maxX - minX, bboxH = maxY - minY;
+    const s = Math.min((pcv.width - 10) / bboxW, (pcv.height - 10) / bboxH);
+    pctx.setTransform(s, 0, 0, s, pcv.width / 2 - s * (minX + maxX) / 2, pcv.height / 2 - s * (minY + maxY) / 2);
+    // baldosas de la huella
+    for (let di = 0; di < fw; di++) for (let dj = 0; dj < fd; dj++) {
+      const x = isoX(di, dj), y = isoY(di, dj);
+      plzDiamond(pctx, x, y + 1, TW, TH, '#0a0e1c');
+      plzDiamond(pctx, x, y, TW - 2, TH - 1, (di + dj) % 2 ? '#1b2340' : '#161c33');
+    }
+    // sprite
+    const spr = { w, h, pal: null, data: null, anim: propAnim };
+    // construir pal/data al vuelo desde cells
+    const palMap = new Map(), pal = [], data = new Array(w * h).fill(0);
+    for (let k = 0; k < w * h; k++) { const col = cells[k]; if (!col) continue; let idx = palMap.get(col); if (idx == null) { pal.push(col); idx = pal.length; palMap.set(col, idx); } data[k] = idx; }
+    spr.pal = pal; spr.data = data;
+    plzDrawCustomSprite(pctx, spr, cx, base, now || 900);
   }
-  const redraw = () => { drawGrid(); drawPreview(); };
-  sizeGrid(); redraw();
+  const redraw = () => { drawGrid(); drawPreview(performance.now()); };
+
+  // redimensiona conservando el dibujo (centrado en horizontal, apoyado abajo)
+  function resize(nbw, nbh) {
+    const ow = w, oh = h, oc = cells;
+    bw = nbw; bh = nbh; w = bw * SPR_BLK; h = bh * SPR_BLK;
+    const nc = new Array(w * h).fill(null);
+    const dx = Math.floor((w - ow) / 2), dy = h - oh;   // centrar en x, alinear abajo
+    for (let y = 0; y < oh; y++) for (let x = 0; x < ow; x++) { const v = oc[y * ow + x]; if (!v) continue; const nx = x + dx, ny = y + dy; if (nx >= 0 && nx < w && ny >= 0 && ny < h) nc[ny * w + nx] = v; }
+    cells = nc; undo.length = 0; redo.length = 0; updoBtns(); sizeGrid(); renderSteps(); renderFoot(); redraw();
+  }
+  const renderSteps = () => {
+    const mk = (host, val, set) => { host.innerHTML = ''; for (let n = 1; n <= 4; n++) { const b = el(`<button class="spr-step ${n === val ? 'on' : ''}">${n}</button>`); b.onclick = () => { if (n !== (host.id === 'sprBW' ? bw : bh)) set(n); }; host.appendChild(b); } };
+    mk(m.querySelector('#sprBW'), bw, (n) => resize(n, bh));
+    mk(m.querySelector('#sprBH'), bh, (n) => resize(bw, n));
+  };
+  const renderFoot = () => { m.querySelector('#sprFoot').textContent = bw > 1 ? `Ocupa ${bw} casillas del suelo · ${w}×${h}px` : `Ocupa 1 casilla · ${w}×${h}px`; };
+  renderSteps(); renderFoot(); sizeGrid(); redraw();
 
   function floodFill(gx, gy, col) {
     const target = cells[gy * w + gx] || null; if (target === col) return;
     const st = [[gx, gy]];
     while (st.length) { const [x, y] = st.pop(); if (x < 0 || y < 0 || x >= w || y >= h) continue; const k = y * w + x; if ((cells[k] || null) !== target) continue; cells[k] = col; st.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]); }
   }
-  const selectSwatch = () => m.querySelectorAll('.spr-sw').forEach(b => b.classList.toggle('on', b.dataset.c === curColor));
-  function apply(gx, gy) {
+  const selectSwatch = () => m.querySelectorAll('.spr-sw[data-c]').forEach(b => b.classList.toggle('on', b.dataset.c === curColor));
+  function put(gx, gy) {
     if (gx < 0 || gy < 0 || gx >= w || gy >= h) return;
     const k = gy * w + gx;
-    if (tool === 'pick') { if (cells[k]) { curColor = cells[k]; selectSwatch(); } return; }
     if (tool === 'erase') cells[k] = null;
     else if (tool === 'fill') floodFill(gx, gy, curColor);
     else cells[k] = curColor;
+  }
+  function apply(gx, gy) {
+    if (gx < 0 || gy < 0 || gx >= w || gy >= h) return;
+    if (tool === 'pick') { const c = cells[gy * w + gx]; if (c) { curColor = c; selectSwatch(); } return; }
+    put(gx, gy);
+    if (mirror) put(w - 1 - gx, gy);   // simetría horizontal
     redraw();
   }
   const cellAt = (ev) => { const r = gcv.getBoundingClientRect(); return [Math.floor((ev.clientX - r.left) / r.width * w), Math.floor((ev.clientY - r.top) / r.height * h)]; };
-  let painting = false;
-  gcv.addEventListener('pointerdown', (ev) => { ev.preventDefault(); painting = true; try { gcv.setPointerCapture(ev.pointerId); } catch (_) {} const [x, y] = cellAt(ev); apply(x, y); });
+  let painting = false, stroked = false;
+  gcv.addEventListener('pointerdown', (ev) => { ev.preventDefault(); if (tool !== 'pick') { snapshot(); stroked = true; } painting = true; try { gcv.setPointerCapture(ev.pointerId); } catch (_) {} const [x, y] = cellAt(ev); apply(x, y); });
   gcv.addEventListener('pointermove', (ev) => { if (!painting || tool === 'fill' || tool === 'pick') return; const [x, y] = cellAt(ev); apply(x, y); });
-  gcv.addEventListener('pointerup', () => { painting = false; });
-  gcv.addEventListener('pointercancel', () => { painting = false; });
+  const endStroke = () => { painting = false; if (stroked) { stroked = false; drawPreview(performance.now()); } };
+  gcv.addEventListener('pointerup', endStroke);
+  gcv.addEventListener('pointercancel', endStroke);
 
-  m.querySelectorAll('.spr-sw').forEach(b => b.onclick = () => { curColor = b.dataset.c; if (tool === 'erase' || tool === 'pick' || tool === 'fill') { tool = 'paint'; m.querySelectorAll('.spr-tool').forEach(t => t.classList.toggle('on', t.dataset.tool === 'paint')); } selectSwatch(); haptic(4); });
-  m.querySelectorAll('.spr-tool[data-tool]').forEach(b => b.onclick = () => { tool = b.dataset.tool; m.querySelectorAll('.spr-tool').forEach(t => t.classList.toggle('on', t === b)); haptic(4); });
-  m.querySelector('#sprClear').onclick = () => { if (cells.some(Boolean) && !confirm('¿Vaciar el lienzo?')) return; cells = new Array(w * h).fill(null); redraw(); };
-  m.querySelectorAll('.spr-size').forEach(b => b.onclick = () => {
-    const ns = +b.dataset.s; if (ns === w) return;
-    if (cells.some(Boolean) && !confirm('Cambiar el tamaño vaciará el dibujo. ¿Seguir?')) return;
-    w = h = ns; cells = new Array(w * h).fill(null); m.querySelectorAll('.spr-size').forEach(x => x.classList.toggle('on', x === b)); sizeGrid(); redraw();
-  });
-  m.querySelector('#sprSit').onchange = (e) => { propSit = e.target.checked; };
+  m.querySelectorAll('.spr-sw[data-c]').forEach(b => b.onclick = () => { curColor = b.dataset.c; if (tool === 'erase' || tool === 'pick' || tool === 'fill') setTool('paint'); selectSwatch(); haptic(4); });
+  m.querySelector('#sprPick').oninput = (e) => { curColor = e.target.value; m.querySelectorAll('.spr-sw[data-c]').forEach(x => x.classList.remove('on')); if (tool === 'erase' || tool === 'pick') setTool('paint'); haptic(4); };
+  function setTool(t) { tool = t; m.querySelectorAll('.spr-tool[data-tool]').forEach(x => x.classList.toggle('on', x.dataset.tool === t)); }
+  m.querySelectorAll('.spr-tool[data-tool]').forEach(b => b.onclick = () => { setTool(b.dataset.tool); haptic(4); });
+  m.querySelector('#sprMirror').onclick = () => { mirror = !mirror; m.querySelector('#sprMirror').classList.toggle('on', mirror); haptic(5); drawGrid(); };
+  m.querySelector('#sprUndo').onclick = () => { if (!undo.length) return; redo.push(cells.slice()); cells = undo.pop(); updoBtns(); redraw(); haptic(5); };
+  m.querySelector('#sprRedo').onclick = () => { if (!redo.length) return; undo.push(cells.slice()); cells = redo.pop(); updoBtns(); redraw(); haptic(5); };
+  m.querySelector('#sprClear').onclick = () => { if (cells.some(Boolean) && !confirm('¿Vaciar el lienzo?')) return; snapshot(); cells = new Array(w * h).fill(null); redraw(); };
+  m.querySelector('#sprSit').onchange = (e) => { propSit = e.target.checked; drawPreview(performance.now()); };
   m.querySelector('#sprSolid').onchange = (e) => { propSolid = e.target.checked; };
-  m.querySelectorAll('.spr-abtn').forEach(b => b.onclick = () => { propAnim = b.dataset.a; m.querySelectorAll('.spr-abtn').forEach(x => x.classList.toggle('on', x === b)); haptic(4); });
+  m.querySelectorAll('.spr-abtn').forEach(b => b.onclick = () => { propAnim = b.dataset.a; m.querySelectorAll('.spr-abtn').forEach(x => x.classList.toggle('on', x === b)); haptic(4); drawPreview(performance.now()); });
 
   function buildSprite() {
     const palMap = new Map(), pal = [], data = new Array(w * h).fill(0);
     for (let k = 0; k < w * h; k++) { const col = cells[k]; if (!col) continue; let idx = palMap.get(col); if (idx == null) { pal.push(col); idx = pal.length; palMap.set(col, idx); } data[k] = idx; }
-    return { w, h, pal, data, solid: propSolid, sit: propSit, anim: propAnim };
+    return { v: 2, w, h, pal, data, fw: bw, fd: 1, solid: propSolid, sit: propSit, anim: propAnim };
   }
   const pubBtn = m.querySelector('#sprPublish');
   pubBtn.onclick = async () => {
@@ -5150,12 +5258,13 @@ function openPlazaSpriteEditor(onDone) {
     try {
       const { data: item, error } = await sb.rpc('plaza_create_item', { p_name: name, p_price: price, p_category: cat, p_sprite: sprite });
       if (error) throw error;
-      PLZ_CUSTOM[item] = { w, h, pal: sprite.pal, data: sprite.data, solid: propSolid, sit: propSit, anim: propAnim, name, category: cat };
+      PLZ_CUSTOM[item] = { w, h, pal: sprite.pal, data: sprite.data, fw: bw, fd: 1, solid: propSolid, sit: propSit, anim: propAnim, name, category: cat };
       PLZ_ITEM_NAME[item] = name;
       haptic(14); toast('¡«' + name + '» publicado en la tienda!');
       m.remove(); onDone && onDone();
     } catch (e) { pubBtn.disabled = false; pubBtn.textContent = 'Publicar en la tienda'; toast((e && e.message) || 'No se pudo publicar'); }
   };
+  updoBtns();
 }
 
 // selector de pista para pinchar en la Plaza (busca por título)
@@ -6321,15 +6430,30 @@ function plzDrawCustomSprite(c, sp, cx, base, now) {
   c.restore();
 }
 
+// objeto custom multi-casilla: sombra por cada baldosa + sprite centrado sobre la huella,
+// apoyado en el frente de la casilla más cercana al espectador
+function plzDrawCustom(f, sp, now) {
+  const c = plaza.ctx;
+  const fw = sp.fw || 1, fd = sp.fd || 1;
+  for (let di = 0; di < fw; di++) for (let dj = 0; dj < fd; dj++) {
+    const p = plzIso(f.i + di, f.j + dj);
+    plzDiamond(c, Math.round(p.x), Math.round(p.y) + 2, PLZ.TW - 8, PLZ.TH - 4, 'rgba(0,0,0,.24)');
+  }
+  const cx = Math.round(((f.i + (fw - 1) / 2) - (f.j + (fd - 1) / 2)) * PLZ.TW / 2);   // centro horizontal de la huella
+  const front = plzIso(f.i + fw - 1, f.j + fd - 1);
+  const base = Math.round(front.y + PLZ.TH / 2);
+  plzDrawCustomSprite(c, sp, cx, base, now);
+}
+
 function plzDrawFurn(f, now) {
   const c = plaza.ctx;
+  // objeto custom: se dibuja con su propia huella (puede ocupar varias casillas)
+  if (PLZ_CUSTOM[f.t]) { plzDrawCustom(f, PLZ_CUSTOM[f.t], now); return; }
+
   const p = plzIso(f.i, f.j);
   const cx = Math.round(p.x), base = Math.round(p.y + PLZ.TH / 2);
   // sombra de contacto bajo cada mueble (da volumen y asienta la pieza en el suelo)
   if (f.t !== 'portal' && f.t !== 'pool') plzDiamond(c, cx, base - Math.round(PLZ.TH / 2) + 2, PLZ.TW - 8, PLZ.TH - 4, 'rgba(0,0,0,.28)');
-
-  // objeto custom: dibuja el sprite de píxeles centrado, apoyado en el frente de la baldosa
-  if (PLZ_CUSTOM[f.t]) { plzDrawCustomSprite(c, PLZ_CUSTOM[f.t], cx, base, now); return; }
 
   if (f.t === 'spk') {
     plzRect(c, cx - 7, base - 30, 14, 30, '#0c101f', '#05070f');
@@ -6776,7 +6900,7 @@ function plzDraw(now) {
 
   // mobiliario + avatares, ordenados por profundidad (pintor)
   const items = [];
-  for (const f of plzR.furn) items.push({ d: f.i + f.j - 0.15, draw: () => plzDrawFurn(f, now) });
+  for (const f of plzR.furn) { const ft = plzFurnFoot(f.t); items.push({ d: f.i + f.j + (ft.fw - 1) + (ft.fd - 1) - 0.15, draw: () => plzDrawFurn(f, now) }); }
   for (const e of plaza.ents.values()) items.push({ d: e.x + e.y, draw: () => plzDrawAvatar(e, now) });
   items.sort((a, b) => a.d - b.d);
   for (const it of items) it.draw();
