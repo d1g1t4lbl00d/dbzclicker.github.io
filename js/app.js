@@ -5116,8 +5116,11 @@ async function openPlazaShop(onBuy) {
     <div class="modal-body">
       <div class="shop-bal"><span class="coin"></span> <b id="shopCoins">${plzCoins()}</b> monedas <span class="shop-tip">· gánalas jugando</span><button class="btn sm ghost shop-inv-btn" id="shopInv">Mi inventario</button></div>
       ${canCreate ? `<button class="btn primary" id="shopCreate" style="width:100%;margin:0 0 12px;display:flex;align-items:center;justify-content:center;gap:8px"><svg style="width:16px;height:16px" fill="none" stroke="#fff"><use href="#i-palette"/></svg> Crear objeto (dibujar sprite)</button>` : ''}
+      <div class="convo-search shop-search"><svg fill="none" stroke="currentColor"><use href="#i-search"/></svg><input id="shopSearch" type="text" placeholder="Buscar objeto…" autocomplete="off"></div>
+      <div class="shop-cats" id="shopCats"></div>
       <div id="shopGrid" class="shop-grid"><div class="pr-empty">Cargando…</div></div>
     </div>`);
+  m.querySelector('.modal')?.classList.add('shop-modal');
   m.querySelector('#shopInv').onclick = () => { m.remove(); openPlazaInventory(); };
   const grid = m.querySelector('#shopGrid');
   await plzLoadCustomItems(true);   // que las miniaturas custom estén disponibles y frescas
@@ -5132,12 +5135,22 @@ async function openPlazaShop(onBuy) {
     try { const { data } = await sb.from('plaza_shop').select('sprite').eq('item', it.item).single(); sprite = data && data.sprite; } catch (_) {}
     if (!sprite) { try { sprite = plzRasterizeToSprite(it.item); } catch (_) {} }
     if (!sprite) { toast('No se pudo cargar el objeto'); return; }
-    openPlazaSpriteEditor(async () => { await plzLoadCustomItems(true); await load(); render(); onBuy && onBuy(); if (plzR) plzRecompute(); },
+    openPlazaSpriteEditor(async () => { await plzLoadCustomItems(true); await load(); renderCats(); render(); onBuy && onBuy(); if (plzR) plzRecompute(); },
       { item: it.item, name: it.name, price: it.price, category: it.category, sprite });
+  };
+  let curCat = 'Todos', searchTerm = '';
+  const renderCats = () => {
+    const cats = ['Todos', ...Array.from(new Set(items.map(it => it.category || 'Deco')))];
+    const host = m.querySelector('#shopCats'); if (!host) return;
+    host.innerHTML = cats.map(c => `<button class="shop-cat ${c === curCat ? 'on' : ''}" data-c="${esc(c)}">${esc(c)}</button>`).join('');
+    host.querySelectorAll('.shop-cat').forEach(b => b.onclick = () => { curCat = b.dataset.c; renderCats(); render(); const on = host.querySelector('.shop-cat.on'); if (on) on.scrollIntoView({ inline: 'center', block: 'nearest' }); });
   };
   const render = () => {
     grid.innerHTML = '';
-    items.forEach(it => {
+    const term = searchTerm.trim().toLowerCase();
+    const list = items.filter(it => (curCat === 'Todos' || (it.category || 'Deco') === curCat) && (!term || (it.name || '').toLowerCase().includes(term)));
+    if (!list.length) { grid.innerHTML = '<div class="pr-empty">No hay objetos que coincidan.</div>'; return; }
+    list.forEach(it => {
       const free = it.price === 0 || PLZ_FREE_ITEMS.has(it.item);
       const qty = plzInv()[it.item] || 0;
       const mine = it.custom && it.created_by && it.created_by === state.user.id;
@@ -5169,15 +5182,16 @@ async function openPlazaShop(onBuy) {
       const delBtn = card.querySelector('.pobj-del');
       if (delBtn) delBtn.onclick = async () => {
         if (!confirm('¿Borrar «' + it.name + '» de la tienda? Los que ya lo compraron lo conservan.')) return;
-        try { const { error } = await sb.rpc('plaza_delete_item', { p_item: it.item }); if (error) throw error; delete PLZ_CUSTOM[it.item]; await load(); render(); haptic(10); toast('Objeto borrado'); onBuy && onBuy(); }
+        try { const { error } = await sb.rpc('plaza_delete_item', { p_item: it.item }); if (error) throw error; delete PLZ_CUSTOM[it.item]; await load(); renderCats(); render(); haptic(10); toast('Objeto borrado'); onBuy && onBuy(); }
         catch (e) { toast((e && e.message) || 'No se pudo borrar'); }
       };
       grid.appendChild(card);
     });
   };
-  render();
+  renderCats(); render();
+  { const s = m.querySelector('#shopSearch'); if (s) s.oninput = () => { searchTerm = s.value; render(); }; }
   const createBtn = m.querySelector('#shopCreate');
-  if (createBtn) createBtn.onclick = () => openPlazaSpriteEditor(async () => { await plzLoadCustomItems(true); await load(); render(); onBuy && onBuy(); });
+  if (createBtn) createBtn.onclick = () => openPlazaSpriteEditor(async () => { await plzLoadCustomItems(true); await load(); renderCats(); render(); onBuy && onBuy(); });
 }
 
 // inventario del usuario: objetos comprados con miniaturas y cantidad
@@ -5202,6 +5216,7 @@ function openPlazaInventory(onGo) {
       : `<div class="pr-empty">${editing ? 'No te queda ningún objeto por colocar. Recoge alguno de la sala o compra más en la Tienda.' : 'Aún no tienes objetos. Cómpralos en la Tienda con las monedas que ganes jugando.'}</div>`}
       <button class="btn primary" id="invShop" style="width:100%;margin-top:12px;display:flex;align-items:center;justify-content:center;gap:8px"><svg style="width:16px;height:16px" fill="none" stroke="#fff"><use href="#i-cart"/></svg> Ir a la Tienda</button>
     </div>`);
+  m.querySelector('.modal')?.classList.add('shop-modal');
   m.querySelectorAll('.shop-card[data-t]').forEach(card => {
     try { card.querySelector('.shop-thumb').appendChild(plzFurnThumb(card.dataset.t, 68)); } catch (_) {}
     if (editing) card.onclick = () => {
