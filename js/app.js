@@ -4104,6 +4104,29 @@ const PLZ = { COLS: 10, ROWS: 10, TW: 32, TH: 16, SPEED: 3.2, WH: 34, PADX: 10, 
 const PLZ_SOLID = new Set(['spk', 'tree', 'lamp', 'fountain', 'djbooth', 'plant', 'photobooth', 'vending', 'crate', 'table', 'bar', 'pool', 'rack', 'neon', 'arcade', 'sea', 'palm', 'umbrella', 'hoop', 'tv', 'books', 'cactus', 'barrel', 'grill', 'disco', 'signneon', 'bonfire', 'statue', 'jukebox', 'poster', 'trophy', 'bush', 'locker', 'candle', 'lava', 'clock']);
 const PLZ_DANCE_COLS = ['rgba(39,169,255,', 'rgba(110,45,245,', 'rgba(224,80,122,', 'rgba(45,200,120,'];
 
+// --- objetos custom: sprites de píxeles dibujados por el admin y publicados en la tienda ---
+// registro item-id -> { w, h, pal:[hex], data:[índice de paleta por celda, 0=transparente], solid, sit, anim, name, category }
+const PLZ_CUSTOM = {};
+let plzCustomLoaded = false;
+async function plzLoadCustomItems(force) {
+  if (plzCustomLoaded && !force) return;
+  try {
+    const { data } = await sb.from('plaza_shop').select('item,name,category,sprite').eq('custom', true);
+    (data || []).forEach(r => {
+      const s = r.sprite || {};
+      PLZ_CUSTOM[r.item] = {
+        w: s.w || 16, h: s.h || 16, pal: Array.isArray(s.pal) ? s.pal : [], data: Array.isArray(s.data) ? s.data : [],
+        solid: !!s.solid, sit: !!s.sit, anim: s.anim || 'none', name: r.name, category: r.category || 'Deco',
+      };
+      PLZ_ITEM_NAME[r.item] = r.name;
+    });
+    plzCustomLoaded = true;
+  } catch (_) {}
+}
+// colisión y asiento son propiedades del objeto (custom) o del tipo base
+function plzIsSolid(t) { const cu = PLZ_CUSTOM[t]; return cu ? cu.solid : PLZ_SOLID.has(t); }
+function plzIsSeat(f) { const cu = PLZ_CUSTOM[f.t]; if (cu) return cu.sit; return f.t === 'bench' || f.t === 'stool' || f.t === 'sofa' || f.t === 'couch'; }
+
 // --- SALAS: cada una con su tema, mobiliario y portales a otras salas ---
 const PLZ_ROOMS = {
   plaza: {
@@ -4218,8 +4241,8 @@ function plzComputeRoom(id) {
   const furn = custom ? custom.furn : def.furn;
   return {
     id, def, furn,
-    blocked: new Set(furn.filter(f => PLZ_SOLID.has(f.t)).map(f => f.i + ',' + f.j)),
-    seats: new Map(furn.filter(f => f.t === 'bench' || f.t === 'stool' || f.t === 'sofa' || f.t === 'couch').map(f => [f.i + ',' + f.j, f])),
+    blocked: new Set(furn.filter(f => plzIsSolid(f.t)).map(f => f.i + ',' + f.j)),
+    seats: new Map(furn.filter(f => plzIsSeat(f)).map(f => [f.i + ',' + f.j, f])),
     portals: new Map(furn.filter(f => f.t === 'portal').map(f => [f.i + ',' + f.j, f])),
     dance: def.dance || [],
   };
@@ -4228,8 +4251,8 @@ function plzComputeRoom(id) {
 function plzRecompute() {
   if (!plzR) return;
   const furn = plzR.furn;
-  plzR.blocked = new Set(furn.filter(f => PLZ_SOLID.has(f.t)).map(f => f.i + ',' + f.j));
-  plzR.seats = new Map(furn.filter(f => f.t === 'bench' || f.t === 'stool' || f.t === 'sofa' || f.t === 'couch').map(f => [f.i + ',' + f.j, f]));
+  plzR.blocked = new Set(furn.filter(f => plzIsSolid(f.t)).map(f => f.i + ',' + f.j));
+  plzR.seats = new Map(furn.filter(f => plzIsSeat(f)).map(f => [f.i + ',' + f.j, f]));
   plzR.portals = new Map(furn.filter(f => f.t === 'portal').map(f => [f.i + ',' + f.j, f]));
 }
 
@@ -4419,6 +4442,8 @@ async function renderPlaza() {
   ctx.imageSmoothingEnabled = false;
   plaza = { canvas, ctx, ents: new Map([[state.user.id, me]]), me, raf: 0, last: performance.now(), target: null, ox: artW / 2, oy: PLZ.PADT, floor: null, chan: null, roomId: startRoom };
 
+  // catálogo de objetos custom (para colisión, asientos y render) antes de entrar
+  await plzLoadCustomItems();
   // canal de conteo (badge) + entrar en la sala inicial
   initPlazaWatch();
   try { plazaChan.track({ room: startRoom }); } catch (_) {}   // aparece en el conteo del mundo
@@ -4697,6 +4722,11 @@ const PLZ_EDIT_ITEMS = [
   { t: 'poster', n: 'Cuadro', c: 'Deco' }, { t: 'trophy', n: 'Trofeo', c: 'Deco' }, { t: 'locker', n: 'Taquilla', c: 'Deco' }, { t: 'clock', n: 'Reloj', c: 'Deco' },
 ];
 const PLZ_CATS = ['Asientos', 'Mesas', 'Plantas', 'Luces', 'Música', 'Deco', 'Agua', 'Juego'];
+// catálogo editable = muebles base + objetos custom publicados (colocados por categoría)
+function plzAllEditItems() {
+  const custom = Object.keys(PLZ_CUSTOM).map(t => ({ t, n: PLZ_CUSTOM[t].name || t, c: PLZ_CATS.includes(PLZ_CUSTOM[t].category) ? PLZ_CUSTOM[t].category : 'Deco' }));
+  return PLZ_EDIT_ITEMS.concat(custom);
+}
 const PLZ_FLOORS = [
   { a: '#161c33', b: '#121729', w: '#0d1122' }, { a: '#241b12', b: '#1c150e', w: '#161016' },
   { a: '#14182b', b: '#0f1322', w: '#0a0d18' }, { a: '#1a1030', b: '#140b26', w: '#0d0720' },
@@ -4776,7 +4806,7 @@ function plzEnterEdit() {
   const hint = document.querySelector('.plaza-hint'); if (hint) hint.style.display = 'none';
   const old = document.getElementById('plazaEditor'); if (old) old.remove();
   const def = plzR.def;
-  const ownedIn = (c) => PLZ_EDIT_ITEMS.filter(it => it.c === c && plzHasItem(it.t));
+  const ownedIn = (c) => plzAllEditItems().filter(it => it.c === c && plzHasItem(it.t));
   let cat = PLZ_CATS.find(c => ownedIn(c).length) || 'Asientos';
   const first = ownedIn(cat)[0]; plaza.editTool = first ? first.t : 'plant';
 
@@ -4904,15 +4934,19 @@ function plzFurnThumb(type, px) {
 }
 
 async function openPlazaShop(onBuy) {
+  const admin = !!(state.profile && state.profile.is_admin);
   const m = openModal(`<div class="modal-head"><h3><svg class="mh-ic" fill="none" stroke="currentColor"><use href="#i-cart"/></svg> Tienda de objetos</h3><button class="close">&times;</button></div>
     <div class="modal-body">
       <div class="shop-bal"><span class="coin"></span> <b id="shopCoins">${plzCoins()}</b> monedas <span class="shop-tip">· gánalas jugando</span><button class="btn sm ghost shop-inv-btn" id="shopInv">Mi inventario</button></div>
+      ${admin ? `<button class="btn primary" id="shopCreate" style="width:100%;margin:0 0 12px;display:flex;align-items:center;justify-content:center;gap:8px"><svg style="width:16px;height:16px" fill="none" stroke="#fff"><use href="#i-palette"/></svg> Crear objeto (dibujar sprite)</button>` : ''}
       <div id="shopGrid" class="shop-grid"><div class="pr-empty">Cargando…</div></div>
     </div>`);
   m.querySelector('#shopInv').onclick = () => { m.remove(); openPlazaInventory(); };
   const grid = m.querySelector('#shopGrid');
+  await plzLoadCustomItems(true);   // que las miniaturas custom estén disponibles y frescas
   let items = [];
-  try { const { data } = await sb.from('plaza_shop').select('item,name,price,category,sort').order('sort'); items = data || []; } catch (_) {}
+  const load = async () => { try { const { data } = await sb.from('plaza_shop').select('item,name,price,category,sort,custom').order('sort'); items = data || []; } catch (_) {} };
+  await load();
   if (!items.length) { grid.innerHTML = '<div class="pr-empty">No se pudo cargar la tienda.</div>'; return; }
   const render = () => {
     grid.innerHTML = '';
@@ -4921,6 +4955,7 @@ async function openPlazaShop(onBuy) {
       const qty = plzInv()[it.item] || 0;
       const card = el(`<div class="shop-card ${qty > 0 ? 'owned' : ''}">
         ${qty > 0 ? `<span class="shop-qty">×${qty}</span>` : ''}
+        ${admin && it.custom ? `<button class="shop-del" title="Borrar objeto" aria-label="Borrar"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg></button>` : ''}
         <div class="shop-thumb"></div>
         <div class="shop-name">${esc(it.name)}</div>
         <button class="shop-buy" ${free ? 'disabled' : ''}>${free ? 'Gratis' : `<span class="coin sm"></span> ${it.price}`}</button>
@@ -4939,10 +4974,18 @@ async function openPlazaShop(onBuy) {
           render(); onBuy && onBuy();
         } catch (e) { buyBtn.disabled = false; toast((e && e.message) || 'No se pudo comprar'); }
       };
+      const delBtn = card.querySelector('.shop-del');
+      if (delBtn) delBtn.onclick = async () => {
+        if (!confirm('¿Borrar «' + it.name + '» de la tienda? Los que ya lo compraron lo conservan.')) return;
+        try { const { error } = await sb.rpc('plaza_delete_item', { p_item: it.item }); if (error) throw error; delete PLZ_CUSTOM[it.item]; await load(); render(); haptic(10); toast('Objeto borrado'); onBuy && onBuy(); }
+        catch (e) { toast((e && e.message) || 'No se pudo borrar'); }
+      };
       grid.appendChild(card);
     });
   };
   render();
+  const createBtn = m.querySelector('#shopCreate');
+  if (createBtn) createBtn.onclick = () => openPlazaSpriteEditor(async () => { await plzLoadCustomItems(true); await load(); render(); onBuy && onBuy(); });
 }
 
 // inventario del usuario: objetos comprados con miniaturas y cantidad
@@ -4959,6 +5002,135 @@ function openPlazaInventory(onGo) {
     </div>`);
   m.querySelectorAll('.shop-card[data-t]').forEach(card => { try { card.querySelector('.shop-thumb').appendChild(plzFurnThumb(card.dataset.t, 68)); } catch (_) {} });
   m.querySelector('#invShop').onclick = () => { m.remove(); openPlazaShop(onGo); };
+}
+
+// ===================== EDITOR DE SPRITES (solo admin) =====================
+// Dibuja un objeto en una rejilla de píxeles, le asigna propiedades y lo publica en la tienda.
+const SPR_PAL = ['#000000', '#0a0e1c', '#1b2542', '#3d4a78', '#8f99ad', '#e8ecf6', '#ffffff', '#27a9ff', '#8fc0ff', '#6e2df5', '#b06eff', '#e0507a', '#ff5d5d', '#f0a13e', '#ffd23e', '#2dc878', '#12c2c2', '#8a5560', '#c9a86a', '#3a2814'];
+const SPR_SIZES = [12, 16, 20, 24];
+function openPlazaSpriteEditor(onDone) {
+  if (!state.profile || !state.profile.is_admin) { toast('Solo el admin puede crear objetos'); return; }
+  let w = 16, h = 16, cells = new Array(w * h).fill(null);
+  let curColor = SPR_PAL[7], tool = 'paint';
+  let propSit = false, propSolid = true, propAnim = 'none';
+
+  const m = openModal(`<div class="modal-head"><h3><svg class="mh-ic" fill="none" stroke="currentColor"><use href="#i-palette"/></svg> Crear objeto</h3><button class="close">&times;</button></div>
+    <div class="modal-body spr-body">
+      <div class="spr-stage">
+        <div class="spr-canvas-wrap"><canvas id="sprCv" class="spr-canvas"></canvas></div>
+        <div class="spr-side">
+          <div class="spr-preview"><canvas id="sprPrev" width="104" height="104"></canvas><span class="spr-preview-lbl">Vista</span></div>
+          <div class="spr-tools" id="sprTools">
+            <button class="spr-tool on" data-tool="paint" title="Pincel"><svg fill="none" stroke="currentColor"><use href="#i-brush"/></svg></button>
+            <button class="spr-tool" data-tool="fill" title="Relleno"><svg fill="none" stroke="currentColor"><use href="#i-bucket"/></svg></button>
+            <button class="spr-tool" data-tool="pick" title="Cuentagotas"><svg fill="none" stroke="currentColor"><use href="#i-eyedropper"/></svg></button>
+            <button class="spr-tool" data-tool="erase" title="Borrador"><svg fill="none" stroke="currentColor"><use href="#i-eraser"/></svg></button>
+            <button class="spr-tool spr-clear" id="sprClear" title="Vaciar"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg></button>
+          </div>
+        </div>
+      </div>
+      <div class="spr-pal" id="sprPal">${SPR_PAL.map((c, i) => `<button class="spr-sw ${i === 7 ? 'on' : ''}" data-c="${c}" style="background:${c}" aria-label="Color"></button>`).join('')}</div>
+      <div class="spr-row spr-sizes"><span class="spr-lbl">Tamaño</span>${SPR_SIZES.map(s => `<button class="spr-size ${s === 16 ? 'on' : ''}" data-s="${s}">${s}×${s}</button>`).join('')}</div>
+      <div class="spr-props">
+        <label class="spr-prop"><input type="checkbox" id="sprSit"> <span><b>Sentable</b><small>Los avatares pueden sentarse encima</small></span></label>
+        <label class="spr-prop"><input type="checkbox" id="sprSolid" checked> <span><b>Sólido</b><small>Bloquea el paso (desactívalo para que sea pisable)</small></span></label>
+        <div class="spr-prop spr-anim"><span><b>Animación / luz</b></span><div class="spr-anim-btns" id="sprAnim">
+          <button class="spr-abtn on" data-a="none">Ninguna</button><button class="spr-abtn" data-a="glow">Brillo</button><button class="spr-abtn" data-a="blink">Parpadeo</button><button class="spr-abtn" data-a="float">Flotar</button>
+        </div></div>
+      </div>
+      <div class="spr-meta">
+        <input id="sprName" class="spr-input" maxlength="40" placeholder="Nombre del objeto">
+        <div class="spr-meta-row">
+          <label class="spr-mlbl"><span class="coin sm"></span><input id="sprPrice" class="spr-input spr-price" type="number" min="0" step="5" value="20" placeholder="Precio"></label>
+          <select id="sprCat" class="spr-input spr-cat">${PLZ_CATS.map(c => `<option value="${c}"${c === 'Deco' ? ' selected' : ''}>${c}</option>`).join('')}</select>
+        </div>
+      </div>
+      <button class="btn primary spr-publish" id="sprPublish">Publicar en la tienda</button>
+    </div>`);
+
+  const gcv = m.querySelector('#sprCv'), gctx = gcv.getContext('2d');
+  const pcv = m.querySelector('#sprPrev'), pctx = pcv.getContext('2d'); pctx.imageSmoothingEnabled = false;
+  let cs = 18;
+  const sizeGrid = () => { cs = Math.max(8, Math.floor(288 / w)); gcv.width = w * cs; gcv.height = h * cs; };
+
+  function drawGrid() {
+    gctx.clearRect(0, 0, gcv.width, gcv.height);
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+      const col = cells[y * w + x];
+      gctx.fillStyle = col || ((x + y) % 2 ? '#1a2036' : '#141a2c');
+      gctx.fillRect(x * cs, y * cs, cs, cs);
+    }
+    gctx.strokeStyle = 'rgba(255,255,255,.06)'; gctx.lineWidth = 1;
+    for (let x = 0; x <= w; x++) { gctx.beginPath(); gctx.moveTo(x * cs + .5, 0); gctx.lineTo(x * cs + .5, h * cs); gctx.stroke(); }
+    for (let y = 0; y <= h; y++) { gctx.beginPath(); gctx.moveTo(0, y * cs + .5); gctx.lineTo(w * cs, y * cs + .5); gctx.stroke(); }
+  }
+  function drawPreview() {
+    pctx.clearRect(0, 0, pcv.width, pcv.height);
+    const sc = Math.max(1, Math.floor(Math.min((pcv.width - 14) / w, (pcv.height - 20) / h)));
+    const sw = w * sc, sh = h * sc, ox = Math.round((pcv.width - sw) / 2), oy = pcv.height - sh - 8;
+    pctx.fillStyle = 'rgba(0,0,0,.28)'; pctx.beginPath(); pctx.ellipse(pcv.width / 2, pcv.height - 8, sw * 0.42, sc * 1.3, 0, 0, 7); pctx.fill();
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const col = cells[y * w + x]; if (!col) continue; pctx.fillStyle = col; pctx.fillRect(ox + x * sc, oy + y * sc, sc, sc); }
+  }
+  const redraw = () => { drawGrid(); drawPreview(); };
+  sizeGrid(); redraw();
+
+  function floodFill(gx, gy, col) {
+    const target = cells[gy * w + gx] || null; if (target === col) return;
+    const st = [[gx, gy]];
+    while (st.length) { const [x, y] = st.pop(); if (x < 0 || y < 0 || x >= w || y >= h) continue; const k = y * w + x; if ((cells[k] || null) !== target) continue; cells[k] = col; st.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]); }
+  }
+  const selectSwatch = () => m.querySelectorAll('.spr-sw').forEach(b => b.classList.toggle('on', b.dataset.c === curColor));
+  function apply(gx, gy) {
+    if (gx < 0 || gy < 0 || gx >= w || gy >= h) return;
+    const k = gy * w + gx;
+    if (tool === 'pick') { if (cells[k]) { curColor = cells[k]; selectSwatch(); } return; }
+    if (tool === 'erase') cells[k] = null;
+    else if (tool === 'fill') floodFill(gx, gy, curColor);
+    else cells[k] = curColor;
+    redraw();
+  }
+  const cellAt = (ev) => { const r = gcv.getBoundingClientRect(); return [Math.floor((ev.clientX - r.left) / r.width * w), Math.floor((ev.clientY - r.top) / r.height * h)]; };
+  let painting = false;
+  gcv.addEventListener('pointerdown', (ev) => { ev.preventDefault(); painting = true; try { gcv.setPointerCapture(ev.pointerId); } catch (_) {} const [x, y] = cellAt(ev); apply(x, y); });
+  gcv.addEventListener('pointermove', (ev) => { if (!painting || tool === 'fill' || tool === 'pick') return; const [x, y] = cellAt(ev); apply(x, y); });
+  gcv.addEventListener('pointerup', () => { painting = false; });
+  gcv.addEventListener('pointercancel', () => { painting = false; });
+
+  m.querySelectorAll('.spr-sw').forEach(b => b.onclick = () => { curColor = b.dataset.c; if (tool === 'erase' || tool === 'pick' || tool === 'fill') { tool = 'paint'; m.querySelectorAll('.spr-tool').forEach(t => t.classList.toggle('on', t.dataset.tool === 'paint')); } selectSwatch(); haptic(4); });
+  m.querySelectorAll('.spr-tool[data-tool]').forEach(b => b.onclick = () => { tool = b.dataset.tool; m.querySelectorAll('.spr-tool').forEach(t => t.classList.toggle('on', t === b)); haptic(4); });
+  m.querySelector('#sprClear').onclick = () => { if (cells.some(Boolean) && !confirm('¿Vaciar el lienzo?')) return; cells = new Array(w * h).fill(null); redraw(); };
+  m.querySelectorAll('.spr-size').forEach(b => b.onclick = () => {
+    const ns = +b.dataset.s; if (ns === w) return;
+    if (cells.some(Boolean) && !confirm('Cambiar el tamaño vaciará el dibujo. ¿Seguir?')) return;
+    w = h = ns; cells = new Array(w * h).fill(null); m.querySelectorAll('.spr-size').forEach(x => x.classList.toggle('on', x === b)); sizeGrid(); redraw();
+  });
+  m.querySelector('#sprSit').onchange = (e) => { propSit = e.target.checked; };
+  m.querySelector('#sprSolid').onchange = (e) => { propSolid = e.target.checked; };
+  m.querySelectorAll('.spr-abtn').forEach(b => b.onclick = () => { propAnim = b.dataset.a; m.querySelectorAll('.spr-abtn').forEach(x => x.classList.toggle('on', x === b)); haptic(4); });
+
+  function buildSprite() {
+    const palMap = new Map(), pal = [], data = new Array(w * h).fill(0);
+    for (let k = 0; k < w * h; k++) { const col = cells[k]; if (!col) continue; let idx = palMap.get(col); if (idx == null) { pal.push(col); idx = pal.length; palMap.set(col, idx); } data[k] = idx; }
+    return { w, h, pal, data, solid: propSolid, sit: propSit, anim: propAnim };
+  }
+  const pubBtn = m.querySelector('#sprPublish');
+  pubBtn.onclick = async () => {
+    const sprite = buildSprite();
+    if (!sprite.pal.length) { toast('Dibuja algo primero'); return; }
+    const name = m.querySelector('#sprName').value.trim();
+    if (!name) { toast('Ponle un nombre al objeto'); m.querySelector('#sprName').focus(); return; }
+    const price = Math.max(0, parseInt(m.querySelector('#sprPrice').value, 10) || 0);
+    const cat = m.querySelector('#sprCat').value;
+    pubBtn.disabled = true; pubBtn.textContent = 'Publicando…';
+    try {
+      const { data: item, error } = await sb.rpc('plaza_create_item', { p_name: name, p_price: price, p_category: cat, p_sprite: sprite });
+      if (error) throw error;
+      PLZ_CUSTOM[item] = { w, h, pal: sprite.pal, data: sprite.data, solid: propSolid, sit: propSit, anim: propAnim, name, category: cat };
+      PLZ_ITEM_NAME[item] = name;
+      haptic(14); toast('¡«' + name + '» publicado en la tienda!');
+      m.remove(); onDone && onDone();
+    } catch (e) { pubBtn.disabled = false; pubBtn.textContent = 'Publicar en la tienda'; toast((e && e.message) || 'No se pudo publicar'); }
+  };
 }
 
 // selector de pista para pinchar en la Plaza (busca por título)
@@ -6102,12 +6274,37 @@ function plzDrawDiscoBall(c, now) {
 }
 
 // ---- sprites pixel del mobiliario (dibujados por frame, ordenados por profundidad) ----
+// dibuja un sprite custom (rejilla w×h de índices de paleta) apoyado en (cx, base)
+function plzDrawCustomSprite(c, sp, cx, base, now) {
+  const w = sp.w, h = sp.h, pal = sp.pal, data = sp.data;
+  const x0 = cx - Math.floor(w / 2), y0 = base - h;   // base = pies del objeto en el frente de la baldosa
+  // brillo pulsante para objetos con animación de luz
+  let bob = 0;
+  if (sp.anim === 'glow') { c.save(); c.shadowColor = pal[0] || '#ffd23e'; c.shadowBlur = 3 + 3 * Math.abs(Math.sin(now / 480)); }
+  else if (sp.anim === 'blink') { c.save(); c.globalAlpha = (Math.floor(now / 420) % 2) ? 1 : 0.42; }
+  else if (sp.anim === 'float') { bob = Math.round(Math.sin(now / 620) * 2) - 2; c.save(); }
+  else c.save();
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const v = data[y * w + x] | 0;
+      if (!v) continue;                       // 0 = transparente
+      const col = pal[v - 1]; if (!col) continue;
+      c.fillStyle = col;
+      c.fillRect(x0 + x, y0 + y + bob, 1, 1);
+    }
+  }
+  c.restore();
+}
+
 function plzDrawFurn(f, now) {
   const c = plaza.ctx;
   const p = plzIso(f.i, f.j);
   const cx = Math.round(p.x), base = Math.round(p.y + PLZ.TH / 2);
   // sombra de contacto bajo cada mueble (da volumen y asienta la pieza en el suelo)
   if (f.t !== 'portal' && f.t !== 'pool') plzDiamond(c, cx, base - Math.round(PLZ.TH / 2) + 2, PLZ.TW - 8, PLZ.TH - 4, 'rgba(0,0,0,.28)');
+
+  // objeto custom: dibuja el sprite de píxeles centrado, apoyado en el frente de la baldosa
+  if (PLZ_CUSTOM[f.t]) { plzDrawCustomSprite(c, PLZ_CUSTOM[f.t], cx, base, now); return; }
 
   if (f.t === 'spk') {
     plzRect(c, cx - 7, base - 30, 14, 30, '#0c101f', '#05070f');
