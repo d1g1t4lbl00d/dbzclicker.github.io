@@ -5304,7 +5304,9 @@ function openPlazaSpriteEditor(onDone, existing) {
         </div>
       </div>
     </div>`);
-  m.classList.add('spr2-modal');
+  // openModal devuelve el backdrop; la clase de tamaño va en el .modal interior
+  m.classList.add('spr2-backdrop');
+  const modalEl = m.querySelector('.modal'); if (modalEl) modalEl.classList.add('spr2-modal');
 
   const gcv = m.querySelector('#sprCv'), gctx = gcv.getContext('2d');
   const view = m.querySelector('#sprView');
