@@ -4916,7 +4916,7 @@ async function plzSaveRoom() {
 }
 
 // ---- economía: monedas, inventario (por unidades) y tienda ----
-const PLZ_FREE_ITEMS = new Set(['plant', 'stool', 'crate']);
+const PLZ_FREE_ITEMS = new Set();   // ya no hay objetos gratis: todos cuestan monedas y son limitados
 const PLZ_ITEM_NAME = {};   // t -> nombre legible (se rellena con PLZ_EDIT_ITEMS)
 function plzCoins() { return (state.profile && state.profile.plaza_coins) || 0; }
 function plzInv() { return (state.profile && state.profile.plaza_inv) || {}; }
@@ -4998,19 +4998,23 @@ async function openPlazaShop(onBuy) {
 // inventario del usuario: objetos comprados con miniaturas y cantidad
 function openPlazaInventory(onGo) {
   const inv = plzInv();
-  const owned = Object.keys(inv).filter(k => inv[k] > 0).sort((a, b) => inv[b] - inv[a]);
   // en modo edición se pueden colocar los objetos directamente desde aquí
   const editing = !!(plaza && plaza.editing);
   // cuántos de cada tipo quedan por colocar (los ya puestos en la sala descuentan)
   const cnt = {};
   if (editing && plzR) for (const f of plzR.furn) if (f.t !== 'portal') cnt[f.t] = (cnt[f.t] || 0) + 1;
+  // unidades disponibles: en edición, el inventario menos lo ya colocado en la sala
+  const remOf = (t) => editing ? Math.max(0, (inv[t] || 0) - (cnt[t] || 0)) : (inv[t] || 0);
+  // solo se muestran objetos con unidades disponibles; los que están todos colocados
+  // desaparecen del inventario hasta que se recogen de la sala
+  const owned = Object.keys(inv).filter(k => inv[k] > 0 && remOf(k) > 0).sort((a, b) => remOf(b) - remOf(a));
   const m = openModal(`<div class="modal-head"><h3><svg class="mh-ic" fill="none" stroke="currentColor"><use href="#i-files"/></svg> Mi inventario</h3><button class="close">&times;</button></div>
     <div class="modal-body">
       <div class="shop-bal"><span class="coin"></span> <b>${plzCoins()}</b> monedas</div>
       ${editing ? '<div class="inv-tip">Toca un objeto para colocarlo en la sala.</div>' : ''}
       ${owned.length
-      ? `<div class="shop-grid">${owned.map(t => { const rem = editing ? Math.max(0, inv[t] - (cnt[t] || 0)) : inv[t]; return `<${editing ? 'button' : 'div'} class="shop-card owned${editing ? ' inv-place' : ''}${editing && rem <= 0 ? ' inv-out' : ''}" data-t="${t}"><span class="shop-qty">×${editing ? rem : inv[t]}</span><div class="shop-thumb"></div><div class="shop-name">${esc(PLZ_ITEM_NAME[t] || t)}</div>${editing ? '<span class="inv-place-lbl">Colocar</span>' : ''}</${editing ? 'button' : 'div'}>`; }).join('')}</div>`
-      : '<div class="pr-empty">Aún no tienes objetos. Cómpralos en la Tienda con las monedas que ganes jugando.</div>'}
+      ? `<div class="shop-grid">${owned.map(t => `<${editing ? 'button' : 'div'} class="shop-card owned${editing ? ' inv-place' : ''}" data-t="${t}"><span class="shop-qty">×${remOf(t)}</span><div class="shop-thumb"></div><div class="shop-name">${esc(PLZ_ITEM_NAME[t] || t)}</div>${editing ? '<span class="inv-place-lbl">Colocar</span>' : ''}</${editing ? 'button' : 'div'}>`).join('')}</div>`
+      : `<div class="pr-empty">${editing ? 'No te queda ningún objeto por colocar. Recoge alguno de la sala o compra más en la Tienda.' : 'Aún no tienes objetos. Cómpralos en la Tienda con las monedas que ganes jugando.'}</div>`}
       <button class="btn primary" id="invShop" style="width:100%;margin-top:12px;display:flex;align-items:center;justify-content:center;gap:8px"><svg style="width:16px;height:16px" fill="none" stroke="#fff"><use href="#i-cart"/></svg> Ir a la Tienda</button>
     </div>`);
   m.querySelectorAll('.shop-card[data-t]').forEach(card => {
