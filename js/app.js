@@ -4430,6 +4430,11 @@ async function renderPlaza() {
       <div class="plaza-head-actions">
         <button class="coins-chip" id="coinsChip" title="Tus monedas · toca para la tienda" aria-label="Monedas"><span class="coin"></span><b id="coinsChipN">${plzCoins()}</b></button>
         <span class="plaza-live" title="Personas aquí ahora"><span class="dot-online"></span> <b id="plazaLiveN">1</b></span>
+        <div class="plaza-zoombar" id="plazaZoomBar">
+          <button id="plzZoomOut" title="Alejar" aria-label="Alejar"><svg fill="none" stroke="currentColor"><use href="#i-zoom-out"/></svg></button>
+          <button id="plzZoomRst" title="Ajustar" aria-label="Ajustar"><svg fill="none" stroke="currentColor"><use href="#i-fit"/></svg></button>
+          <button id="plzZoomIn" title="Acercar" aria-label="Acercar"><svg fill="none" stroke="currentColor"><use href="#i-zoom-in"/></svg></button>
+        </div>
         <button class="plaza-dj" id="plazaDj" title="Poner música para la plaza"><svg fill="none" stroke="currentColor"><use href="#i-headphones"/></svg><span>DJ</span></button>
       </div>
     </div>
@@ -4697,6 +4702,24 @@ async function renderPlaza() {
   // monedas: visibles solo dentro de la plaza y sus salas
   { const cc = $('coinsChip'); if (cc) cc.onclick = () => openPlazaShop(); }
   plzUpdateCoinsHub();
+
+  // zoom del mundo (solo escritorio): escala uniforme del lienzo, el mapeo de clics
+  // se mantiene correcto porque usa getBoundingClientRect. Se navega con el scroll.
+  let pzoom = 1;
+  const wrapEl = $('plazaWrap');
+  const applyZoom = () => {
+    if (!wrapEl || !canvas) return;
+    const desktop = window.innerWidth >= 721;
+    if (!desktop || pzoom <= 1.01) { canvas.style.height = ''; canvas.style.width = ''; canvas.style.maxWidth = ''; wrapEl.classList.remove('plaza-zoomed'); pzoom = Math.max(1, pzoom); return; }
+    wrapEl.classList.add('plaza-zoomed');
+    const baseH = wrapEl.clientHeight; canvas.style.height = Math.round(baseH * pzoom) + 'px'; canvas.style.width = 'auto'; canvas.style.maxWidth = 'none';
+  };
+  const setZoom = (z) => { pzoom = Math.max(1, Math.min(3, z)); applyZoom(); };
+  { const zi = $('plzZoomIn'), zo = $('plzZoomOut'), zr = $('plzZoomRst');
+    if (zi) zi.onclick = () => setZoom(pzoom + 0.35);
+    if (zo) zo.onclick = () => setZoom(pzoom - 0.35);
+    if (zr) zr.onclick = () => setZoom(1); }
+  canvas.addEventListener('wheel', (e) => { if (window.innerWidth < 721) return; e.preventDefault(); setZoom(pzoom + (e.deltaY < 0 ? 0.3 : -0.3)); }, { passive: false });
 
   function plzLeave() {
     try { plazaChan.untrack(); } catch (_) {}                                  // salir del conteo del mundo

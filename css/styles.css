@@ -4285,6 +4285,12 @@ html { touch-action: manipulation; }
 .plaza-head { align-items: flex-start; gap: 10px; }
 .plaza-head-title { min-width: 0; }
 .plaza-head-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+.plaza-zoombar { display: none; align-items: center; gap: 2px; padding: 2px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-2); }
+.plaza-zoombar button { width: 28px; height: 28px; display: grid; place-items: center; border: none; background: none; color: var(--ink-soft); border-radius: 999px; cursor: pointer; }
+.plaza-zoombar button:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
+.plaza-zoombar button svg { width: 15px; height: 15px; }
+@media (min-width: 721px) { .plaza-zoombar { display: flex; } }
+.plaza-view .plaza-wrap.plaza-zoomed { place-items: start; overflow: auto; cursor: grab; }
 .plaza-live {
   display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; font-weight: 800;
   color: #2dc878; background: rgba(45,200,120,.12); border: 1px solid rgba(45,200,120,.3);
