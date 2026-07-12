@@ -3317,6 +3317,26 @@ input:focus, textarea:focus, select:focus { border-color: var(--blue); box-shado
 .shop-foot .btn.sm { padding: 7px 12px; font-size: 12.5px; white-space: nowrap; }
 .shop-secure { display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 700; color: #1f9d57; margin-top: 2px; }
 .shop-secure svg { width: 12px; height: 12px; }
+.shop-prevbadge { position: absolute; left: 8px; bottom: 8px; display: inline-flex; align-items: center; gap: 4px; font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; color: #fff; background: rgba(0,0,0,.55); padding: 4px 9px 4px 7px; border-radius: 999px; }
+.shop-prevbadge svg { width: 11px; height: 11px; }
+
+/* Detalle del producto (modal) */
+.shopd-cover { position: relative; width: 100%; aspect-ratio: 16/10; border-radius: 14px; overflow: hidden; background: var(--accent-grad) center/cover no-repeat; display: grid; place-items: center; margin-bottom: 14px; }
+.shopd-cover svg { width: 46px; height: 46px; color: rgba(255,255,255,.9); }
+.shopd-body { display: flex; flex-direction: column; gap: 12px; }
+.shopd-title { font-size: 21px; font-weight: 850; color: var(--ink); line-height: 1.2; }
+.shopd-desc { font-size: 14.5px; color: var(--ink-2); line-height: 1.55; white-space: pre-wrap; word-break: break-word; }
+.shopd-prev { display: flex; align-items: center; gap: 14px; padding: 12px 14px; border-radius: 14px; border: 1px solid var(--line); background: linear-gradient(180deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent), var(--panel-2); }
+.shopd-play { flex: none; width: 48px; height: 48px; border-radius: 50%; border: none; display: grid; place-items: center; cursor: pointer; background: var(--accent-grad); color: #fff; box-shadow: 0 6px 16px rgba(0,0,0,.3); }
+.shopd-play svg { width: 22px; height: 22px; }
+.shopd-play:active { transform: scale(.94); }
+.shopd-prev-m { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.shopd-prev-m b { font-size: 13px; font-weight: 800; color: var(--ink); }
+.shopd-bar { height: 6px; border-radius: 999px; background: var(--line); overflow: hidden; }
+.shopd-barfill { height: 100%; width: 0; background: var(--accent-grad); transition: width .1s linear; }
+.shopd-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 2px; }
+.shopd-price { font-size: 24px; font-weight: 900; color: var(--ink); white-space: nowrap; }
+.shopd-foot .btn { padding: 12px 22px; font-size: 15px; }
 
 /* barra de cobros del vendedor */
 .shop-paybar { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: space-between; padding: 12px 14px; margin-bottom: 12px; border: 1px solid var(--line); border-radius: 14px; background: linear-gradient(180deg, rgba(62,87,252,.06), transparent), var(--panel); box-shadow: var(--sh-1); }

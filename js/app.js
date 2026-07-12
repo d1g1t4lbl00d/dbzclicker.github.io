@@ -8505,7 +8505,7 @@ function shopProductCard(p, isMe, refresh, sold) {
     : (p.stock != null ? `<span class="shop-stock">Quedan ${p.stock}</span>` : '');
   const card = el(`
     <div class="shop-card${soldOut ? ' is-sold' : ''}">
-      <div class="shop-cover" ${img ? `style="background-image:url('${esc(img)}')"` : ''}>${img ? '' : `<svg fill="none" stroke="#fff"><use href="#${t.icon}"/></svg>`}<span class="shop-type">${esc(t.label)}</span>${soldOut ? '<span class="shop-soldbadge">AGOTADO</span>' : ''}${isMe ? '<button class="shop-edit" data-act="edit" aria-label="Editar">⋯</button>' : ''}</div>
+      <div class="shop-cover" ${img ? `style="background-image:url('${esc(img)}')"` : ''}>${img ? '' : `<svg fill="none" stroke="#fff"><use href="#${t.icon}"/></svg>`}<span class="shop-type">${esc(t.label)}</span>${p.preview_url ? '<span class="shop-prevbadge"><svg fill="none" stroke="currentColor"><use href="#i-play"/></svg>Preview</span>' : ''}${soldOut ? '<span class="shop-soldbadge">AGOTADO</span>' : ''}${isMe ? '<button class="shop-edit" data-act="edit" aria-label="Editar">⋯</button>' : ''}</div>
       <div class="shop-body">
         <div class="shop-title">${esc(p.title || '')}</div>
         ${p.type === 'ticket' && p.event_date ? `<div class="shop-meta">${esc(schedLabel ? schedLabel(p.event_date) : new Date(p.event_date).toLocaleDateString('es-ES'))}${p.event_place ? ' · ' + esc(p.event_place) : ''}</div>` : ''}
@@ -8520,10 +8520,54 @@ function shopProductCard(p, isMe, refresh, sold) {
         </div>
       </div>
     </div>`);
-  card.querySelector('[data-act="paybuy"]')?.addEventListener('click', (e) => buyInApp(p, e.currentTarget));
-  card.querySelector('[data-act="download"]')?.addEventListener('click', () => { haptic(10); const a = document.createElement('a'); a.href = czHref(p.file_url); a.download = ''; a.target = '_blank'; a.rel = 'noopener'; a.click(); });
-  card.querySelector('[data-act="edit"]')?.addEventListener('click', () => openShopEdit(p, p.user_id, refresh));
+  card.querySelector('[data-act="paybuy"]')?.addEventListener('click', (e) => { e.stopPropagation(); buyInApp(p, e.currentTarget); });
+  card.querySelector('[data-act="download"]')?.addEventListener('click', (e) => { e.stopPropagation(); haptic(10); const a = document.createElement('a'); a.href = czHref(p.file_url); a.download = ''; a.target = '_blank'; a.rel = 'noopener'; a.click(); });
+  card.querySelector('[data-act="edit"]')?.addEventListener('click', (e) => { e.stopPropagation(); openShopEdit(p, p.user_id, refresh); });
+  // tocar la tarjeta abre el detalle del producto (descripción completa + preview)
+  card.style.cursor = 'pointer';
+  card.addEventListener('click', (e) => { if (e.target.closest('[data-act]')) return; openShopProduct(p, isMe, refresh); });
   return card;
+}
+
+// Detalle del producto: portada grande, descripción completa, preview de audio y compra/descarga
+function openShopProduct(p, isMe, refresh) {
+  const t = SHOP_TYPES[p.type] || SHOP_TYPES.merch;
+  const img = p.image_url ? czUrl(p.image_url) : '';
+  const soldOut = p.stock != null && p.stock <= 0;
+  const free = p.is_free && p.file_url && !soldOut;
+  const inapp = !p.is_free && p.pay_inapp && p.price_cents >= 50 && !soldOut;
+  const priceTxt = p.is_free ? 'Gratis' : (p.price_cents >= 50 ? fmtEur(p.price_cents, p.currency) : (p.price || ''));
+  const cta = p.type === 'ticket' ? 'Conseguir' : 'Comprar';
+  const m = openModal(`<div class="modal-head"><h3>Producto</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <div class="shopd-cover" ${img ? `style="background-image:url('${esc(img)}')"` : ''}>${img ? '' : `<svg fill="none" stroke="#fff"><use href="#${t.icon}"/></svg>`}<span class="shop-type">${esc(t.label)}</span>${soldOut ? '<span class="shop-soldbadge">AGOTADO</span>' : ''}${isMe ? '<button class="shop-edit" id="shpEdit" aria-label="Editar">⋯</button>' : ''}</div>
+      <div class="shopd-body">
+        <div class="shopd-title">${esc(p.title || '')}</div>
+        ${p.type === 'ticket' && p.event_date ? `<div class="shop-meta">${esc(new Date(p.event_date).toLocaleString('es-ES', { dateStyle: 'medium', timeStyle: 'short' }))}${p.event_place ? ' · ' + esc(p.event_place) : ''}</div>` : ''}
+        ${p.preview_url ? `<div class="shopd-prev"><button class="shopd-play" id="shpPlay" aria-label="Escuchar preview"><svg fill="none" stroke="currentColor"><use href="#i-play"/></svg></button><div class="shopd-prev-m"><b>Escucha un fragmento</b><div class="shopd-bar"><div class="shopd-barfill" id="shpFill"></div></div></div></div><audio id="shpAudio" preload="none" src="${esc(czUrl(p.preview_url))}"></audio>` : ''}
+        ${p.description ? `<div class="shopd-desc">${esc(p.description)}</div>` : `<div class="shopd-desc" style="opacity:.6">Sin descripción.</div>`}
+        ${p.stock != null && !soldOut ? `<div class="shop-stock">Quedan ${p.stock}</div>` : ''}
+        <div class="shopd-foot">
+          <span class="shopd-price">${esc(priceTxt)}</span>
+          ${soldOut ? '<button class="btn" disabled>Agotado</button>'
+            : (free ? `<button class="btn primary" id="shpDl"><svg fill="none" stroke="#fff"><use href="#i-download"/></svg> Descargar</button>`
+                 : (inapp ? `<button class="btn primary" id="shpBuy">${cta}</button>` : ''))}
+        </div>
+        ${inapp ? '<div class="shop-secure"><svg fill="none" stroke="currentColor"><use href="#i-lock"/></svg> Pago seguro en UnderBro</div>' : ''}
+      </div>
+    </div>`);
+  const audio = m.querySelector('#shpAudio');
+  if (audio) {
+    const btn = m.querySelector('#shpPlay'), fill = m.querySelector('#shpFill'), use = btn.querySelector('use');
+    btn.onclick = () => { if (audio.paused) audio.play().catch(() => toast('No se pudo reproducir el preview')); else audio.pause(); };
+    audio.onplay = () => use.setAttribute('href', '#i-pause');
+    audio.onpause = () => use.setAttribute('href', '#i-play');
+    audio.ontimeupdate = () => { if (audio.duration) fill.style.width = (audio.currentTime / audio.duration * 100) + '%'; };
+    audio.onended = () => { use.setAttribute('href', '#i-play'); fill.style.width = '0%'; };
+  }
+  m.querySelector('#shpBuy')?.addEventListener('click', (e) => buyInApp(p, e.currentTarget));
+  m.querySelector('#shpDl')?.addEventListener('click', () => { haptic(10); const a = document.createElement('a'); a.href = czHref(p.file_url); a.download = ''; a.target = '_blank'; a.rel = 'noopener'; a.click(); });
+  m.querySelector('#shpEdit')?.addEventListener('click', () => { m.remove(); openShopEdit(p, p.user_id, refresh); });
 }
 
 // Barra de estado de cobros + ventas para el dueño de la tienda
@@ -8738,6 +8782,10 @@ async function openShopEdit(p, userId, onSaved) {
         <div class="cover-pick" id="shFileDz"><div class="cover-pick-txt"><b id="shFileName">${p.file_url ? 'Archivo subido ✓' : 'Subir archivo (zip, mp3, wav…)'}</b><span>se entrega tras el pago / al pulsar “Descargar”</span></div></div>
         <input type="file" id="shFile" hidden />
       </div>
+      <div class="field" id="shPrevRow"><label>Preview de audio <span style="opacity:.6;font-weight:600">(opcional)</span></label>
+        <div class="cover-pick" id="shPrevDz"><div class="cover-pick-txt"><b id="shPrevName">${p.preview_url ? 'Preview subido ✓' : 'Subir un fragmento (mp3)'}</b><span>lo pueden escuchar los compradores antes de comprar</span></div></div>
+        <input type="file" id="shPrev" accept="audio/*" hidden />
+      </div>
       <div class="field" id="shShipRow" style="display:none"><label>Coste de envío (€)</label><input type="number" id="shShipEur" min="0" step="0.01" inputmode="decimal" value="${p.ship_cents != null ? (p.ship_cents / 100) : ''}" placeholder="3,99 (0 = envío gratis)" /><span class="pk-hint">Se pide la dirección del comprador al pagar y la verás en tu <b>Monedero → Ventas</b> para enviar el pedido.</span></div>
       <div id="shEvRow" style="${p.type === 'ticket' ? '' : 'display:none'}">
         <label class="pk-l">Tipo de evento</label>
@@ -8757,7 +8805,7 @@ async function openShopEdit(p, userId, onSaved) {
       ${edit ? '<button class="btn danger-btn" id="shDel"><svg fill="none" stroke="#fff"><use href="#i-trash"/></svg> Eliminar</button>' : ''}
       <div class="auth-msg" id="shMsg"></div>
     </div>`);
-  let kind = 'digital', type = p.type || 'beat', imgFile = null, dataFile = null;  // ventas físicas desactivadas → solo digital
+  let kind = 'digital', type = p.type || 'beat', imgFile = null, dataFile = null, prevFile = null;  // ventas físicas desactivadas → solo digital
   let evOnline = !!p.event_online;
   const catSel = m.querySelector('#shCat');
   const fillCats = () => {
@@ -8774,6 +8822,7 @@ async function openShopEdit(p, userId, onSaved) {
     m.querySelector('#shEurRow').style.display = free && !physical ? 'none' : '';
     m.querySelector('#shConnNote').style.display = ((physical || !free) && _sellerStatus && !_sellerStatus.ready) ? '' : 'none';
     m.querySelector('#shFileRow').style.display = (!physical && SHOP_DIGITAL_FILE.includes(type)) ? '' : 'none';
+    m.querySelector('#shPrevRow').style.display = (!physical && SHOP_DIGITAL_FILE.includes(type)) ? '' : 'none';
     m.querySelector('#shShipRow').style.display = physical ? '' : 'none';
     m.querySelector('#shEvRow').style.display = type === 'ticket' ? '' : 'none';
     if (type === 'ticket') {
@@ -8793,6 +8842,8 @@ async function openShopEdit(p, userId, onSaved) {
   m.querySelector('#shImg').onchange = (e) => { const f = e.target.files[0]; if (!f) return; imgFile = f; m.querySelector('#shPrev').innerHTML = `<img decoding="async" src="${URL.createObjectURL(f)}" alt="">`; };
   m.querySelector('#shFileDz').onclick = () => m.querySelector('#shFile').click();
   m.querySelector('#shFile').onchange = (e) => { const f = e.target.files[0]; if (!f) return; dataFile = f; m.querySelector('#shFileName').textContent = f.name; };
+  m.querySelector('#shPrevDz').onclick = () => m.querySelector('#shPrev').click();
+  m.querySelector('#shPrev').onchange = (e) => { const f = e.target.files[0]; if (!f) return; if (!f.type.startsWith('audio')) { toast('El preview debe ser un audio'); return; } prevFile = f; m.querySelector('#shPrevName').textContent = f.name; };
   if (edit) m.querySelector('#shDel').onclick = async () => { if (!confirm('¿Eliminar este producto?')) return; await sb.from('shop_products').delete().eq('id', p.id); m.remove(); toast('Producto eliminado'); onSaved && onSaved(); };
   m.querySelector('#shSave').onclick = async () => {
     const btn = m.querySelector('#shSave'); const msg = m.querySelector('#shMsg');
@@ -8819,17 +8870,18 @@ async function openShopEdit(p, userId, onSaved) {
     if (physical) { const se = parseFloat(String(m.querySelector('#shShipEur').value || '').replace(',', '.')); ship_cents = (Number.isFinite(se) && se > 0) ? Math.round(se * 100) : 0; }
     btn.disabled = true; btn.textContent = 'Guardando…';
     try {
-      const stamp = Date.now();
-      let image_url = p.image_url || null, file_url = p.file_url || null;
-      if (imgFile) { const path = `${userId}/shop-${stamp}`; const up = await sb.storage.from('covers').upload(path, imgFile, { cacheControl: '31536000', contentType: imgFile.type, upsert: true }); if (!up.error) image_url = sb.storage.from('covers').getPublicUrl(path).data.publicUrl; }
-      if (dataFile) { const ext = (dataFile.name.split('.').pop() || 'zip').toLowerCase(); const rand = Math.random().toString(36).slice(2, 12) + Math.random().toString(36).slice(2, 12); const path = `${userId}/shopfile-${stamp}-${rand}.${ext}`; const up = await sb.storage.from('tracks').upload(path, dataFile, { cacheControl: '31536000', contentType: dataFile.type || 'application/octet-stream', upsert: true }); if (!up.error) file_url = sb.storage.from('tracks').getPublicUrl(path).data.publicUrl; }
+      let image_url = p.image_url || null, file_url = p.file_url || null, preview_url = p.preview_url || null;
+      // usa la misma vía de subida que el resto de la app (R2 / proxy underbro.app/media)
+      if (imgFile) image_url = await uploadMedia('covers', imgFile);
+      if (dataFile) file_url = await uploadMedia('tracks', dataFile);
+      if (prevFile) preview_url = await uploadMedia('tracks', prevFile);
       const row = {
         user_id: userId, kind, type, title, is_free: free,
         pay_inapp: !free, price_cents, currency: 'eur',
         needs_shipping: physical, ship_cents, stock,
         price: free ? null : fmtEur(price_cents, 'eur'),
         description: m.querySelector('#shDesc').value.trim() || null,
-        image_url, file_url,
+        image_url, file_url, preview_url,
         buy_url: null,
         event_date: type === 'ticket' && m.querySelector('#shEvDate').value ? new Date(m.querySelector('#shEvDate').value).toISOString() : null,
         event_place: type === 'ticket' ? (m.querySelector('#shEvPlace').value.trim() || null) : null,
