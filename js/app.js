@@ -4115,8 +4115,9 @@ async function plzLoadCustomItems(force) {
     const { data } = await sb.from('plaza_shop').select('item,name,category,sprite').not('sprite', 'is', null);
     (data || []).forEach(r => {
       const s = r.sprite || {};
-      const data = Array.isArray(s.data) ? s.data : [];
-      const frames = (Array.isArray(s.frames) && s.frames.length) ? s.frames : [data];
+      const rawFrames = (Array.isArray(s.frames) && s.frames.length) ? s.frames : [s.data];
+      const frames = rawFrames.map(sprDecodeFrame);   // acepta texto compacto o arrays antiguos
+      const data = frames[0] || [];
       PLZ_CUSTOM[r.item] = {
         w: s.w || 16, h: s.h || 16, pal: Array.isArray(s.pal) ? s.pal : [], data,
         frames, fps: Math.max(1, Math.min(20, s.fps || 6)),
@@ -4150,6 +4151,16 @@ function plzFindFurnAt(furn, fi, fj) {
     if (fi >= f.i && fi < f.i + fw && fj >= f.j && fj < f.j + fd) return k;
   }
   return -1;
+}
+// caja de selección en pantalla (coords de arte) del sprite VISIBLE de un mueble.
+// Sirve para tocar el objeto donde se ve, no solo en su baldosa (los altos suben mucho).
+function plzFurnHitBox(f) {
+  const cu = PLZ_CUSTOM[f.t];
+  const fw = cu ? (cu.fw || 1) : 1, fd = cu ? (cu.fd || 1) : 1;
+  const cx = plzFurnCenterX(f);
+  const base = plzIso(f.i + fw - 1, f.j + fd - 1).y + PLZ.TH / 2;
+  const sw = cu ? cu.w : 30, sh = cu ? cu.h : 44;   // los base miden ~30×44 de arte
+  return { x0: cx - sw / 2 - 3, x1: cx + sw / 2 + 3, y0: base - sh - 3, y1: base + 4 };
 }
 // colisión y asiento son propiedades del objeto (custom) o del tipo base.
 // Un asiento nunca bloquea el paso (hay que poder caminar hasta él para sentarse).
@@ -4577,12 +4588,17 @@ async function renderPlaza() {
       const efi = Math.floor((rx / (PLZ.TW / 2) + ry / (PLZ.TH / 2)) / 2);
       const efj = Math.floor((ry / (PLZ.TH / 2) - rx / (PLZ.TW / 2)) / 2);
       if (plaza.moving) { plzMoveTo(plaza.moving, efi, efj); plaza.moving = null; return; }   // recolocar
-      // tocar un objeto existente (con herramienta de colocar) → menú mover/girar/recoger/vender
-      if (plaza.editTool !== 'erase' && efi >= 0 && efj >= 0 && efi < PLZ.COLS && efj < PLZ.ROWS) {
-        const k = plzFindFurnAt(plzR.furn, efi, efj);
-        if (k >= 0) { openObjMenu(plzR.furn[k], (e.clientX - r.left), (e.clientY - r.top)); haptic(6); return; }
+      // hit-test del sprite visible (de delante hacia atrás): permite tocar el objeto donde SE VE,
+      // no solo su casilla del suelo (los muebles altos se dibujan por encima de su baldosa).
+      const hitF = [...plzR.furn].filter(f => f.t !== 'portal').sort((a, b) => (b.i + b.j) - (a.i + a.j))
+        .find(f => { const bx = plzFurnHitBox(f); return rx >= bx.x0 && rx <= bx.x1 && ry >= bx.y0 && ry <= bx.y1; });
+      if (plaza.editTool === 'erase') {   // quitar: el objeto tocado o el de la casilla
+        let t = hitF; if (!t) { const k = plzFindFurnAt(plzR.furn, efi, efj); if (k >= 0) t = plzR.furn[k]; }
+        if (t) plzPickFurn(t); else toast('Toca un objeto para quitarlo');
+        return;
       }
-      plzEditTap(efi, efj); return;
+      if (hitF) { openObjMenu(hitF, (e.clientX - r.left), (e.clientY - r.top)); haptic(6); return; }   // menú del objeto
+      plzEditTap(efi, efj); return;   // suelo vacío → colocar el objeto elegido
     }
     // ¿ha tocado el objeto interactivo de la sala? → abre su minijuego
     const act = PLZ_ACTIVITY[plaza.roomId];
@@ -4984,32 +5000,24 @@ function plzExitEdit() {
   const hint = document.querySelector('.plaza-hint'); if (hint) hint.style.display = '';
   if (plzR && plzR.def.custom && (plzR.def.ownerId === state.user.id || plzIsAdmin())) plzShowEditFab();
 }
+// colocar un objeto en el suelo (el borrado y el menú se gestionan en el tap del lienzo)
 function plzEditTap(fi, fj) {
   if (fi < 0 || fj < 0 || fi >= PLZ.COLS || fj >= PLZ.ROWS) return;
   const furn = plzR.furn;
-  // borrar: elimina el mueble cuya huella contiene la casilla tocada
-  if (plaza.editTool === 'erase') {
-    const k = plzFindFurnAt(furn, fi, fj);
-    if (k >= 0) { furn.splice(k, 1); plzRecompute(); if (plaza._renderPalette) plaza._renderPalette(); haptic(10); }
-    return;
-  }
   const tool = plaza.editTool;
+  if (!tool || tool === 'erase' || tool === 'style') return;
   const { fw, fd } = plzFurnFoot(tool);
   // casillas que ocuparía (ancla = casilla tocada, la huella crece hacia +i/+j)
   const tiles = [];
   for (let di = 0; di < fw; di++) for (let dj = 0; dj < fd; dj++) tiles.push([fi + di, fj + dj]);
   if (tiles.some(([ti, tj]) => ti >= PLZ.COLS || tj >= PLZ.ROWS)) { toast('No cabe aquí · déjale sitio hacia el fondo'); haptic(20); return; }
   if (tiles.some(([ti, tj]) => furn.some(f => f.t === 'portal' && f.i === ti && f.j === tj))) { toast('Ahí está la salida'); haptic(20); return; }
-  // muebles que se solapan con la nueva huella → se reemplazan
-  const removeIdx = new Set();
-  for (const [ti, tj] of tiles) { const k = plzFindFurnAt(furn, ti, tj); if (k >= 0) removeIdx.add(k); }
-  // límite por unidades del inventario (cada unidad = un objeto colocable), sin contar los que se reemplazan
+  if (tiles.some(([ti, tj]) => plzFindFurnAt(furn, ti, tj) >= 0)) { toast('Ahí ya hay un objeto · recógelo primero'); haptic(18); return; }
+  // límite por unidades del inventario (el admin tiene ilimitado)
   if (!PLZ_FREE_ITEMS.has(tool)) {
-    let placed = 0;
-    for (let k = 0; k < furn.length; k++) if (furn[k].t === tool && !removeIdx.has(k)) placed++;
+    const placed = furn.filter(f => f.t === tool).length;
     if (placed >= plzQty(tool)) { toast('No te quedan «' + (PLZ_ITEM_NAME[tool] || tool) + '» · compra más en la Tienda'); haptic(20); return; }
   }
-  [...removeIdx].sort((a, b) => b - a).forEach(k => furn.splice(k, 1));
   furn.push({ t: tool, i: fi, j: fj });
   plzRecompute(); if (plaza._renderPalette) plaza._renderPalette(); haptic(6);
 }
@@ -5096,7 +5104,8 @@ function plzRasterizeToSprite(type) {
   const img = c.getImageData(0, 0, S, S).data;
   // recuadro del contenido
   let minX = S, maxX = -1, minY = S, maxY = -1;
-  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) { if (img[(y * S + x) * 4 + 3] > 40) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; } }
+  // umbral alto: ignora el halo semitransparente (glow/shadowBlur) para no inflar la paleta ni el tamaño
+  for (let y = 0; y < S; y++) for (let x = 0; x < S; x++) { if (img[(y * S + x) * 4 + 3] > 110) { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; } }
   if (maxX < 0) return { w: 16, h: 16, pal: [], data: [], fw: 1, fd: 1, solid: PLZ_SOLID.has(type), sit: PLZ_BASE_SEATS.has(type), anim: 'none' };
   const cw = maxX - minX + 1, ch = maxY - minY + 1;
   const bw = Math.max(1, Math.min(4, Math.ceil(cw / SPR_BLK))), bh = Math.max(1, Math.min(4, Math.ceil(ch / SPR_BLK)));
@@ -5107,7 +5116,7 @@ function plzRasterizeToSprite(type) {
   const palMap = new Map(), pal = [], data = new Array(w * h).fill(0);
   for (let y = 0; y < ch; y++) for (let x = 0; x < cw; x++) {
     const i = ((minY + y) * S + (minX + x)) * 4;
-    if (img[i + 3] < 60) continue;
+    if (img[i + 3] < 110) continue;
     const col = hex(q(img[i]), q(img[i + 1]), q(img[i + 2]));
     let idx = palMap.get(col); if (idx == null) { pal.push(col); idx = pal.length; palMap.set(col, idx); }
     data[(y + dy) * w + (x + dx)] = idx;
@@ -5265,6 +5274,12 @@ function openPlazaInventory(onGo) {
 const SPR_PAL = ['#000000', '#0a0e1c', '#1b2542', '#3d4a78', '#8f99ad', '#e8ecf6', '#ffffff', '#27a9ff', '#8fc0ff', '#6e2df5', '#b06eff', '#e0507a', '#ff5d5d', '#f0a13e', '#ffd23e', '#2dc878', '#12c2c2', '#8a5560', '#c9a86a', '#3a2814'];
 const SPR_BLK = 16;   // píxeles de arte por bloque
 let SPR_RECENT = [];  // colores usados recientemente (persisten en la sesión)
+// codificación compacta de un fotograma (índices de paleta) como texto: 1 char por celda.
+// Reduce enormemente el tamaño del jsonb, sobre todo con varios fotogramas.
+const SPR_CS = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-_:;+*=<>?@#%&()[]{}!|~^';
+const SPR_CSMAP = (() => { const m = {}; for (let i = 0; i < SPR_CS.length; i++) m[SPR_CS[i]] = i; return m; })();
+function sprEncodeFrame(arr) { for (let i = 0; i < arr.length; i++) if ((arr[i] | 0) >= SPR_CS.length) return null; let s = ''; for (let i = 0; i < arr.length; i++) s += SPR_CS[arr[i] | 0]; return s; }
+function sprDecodeFrame(x) { if (typeof x !== 'string') return Array.isArray(x) ? x : []; const out = new Array(x.length); for (let i = 0; i < x.length; i++) out[i] = SPR_CSMAP[x[i]] || 0; return out; }
 function openPlazaSpriteEditor(onDone, existing) {
   if (!plzCanCreate()) { toast('No tienes permiso para crear objetos'); return; }
   const ed0 = existing || null;
@@ -5288,8 +5303,8 @@ function openPlazaSpriteEditor(onDone, existing) {
     for (let y = 0; y < srcH; y++) for (let x = 0; x < srcW; x++) { const v = oc[y * srcW + x]; if (!v) continue; const nx = x + dx, ny = y + dy; if (nx >= 0 && nx < w && ny >= 0 && ny < h) nc[ny * w + nx] = v; }
     return nc;
   };
-  // fotogramas: array de lienzos; se edita el activo (curFrame)
-  let frames = srcFrames ? srcFrames.map(mapFrameData) : [new Array(w * h).fill(null)];
+  // fotogramas: array de lienzos; se edita el activo (curFrame). Decodifica el texto compacto o arrays.
+  let frames = srcFrames ? srcFrames.map(fd => mapFrameData(sprDecodeFrame(fd))) : [new Array(w * h).fill(null)];
   let curFrame = 0, cells = frames[0], fps = srcFps, onion = false, playing = false, previewRaf = null;
   let fw = ed0 && ed0.sprite ? Math.max(1, Math.min(bw, ed0.sprite.fw || 1)) : bw;
   let curColor = SPR_PAL[7], tool = 'pencil', brush = 1, mirror = false, cs = 16;
@@ -5589,8 +5604,10 @@ function openPlazaSpriteEditor(onDone, existing) {
     frames[curFrame] = cells;
     const palMap = new Map(), pal = [];
     const framesData = frames.map(fc => { const d = new Array(w * h).fill(0); for (let k = 0; k < w * h; k++) { const col = fc[k]; if (!col) continue; let idx = palMap.get(col); if (idx == null) { pal.push(col); idx = pal.length; palMap.set(col, idx); } d[k] = idx; } return d; });
-    const out = { v: 2, w, h, pal, data: framesData[0], fw, fd: 1, solid: propSolid, sit: propSit, anim: propAnim };
-    if (framesData.length > 1) { out.frames = framesData; out.fps = fps; }
+    // guarda cada fotograma como texto compacto (1 char/celda) si la paleta cabe; si no, arrays
+    const enc = framesData.map(d => { const e = sprEncodeFrame(d); return e == null ? d : e; });
+    const out = { v: 2, w, h, pal, data: enc[0], fw, fd: 1, solid: propSolid, sit: propSit, anim: propAnim };
+    if (enc.length > 1) { out.frames = enc; out.fps = fps; }
     return out;
   }
   const pubBtn = m.querySelector('#sprPublish');
@@ -5605,7 +5622,9 @@ function openPlazaSpriteEditor(onDone, existing) {
       let item = ed0 && ed0.item;
       if (ed0) { const { error } = await sb.rpc('plaza_update_item', { p_item: ed0.item, p_name: name, p_price: price, p_category: cat, p_sprite: sprite }); if (error) throw error; }
       else { const { data, error } = await sb.rpc('plaza_create_item', { p_name: name, p_price: price, p_category: cat, p_sprite: sprite }); if (error) throw error; item = data; }
-      PLZ_CUSTOM[item] = { w, h, pal: sprite.pal, data: sprite.data, fw, fd: 1, solid: propSolid, sit: propSit, anim: propAnim, name, category: cat };
+      // registro local: fotogramas decodificados (índices) para render inmediato
+      const decFrames = ((sprite.frames && sprite.frames.length) ? sprite.frames : [sprite.data]).map(sprDecodeFrame);
+      PLZ_CUSTOM[item] = { w, h, pal: sprite.pal, data: decFrames[0], frames: decFrames, fps: sprite.fps || fps, fw, fd: 1, solid: propSolid, sit: propSit, anim: propAnim, name, category: cat };
       PLZ_ITEM_NAME[item] = name;
       document.removeEventListener('keydown', onKey);
       haptic(14); toast(ed0 ? 'Cambios guardados' : '¡«' + name + '» publicado en la tienda!');
