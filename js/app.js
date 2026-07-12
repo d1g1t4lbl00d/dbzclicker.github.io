@@ -8301,8 +8301,8 @@ async function loadProfileEvents(userId, container) {
    Cobro DENTRO de UnderBro con Stripe (UnderBro se lleva comisión) o, como
    alternativa, enlace externo del artista; descarga directa si es gratis.
    ======================================================================= */
-// Tienda oculta de momento (funcionalidad completa, lista para reactivar): poner a true.
-const SHOP_ENABLED = false;
+// Tienda del perfil activada: pestaña "Tienda" en cada perfil (beats/packs/servicios/entradas).
+const SHOP_ENABLED = true;
 const SHOP_TYPES = {
   beat: { label: 'Beat / Pack', icon: 'i-music' },
   feat: { label: 'Colaboración / FT', icon: 'i-people' },
