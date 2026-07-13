@@ -1074,6 +1074,7 @@ let _pendingScrollTop = false;   // resetear el scroll del feed arriba en el pr�
 async function switchView(view) {
   ubRecord({ kind: 'view', view });
   state.view = view;
+  if (view !== 'admin') admShopChanClose();   // cerrar el realtime de la tienda al salir del admin
   const main = $('main');
   $('feedTabs')?.classList.toggle('hidden', view !== 'feed');
   if (!ubSwiping) { main.classList.remove('swap', 'swap-fwd', 'swap-back'); void main.offsetWidth; main.classList.add(_swapDir ? ('swap-' + _swapDir) : 'swap'); }
@@ -12693,7 +12694,7 @@ async function renderAdmin() {
       </div>
       <div class="admin-card span2"><h3>🛒 Tienda y ventas</h3>
         <div class="adm-kpis" id="admShopKpis"><div class="loading" style="padding:14px"><div class="spinner"></div></div></div>
-        <div class="adm-tabs" id="admShopTabs" style="margin-top:12px"><button class="active" data-st="orders">Pedidos</button><button data-st="products">Productos</button></div>
+        <div class="adm-tabs" id="admShopTabs" style="margin-top:12px"><button class="active" data-st="products">Productos</button><button data-st="orders">Pedidos</button></div>
         <div id="admShopList" class="adm-list"><div class="loading" style="padding:18px"><div class="spinner"></div></div></div>
       </div>
     </div>`;
@@ -12809,7 +12810,7 @@ async function adminNamesByIds(ids) {
     return map;
   } catch (_) { return {}; }
 }
-async function loadAdminShop() {
+async function loadAdminShopKpis() {
   const kbox = $('admShopKpis'); if (!kbox) return;
   let prodCount = 0, orders = [];
   try { const { count } = await sb.from('shop_products').select('id', { count: 'exact', head: true }); prodCount = count || 0; } catch (_) {}
@@ -12819,22 +12820,58 @@ async function loadAdminShop() {
   const kpi = (k, v) => `<div class="adm-kpi"><b>${v}</b><span>${k}</span></div>`;
   kbox.innerHTML = kpi('Productos', nfmt(prodCount)) + kpi('Pedidos pagados', nfmt(orders.length))
     + kpi('Ventas brutas', fmtEur(gross, 'eur')) + kpi('Comisión UnderBro', fmtEur(commission, 'eur'));
-  adminShopList('orders');
+}
+async function loadAdminShop() {
+  const kbox = $('admShopKpis'); if (!kbox) return;
+  await loadAdminShopKpis();
+  adminShopList('products');   // por defecto muestro los productos de los usuarios
+  admShopWatch();              // en vivo: si alguien sube algo, aparece al momento
+}
+// Canal en tiempo real de la tienda: cuando un usuario sube/edita/borra un
+// producto de su perfil, se refresca mi panel de admin automáticamente.
+let admShopChan = null;
+function admShopChanClose() { try { admShopChan && sb.removeChannel(admShopChan); } catch (_) {} admShopChan = null; }
+function admShopWatch() {
+  admShopChanClose();
+  admShopChan = sb.channel('adm-shop-products')
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'shop_products' }, async (payload) => {
+      if (state.view !== 'admin') { admShopChanClose(); return; }
+      loadAdminShopKpis();
+      const activeBtn = document.querySelector('#admShopTabs button.active');
+      const activeTab = activeBtn ? activeBtn.dataset.st : 'products';
+      if (activeTab === 'products') adminShopList('products');
+      if (payload.eventType === 'INSERT' && payload.new) {
+        const names = await adminNamesByIds([payload.new.user_id]);
+        toast(`🛒 Nuevo producto de @${names[payload.new.user_id] || '—'}`);
+      }
+    })
+    .subscribe();
 }
 async function adminShopList(tab) {
   const box = $('admShopList'); if (!box) return;
   box.innerHTML = '<div class="loading" style="padding:18px"><div class="spinner"></div></div>';
   try {
     if (tab === 'products') {
-      const { data } = await sb.from('shop_products').select('id,title,kind,type,price_cents,is_free,stock,user_id,created_at').order('created_at', { ascending: false }).limit(40);
+      const { data } = await sb.from('shop_products').select('*').order('created_at', { ascending: false }).limit(60);
       const rows = data || [];
       const names = await adminNamesByIds(rows.map(r => r.user_id));
-      box.innerHTML = ''; if (!rows.length) { box.innerHTML = '<div class="sub">Sin productos.</div>'; return; }
+      box.innerHTML = ''; if (!rows.length) { box.innerHTML = '<div class="sub">Aún no hay productos en las tiendas de los usuarios.</div>'; return; }
       rows.forEach(p => {
-        const price = p.is_free ? 'Gratis' : (p.price_cents ? fmtEur(p.price_cents, 'eur') : '—');
+        const price = p.is_free ? 'Gratis' : (p.price_cents ? fmtEur(p.price_cents, p.currency) : (p.price || '—'));
         const stk = p.stock != null ? (p.stock <= 0 ? ' · AGOTADO' : ` · ${p.stock} ud.`) : '';
-        const r = el(`<div class="adm-row"><div class="adm-row-main"><b>${esc((p.title || '—').slice(0, 46))}</b><span>@${esc(names[p.user_id] || '—')} · ${esc((SHOP_TYPES[p.type] || SHOP_TYPES.other).label)} · ${esc(price)}${stk}</span></div><div class="adm-row-acts"><button class="btn sm danger" data-del>Borrar</button></div></div>`);
-        r.querySelector('[data-del]').onclick = async () => { if (!confirm('¿Borrar este producto de la tienda del usuario?')) return; const { error } = await sb.from('shop_products').delete().eq('id', p.id); if (error) { toast('No se pudo (¿permisos?)'); return; } r.remove(); toast('Producto borrado'); };
+        const t = SHOP_TYPES[p.type] || SHOP_TYPES.other;
+        const media = p.image_url ? `<img decoding="async" loading="lazy" src="${esc(czUrl(p.image_url))}" alt="">` : `<svg style="width:20px;height:20px" fill="none" stroke="currentColor"><use href="#${t.icon}"/></svg>`;
+        const r = el(`<div class="adm-row">
+          <span class="adm-av" data-view style="cursor:pointer">${media}</span>
+          <div class="adm-row-main" data-view><b>${esc((p.title || '—').slice(0, 46))}</b><span>@${esc(names[p.user_id] || '—')} · ${esc(t.label)} · ${esc(price)}${stk}</span></div>
+          <div class="adm-row-acts">
+            <button class="btn sm" data-edit>Editar</button>
+            <button class="btn sm danger" data-del>Borrar</button>
+          </div></div>`);
+        const view = () => openShopProduct(p, false, () => adminShopList('products'));
+        r.querySelectorAll('[data-view]').forEach(x => x.onclick = view);
+        r.querySelector('[data-edit]').onclick = () => openShopEdit(p, p.user_id, () => { adminShopList('products'); loadAdminShopKpis(); });
+        r.querySelector('[data-del]').onclick = async () => { if (!confirm(`¿Borrar "${(p.title || '').slice(0, 30)}" de la tienda de @${names[p.user_id] || '—'}?`)) return; const { error } = await sb.from('shop_products').delete().eq('id', p.id); if (error) { toast('No se pudo (¿permisos?)'); return; } r.remove(); loadAdminShopKpis(); toast('Producto borrado'); };
         box.appendChild(r);
       });
     } else {
