@@ -36,39 +36,76 @@
   <div class="wrap">
     <div class="brand"><img src="/icon-192.png" alt="UnderBro" /><b>UnderBro</b></div>
     <h1>Política de privacidad y cookies</h1>
-    <p class="muted">Última actualización: 5 de junio de 2026</p>
+    <p class="muted">Última actualización: 13 de julio de 2026</p>
 
     <p><b>UnderBro</b> es una plataforma social de música underground donde puedes subir pistas,
-    compartir fotos, comentar, seguir a otros creadores y chatear. Esta política explica qué datos
-    tratamos, con qué fin y cómo puedes controlarlos.</p>
+    compartir fotos, comentar, seguir a otros creadores, chatear, participar en eventos y en el mundo
+    de <b>La Plaza</b>, y <b>comprar y vender</b> en la tienda de cada perfil. Esta política explica qué
+    datos tratamos, con qué fin, con quién los compartimos y cómo puedes controlarlos.</p>
 
     <h2>Datos que tratamos</h2>
     <ul>
       <li><b>Cuenta:</b> tu correo electrónico y una contraseña cifrada (gestionada por Supabase Auth).</li>
-      <li><b>Perfil:</b> nombre para mostrar, nombre de usuario, biografía, enlaces y foto/banner.</li>
+      <li><b>Perfil:</b> nombre para mostrar, nombre de usuario, biografía, ciudad/escena (si la indicas),
+      enlaces, roles y foto/banner.</li>
       <li><b>Contenido que creas:</b> pistas de audio, portadas, fotos, comentarios, "me gusta",
-      seguidores, eventos, mensajes del chat general y mensajes directos (incluidas notas de voz y adjuntos).</li>
-      <li><b>Datos técnicos mínimos:</b> estado de conexión (presencia) y, si los activas, tokens de
-      notificaciones push para avisarte de mensajes nuevos.</li>
+      seguidores, eventos y sus galerías, salas y objetos de La Plaza, mensajes del chat general y
+      mensajes directos (incluidas notas de voz y adjuntos).</li>
+      <li><b>Tienda y pagos:</b> la tienda es <b>100% digital</b> (beats, colaboraciones, servicios,
+      entradas y descargas); no hay envíos físicos ni recogemos direcciones postales. Cuando compras o
+      vendes tratamos los productos, los pedidos, el importe, la comisión y tu historial de compras y
+      ventas, y el <b>correo del comprador</b> (necesario para el pago y para entregar el producto digital
+      o la entrada). <b>Los pagos con tarjeta los procesa Stripe</b>: nosotros <b>no</b> almacenamos ni
+      vemos los datos de tu tarjeta.</li>
+      <li><b>Notificaciones push:</b> si las activas, el identificador (endpoint) de suscripción de tu
+      navegador para poder enviarte avisos.</li>
+      <li><b>Datos técnicos mínimos:</b> estado de conexión (presencia "en línea") y analítica web
+      <b>agregada y sin cookies</b> (Vercel) para medir el uso general de la app.</li>
     </ul>
+
+    <h2>Permisos del dispositivo (cámara y micrófono)</h2>
+    <p>Algunas funciones piden permiso para usar tu <b>cámara</b> o <b>micrófono</b>, y solo se activan
+    cuando tú las usas: hacer o subir fotos, grabar notas de voz, las <b>llamadas de voz y vídeo</b>, y el
+    <b>escáner de códigos QR</b> para validar entradas. No accedemos a la cámara ni al micrófono sin tu
+    acción, y puedes revocar el permiso en tu navegador cuando quieras. No usamos geolocalización.</p>
 
     <h2>Cómo usamos los datos</h2>
     <ul>
       <li>Para prestar el servicio: mostrar tu perfil y contenido, entregar tus mensajes y reproducir audio.</li>
+      <li>Para gestionar la tienda: procesar compras y ventas, entregar el producto o la entrada y pagar
+      al vendedor.</li>
       <li>Para mantener tu sesión iniciada y recordar preferencias (tema, volumen).</li>
       <li>Para enviarte notificaciones push <b>solo si las activas</b>.</li>
-      <li>Para moderación y seguridad (ver más abajo).</li>
+      <li>Para moderación, seguridad y prevención del fraude.</li>
     </ul>
-    <p>No vendemos tus datos ni usamos publicidad ni rastreadores de terceros.</p>
+    <p>No vendemos tus datos ni usamos publicidad ni rastreadores de terceros con fines publicitarios.</p>
+
+    <h2>Con quién compartimos datos</h2>
+    <ul>
+      <li><b>Con otros usuarios:</b> tu perfil y el contenido que publicas son visibles según la función.
+      En una <b>compra</b>, el vendedor puede ver el <b>correo del comprador</b> para gestionar la venta y
+      la entrega del producto digital o la entrada.</li>
+      <li><b>Con proveedores que actúan por cuenta nuestra (encargados del tratamiento):</b>
+        <ul>
+          <li><b>Supabase</b> — autenticación, base de datos y parte del almacenamiento.</li>
+          <li><b>Cloudflare</b> — entrega y almacenamiento del audio y las imágenes.</li>
+          <li><b>Vercel</b> — alojamiento de la web y analítica agregada.</li>
+          <li><b>Stripe</b> — procesamiento de los pagos con tarjeta y los cobros a vendedores.</li>
+        </ul>
+      </li>
+    </ul>
+    <p class="muted">Algunos de estos proveedores pueden tratar datos fuera del Espacio Económico Europeo;
+    en ese caso se aplican las garantías adecuadas (como las Cláusulas Contractuales Tipo).</p>
 
     <h2>Almacenamiento local y cookies</h2>
-    <p>Usamos el almacenamiento local del navegador (no cookies publicitarias) para mantener la sesión
-    y guardar preferencias en tu dispositivo.</p>
+    <p>Usamos el <b>almacenamiento local</b> del navegador (no cookies publicitarias) para mantener la
+    sesión y guardar preferencias en tu dispositivo. Durante un pago, <b>Stripe</b> puede usar sus propias
+    cookies para seguridad y prevención del fraude en su página de pago.</p>
 
-    <h2>Dónde se procesan</h2>
-    <p>Los datos y archivos se almacenan en <b>Supabase</b> (autenticación, base de datos y
-    almacenamiento) y la aplicación se sirve mediante <b>Vercel</b>, que actúan como
-    encargados del tratamiento.</p>
+    <h2>Conservación de datos</h2>
+    <p>Conservamos tus datos mientras tengas cuenta. Si la eliminas, borramos tu perfil, tu contenido y
+    tus archivos. No obstante, podemos conservar los <b>registros de pedidos y facturación</b> el tiempo
+    necesario para cumplir obligaciones legales y fiscales.</p>
 
     <h2>Seguridad y moderación de contenido</h2>
     <div class="card">
@@ -79,12 +116,14 @@
         <li>El contenido que infrinja derechos de autor o nuestras normas puede ser retirado y las
         cuentas infractoras suspendidas.</li>
       </ul>
-      <p style="margin-bottom:0">Sube únicamente contenido sobre el que tengas derechos.</p>
+      <p style="margin-bottom:0">Sube y vende únicamente contenido sobre el que tengas derechos.</p>
     </div>
 
     <h2>Tus derechos</h2>
-    <p>Puedes editar tu perfil en cualquier momento y <b>eliminar tu cuenta y todos tus datos y
-    archivos</b> de forma permanente desde <b>Ajustes → Eliminar cuenta</b> dentro de la app.</p>
+    <p>Puedes acceder a tus datos y rectificarlos editando tu perfil, y <b>eliminar tu cuenta y todos tus
+    datos y archivos</b> de forma permanente desde <b>Ajustes → Eliminar cuenta</b> dentro de la app.
+    También puedes solicitar el acceso, la portabilidad o la supresión de tus datos escribiéndonos, y
+    presentar una reclamación ante la autoridad de protección de datos de tu país.</p>
 
     <h2>Menores</h2>
     <p>UnderBro no está dirigida a menores de 13 años. Si crees que un menor nos ha facilitado datos,

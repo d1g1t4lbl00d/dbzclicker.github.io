@@ -15360,17 +15360,21 @@ function showPrivacyPolicy() {
       <h4>Datos que guardamos</h4>
       <ul>
         <li>Cuenta: tu correo y una contraseña cifrada (gestionada por Supabase Auth).</li>
-        <li>Perfil: nombre, usuario, biografía y foto.</li>
-        <li>Contenido: pistas que subes, portadas, comentarios, "me gusta", seguidores, mensajes del chat y mensajes directos.</li>
+        <li>Perfil: nombre, usuario, biografía, ciudad, enlaces y foto/banner.</li>
+        <li>Contenido: pistas, portadas, fotos, comentarios, "me gusta", seguidores, eventos y galerías, salas de La Plaza, chat y mensajes directos (con notas de voz y adjuntos).</li>
+        <li>Tienda (100% digital, sin envíos): productos, pedidos, importe, comisión y tu historial de compras y ventas, más el correo del comprador. Los pagos con tarjeta los procesa <b>Stripe</b>; no vemos ni guardamos tu tarjeta.</li>
+        <li>Notificaciones push: solo si las activas.</li>
       </ul>
+      <h4>Permisos de cámara y micrófono</h4>
+      <p>Solo se usan cuando tú activas una función: fotos, notas de voz, llamadas y el escáner de QR de entradas. No accedemos sin tu acción y no usamos ubicación.</p>
       <h4>Cookies y almacenamiento local</h4>
-      <p>Usamos almacenamiento local del navegador para mantener tu sesión iniciada, recordar el volumen y tus preferencias. No usamos cookies de publicidad ni de rastreo de terceros.</p>
+      <p>Usamos almacenamiento local del navegador para mantener tu sesión y tus preferencias. No usamos cookies de publicidad ni de rastreo. Durante un pago, Stripe puede usar sus propias cookies de seguridad.</p>
       <h4>Dónde se procesan</h4>
-      <p>Los datos se almacenan en <b>Supabase</b> (base de datos y archivos) y la web se sirve mediante <b>Vercel</b>, actuando como encargados del tratamiento.</p>
+      <p>Proveedores que actúan por cuenta nuestra: <b>Supabase</b> (base de datos y cuentas), <b>Cloudflare</b> (audio e imágenes), <b>Vercel</b> (web y analítica agregada) y <b>Stripe</b> (pagos).</p>
       <h4>Seguridad y moderación</h4>
       <p>Puedes <b>bloquear</b> a cualquier usuario (deja de poder escribirte y ocultas su contenido) y <b>reportar</b> perfiles, pistas, fotos y mensajes. El contenido que infrinja derechos o las normas puede ser retirado por moderación.</p>
       <h4>Tus derechos</h4>
-      <p>Puedes editar tu perfil en cualquier momento y <b>eliminar tu cuenta y todos tus datos y archivos</b> desde <b>Ajustes → Eliminar cuenta</b>. Esa acción es permanente.</p>
+      <p>Puedes editar tu perfil en cualquier momento y <b>eliminar tu cuenta y todos tus datos y archivos</b> desde <b>Ajustes → Eliminar cuenta</b>. Podemos conservar registros de pedidos por obligaciones fiscales. Esa acción es permanente.</p>
       <p style="color:var(--ink-soft);font-size:12px;margin-top:14px">Versión completa en <a href="/privacy" target="_blank" rel="noopener">underbro.app/privacy</a> · Última actualización: ${new Date().toLocaleDateString('es-ES')}.</p>
     </div>`);
 }
