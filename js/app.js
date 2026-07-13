@@ -8778,7 +8778,7 @@ async function openMyPurchases() {
   let rows = [];
   try {
     const { data } = await sb.from('shop_orders')
-      .select('id,title,type,amount_cents,ship_cents,currency,ticket_code,ticket_used,paid_at,shop_products(file_url,image_url,event_date,event_place,event_online,event_url)')
+      .select('id,title,type,amount_cents,ship_cents,currency,ticket_code,ticket_used,paid_at,file_url,image_url,shop_products(file_url,image_url,event_date,event_place,event_online,event_url)')
       .eq('buyer_id', state.user.id).eq('status', 'paid').order('paid_at', { ascending: false }).limit(200);
     rows = data || [];
   } catch (_) {}
@@ -8787,28 +8787,31 @@ async function openMyPurchases() {
   const audios = [];
   rows.forEach(o => {
     const prod = o.shop_products || {};
+    // Preferimos la copia guardada en el pedido (siempre disponible aunque borren el producto)
+    const fileUrl = o.file_url || prod.file_url || null;
+    const imageUrl = o.image_url || prod.image_url || null;
     const total = (o.amount_cents || 0) + (o.ship_cents || 0);
     const free = (o.amount_cents || 0) === 0;
     const st = SHOP_TYPES[o.type] || SHOP_TYPES.other;
-    const kind = o.type === 'ticket' ? 'ticket' : purchaseMediaKind(prod.file_url);
-    const cover = prod.image_url
-      ? `<img decoding="async" loading="lazy" src="${esc(czUrl(prod.image_url))}" alt="">`
+    const kind = o.type === 'ticket' ? 'ticket' : purchaseMediaKind(fileUrl);
+    const cover = imageUrl
+      ? `<img decoding="async" loading="lazy" src="${esc(czUrl(imageUrl))}" alt="">`
       : `<svg fill="none" stroke="currentColor"><use href="#${st.icon}"/></svg>`;
     let ctrl = '';
     if (kind === 'audio') {
       ctrl = `<div class="mylib-player">
         <button class="mylib-play" data-play aria-label="Reproducir"><svg fill="none" stroke="currentColor"><use href="#i-play"/></svg></button>
         <div class="mylib-bar"><div class="mylib-fill" data-fill></div></div>
-        <a class="mylib-dl" href="${esc(czHref(prod.file_url))}" target="_blank" rel="noopener" title="Descargar"><svg fill="none" stroke="currentColor"><use href="#i-download"/></svg></a>
-        <audio preload="none" src="${esc(czUrl(prod.file_url))}" data-audio></audio>
+        <a class="mylib-dl" href="${esc(czHref(fileUrl))}" target="_blank" rel="noopener" title="Descargar"><svg fill="none" stroke="currentColor"><use href="#i-download"/></svg></a>
+        <audio preload="none" src="${esc(czUrl(fileUrl))}" data-audio></audio>
       </div>`;
     } else if (kind === 'image') {
-      ctrl = `<a class="btn sm primary mylib-btn" href="${esc(czHref(prod.file_url))}" target="_blank" rel="noopener"><svg fill="none" stroke="#fff"><use href="#i-image"/></svg> Ver / descargar</a>`;
+      ctrl = `<a class="btn sm primary mylib-btn" href="${esc(czHref(fileUrl))}" target="_blank" rel="noopener"><svg fill="none" stroke="#fff"><use href="#i-image"/></svg> Ver / descargar</a>`;
     } else if (kind === 'ticket') {
       const d = { event_online: prod.event_online, event_url: prod.event_url, event_date: prod.event_date, event_place: prod.event_place, ticket_code: o.ticket_code };
       ctrl = ticketDeliveryHTML(d) + (o.ticket_used ? `<div class="sale-meta" style="margin-top:6px">✓ Entrada ya validada</div>` : '');
     } else if (kind === 'file') {
-      ctrl = `<a class="btn sm primary mylib-btn" href="${esc(czHref(prod.file_url))}" target="_blank" rel="noopener"><svg fill="none" stroke="#fff"><use href="#i-download"/></svg> Descargar</a>`;
+      ctrl = `<a class="btn sm primary mylib-btn" href="${esc(czHref(fileUrl))}" target="_blank" rel="noopener"><svg fill="none" stroke="#fff"><use href="#i-download"/></svg> Descargar</a>`;
     } else {
       ctrl = `<div class="sale-meta">El artista te entregará el producto.</div>`;
     }

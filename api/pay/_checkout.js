@@ -33,6 +33,7 @@ module.exports = async (req, res) => {
     const ord = await sbAdmin('shop_orders', { method: 'POST', body: {
       product_id: p.id, seller_id: p.user_id, buyer_id: user.id, buyer_email: user.email || null,
       title: p.title, type: p.type, amount_cents: amount, fee_cents: fee, ship_cents: shipCents, currency: cur, status: 'pending',
+      file_url: p.file_url || null, image_url: p.image_url || null,  // copia de entrega: el comprador lo conserva aunque borren el producto
     }});
     const order = Array.isArray(ord) ? ord[0] : ord;
 
