@@ -8458,6 +8458,14 @@ async function buyInApp(p, btn) {
   } catch (e) { toast('Error de conexión'); }
   if (btn) { btn.disabled = false; btn.innerHTML = btn.dataset.t || 'Comprar'; }
 }
+// Descarga de producto GRATIS: deja registro (aparece en "Mis compras" del
+// comprador y en la actividad del vendedor) y luego descarga. Si el registro
+// falla por lo que sea, se descarga igual — nunca bloquea al usuario.
+async function shopFreeDownload(p) {
+  haptic(10);
+  try { if (state.user && p.user_id !== state.user.id) await sb.rpc('shop_free_grab', { p_id: p.id }); } catch (_) {}
+  const a = document.createElement('a'); a.href = czHref(p.file_url); a.download = ''; a.target = '_blank'; a.rel = 'noopener'; a.click();
+}
 // Vuelta desde Stripe (?pay=...)
 async function handlePayReturn(pay, sid) {
   if (pay === 'cancel') { toast('Pago cancelado'); return; }
@@ -8608,7 +8616,7 @@ function shopProductCard(p, isMe, refresh, sold) {
       </div>
     </div>`);
   card.querySelector('[data-act="paybuy"]')?.addEventListener('click', (e) => { e.stopPropagation(); buyInApp(p, e.currentTarget); });
-  card.querySelector('[data-act="download"]')?.addEventListener('click', (e) => { e.stopPropagation(); haptic(10); const a = document.createElement('a'); a.href = czHref(p.file_url); a.download = ''; a.target = '_blank'; a.rel = 'noopener'; a.click(); });
+  card.querySelector('[data-act="download"]')?.addEventListener('click', (e) => { e.stopPropagation(); shopFreeDownload(p); });
   card.querySelector('[data-act="edit"]')?.addEventListener('click', (e) => { e.stopPropagation(); openShopEdit(p, p.user_id, refresh); });
   // tocar la tarjeta abre el detalle del producto (descripción completa + preview)
   card.style.cursor = 'pointer';
@@ -8653,7 +8661,7 @@ function openShopProduct(p, isMe, refresh) {
     audio.onended = () => { use.setAttribute('href', '#i-play'); fill.style.width = '0%'; };
   }
   m.querySelector('#shpBuy')?.addEventListener('click', (e) => buyInApp(p, e.currentTarget));
-  m.querySelector('#shpDl')?.addEventListener('click', () => { haptic(10); const a = document.createElement('a'); a.href = czHref(p.file_url); a.download = ''; a.target = '_blank'; a.rel = 'noopener'; a.click(); });
+  m.querySelector('#shpDl')?.addEventListener('click', () => shopFreeDownload(p));
   m.querySelector('#shpEdit')?.addEventListener('click', () => { m.remove(); openShopEdit(p, p.user_id, refresh); });
 }
 
@@ -13070,6 +13078,12 @@ function renderSettings() {
       <button class="btn primary" id="saveProfile">Guardar cambios</button>
       <div class="auth-msg" id="setMsg"></div>
       <hr style="border:none;border-top:1px solid var(--line-soft);margin:20px 0" />
+      <div class="field"><label>🛍️ Tienda</label>
+        <button class="btn" id="setMyBuys" style="width:100%"><svg fill="none" stroke="currentColor"><use href="#i-cart"/></svg> Mis compras</button>
+        <button class="btn" id="setMyWallet" style="width:100%;margin-top:8px"><svg fill="none" stroke="currentColor"><use href="#i-cart"/></svg> Mi monedero · ventas y cobros</button>
+        <div class="sub" style="margin-top:6px">Lo que has comprado y, si vendes, tus ventas y retiradas.</div>
+      </div>
+      <hr style="border:none;border-top:1px solid var(--line-soft);margin:20px 0" />
       <div class="field"><label>Nueva contraseña</label><input type="password" id="setPass" placeholder="Mínimo 6 caracteres" autocomplete="new-password" /></div>
       <button class="btn" id="savePass">Cambiar contraseña</button>
       <div class="auth-msg" id="passMsg"></div>
@@ -13105,6 +13119,8 @@ function renderSettings() {
   $('setRoles')?.querySelectorAll('.role-opt').forEach(b => b.onclick = () => b.classList.toggle('on'));
   $('policyLink').onclick = showPrivacyPolicy;
   $('manageBlocks').onclick = openBlockedList;
+  $('setMyBuys').onclick = () => openMyPurchases();
+  $('setMyWallet').onclick = () => openWallet(state.user.id);
   if ($('modReports')) $('modReports').onclick = openReportsAdmin;
   if ($('storyStudio')) $('storyStudio').onclick = () => window.open('/studio', '_blank');
   const themeBtn = $('setThemeBtn');
@@ -13221,7 +13237,7 @@ async function fetchNotifications() {
       const buyerIds = [...new Set(sales.map(s => s.buyer_id).filter(Boolean))];
       let buyers = {};
       if (buyerIds.length) { const { data: bp } = await sb.from('profiles').select('id,username,display_name,avatar_url').in('id', buyerIds); (bp || []).forEach(p => buyers[p.id] = p); }
-      sales.forEach(s => out.push({ ts: s.paid_at, type: 'sale', who: buyers[s.buyer_id] || { display_name: 'Alguien' }, text: `🛒 compró "${s.title || 'tu producto'}" · ${fmtEur((s.amount_cents || 0) + (s.ship_cents || 0), s.currency)}` }));
+      sales.forEach(s => { const tot = (s.amount_cents || 0) + (s.ship_cents || 0); out.push({ ts: s.paid_at, type: 'sale', who: buyers[s.buyer_id] || { display_name: 'Alguien' }, text: tot > 0 ? `🛒 compró "${s.title || 'tu producto'}" · ${fmtEur(tot, s.currency)}` : `🎁 descargó "${s.title || 'tu producto'}" (gratis)` }); });
     }
   } catch (_) {}
   out.sort((a,b) => new Date(b.ts) - new Date(a.ts));
