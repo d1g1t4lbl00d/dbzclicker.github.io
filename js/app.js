@@ -15371,6 +15371,8 @@ function showPrivacyPolicy() {
       <p>Usamos almacenamiento local del navegador para mantener tu sesión y tus preferencias. No usamos cookies de publicidad ni de rastreo. Durante un pago, Stripe puede usar sus propias cookies de seguridad.</p>
       <h4>Dónde se procesan</h4>
       <p>Proveedores que actúan por cuenta nuestra: <b>Supabase</b> (base de datos y cuentas), <b>Cloudflare</b> (audio e imágenes), <b>Vercel</b> (web y analítica agregada) y <b>Stripe</b> (pagos).</p>
+      <h4>Servicios de terceros y responsabilidad</h4>
+      <p>Los <b>pagos</b> los gestiona <b>Stripe</b> y el <b>almacenamiento y la entrega</b> de audio e imágenes, <b>Cloudflare</b>. El servicio se ofrece "tal cual": en la medida que permita la ley, <b>UnderBro no se responsabiliza</b> de caídas, errores, pérdidas de datos o fallos de pago o de entrega originados por esos proveedores o por causas ajenas a nuestro control. Esto no afecta a los derechos de consumo que la ley te reconozca.</p>
       <h4>Seguridad y moderación</h4>
       <p>Puedes <b>bloquear</b> a cualquier usuario (deja de poder escribirte y ocultas su contenido) y <b>reportar</b> perfiles, pistas, fotos y mensajes. El contenido que infrinja derechos o las normas puede ser retirado por moderación.</p>
       <h4>Tus derechos</h4>
