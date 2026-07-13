@@ -3800,6 +3800,92 @@ async function compressAudioToMp3(file, kbps = 192, onProgress) {
   return new File(mp3Data, name, { type: 'audio/mpeg' });
 }
 
+// Codifica SOLO un tramo [start, start+dur] de un AudioBuffer a MP3 (para previews)
+function audioBufferSliceToMp3(audioBuf, start, dur, kbps = 160) {
+  const sr = audioBuf.sampleRate;
+  const ch = Math.min(2, audioBuf.numberOfChannels);
+  const from = Math.max(0, Math.floor(start * sr));
+  const to = Math.min(audioBuf.length, Math.floor((start + dur) * sr));
+  const left = audioBuf.getChannelData(0);
+  const right = ch > 1 ? audioBuf.getChannelData(1) : null;
+  const enc = new window.lamejs.Mp3Encoder(ch, sr, kbps);
+  const blockSize = 1152, mp3Data = [];
+  const to16 = (f) => { const s = Math.max(-1, Math.min(1, f)); return s < 0 ? s * 0x8000 : s * 0x7FFF; };
+  for (let i = from; i < to; i += blockSize) {
+    const n = Math.min(blockSize, to - i);
+    const l16 = new Int16Array(n); const r16 = right ? new Int16Array(n) : null;
+    for (let j = 0; j < n; j++) { l16[j] = to16(left[i + j]); if (r16) r16[j] = to16(right[i + j]); }
+    const buf = r16 ? enc.encodeBuffer(l16, r16) : enc.encodeBuffer(l16);
+    if (buf.length) mp3Data.push(buf);
+  }
+  const tail = enc.flush(); if (tail.length) mp3Data.push(tail);
+  return new File(mp3Data, 'preview.mp3', { type: 'audio/mpeg' });
+}
+
+// Selector de fragmento sobre la onda (misma mecánica que las historias).
+// Llama a onDone(mp3File, start, dur) con el trozo elegido ya codificado.
+function openAudioFragmentPicker(audioBuf, onDone) {
+  const dur = audioBuf.duration;
+  let clip = Math.min(15, dur), start = 0, playhead = null;
+  const peaks = peaksFromBuffer(audioBuf, 170);
+  const m = openModal(`<div class="modal-head"><h3>Elegir preview</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <p class="eco-hint">Arrastra sobre la onda para elegir el fragmento que escucharán los compradores.</p>
+      <div class="seg" id="fpLen" style="margin-bottom:12px"><button data-len="15" class="on">15 s</button><button data-len="30">30 s</button></div>
+      <canvas id="fpWave" class="st-wave"></canvas>
+      <div class="st-times"><span id="fpFrom">0:00</span><span id="fpTo">0:15</span></div>
+      <div class="st-actions">
+        <button class="btn" id="fpPlay"><svg fill="none" stroke="currentColor"><use href="#i-play"/></svg> Escuchar</button>
+        <button class="btn primary" id="fpUse">Usar este fragmento</button>
+      </div>
+    </div>`);
+  const cv = m.querySelector('#fpWave'), wctx = cv.getContext('2d'), dpr = Math.min(2, window.devicePixelRatio || 1);
+  let cw = 0; const CH = 96;
+  const sizeCv = () => { cw = cv.clientWidth || 520; cv.width = cw * dpr; cv.height = CH * dpr; wctx.setTransform(dpr, 0, 0, dpr, 0, 0); };
+  const clampStart = () => { start = Math.max(0, Math.min(Math.max(0, dur - clip), start)); };
+  const drawWave = () => {
+    if (!cw) sizeCv();
+    wctx.clearRect(0, 0, cw, CH);
+    const n = peaks.length, bw = cw / n, x0 = (start / dur) * cw, x1 = ((start + clip) / dur) * cw;
+    for (let i = 0; i < n; i++) { const h = Math.max(3, peaks[i] * (CH * 0.84)), x = i * bw, cxb = x + bw / 2, inW = cxb >= x0 && cxb <= x1; wctx.fillStyle = inW ? '#3e57fc' : 'rgba(140,150,180,.30)'; _roundRect(wctx, x + 1, (CH - h) / 2, Math.max(1, bw - 2), h, 2); wctx.fill(); }
+    wctx.fillStyle = 'rgba(62,87,252,.12)'; wctx.fillRect(x0, 0, x1 - x0, CH);
+    wctx.strokeStyle = 'rgba(62,87,252,.95)'; wctx.lineWidth = 2; wctx.strokeRect(x0 + 1, 2, Math.max(2, x1 - x0 - 2), CH - 4);
+    if (playhead != null) { const px = ((start + playhead) / dur) * cw; wctx.strokeStyle = '#fff'; wctx.lineWidth = 2; wctx.beginPath(); wctx.moveTo(px, 0); wctx.lineTo(px, CH); wctx.stroke(); }
+  };
+  const updTimes = () => { m.querySelector('#fpFrom').textContent = fmtClock(start); m.querySelector('#fpTo').textContent = fmtClock(start + clip); };
+  const setFromX = (clientX) => { const r = cv.getBoundingClientRect(); const frac = Math.max(0, Math.min(1, (clientX - r.left) / r.width)); start = frac * dur - clip / 2; clampStart(); updTimes(); drawWave(); };
+  let drag = false;
+  cv.addEventListener('pointerdown', (e) => { drag = true; try { cv.setPointerCapture(e.pointerId); } catch (_) {} setFromX(e.clientX); });
+  cv.addEventListener('pointermove', (e) => { if (drag) setFromX(e.clientX); });
+  cv.addEventListener('pointerup', () => { drag = false; });
+  cv.addEventListener('pointercancel', () => { drag = false; });
+  const onResize = () => drawWave(); window.addEventListener('resize', onResize);
+  setTimeout(() => { sizeCv(); updTimes(); drawWave(); }, 40);
+  m.querySelectorAll('#fpLen button').forEach(b => b.onclick = () => {
+    m.querySelectorAll('#fpLen button').forEach(x => x.classList.toggle('on', x === b));
+    clip = Math.min(parseInt(b.dataset.len, 10), dur); clampStart(); updTimes(); drawWave();
+  });
+  let pctx = null, psrc = null, praf = 0;
+  const setIcon = (playing) => { m.querySelector('#fpPlay').innerHTML = `<svg fill="none" stroke="currentColor"><use href="#i-${playing ? 'pause' : 'play'}"/></svg> ${playing ? 'Parar' : 'Escuchar'}`; };
+  const stopPrev = () => { try { psrc && psrc.stop(); } catch (_) {} try { pctx && pctx.close(); } catch (_) {} psrc = null; pctx = null; cancelAnimationFrame(praf); playhead = null; drawWave(); setIcon(false); };
+  m.querySelector('#fpPlay').onclick = () => {
+    if (psrc) { stopPrev(); return; }
+    pctx = new (window.AudioContext || window.webkitAudioContext)(); psrc = pctx.createBufferSource(); psrc.buffer = audioBuf; psrc.connect(pctx.destination);
+    const t0 = pctx.currentTime; psrc.start(0, start, clip); setIcon(true);
+    const tick = () => { if (!pctx) return; playhead = Math.min(clip, pctx.currentTime - t0); drawWave(); if (playhead < clip) praf = requestAnimationFrame(tick); else stopPrev(); }; tick();
+  };
+  m.querySelector('.close').addEventListener('click', () => { stopPrev(); window.removeEventListener('resize', onResize); });
+  m.querySelector('#fpUse').onclick = () => {
+    const btn = m.querySelector('#fpUse'); btn.disabled = true; btn.textContent = 'Preparando…';
+    stopPrev(); window.removeEventListener('resize', onResize);
+    setTimeout(() => {
+      let file; try { file = audioBufferSliceToMp3(audioBuf, start, clip, 160); }
+      catch (e) { toast('No se pudo crear el preview'); btn.disabled = false; btn.textContent = 'Usar este fragmento'; return; }
+      m.remove(); onDone(file, start, clip);
+    }, 30);
+  };
+}
+
 // Calcula el waveform REAL de la canción (picos RMS) para dibujarlo fielmente
 async function computeWaveformPeaks(file, n = 140) {
   try {
@@ -8784,7 +8870,12 @@ async function openShopEdit(p, userId, onSaved) {
         <input type="file" id="shFile" hidden />
       </div>
       <div class="field" id="shPrevRow"><label>Preview de audio <span style="opacity:.6;font-weight:600">(opcional)</span></label>
-        <div class="cover-pick" id="shPrevDz"><div class="cover-pick-txt"><b id="shPrevName">${p.preview_url ? 'Preview subido ✓' : 'Subir un fragmento (mp3)'}</b><span>lo pueden escuchar los compradores antes de comprar</span></div></div>
+        <span class="pk-hint" style="display:block;margin-bottom:8px">Un fragmento corto que los compradores escuchan antes de comprar.</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button type="button" class="btn sm" id="shPrevPick"><svg fill="none" stroke="currentColor"><use href="#i-play"/></svg> Elegir fragmento del audio</button>
+          <button type="button" class="btn sm" id="shPrevUp"><svg fill="none" stroke="currentColor"><use href="#i-upload"/></svg> Subir un mp3</button>
+        </div>
+        <div id="shPrevName" class="pk-hint" style="margin-top:8px">${p.preview_url ? 'Preview actual ✓ (guardado)' : ''}</div>
         <input type="file" id="shPrevFile" accept="audio/*" hidden />
       </div>
       <div class="field" id="shShipRow" style="display:none"><label>Coste de envío (€)</label><input type="number" id="shShipEur" min="0" step="0.01" inputmode="decimal" value="${p.ship_cents != null ? (p.ship_cents / 100) : ''}" placeholder="3,99 (0 = envío gratis)" /><span class="pk-hint">Se pide la dirección del comprador al pagar y la verás en tu <b>Monedero → Ventas</b> para enviar el pedido.</span></div>
@@ -8843,8 +8934,29 @@ async function openShopEdit(p, userId, onSaved) {
   m.querySelector('#shImg').onchange = (e) => { const f = e.target.files[0]; if (!f) return; imgFile = f; m.querySelector('#shPrev').innerHTML = `<img decoding="async" src="${URL.createObjectURL(f)}" alt="">`; };
   m.querySelector('#shFileDz').onclick = () => m.querySelector('#shFile').click();
   m.querySelector('#shFile').onchange = (e) => { const f = e.target.files[0]; if (!f) return; dataFile = f; m.querySelector('#shFileName').textContent = f.name; };
-  m.querySelector('#shPrevDz').onclick = () => m.querySelector('#shPrevFile').click();
-  m.querySelector('#shPrevFile').onchange = (e) => { const f = e.target.files[0]; if (!f) return; if (!f.type.startsWith('audio')) { toast('El preview debe ser un audio'); return; } prevFile = f; m.querySelector('#shPrevName').textContent = f.name; };
+  // Subir un mp3 a mano (alternativa)
+  m.querySelector('#shPrevUp').onclick = () => m.querySelector('#shPrevFile').click();
+  m.querySelector('#shPrevFile').onchange = (e) => { const f = e.target.files[0]; if (!f) return; if (!f.type.startsWith('audio')) { toast('El preview debe ser un audio'); return; } prevFile = f; m.querySelector('#shPrevName').textContent = 'Preview: ' + f.name; };
+  // Elegir un fragmento del audio ya subido (misma mecánica que las historias)
+  m.querySelector('#shPrevPick').onclick = async () => {
+    const btn = m.querySelector('#shPrevPick');
+    if (!dataFile && !p.file_url) { toast('Primero sube el archivo de audio que vendes'); return; }
+    const old = btn.innerHTML; btn.disabled = true; btn.textContent = 'Cargando audio…';
+    let buf = null;
+    try {
+      let ab;
+      if (dataFile) { if (!dataFile.type.startsWith('audio')) { toast('El archivo que vendes no es audio; sube un mp3 de preview'); btn.disabled = false; btn.innerHTML = old; return; } ab = await dataFile.arrayBuffer(); }
+      else { const r = await fetch(czUrl(p.file_url)); ab = await r.arrayBuffer(); }
+      const actx = new (window.AudioContext || window.webkitAudioContext)();
+      try { buf = await actx.decodeAudioData(ab); } finally { try { actx.close(); } catch (_) {} }
+    } catch (_) {}
+    btn.disabled = false; btn.innerHTML = old;
+    if (!buf) { toast('No se pudo leer el audio. Puedes subir un mp3 de preview.'); return; }
+    openAudioFragmentPicker(buf, (file, start, clip) => {
+      prevFile = file;
+      m.querySelector('#shPrevName').textContent = `Fragmento elegido ✓ (${fmtClock(start)}–${fmtClock(start + clip)})`;
+    });
+  };
   if (edit) m.querySelector('#shDel').onclick = async () => { if (!confirm('¿Eliminar este producto?')) return; await sb.from('shop_products').delete().eq('id', p.id); m.remove(); toast('Producto eliminado'); onSaved && onSaved(); };
   m.querySelector('#shSave').onclick = async () => {
     const btn = m.querySelector('#shSave'); const msg = m.querySelector('#shMsg');
