@@ -12814,6 +12814,7 @@ async function renderAdmin() {
       </div>
       <div class="admin-card span2"><h3>🛒 Tienda y ventas</h3>
         <div class="adm-kpis" id="admShopKpis"><div class="loading" style="padding:14px"><div class="spinner"></div></div></div>
+        <button class="btn primary" id="admTxBtn" style="width:100%;margin-top:12px"><svg fill="none" stroke="#fff"><use href="#i-files"/></svg> Ver todos los movimientos · compras, ventas y subidas</button>
         <div class="adm-tabs" id="admShopTabs" style="margin-top:12px"><button class="active" data-st="products">Productos</button><button data-st="orders">Pedidos</button></div>
         <div id="admShopList" class="adm-list"><div class="loading" style="padding:18px"><div class="spinner"></div></div></div>
       </div>
@@ -12821,6 +12822,7 @@ async function renderAdmin() {
   loadAdminStats();
   loadAdminContent('tracks');
   loadAdminShop();
+  $('admTxBtn').onclick = openAdminTx;
   main.querySelectorAll('#admShopTabs button').forEach((b) => b.onclick = () => {
     main.querySelectorAll('#admShopTabs button').forEach((x) => x.classList.toggle('active', x === b));
     adminShopList(b.dataset.st);
@@ -13027,6 +13029,113 @@ async function adminShopList(tab) {
       });
     }
   } catch (_) { box.innerHTML = '<div class="sub">Error al cargar.</div>'; }
+}
+// perfiles (con avatar) por lista de ids, para el libro de movimientos
+async function adminProfilesByIds(ids) {
+  const uniq = [...new Set(ids.filter(Boolean))];
+  if (!uniq.length) return {};
+  try {
+    const { data } = await sb.from('profiles').select('id,username,display_name,avatar_url,verified,theme').in('id', uniq);
+    const map = {}; (data || []).forEach(p => { map[p.id] = p; });
+    return map;
+  } catch (_) { return {}; }
+}
+// LIBRO DE MOVIMIENTOS: compras, ventas y subidas, con nombres/avatares, buscador y filtros
+async function openAdminTx() {
+  const m = openModal(`<div class="modal-head"><h3>📒 Movimientos de la tienda</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <div class="atx-tools">
+        <input id="atxQ" type="text" placeholder="Buscar por comprador, vendedor o producto…" autocomplete="off" />
+        <div class="atx-filters" id="atxFilters">
+          <button class="on" data-f="all">Todo</button>
+          <button data-f="sales">Ventas</button>
+          <button data-f="free">Gratis</button>
+          <button data-f="uploads">Subidas</button>
+        </div>
+      </div>
+      <div id="atxList" class="atx-list"><div class="loading" style="padding:24px"><div class="spinner"></div></div></div>
+    </div>`);
+  const listBox = m.querySelector('#atxList');
+  let events = [];
+  try {
+    const [ordRes, prodRes] = await Promise.all([
+      sb.from('shop_orders').select('id,title,type,amount_cents,fee_cents,ship_cents,currency,status,buyer_id,buyer_email,seller_id,shipped,ship_addr,created_at,paid_at').order('created_at', { ascending: false }).limit(300),
+      sb.from('shop_products').select('id,title,type,price_cents,is_free,user_id,created_at').order('created_at', { ascending: false }).limit(300),
+    ]);
+    const orders = ordRes.data || [], products = prodRes.data || [];
+    const profs = await adminProfilesByIds([...orders.flatMap(o => [o.buyer_id, o.seller_id]), ...products.map(p => p.user_id)]);
+    orders.forEach(o => events.push({ kind: 'order', ts: o.paid_at || o.created_at, o, p: null }));
+    products.forEach(p => events.push({ kind: 'upload', ts: p.created_at, o: null, p }));
+    events.sort((a, b) => new Date(b.ts) - new Date(a.ts));
+    events.forEach(e => {
+      if (e.kind === 'order') {
+        const o = e.o; e._buyer = profs[o.buyer_id]; e._seller = profs[o.seller_id];
+        e._free = (o.amount_cents || 0) === 0 && o.status === 'paid';
+        e._hay = `${o.title || ''} ${e._buyer ? (e._buyer.username + ' ' + (e._buyer.display_name || '')) : (o.buyer_email || '')} ${e._seller ? (e._seller.username + ' ' + (e._seller.display_name || '')) : ''}`.toLowerCase();
+      } else {
+        const p = e.p; e._owner = profs[p.user_id];
+        e._hay = `${p.title || ''} ${e._owner ? (e._owner.username + ' ' + (e._owner.display_name || '')) : ''}`.toLowerCase();
+      }
+    });
+  } catch (_) { listBox.innerHTML = '<div class="sub" style="padding:16px">No se pudieron cargar los movimientos.</div>'; return; }
+
+  const STMAP = { paid: ['ok', 'Pagado'], pending: ['mod', 'Pendiente'], refunded: ['ban', 'Reembolsado'] };
+  const fmtWhen = (ts) => ts ? new Date(ts).toLocaleString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+  const nameChip = (prof, fallback) => {
+    const nm = prof ? '@' + (prof.username || prof.display_name || '—') : esc(fallback || '—');
+    return `<b class="atx-name"${prof ? ` data-open="${prof.id}"` : ''}>${esc(nm)}</b>`;
+  };
+  const render = () => {
+    const term = (m.querySelector('#atxQ').value || '').trim().toLowerCase();
+    const filt = m.querySelector('#atxFilters .on').dataset.f;
+    const rows = events.filter(e => {
+      if (filt === 'sales' && !(e.kind === 'order' && !e._free)) return false;
+      if (filt === 'free' && !(e.kind === 'order' && e._free)) return false;
+      if (filt === 'uploads' && e.kind !== 'upload') return false;
+      if (term && e._hay.indexOf(term) < 0) return false;
+      return true;
+    });
+    if (!rows.length) { listBox.innerHTML = '<div class="sub" style="padding:16px">Sin resultados.</div>'; return; }
+    listBox.innerHTML = '';
+    rows.slice(0, 200).forEach(e => {
+      let r;
+      if (e.kind === 'order') {
+        const o = e.o, t = (SHOP_TYPES[o.type] || SHOP_TYPES.other).label;
+        const total = (o.amount_cents || 0) + (o.ship_cents || 0) + (o.fee_cents || 0);
+        const st = STMAP[o.status] || ['mod', o.status || '—'];
+        const money = e._free ? '🎁 Gratis' : fmtEur(total, o.currency);
+        const ship = o.ship_cents != null ? (o.shipped ? ' · 📦 enviado' : ' · ⏳ envío pendiente') : '';
+        r = el(`<div class="atx-row">
+          <span class="atx-av">${avatarHTML(e._buyer || { username: '?' })}</span>
+          <div class="atx-body">
+            <div class="atx-l1"><b>${esc((o.title || 'Producto').slice(0, 46))}</b><span class="atx-amt">${esc(money)}</span></div>
+            <div class="atx-l2">${nameChip(e._buyer, o.buyer_email)} <span class="atx-arrow">compró a</span> ${nameChip(e._seller)}</div>
+            <div class="atx-l3"><span class="adm-tag ${st[0]}">${esc(st[1])}</span> ${esc(t)}${e._free ? '' : ` · comisión ${esc(fmtEur(o.fee_cents || 0, o.currency))}`} · ${esc(fmtWhen(e.ts))}${ship}</div>
+            ${o.ship_addr ? `<div class="atx-addr">📦 ${esc(o.ship_addr)}</div>` : ''}
+          </div>
+        </div>`);
+      } else {
+        const p = e.p, t = (SHOP_TYPES[p.type] || SHOP_TYPES.other).label;
+        const price = p.is_free ? 'Gratis' : (p.price_cents ? fmtEur(p.price_cents, 'eur') : '—');
+        r = el(`<div class="atx-row">
+          <span class="atx-av">${avatarHTML(e._owner || { username: '?' })}</span>
+          <div class="atx-body">
+            <div class="atx-l1"><b>${esc((p.title || 'Producto').slice(0, 46))}</b><span class="atx-amt">${esc(price)}</span></div>
+            <div class="atx-l2">${nameChip(e._owner)} <span class="atx-arrow">subió a su tienda</span></div>
+            <div class="atx-l3"><span class="adm-tag" style="background:#e7ecfb;color:#3a54c9">SUBIDA</span> ${esc(t)} · ${esc(fmtWhen(e.ts))}</div>
+          </div>
+        </div>`);
+      }
+      r.querySelectorAll('[data-open]').forEach(x => x.onclick = () => { m.remove(); openProfile(x.dataset.open); });
+      listBox.appendChild(r);
+    });
+  };
+  m.querySelector('#atxQ').addEventListener('input', render);
+  m.querySelectorAll('#atxFilters button').forEach(b => b.onclick = () => {
+    m.querySelectorAll('#atxFilters button').forEach(x => x.classList.toggle('on', x === b));
+    render();
+  });
+  render();
 }
 async function adminBroadcast() {
   const title = $('admBcTitle').value.trim(), body = $('admBcBody').value.trim();
