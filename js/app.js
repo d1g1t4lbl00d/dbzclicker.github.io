@@ -12934,12 +12934,15 @@ async function loadAdminShopKpis() {
   const kbox = $('admShopKpis'); if (!kbox) return;
   let prodCount = 0, orders = [];
   try { const { count } = await sb.from('shop_products').select('id', { count: 'exact', head: true }); prodCount = count || 0; } catch (_) {}
-  try { const { data } = await sb.from('shop_orders').select('amount_cents,fee_cents,ship_cents').eq('status', 'paid').limit(2000); orders = data || []; } catch (_) {}
+  try { const { data } = await sb.from('shop_orders').select('amount_cents,fee_cents,ship_cents,seller_id,buyer_id').eq('status', 'paid').limit(2000); orders = data || []; } catch (_) {}
   const gross = orders.reduce((s, o) => s + (o.amount_cents || 0) + (o.ship_cents || 0) + (o.fee_cents || 0), 0);
   const commission = orders.reduce((s, o) => s + (o.fee_cents || 0), 0);
+  const sellers = new Set(orders.map(o => o.seller_id).filter(Boolean)).size;
+  const buyers = new Set(orders.map(o => o.buyer_id).filter(Boolean)).size;
   const kpi = (k, v) => `<div class="adm-kpi"><b>${v}</b><span>${k}</span></div>`;
-  kbox.innerHTML = kpi('Productos', nfmt(prodCount)) + kpi('Pedidos pagados', nfmt(orders.length))
-    + kpi('Ventas brutas', fmtEur(gross, 'eur')) + kpi('Comisión UnderBro', fmtEur(commission, 'eur'));
+  kbox.innerHTML = kpi('Productos', nfmt(prodCount)) + kpi('Pedidos', nfmt(orders.length))
+    + kpi('Ventas brutas', fmtEur(gross, 'eur')) + kpi('Comisión UnderBro', fmtEur(commission, 'eur'))
+    + kpi('Vendedores', nfmt(sellers)) + kpi('Compradores', nfmt(buyers));
 }
 async function loadAdminShop() {
   const kbox = $('admShopKpis'); if (!kbox) return;
@@ -12995,14 +12998,31 @@ async function adminShopList(tab) {
         box.appendChild(r);
       });
     } else {
-      const { data } = await sb.from('shop_orders').select('id,title,type,amount_cents,fee_cents,ship_cents,currency,status,buyer_email,seller_id,shipped,paid_at').eq('status', 'paid').order('paid_at', { ascending: false }).limit(40);
+      // Panel completo de transacciones: quién compra → quién vende, qué y estado
+      const { data } = await sb.from('shop_orders')
+        .select('id,title,type,amount_cents,fee_cents,ship_cents,currency,status,buyer_id,buyer_email,seller_id,shipped,ship_addr,created_at,paid_at')
+        .order('created_at', { ascending: false }).limit(60);
       const rows = data || [];
-      const names = await adminNamesByIds(rows.map(r => r.seller_id));
+      const names = await adminNamesByIds([...rows.map(r => r.seller_id), ...rows.map(r => r.buyer_id)]);
       box.innerHTML = ''; if (!rows.length) { box.innerHTML = '<div class="sub">Sin pedidos todavía.</div>'; return; }
+      const stMap = { paid: ['ok', 'pagado'], pending: ['mod', 'pendiente'], refunded: ['ban', 'reembolsado'] };
       rows.forEach(o => {
         const total = (o.amount_cents || 0) + (o.ship_cents || 0) + (o.fee_cents || 0);
-        const ship = o.ship_cents != null ? (o.shipped ? ' · 📦 enviado' : ' · ⏳ pendiente') : '';
-        const r = el(`<div class="adm-row"><div class="adm-row-main"><b>${esc((o.title || 'Producto').slice(0, 40))} <span class="sub">${esc(fmtEur(total, o.currency))}</span></b><span>vende @${esc(names[o.seller_id] || '—')} · comisión ${esc(fmtEur(o.fee_cents || 0, o.currency))} · ${o.paid_at ? esc(new Date(o.paid_at).toLocaleDateString('es-ES')) : ''}${ship}</span></div></div>`);
+        const free = (o.amount_cents || 0) === 0 && o.status === 'paid';
+        const t = (SHOP_TYPES[o.type] || SHOP_TYPES.other).label;
+        const st = stMap[o.status] || ['mod', o.status || '—'];
+        const when = (o.paid_at || o.created_at) ? new Date(o.paid_at || o.created_at).toLocaleDateString('es-ES', { day: '2-digit', month: 'short' }) : '';
+        const ship = o.ship_cents != null ? (o.shipped ? ' · 📦 enviado' : ' · ⏳ envío pendiente') : '';
+        const money = free ? '🎁 Gratis' : fmtEur(total, o.currency);
+        const buyerTxt = o.buyer_id ? '@' + (names[o.buyer_id] || '—') : esc(o.buyer_email || 'invitado');
+        const sellerTxt = '@' + (names[o.seller_id] || '—');
+        const r = el(`<div class="adm-row"><div class="adm-row-main">
+          <b>${esc((o.title || 'Producto').slice(0, 42))} <span class="sub">· ${esc(money)}</span> <span class="adm-tag ${st[0]}">${esc(st[1])}</span></b>
+          <span>Compra <b data-buyer style="cursor:${o.buyer_id ? 'pointer' : 'default'};color:var(--ink)">${buyerTxt}</b> · vende <b data-seller style="cursor:pointer;color:var(--ink)">${sellerTxt}</b> · ${esc(t)}${free ? '' : ` · comisión ${esc(fmtEur(o.fee_cents || 0, o.currency))}`} · ${esc(when)}${ship}</span>
+          ${o.ship_addr ? `<span class="sub" style="display:block;margin-top:2px">📦 ${esc(o.ship_addr)}</span>` : ''}
+        </div></div>`);
+        if (o.buyer_id) r.querySelector('[data-buyer]').onclick = () => openProfile(o.buyer_id);
+        if (o.seller_id) r.querySelector('[data-seller]').onclick = () => openProfile(o.seller_id);
         box.appendChild(r);
       });
     }
