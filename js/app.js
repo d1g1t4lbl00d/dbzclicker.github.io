@@ -12831,8 +12831,8 @@ async function renderAdmin() {
   $('admUserGo').onclick = doSearch;
   $('admUserQ').addEventListener('keydown', (e) => { if (e.key === 'Enter') doSearch(); });
   adminUserSearch('');   // últimos registrados
-  main.querySelectorAll('.adm-tabs button').forEach((b) => b.onclick = () => {
-    main.querySelectorAll('.adm-tabs button').forEach((x) => x.classList.toggle('active', x === b));
+  main.querySelectorAll('.adm-tabs button[data-ct]').forEach((b) => b.onclick = () => {
+    main.querySelectorAll('.adm-tabs button[data-ct]').forEach((x) => x.classList.toggle('active', x === b));
     loadAdminContent(b.dataset.ct);
   });
   $('admBcSend').onclick = adminBroadcast;
