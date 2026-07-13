@@ -15418,6 +15418,8 @@ function showPrivacyPolicy() {
       <p>Puedes <b>bloquear</b> a cualquier usuario (deja de poder escribirte y ocultas su contenido) y <b>reportar</b> perfiles, pistas, fotos y mensajes. El contenido que infrinja derechos o las normas puede ser retirado por moderación.</p>
       <h4>Tus derechos</h4>
       <p>Puedes editar tu perfil en cualquier momento y <b>eliminar tu cuenta y todos tus datos y archivos</b> desde <b>Ajustes → Eliminar cuenta</b>. Podemos conservar registros de pedidos por obligaciones fiscales. Esa acción es permanente.</p>
+      <h4>Contacto</h4>
+      <p>Para cualquier consulta sobre privacidad o para ejercer tus derechos: <a href="mailto:underbroapp@gmail.com">underbroapp@gmail.com</a>.</p>
       <p style="color:var(--ink-soft);font-size:12px;margin-top:14px">Versión completa en <a href="/privacy" target="_blank" rel="noopener">underbro.app/privacy</a> · Última actualización: ${new Date().toLocaleDateString('es-ES')}.</p>
     </div>`);
 }

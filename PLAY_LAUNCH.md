@@ -58,7 +58,7 @@ Falta (acciones tuyas, fuera del código): dominio activo, cuenta Play, generar 
 - **Capturas:** mín. 2 (teléfono). Puedes usar las pantallas de stream, perfil y chat.
 - **Categoría:** Música y audio (o Social).
 - **Política de privacidad (URL):** `https://underbro.app/privacy`
-- **Correo de contacto:** crea/define uno (p. ej. `hola@underbro.app`) y úsalo también en privacy.html.
+- **Correo de contacto:** `underbroapp@gmail.com` (el mismo que aparece en privacy.html).
 
 ---
 
