@@ -8785,7 +8785,7 @@ async function openShopEdit(p, userId, onSaved) {
       </div>
       <div class="field" id="shPrevRow"><label>Preview de audio <span style="opacity:.6;font-weight:600">(opcional)</span></label>
         <div class="cover-pick" id="shPrevDz"><div class="cover-pick-txt"><b id="shPrevName">${p.preview_url ? 'Preview subido ✓' : 'Subir un fragmento (mp3)'}</b><span>lo pueden escuchar los compradores antes de comprar</span></div></div>
-        <input type="file" id="shPrev" accept="audio/*" hidden />
+        <input type="file" id="shPrevFile" accept="audio/*" hidden />
       </div>
       <div class="field" id="shShipRow" style="display:none"><label>Coste de envío (€)</label><input type="number" id="shShipEur" min="0" step="0.01" inputmode="decimal" value="${p.ship_cents != null ? (p.ship_cents / 100) : ''}" placeholder="3,99 (0 = envío gratis)" /><span class="pk-hint">Se pide la dirección del comprador al pagar y la verás en tu <b>Monedero → Ventas</b> para enviar el pedido.</span></div>
       <div id="shEvRow" style="${p.type === 'ticket' ? '' : 'display:none'}">
@@ -8843,8 +8843,8 @@ async function openShopEdit(p, userId, onSaved) {
   m.querySelector('#shImg').onchange = (e) => { const f = e.target.files[0]; if (!f) return; imgFile = f; m.querySelector('#shPrev').innerHTML = `<img decoding="async" src="${URL.createObjectURL(f)}" alt="">`; };
   m.querySelector('#shFileDz').onclick = () => m.querySelector('#shFile').click();
   m.querySelector('#shFile').onchange = (e) => { const f = e.target.files[0]; if (!f) return; dataFile = f; m.querySelector('#shFileName').textContent = f.name; };
-  m.querySelector('#shPrevDz').onclick = () => m.querySelector('#shPrev').click();
-  m.querySelector('#shPrev').onchange = (e) => { const f = e.target.files[0]; if (!f) return; if (!f.type.startsWith('audio')) { toast('El preview debe ser un audio'); return; } prevFile = f; m.querySelector('#shPrevName').textContent = f.name; };
+  m.querySelector('#shPrevDz').onclick = () => m.querySelector('#shPrevFile').click();
+  m.querySelector('#shPrevFile').onchange = (e) => { const f = e.target.files[0]; if (!f) return; if (!f.type.startsWith('audio')) { toast('El preview debe ser un audio'); return; } prevFile = f; m.querySelector('#shPrevName').textContent = f.name; };
   if (edit) m.querySelector('#shDel').onclick = async () => { if (!confirm('¿Eliminar este producto?')) return; await sb.from('shop_products').delete().eq('id', p.id); m.remove(); toast('Producto eliminado'); onSaved && onSaved(); };
   m.querySelector('#shSave').onclick = async () => {
     const btn = m.querySelector('#shSave'); const msg = m.querySelector('#shMsg');
