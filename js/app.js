@@ -8763,41 +8763,79 @@ async function openSellerSales(userId) {
   });
 }
 
-// Compras del usuario (re-descarga / código de entrada / estado de envío)
+// ¿qué tipo de archivo es? (por la extensión de la URL)
+function purchaseMediaKind(url) {
+  const u = (url || '').toLowerCase().split('?')[0];
+  if (/\.(mp3|wav|m4a|aac|ogg|flac|opus)$/.test(u)) return 'audio';
+  if (/\.(jpe?g|png|webp|gif|avif|svg)$/.test(u)) return 'image';
+  return u ? 'file' : 'none';
+}
+// Biblioteca de compras: reproduce audio ahí mismo, ve/descarga imágenes,
+// entradas con QR. Siempre disponibles (se leen de tus pedidos).
 async function openMyPurchases() {
   const m = openModal(`<div class="modal-head"><h3>🛍️ Mis compras</h3><button class="close">&times;</button></div><div class="modal-body" id="buysBody"><div class="loading" style="padding:24px"><div class="spinner"></div></div></div>`);
   const box = m.querySelector('#buysBody');
   let rows = [];
   try {
     const { data } = await sb.from('shop_orders')
-      .select('id,title,type,amount_cents,ship_cents,currency,ticket_code,ticket_used,ship_addr,shipped,paid_at,shop_products(file_url,event_date,event_place,event_online,event_url)')
-      .eq('buyer_id', state.user.id).eq('status', 'paid').order('paid_at', { ascending: false }).limit(100);
+      .select('id,title,type,amount_cents,ship_cents,currency,ticket_code,ticket_used,paid_at,shop_products(file_url,image_url,event_date,event_place,event_online,event_url)')
+      .eq('buyer_id', state.user.id).eq('status', 'paid').order('paid_at', { ascending: false }).limit(200);
     rows = data || [];
   } catch (_) {}
-  if (!rows.length) { box.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-cart"/></svg><p>Aún no has comprado nada. Lo que compres aparecerá aquí para descargarlo cuando quieras.</p></div>`; return; }
+  if (!rows.length) { box.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-cart"/></svg><p>Aún no has comprado nada. Lo que compres aparecerá aquí siempre, para escucharlo o descargarlo cuando quieras.</p></div>`; return; }
   box.innerHTML = '';
+  const audios = [];
   rows.forEach(o => {
     const prod = o.shop_products || {};
     const total = (o.amount_cents || 0) + (o.ship_cents || 0);
-    const tlabel = (SHOP_TYPES[o.type] || SHOP_TYPES.other).label;
-    let action = '', qrCode = null;
-    if (o.type === 'ticket') {
+    const free = (o.amount_cents || 0) === 0;
+    const st = SHOP_TYPES[o.type] || SHOP_TYPES.other;
+    const kind = o.type === 'ticket' ? 'ticket' : purchaseMediaKind(prod.file_url);
+    const cover = prod.image_url
+      ? `<img decoding="async" loading="lazy" src="${esc(czUrl(prod.image_url))}" alt="">`
+      : `<svg fill="none" stroke="currentColor"><use href="#${st.icon}"/></svg>`;
+    let ctrl = '';
+    if (kind === 'audio') {
+      ctrl = `<div class="mylib-player">
+        <button class="mylib-play" data-play aria-label="Reproducir"><svg fill="none" stroke="currentColor"><use href="#i-play"/></svg></button>
+        <div class="mylib-bar"><div class="mylib-fill" data-fill></div></div>
+        <a class="mylib-dl" href="${esc(czHref(prod.file_url))}" target="_blank" rel="noopener" title="Descargar"><svg fill="none" stroke="currentColor"><use href="#i-download"/></svg></a>
+        <audio preload="none" src="${esc(czUrl(prod.file_url))}" data-audio></audio>
+      </div>`;
+    } else if (kind === 'image') {
+      ctrl = `<a class="btn sm primary mylib-btn" href="${esc(czHref(prod.file_url))}" target="_blank" rel="noopener"><svg fill="none" stroke="#fff"><use href="#i-image"/></svg> Ver / descargar</a>`;
+    } else if (kind === 'ticket') {
       const d = { event_online: prod.event_online, event_url: prod.event_url, event_date: prod.event_date, event_place: prod.event_place, ticket_code: o.ticket_code };
-      action = ticketDeliveryHTML(d);
-      if (!prod.event_online && o.ticket_code) qrCode = o.ticket_code;
-      if (o.ticket_used) action += `<div class="sale-meta" style="margin-top:6px">✓ Entrada ya validada</div>`;
+      ctrl = ticketDeliveryHTML(d) + (o.ticket_used ? `<div class="sale-meta" style="margin-top:6px">✓ Entrada ya validada</div>` : '');
+    } else if (kind === 'file') {
+      ctrl = `<a class="btn sm primary mylib-btn" href="${esc(czHref(prod.file_url))}" target="_blank" rel="noopener"><svg fill="none" stroke="#fff"><use href="#i-download"/></svg> Descargar</a>`;
+    } else {
+      ctrl = `<div class="sale-meta">El artista te entregará el producto.</div>`;
     }
-    else if (o.ship_addr) action = `<div class="sale-meta" style="margin-top:6px">${o.shipped ? '📦 Enviado' : '⏳ Preparando envío'} · a ${esc(o.ship_addr)}</div>`;
-    else if (prod.file_url) action = `<a class="btn sm primary" style="margin-top:8px" href="${esc(czHref(prod.file_url))}" target="_blank" rel="noopener"><svg fill="none" stroke="#fff"><use href="#i-download"/></svg> Descargar</a>`;
-    else action = `<div class="sale-meta" style="margin-top:6px">El artista te entregará el producto.</div>`;
-    const row = el(`<div class="sale-row">
-      <div class="sale-top"><b>${esc(o.title || 'Producto')}</b><span class="sale-amt">${esc(fmtEur(total, o.currency))}</span></div>
-      <div class="sale-meta">${esc(tlabel)} · ${o.paid_at ? esc(new Date(o.paid_at).toLocaleDateString('es-ES')) : ''}</div>
-      ${action}
+    const row = el(`<div class="mylib-row">
+      <div class="mylib-cover">${cover}</div>
+      <div class="mylib-body">
+        <div class="mylib-top"><b>${esc(o.title || 'Producto')}</b><span class="mylib-amt">${free ? '🎁' : esc(fmtEur(total, o.currency))}</span></div>
+        <div class="mylib-meta">${esc(st.label)} · ${o.paid_at ? esc(new Date(o.paid_at).toLocaleDateString('es-ES')) : ''}</div>
+        ${ctrl}
+      </div>
     </div>`);
     box.appendChild(row);
-    if (qrCode) renderQR(row.querySelector('[data-qr]'), qrCode);
+    if (kind === 'ticket' && !prod.event_online && o.ticket_code) renderQR(row.querySelector('[data-qr]'), o.ticket_code);
+    if (kind === 'audio') {
+      const audio = row.querySelector('[data-audio]'), btn = row.querySelector('[data-play]'), fill = row.querySelector('[data-fill]'), use = btn.querySelector('use');
+      audios.push(audio);
+      btn.onclick = () => {
+        if (audio.paused) { audios.forEach(a => { if (a !== audio) a.pause(); }); audio.play().catch(() => toast('No se pudo reproducir')); }
+        else audio.pause();
+      };
+      audio.onplay = () => use.setAttribute('href', '#i-pause');
+      audio.onpause = () => use.setAttribute('href', '#i-play');
+      audio.ontimeupdate = () => { if (audio.duration) fill.style.width = (audio.currentTime / audio.duration * 100) + '%'; };
+      audio.onended = () => { use.setAttribute('href', '#i-play'); fill.style.width = '0%'; };
+    }
   });
+  m.querySelector('.close')?.addEventListener('click', () => audios.forEach(a => { try { a.pause(); } catch (_) {} }));
 }
 
 // Validador de entradas para el organizador (presencial): código manual o escaneo de QR, un solo uso
