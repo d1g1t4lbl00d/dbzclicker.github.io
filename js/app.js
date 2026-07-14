@@ -1089,6 +1089,7 @@ async function switchView(view) {
   if (view === 'forum') return renderForum();
   if (view === 'plaza') return renderPlaza();
   if (view === 'messages') return renderMessages();
+  if (view === 'commerce') return renderCommerce();
   if (view === 'posts') return renderPosts();
   if (view === 'search') return renderSearch();
   if (view === 'playlists') return renderPlaylists();
@@ -8765,21 +8766,28 @@ async function openSellerSales(userId) {
   let rows = [];
   try {
     const { data } = await sb.from('shop_orders')
-      .select('id,title,type,amount_cents,ship_cents,currency,buyer_email,ship_addr,shipped,paid_at')
+      .select('id,title,type,amount_cents,ship_cents,currency,buyer_id,buyer_email,ship_addr,shipped,paid_at')
       .eq('seller_id', userId).eq('status', 'paid').order('paid_at', { ascending: false }).limit(100);
     rows = data || [];
   } catch (_) {}
-  if (!rows.length) { box.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-cart"/></svg><p>Aún no tienes ventas. Cuando alguien compre, aparecerá aquí (con la dirección si es un envío).</p></div>`; return; }
+  if (!rows.length) { box.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-cart"/></svg><p>Aún no tienes ventas. Cuando alguien compre, aparecerá aquí.</p></div>`; return; }
+  const names = await adminNamesByIds(rows.map(r => r.buyer_id));
   box.innerHTML = '';
   rows.forEach(o => {
     const total = (o.amount_cents || 0) + (o.ship_cents || 0);
     const tlabel = (SHOP_TYPES[o.type] || SHOP_TYPES.other).label;
+    const who = o.buyer_id ? '@' + (names[o.buyer_id] || '—') : esc(o.buyer_email || '');
     const row = el(`<div class="sale-row">
       <div class="sale-top"><b>${esc(o.title || 'Producto')}</b><span class="sale-amt">${esc(fmtEur(total, o.currency))}</span></div>
-      <div class="sale-meta">${esc(tlabel)} · ${o.paid_at ? esc(new Date(o.paid_at).toLocaleDateString('es-ES')) : ''}${o.buyer_email ? ' · ' + esc(o.buyer_email) : ''}</div>
+      <div class="sale-meta">${esc(tlabel)} · ${o.paid_at ? esc(new Date(o.paid_at).toLocaleDateString('es-ES')) : ''} · <b data-openbuyer style="color:var(--ink);cursor:${o.buyer_id ? 'pointer' : 'default'}">${who}</b></div>
+      ${o.buyer_id ? '<button class="btn sm primary" data-msgbuyer style="margin-top:8px"><svg fill="none" stroke="#fff"><use href="#i-send"/></svg> Escribir al comprador</button>' : ''}
       ${o.ship_addr ? `<div class="sale-ship"><svg fill="none" stroke="currentColor"><use href="#i-files"/></svg> Enviar a: ${esc(o.ship_addr)}</div>
         <button class="btn sm ${o.shipped ? '' : 'primary'}" data-ship style="margin-top:8px">${o.shipped ? '✓ Enviado — deshacer' : 'Marcar como enviado'}</button>` : ''}
     </div>`);
+    if (o.buyer_id) {
+      row.querySelector('[data-openbuyer]').onclick = () => { m.remove(); openProfile(o.buyer_id); };
+      row.querySelector('[data-msgbuyer]').onclick = () => { m.remove(); openDM(o.buyer_id, `👋 Hola, sobre tu compra de «${(o.title || 'mi producto').slice(0, 60)}»: `); };
+    }
     const sb2 = row.querySelector('[data-ship]');
     if (sb2) sb2.onclick = async () => {
       const nv = !o.shipped;
@@ -8860,7 +8868,7 @@ async function openMyPurchases() {
     </div>`);
     box.appendChild(row);
     row.querySelector('[data-claim]').onclick = () => shopOpenClaim(o);
-    row.querySelector('[data-contact]') && (row.querySelector('[data-contact]').onclick = () => { m.remove(); openDM(o.seller_id); });
+    row.querySelector('[data-contact]') && (row.querySelector('[data-contact]').onclick = () => { m.remove(); openDM(o.seller_id, `📦 Sobre mi compra de «${(o.title || 'tu servicio').slice(0, 60)}». Te paso mi material:`); });
     if (kind === 'ticket' && !prod.event_online && o.ticket_code) renderQR(row.querySelector('[data-qr]'), o.ticket_code);
     if (kind === 'audio') {
       const audio = row.querySelector('[data-audio]'), btn = row.querySelector('[data-play]'), fill = row.querySelector('[data-fill]'), use = btn.querySelector('use');
@@ -8927,6 +8935,62 @@ async function openSellerClaims(userId, asAdmin) {
     };
     box.appendChild(r);
   });
+}
+
+// ============ COMPRAVENTA — panel único (compras + ventas + monedero) ============
+async function renderCommerce() {
+  setActiveNav('commerce');
+  const uid = state.user.id;
+  const main = $('main');
+  main.innerHTML = `
+    <div class="main-head"><div><h2>🛒 Compraventa</h2><div class="sub">Tus compras, tus ventas, reclamaciones y monedero en un solo sitio</div></div></div>
+    <div id="cvBody"><div class="loading" style="padding:24px"><div class="spinner"></div></div></div>`;
+  const box = $('cvBody');
+  const h = await payAuthHeaders();
+  let bal = null, buys = 0, sales = [], claims = 0;
+  try { if (h) { const r = await fetch('/api/pay/balance', { headers: h }); bal = await r.json(); } } catch (_) {}
+  try { const { count } = await sb.from('shop_orders').select('id', { count: 'exact', head: true }).eq('buyer_id', uid).eq('status', 'paid'); buys = count || 0; } catch (_) {}
+  try { const { data } = await sb.from('shop_orders').select('amount_cents,ship_cents').eq('seller_id', uid).eq('status', 'paid'); sales = data || []; } catch (_) {}
+  try { const { count } = await sb.from('shop_claims').select('id', { count: 'exact', head: true }).eq('seller_id', uid).eq('status', 'open'); claims = count || 0; } catch (_) {}
+  const totalIn = sales.reduce((s, o) => s + (o.amount_cents || 0) + (o.ship_cents || 0), 0);
+  const avail = bal && bal.available_cents != null ? bal.available_cents : null;
+  const pend = bal && bal.pending_cents != null ? bal.pending_cents : null;
+  box.innerHTML = `
+    <div class="cv-grid">
+      <div class="admin-card">
+        <h3>🛍️ Tus compras</h3>
+        <p class="sub" style="margin:0 0 12px">Todo lo que compras queda aquí para siempre: reprodúcelo o descárgalo cuando quieras.</p>
+        <div class="cv-kpi"><b>${nfmt(buys)}</b> <span>compra${buys === 1 ? '' : 's'}</span></div>
+        <button class="btn primary" id="cvBuys" style="width:100%;margin-top:12px"><svg fill="none" stroke="#fff"><use href="#i-cart"/></svg> Ver mis compras</button>
+      </div>
+      <div class="admin-card">
+        <h3>💸 Tus ventas y cobros</h3>
+        <div class="wallet-bal" style="margin:0 0 12px">
+          <div class="wallet-main"><span class="wallet-lbl">Disponible</span><span class="wallet-amt">${avail != null ? esc(fmtEur(avail, 'eur')) : '—'}</span></div>
+          <div class="wallet-sub"><span>En camino: <b>${pend != null ? esc(fmtEur(pend, 'eur')) : '—'}</b></span><span>${sales.length} venta${sales.length === 1 ? '' : 's'} · ${esc(fmtEur(totalIn, 'eur'))}</span></div>
+        </div>
+        <button class="btn primary" id="cvSales" style="width:100%"><svg fill="none" stroke="#fff"><use href="#i-cart"/></svg> Mis ventas</button>
+        <button class="btn" id="cvClaims" style="width:100%;margin-top:8px${claims ? ';border-color:#e3b7b0;color:#c0533f' : ''}"><svg fill="none" stroke="currentColor"><use href="#i-bell"/></svg> Reclamaciones${claims ? ` (${claims})` : ''}</button>
+        <button class="btn" id="cvTickets" style="width:100%;margin-top:8px"><svg fill="none" stroke="currentColor"><use href="#i-calendar"/></svg> Validar entradas</button>
+        <button class="btn" id="cvBank" style="width:100%;margin-top:8px"><svg fill="none" stroke="currentColor"><use href="#i-download"/></svg> Pagos, banco y retiradas</button>
+        <div class="auth-msg" id="cvMsg"></div>
+      </div>
+    </div>`;
+  $('cvBuys').onclick = () => openMyPurchases();
+  $('cvSales').onclick = () => openSellerSales(uid);
+  $('cvClaims').onclick = () => openSellerClaims(uid, false);
+  $('cvTickets').onclick = () => openTicketValidator();
+  $('cvBank').onclick = async (e) => {
+    const b = e.currentTarget; b.disabled = true; b.textContent = 'Abriendo Stripe…';
+    try {
+      const hh = await payAuthHeaders();
+      const r = await fetch('/api/pay/dashboard', { method: 'POST', headers: hh });
+      const d = await r.json();
+      if (d && d.url) window.open(d.url, '_blank', 'noopener');
+      else $('cvMsg').textContent = 'Para cobrar, primero activa tu tienda desde tu perfil.';
+    } catch (_) { $('cvMsg').textContent = 'Error de conexión.'; }
+    b.disabled = false; b.innerHTML = '<svg fill="none" stroke="currentColor"><use href="#i-download"/></svg> Pagos, banco y retiradas';
+  };
 }
 
 // Validador de entradas para el organizador (presencial): código manual o escaneo de QR, un solo uso
@@ -15226,7 +15290,7 @@ async function renderMessages() {
   renderBros('');
 }
 
-async function openDM(other) {
+async function openDM(other, prefill) {
   if (!other || other === state.user.id) return;
   if (state.hiddenConvos.has(other)) { state.hiddenConvos.delete(other); saveHiddenConvos(); }
   const { data: prof } = await sb.from('profiles').select('*').eq('id', other).single();
@@ -15238,6 +15302,7 @@ async function openDM(other) {
   $('dmPeerHead').innerHTML = `${avatarHTML(prof)}<div class="dm-peer-meta"><div class="dm-name">${esc(name)}${verifiedBadge(prof)}</div><div class="dm-status" id="dmStatus">${online ? '<span class="dot-online"></span> en línea' : '@' + esc(prof.username)}</div></div>`;
   $('dmPeerHead').onclick = () => { closeDmScreen(); openProfile(other); };
   $('dmInput').placeholder = `Mensaje para ${name}...`;
+  if (prefill) { $('dmInput').value = prefill; try { $('dmInput').focus(); } catch (_) {} }
   $('dmCallBtn').classList.toggle('hidden', !callSupported());
   $('dmVideoBtn').classList.toggle('hidden', !callSupported());
   const thread = $('dmThread');

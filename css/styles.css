@@ -2598,6 +2598,12 @@ body.q-dragging .npq-list { overflow: hidden; }
 .claim-top b { flex: 1; min-width: 0; font-size: 14.5px; font-weight: 750; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .claim-meta { font-size: 12px; color: var(--ink-soft); margin: 3px 0 8px; }
 .claim-reason { font-size: 13.5px; color: var(--ink); background: var(--panel); border: 1px solid var(--line-soft); border-radius: 10px; padding: 9px 11px; white-space: pre-wrap; word-break: break-word; margin-bottom: 10px; }
+
+/* ===== Compraventa (panel único) ===== */
+.cv-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; align-items: start; }
+@media (max-width: 720px) { .cv-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; } }
+.cv-kpi b { font-size: 30px; font-weight: 820; letter-spacing: -.5px; color: var(--ink); }
+.cv-kpi span { color: var(--ink-soft); font-size: 13px; }
 .bdgbtn { width: 30px; height: 30px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); color: var(--ink-soft); font-size: 14px; font-weight: 800; cursor: pointer; display: grid; place-items: center; transition: all .15s var(--ease); }
 .bdgbtn.on { background: linear-gradient(180deg,#ffd96b,#f5b829); border-color: #e8a200; color: #5a3b00; box-shadow: 0 2px 8px rgba(245,184,41,.4); }
 .bdgbtn:active { transform: scale(.92); }
