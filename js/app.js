@@ -8418,6 +8418,10 @@ const SHOP_KINDS = {
 function shopKindOf(p) { return p.kind || (p.needs_shipping || p.type === 'merch' ? 'physical' : 'digital'); }
 // categorías digitales que se entregan con archivo descargable
 const SHOP_DIGITAL_FILE = ['beat', 'feat', 'service', 'other'];
+// Columnas seguras de shop_products: NUNCA incluye file_url (el archivo que se
+// vende) para que la API pública no lo exponga. La URL solo la dan RPCs seguras
+// (shop_owner_file al dueño, shop_free_grab al comprador de un gratis) o el pedido.
+const SHOP_PROD_COLS = 'id,user_id,type,title,price,is_free,description,image_url,buy_url,event_date,event_place,sort,created_at,price_cents,currency,pay_inapp,needs_shipping,ship_cents,kind,stock,event_online,event_url,preview_url,has_file';
 
 // ---- Pagos in-app (Stripe Connect) ----
 async function payAuthHeaders() {
@@ -8475,8 +8479,13 @@ async function buyInApp(p, btn) {
 // falla por lo que sea, se descarga igual — nunca bloquea al usuario.
 async function shopFreeDownload(p) {
   haptic(10);
-  try { if (state.user && p.user_id !== state.user.id) await sb.rpc('shop_free_grab', { p_id: p.id }); } catch (_) {}
-  const a = document.createElement('a'); a.href = czHref(p.file_url); a.download = ''; a.target = '_blank'; a.rel = 'noopener'; a.click();
+  let url = p.file_url || null;   // el file_url ya no viene en el listado: lo pedimos por RPC seguro
+  try {
+    if (state.user && p.user_id !== state.user.id) { const { data } = await sb.rpc('shop_free_grab', { p_id: p.id }); url = (data && data[0] && data[0].product_file) || url; }
+    else if (state.user) { const { data } = await sb.rpc('shop_owner_file', { p_product: p.id }); url = data || url; }
+  } catch (_) {}
+  if (!url) { toast('No se pudo obtener el archivo'); return; }
+  const a = document.createElement('a'); a.href = czHref(url); a.download = ''; a.target = '_blank'; a.rel = 'noopener'; a.click();
 }
 // Vuelta desde Stripe (?pay=...)
 async function handlePayReturn(pay, sid) {
@@ -8559,7 +8568,7 @@ async function renderQR(container, text) {
 async function loadProfileShop(userId, container, isMe) {
   container.innerHTML = `<div class="loading" style="padding:24px"><div class="spinner"></div></div>`;
   let items = [];
-  try { const { data } = await sb.from('shop_products').select('*').eq('user_id', userId).order('sort', { ascending: true }).order('created_at', { ascending: false }); items = data || []; }
+  try { const { data } = await sb.from('shop_products').select(SHOP_PROD_COLS).eq('user_id', userId).order('sort', { ascending: true }).order('created_at', { ascending: false }); items = data || []; }
   catch (e) { console.error(e); }
   const render = () => {
     container.innerHTML = '';
@@ -8604,8 +8613,8 @@ function shopProductCard(p, isMe, refresh, sold) {
   const img = p.image_url ? czUrl(p.image_url) : '';
   const soldOut = p.stock != null && p.stock <= 0;
   // digital descargable sin archivo subido: no se puede vender ni entregar
-  const missingFile = !p.needs_shipping && ['beat', 'feat', 'service', 'other'].includes(p.type) && !p.file_url;
-  const free = p.is_free && p.file_url && !soldOut;
+  const missingFile = !p.needs_shipping && ['beat', 'feat', 'service', 'other'].includes(p.type) && !p.has_file;
+  const free = p.is_free && p.has_file && !soldOut;
   const inapp = !p.is_free && p.pay_inapp && p.price_cents >= 50 && !soldOut && !missingFile;
   const cta = p.type === 'ticket' ? 'Conseguir' : 'Comprar';
   const ship = p.needs_shipping && p.ship_cents > 0;
@@ -8644,8 +8653,8 @@ function openShopProduct(p, isMe, refresh) {
   const img = p.image_url ? czUrl(p.image_url) : '';
   const soldOut = p.stock != null && p.stock <= 0;
   // digital descargable sin archivo subido: no se puede vender ni entregar
-  const missingFile = !p.needs_shipping && ['beat', 'feat', 'service', 'other'].includes(p.type) && !p.file_url;
-  const free = p.is_free && p.file_url && !soldOut;
+  const missingFile = !p.needs_shipping && ['beat', 'feat', 'service', 'other'].includes(p.type) && !p.has_file;
+  const free = p.is_free && p.has_file && !soldOut;
   const inapp = !p.is_free && p.pay_inapp && p.price_cents >= 50 && !soldOut && !missingFile;
   const priceTxt = p.is_free ? 'Gratis' : (p.price_cents >= 50 ? fmtEur(p.price_cents, p.currency) : (p.price || ''));
   const cta = p.type === 'ticket' ? 'Conseguir' : 'Comprar';
@@ -8800,7 +8809,7 @@ async function openMyPurchases() {
   let rows = [];
   try {
     const { data } = await sb.from('shop_orders')
-      .select('id,title,type,amount_cents,ship_cents,currency,ticket_code,ticket_used,paid_at,file_url,image_url,shop_products(file_url,image_url,event_date,event_place,event_online,event_url)')
+      .select('id,title,type,amount_cents,ship_cents,currency,ticket_code,ticket_used,paid_at,file_url,image_url,shop_products(image_url,event_date,event_place,event_online,event_url)')
       .eq('buyer_id', state.user.id).eq('status', 'paid').order('paid_at', { ascending: false }).limit(200);
     rows = data || [];
   } catch (_) {}
@@ -8967,6 +8976,9 @@ async function openTicketValidator() {
 
 async function openShopEdit(p, userId, onSaved) {
   const edit = !!p; p = p || { type: 'beat', is_free: false };
+  // El file_url ya no viaja en el listado (protegido). El dueño lo recupera por RPC seguro.
+  let existingFile = null;
+  if (edit && p.id) { try { const { data } = await sb.rpc('shop_owner_file', { p_product: p.id }); existingFile = data || null; } catch (_) {} }
   const m = openModal(`
     <div class="modal-head"><h3>${edit ? 'Editar producto' : 'Nuevo producto'}</h3><button class="close">&times;</button></div>
     <div class="modal-body">
@@ -8990,7 +9002,7 @@ async function openShopEdit(p, userId, onSaved) {
       <div class="field" id="shEurRow"><label>Precio (€)</label><input type="number" id="shPriceEur" min="0.50" step="0.01" inputmode="decimal" value="${p.price_cents ? (p.price_cents / 100) : ''}" placeholder="9,99" /><span class="pk-hint">Cobro seguro con tarjeta dentro de UnderBro.</span></div>
       <div class="pk-warn" id="shConnNote" style="display:none">Para vender necesitas tu tienda activa: pulsa <b>“Crear tienda”</b> arriba para activar los cobros.</div>
       <div class="field" id="shFileRow"><label>Archivo a entregar</label>
-        <div class="cover-pick" id="shFileDz"><div class="cover-pick-txt"><b id="shFileName">${p.file_url ? 'Archivo subido ✓' : 'Subir archivo (zip, mp3, wav…)'}</b><span>se entrega tras el pago / al pulsar “Descargar”</span></div></div>
+        <div class="cover-pick" id="shFileDz"><div class="cover-pick-txt"><b id="shFileName">${existingFile ? 'Archivo subido ✓' : 'Subir archivo (zip, mp3, wav…)'}</b><span>se entrega tras el pago / al pulsar “Descargar”</span></div></div>
         <input type="file" id="shFile" hidden />
       </div>
       <div class="field" id="shPrevRow"><label>Preview de audio <span style="opacity:.6;font-weight:600">(opcional)</span></label>
@@ -9064,13 +9076,13 @@ async function openShopEdit(p, userId, onSaved) {
   // Elegir un fragmento del audio ya subido (misma mecánica que las historias)
   m.querySelector('#shPrevPick').onclick = async () => {
     const btn = m.querySelector('#shPrevPick');
-    if (!dataFile && !p.file_url) { toast('Primero sube el archivo de audio que vendes'); return; }
+    if (!dataFile && !existingFile) { toast('Primero sube el archivo de audio que vendes'); return; }
     const old = btn.innerHTML; btn.disabled = true; btn.textContent = 'Cargando audio…';
     let buf = null;
     try {
       let ab;
       if (dataFile) { if (!dataFile.type.startsWith('audio')) { toast('El archivo que vendes no es audio; sube un mp3 de preview'); btn.disabled = false; btn.innerHTML = old; return; } ab = await dataFile.arrayBuffer(); }
-      else { const r = await fetch(czUrl(p.file_url)); ab = await r.arrayBuffer(); }
+      else { const r = await fetch(czUrl(existingFile)); ab = await r.arrayBuffer(); }
       const actx = new (window.AudioContext || window.webkitAudioContext)();
       try { buf = await actx.decodeAudioData(ab); } finally { try { actx.close(); } catch (_) {} }
     } catch (_) {}
@@ -9087,7 +9099,7 @@ async function openShopEdit(p, userId, onSaved) {
     const title = m.querySelector('#shTitle').value.trim();
     const physical = kind === 'physical';
     const free = !physical && m.querySelector('#shFree').checked;
-    const hasFile = !!dataFile || !!p.file_url;
+    const hasFile = !!dataFile || !!existingFile;
     // ---- validación: un producto debe tener contenido real ----
     if (title.length < 2) { msg.className = 'auth-msg error'; msg.textContent = 'Ponle un título (mínimo 2 caracteres).'; return; }
     // Digital descargable (beat, colaboración, servicio, otro): el archivo es OBLIGATORIO.
@@ -9108,7 +9120,7 @@ async function openShopEdit(p, userId, onSaved) {
     if (physical) { const se = parseFloat(String(m.querySelector('#shShipEur').value || '').replace(',', '.')); ship_cents = (Number.isFinite(se) && se > 0) ? Math.round(se * 100) : 0; }
     btn.disabled = true; btn.textContent = 'Guardando…';
     try {
-      let image_url = p.image_url || null, file_url = p.file_url || null, preview_url = p.preview_url || null;
+      let image_url = p.image_url || null, file_url = existingFile || null, preview_url = p.preview_url || null;
       // usa la misma vía de subida que el resto de la app (R2 / proxy underbro.app/media)
       if (imgFile) image_url = await uploadMedia('covers', imgFile);
       if (dataFile) file_url = await uploadMedia('tracks', dataFile);
@@ -13096,7 +13108,7 @@ async function adminShopList(tab) {
   box.innerHTML = '<div class="loading" style="padding:18px"><div class="spinner"></div></div>';
   try {
     if (tab === 'products') {
-      const { data } = await sb.from('shop_products').select('*').order('created_at', { ascending: false }).limit(60);
+      const { data } = await sb.from('shop_products').select(SHOP_PROD_COLS).order('created_at', { ascending: false }).limit(60);
       const rows = data || [];
       const names = await adminNamesByIds(rows.map(r => r.user_id));
       box.innerHTML = ''; if (!rows.length) { box.innerHTML = '<div class="sub">Aún no hay productos en las tiendas de los usuarios.</div>'; return; }
