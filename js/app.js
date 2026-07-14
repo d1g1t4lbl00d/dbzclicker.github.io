@@ -8613,7 +8613,7 @@ function shopProductCard(p, isMe, refresh, sold) {
   const img = p.image_url ? czUrl(p.image_url) : '';
   const soldOut = p.stock != null && p.stock <= 0;
   // digital descargable sin archivo subido: no se puede vender ni entregar
-  const missingFile = !p.needs_shipping && ['beat', 'feat', 'service', 'other'].includes(p.type) && !p.has_file;
+  const missingFile = !p.needs_shipping && p.type === 'beat' && !p.has_file;
   const free = p.is_free && p.has_file && !soldOut;
   const inapp = !p.is_free && p.pay_inapp && p.price_cents >= 50 && !soldOut && !missingFile;
   const cta = p.type === 'ticket' ? 'Conseguir' : 'Comprar';
@@ -8653,7 +8653,7 @@ function openShopProduct(p, isMe, refresh) {
   const img = p.image_url ? czUrl(p.image_url) : '';
   const soldOut = p.stock != null && p.stock <= 0;
   // digital descargable sin archivo subido: no se puede vender ni entregar
-  const missingFile = !p.needs_shipping && ['beat', 'feat', 'service', 'other'].includes(p.type) && !p.has_file;
+  const missingFile = !p.needs_shipping && p.type === 'beat' && !p.has_file;
   const free = p.is_free && p.has_file && !soldOut;
   const inapp = !p.is_free && p.pay_inapp && p.price_cents >= 50 && !soldOut && !missingFile;
   const priceTxt = p.is_free ? 'Gratis' : (p.price_cents >= 50 ? fmtEur(p.price_cents, p.currency) : (p.price || ''));
@@ -8811,7 +8811,7 @@ async function openMyPurchases() {
   let rows = [];
   try {
     const { data } = await sb.from('shop_orders')
-      .select('id,title,type,amount_cents,ship_cents,currency,ticket_code,ticket_used,paid_at,file_url,image_url,shop_products(image_url,event_date,event_place,event_online,event_url)')
+      .select('id,title,type,amount_cents,ship_cents,currency,ticket_code,ticket_used,paid_at,file_url,image_url,seller_id,shop_products(image_url,event_date,event_place,event_online,event_url)')
       .eq('buyer_id', state.user.id).eq('status', 'paid').order('paid_at', { ascending: false }).limit(200);
     rows = data || [];
   } catch (_) {}
@@ -8846,7 +8846,8 @@ async function openMyPurchases() {
     } else if (kind === 'file') {
       ctrl = `<a class="btn sm primary mylib-btn" href="${esc(czHref(fileUrl))}" target="_blank" rel="noopener"><svg fill="none" stroke="#fff"><use href="#i-download"/></svg> Descargar</a>`;
     } else {
-      ctrl = `<div class="sale-meta">El artista te entregará el producto.</div>`;
+      // servicio/encargo (sin archivo): se entrega por chat
+      ctrl = `<div class="sale-meta" style="margin-bottom:8px">Servicio bajo pedido: envíale tu material al vendedor por el chat y te devolverá el resultado por ahí.</div>${o.seller_id ? '<button class="btn sm primary mylib-btn" data-contact><svg fill="none" stroke="#fff"><use href="#i-send"/></svg> Escribir al vendedor</button>' : ''}`;
     }
     const row = el(`<div class="mylib-row">
       <div class="mylib-cover">${cover}</div>
@@ -8859,6 +8860,7 @@ async function openMyPurchases() {
     </div>`);
     box.appendChild(row);
     row.querySelector('[data-claim]').onclick = () => shopOpenClaim(o);
+    row.querySelector('[data-contact]') && (row.querySelector('[data-contact]').onclick = () => { m.remove(); openDM(o.seller_id); });
     if (kind === 'ticket' && !prod.event_online && o.ticket_code) renderQR(row.querySelector('[data-qr]'), o.ticket_code);
     if (kind === 'audio') {
       const audio = row.querySelector('[data-audio]'), btn = row.querySelector('[data-play]'), fill = row.querySelector('[data-fill]'), use = btn.querySelector('use');
@@ -9005,6 +9007,7 @@ async function openShopEdit(p, userId, onSaved) {
       <div class="pk-warn" id="shConnNote" style="display:none">Para vender necesitas tu tienda activa: pulsa <b>“Crear tienda”</b> arriba para activar los cobros.</div>
       <div class="field" id="shFileRow"><label>Archivo a entregar</label>
         <div class="cover-pick" id="shFileDz"><div class="cover-pick-txt"><b id="shFileName">${existingFile ? 'Archivo subido ✓' : 'Subir archivo (zip, mp3, wav…)'}</b><span>se entrega tras el pago / al pulsar “Descargar”</span></div></div>
+        <span class="pk-hint" id="shFileHint"></span>
         <input type="file" id="shFile" hidden />
       </div>
       <div class="field" id="shPrevRow"><label>Preview de audio <span style="opacity:.6;font-weight:600">(opcional)</span></label>
@@ -9053,6 +9056,10 @@ async function openShopEdit(p, userId, onSaved) {
     m.querySelector('#shEurRow').style.display = free && !physical ? 'none' : '';
     m.querySelector('#shConnNote').style.display = ((physical || !free) && _sellerStatus && !_sellerStatus.ready) ? '' : 'none';
     m.querySelector('#shFileRow').style.display = (!physical && SHOP_DIGITAL_FILE.includes(type)) ? '' : 'none';
+    const fh = m.querySelector('#shFileHint');
+    if (fh) fh.textContent = type === 'beat'
+      ? 'Obligatorio: se entrega automáticamente al comprador al pagar.'
+      : 'Opcional. Si es un servicio (mix/máster, colaboración), no subas nada: lo entregarás por chat cuando el comprador te mande su material.';
     m.querySelector('#shPrevRow').style.display = (!physical && SHOP_DIGITAL_FILE.includes(type)) ? '' : 'none';
     m.querySelector('#shShipRow').style.display = physical ? '' : 'none';
     m.querySelector('#shEvRow').style.display = type === 'ticket' ? '' : 'none';
@@ -9105,10 +9112,10 @@ async function openShopEdit(p, userId, onSaved) {
     const hasFile = !!dataFile || !!existingFile;
     // ---- validación: un producto debe tener contenido real ----
     if (title.length < 2) { msg.className = 'auth-msg error'; msg.textContent = 'Ponle un título (mínimo 2 caracteres).'; return; }
-    // Digital descargable (beat, colaboración, servicio, otro): el archivo es OBLIGATORIO.
-    // Nada de "ya lo paso cuando me lo compren": sin archivo no se está vendiendo nada.
-    const needsFile = !physical && SHOP_DIGITAL_FILE.includes(type);
-    if (needsFile && !hasFile) { msg.className = 'auth-msg error'; msg.textContent = 'Sube el archivo que vas a entregar (audio, zip…). Es obligatorio: el comprador lo recibe automáticamente al pagar.'; return; }
+    // Solo el beat/pack DESCARGABLE exige archivo (se entrega solo al pagar).
+    // Los servicios/colaboraciones son "bajo pedido": se entregan por chat, sin archivo previo.
+    const needsFile = !physical && type === 'beat';
+    if (needsFile && !hasFile) { msg.className = 'auth-msg error'; msg.textContent = 'Un beat/pack descargable debe llevar el archivo: se entrega automáticamente al comprar.'; return; }
     let price_cents = null;
     if (!free) {
       const eur = parseFloat(String(m.querySelector('#shPriceEur').value || '').replace(',', '.'));
