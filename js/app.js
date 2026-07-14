@@ -8704,6 +8704,8 @@ async function openWallet(userId) {
   let bal = null, sales = [];
   try { if (h) { const r = await fetch('/api/pay/balance', { headers: h }); bal = await r.json(); } } catch (_) {}
   try { const { data } = await sb.from('shop_orders').select('amount_cents,ship_cents,status').eq('seller_id', userId).eq('status', 'paid'); sales = data || []; } catch (_) {}
+  let openClaims = 0;
+  try { const { count } = await sb.from('shop_claims').select('id', { count: 'exact', head: true }).eq('seller_id', userId).eq('status', 'open'); openClaims = count || 0; } catch (_) {}
   const totalIn = sales.reduce((s, o) => s + (o.amount_cents || 0) + (o.ship_cents || 0), 0);
   const avail = bal && bal.available_cents != null ? bal.available_cents : null;
   const pend = bal && bal.pending_cents != null ? bal.pending_cents : null;
@@ -8714,10 +8716,12 @@ async function openWallet(userId) {
     </div>
     <p class="wallet-note">Tus ventas pasan a “Disponible” y Stripe las ingresa en tu cuenta bancaria automáticamente. En el panel de Stripe puedes ver/cambiar tu banco y los pagos.</p>
     <button class="btn primary" id="wSales"><svg fill="none" stroke="#fff"><use href="#i-cart"/></svg> Mis ventas</button>
+    <button class="btn" id="wClaims"${openClaims ? ' style="border-color:#e3b7b0;color:#c0533f"' : ''}><svg fill="none" stroke="currentColor"><use href="#i-bell"/></svg> Reclamaciones${openClaims ? ` (${openClaims})` : ''}</button>
     <button class="btn" id="wValidate"><svg fill="none" stroke="currentColor"><use href="#i-calendar"/></svg> Validar entradas</button>
     <button class="btn" id="wBank"><svg fill="none" stroke="currentColor"><use href="#i-download"/></svg> Pagos, banco y retiradas</button>
     <div class="auth-msg" id="wMsg"></div>`;
   m.querySelector('#wSales').onclick = () => { m.remove(); openSellerSales(userId); };
+  m.querySelector('#wClaims').onclick = () => { m.remove(); openSellerClaims(userId, false); };
   m.querySelector('#wValidate').onclick = () => { m.remove(); openTicketValidator(); };
   m.querySelector('#wBank').onclick = async (e) => {
     const b = e.currentTarget; b.disabled = true; b.textContent = 'Abriendo Stripe…';
@@ -8789,7 +8793,7 @@ async function openMyPurchases() {
     rows = data || [];
   } catch (_) {}
   if (!rows.length) { box.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-cart"/></svg><p>Aún no has comprado nada. Lo que compres aparecerá aquí siempre, para escucharlo o descargarlo cuando quieras.</p></div>`; return; }
-  box.innerHTML = '';
+  box.innerHTML = `<div class="mylib-guard"><svg fill="none" stroke="currentColor"><use href="#i-lock"/></svg> Tus compras quedan guardadas aquí <b>para siempre</b>. Descárgalas cuando quieras y, si algo falla, reclama en cada una.</div>`;
   const audios = [];
   rows.forEach(o => {
     const prod = o.shop_products || {};
@@ -8827,9 +8831,11 @@ async function openMyPurchases() {
         <div class="mylib-top"><b>${esc(o.title || 'Producto')}</b><span class="mylib-amt">${free ? '🎁' : esc(fmtEur(total, o.currency))}</span></div>
         <div class="mylib-meta">${esc(st.label)} · ${o.paid_at ? esc(new Date(o.paid_at).toLocaleDateString('es-ES')) : ''}</div>
         ${ctrl}
+        <button class="mylib-claim" data-claim>¿Un problema con esta compra? Reclamar</button>
       </div>
     </div>`);
     box.appendChild(row);
+    row.querySelector('[data-claim]').onclick = () => shopOpenClaim(o);
     if (kind === 'ticket' && !prod.event_online && o.ticket_code) renderQR(row.querySelector('[data-qr]'), o.ticket_code);
     if (kind === 'audio') {
       const audio = row.querySelector('[data-audio]'), btn = row.querySelector('[data-play]'), fill = row.querySelector('[data-fill]'), use = btn.querySelector('use');
@@ -8845,6 +8851,57 @@ async function openMyPurchases() {
     }
   });
   m.querySelector('.close')?.addEventListener('click', () => audios.forEach(a => { try { a.pause(); } catch (_) {} }));
+}
+
+// El comprador abre una reclamación de una compra
+function shopOpenClaim(order) {
+  const m = openModal(`<div class="modal-head"><h3>Reclamar compra</h3><button class="close">&times;</button></div>
+    <div class="modal-body">
+      <p class="sub" style="margin-top:0">Cuéntanos qué ha pasado con <b>${esc((order.title || 'tu compra').slice(0, 60))}</b>. El vendedor recibirá tu reclamación al instante y el equipo de UnderBro podrá mediar.</p>
+      <textarea id="clReason" rows="4" maxlength="1000" placeholder="Ej.: he pagado pero no puedo descargar el archivo · el archivo está corrupto o incompleto · no es lo que se anunciaba…" style="width:100%;box-sizing:border-box;padding:11px 14px;border:1.5px solid var(--line);border-radius:12px;background:var(--panel-2);color:var(--ink);resize:vertical"></textarea>
+      <button class="btn primary" id="clSend" style="width:100%;margin-top:10px">Enviar reclamación</button>
+      <div class="auth-msg" id="clMsg"></div>
+    </div>`);
+  m.querySelector('#clSend').onclick = async () => {
+    const reason = m.querySelector('#clReason').value.trim();
+    const msg = m.querySelector('#clMsg');
+    if (reason.length < 3) { msg.className = 'auth-msg error'; msg.textContent = 'Cuéntanos un poco más qué ha pasado.'; return; }
+    const btn = m.querySelector('#clSend'); btn.disabled = true; btn.textContent = 'Enviando…';
+    const { error } = await sb.rpc('shop_open_claim', { p_order: order.id, p_reason: reason });
+    if (error) { btn.disabled = false; btn.textContent = 'Enviar reclamación'; msg.className = 'auth-msg error'; msg.textContent = 'No se pudo enviar. Inténtalo de nuevo.'; return; }
+    m.remove(); toast('Reclamación enviada ✓ El vendedor ha sido avisado.');
+  };
+}
+// Reclamaciones recibidas por el vendedor (o todas, si es admin) con opción de marcar resuelta
+async function openSellerClaims(userId, asAdmin) {
+  const m = openModal(`<div class="modal-head"><h3>⚠️ Reclamaciones</h3><button class="close">&times;</button></div><div class="modal-body" id="claimsBody"><div class="loading" style="padding:24px"><div class="spinner"></div></div></div>`);
+  const box = m.querySelector('#claimsBody');
+  let rows = [];
+  try {
+    let q = sb.from('shop_claims').select('id,title,reason,status,created_at,buyer_id,seller_id').order('created_at', { ascending: false }).limit(100);
+    if (!asAdmin) q = q.eq('seller_id', userId);
+    const { data } = await q; rows = data || [];
+  } catch (_) {}
+  if (!rows.length) { box.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-bell"/></svg><p>No hay reclamaciones. ¡Todo en orden!</p></div>`; return; }
+  const names = await adminNamesByIds(rows.map(r => r.buyer_id));
+  box.innerHTML = '';
+  rows.forEach(c => {
+    const open = c.status === 'open';
+    const r = el(`<div class="claim-row ${open ? 'open' : ''}">
+      <div class="claim-top"><b>${esc(c.title || 'Producto')}</b><span class="adm-tag ${open ? 'mod' : 'ok'}">${open ? 'Abierta' : 'Resuelta'}</span></div>
+      <div class="claim-meta">de @${esc(names[c.buyer_id] || '—')} · ${esc(new Date(c.created_at).toLocaleDateString('es-ES'))}</div>
+      <div class="claim-reason">${esc(c.reason || '')}</div>
+      ${open ? `<button class="btn sm" data-resolve>Marcar como resuelta</button>` : ''}
+    </div>`);
+    const rb = r.querySelector('[data-resolve]');
+    if (rb) rb.onclick = async () => {
+      rb.disabled = true;
+      const { error } = await sb.from('shop_claims').update({ status: 'resolved', resolved_at: new Date().toISOString() }).eq('id', c.id);
+      if (error) { rb.disabled = false; toast('No se pudo actualizar'); return; }
+      toast('Reclamación marcada como resuelta'); m.remove(); openSellerClaims(userId, asAdmin);
+    };
+    box.appendChild(r);
+  });
 }
 
 // Validador de entradas para el organizador (presencial): código manual o escaneo de QR, un solo uso
@@ -12863,6 +12920,7 @@ async function renderAdmin() {
       <div class="admin-card span2"><h3>🛒 Tienda y ventas</h3>
         <div class="adm-kpis" id="admShopKpis"><div class="loading" style="padding:14px"><div class="spinner"></div></div></div>
         <button class="btn primary" id="admTxBtn" style="width:100%;margin-top:12px"><svg fill="none" stroke="#fff"><use href="#i-files"/></svg> Ver todos los movimientos · compras, ventas y subidas</button>
+        <button class="btn" id="admClaimsBtn" style="width:100%;margin-top:8px"><svg fill="none" stroke="currentColor"><use href="#i-bell"/></svg> Reclamaciones de compradores</button>
         <div class="adm-tabs" id="admShopTabs" style="margin-top:12px"><button class="active" data-st="products">Productos</button><button data-st="orders">Pedidos</button></div>
         <div id="admShopList" class="adm-list"><div class="loading" style="padding:18px"><div class="spinner"></div></div></div>
       </div>
@@ -12871,6 +12929,7 @@ async function renderAdmin() {
   loadAdminContent('tracks');
   loadAdminShop();
   $('admTxBtn').onclick = openAdminTx;
+  $('admClaimsBtn').onclick = () => openSellerClaims(state.user.id, true);
   main.querySelectorAll('#admShopTabs button').forEach((b) => b.onclick = () => {
     main.querySelectorAll('#admShopTabs button').forEach((x) => x.classList.toggle('active', x === b));
     adminShopList(b.dataset.st);

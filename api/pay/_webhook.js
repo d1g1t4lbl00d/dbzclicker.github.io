@@ -23,7 +23,7 @@ async function fulfill(sessionId) {
   if (!s || s.payment_status !== 'paid') return;
   const orderId = s.metadata && s.metadata.order_id;
   if (!orderId) return;
-  const cur = await sbAdmin(`shop_orders?id=eq.${orderId}&select=id,status`).catch(() => null);
+  const cur = await sbAdmin(`shop_orders?id=eq.${orderId}&select=id,status,file_url,image_url,product_id`).catch(() => null);
   const o = cur && cur[0];
   if (!o || o.status === 'paid') return; // idempotente
   const token = crypto.randomBytes(18).toString('hex');
@@ -36,13 +36,22 @@ async function fulfill(sessionId) {
     ship = [sd.name, a.line1, a.line2, [a.postal_code, a.city].filter(Boolean).join(' '), a.state, a.country]
       .filter(Boolean).join(', ');
   }
-  await sbAdmin(`shop_orders?id=eq.${orderId}`, { method: 'PATCH', prefer: 'return=minimal', body: {
+  const productId = (s.metadata && s.metadata.product_id) || o.product_id;
+  // RED DE SEGURIDAD: garantizamos que el pedido guarde su copia de entrega
+  // (archivo + portada) para que el comprador SIEMPRE pueda descargar su producto,
+  // aunque el vendedor luego borre o cambie el producto.
+  const snap = {};
+  if (!o.file_url && productId) {
+    const pr = await sbAdmin(`shop_products?id=eq.${productId}&select=file_url,image_url`).catch(() => null);
+    if (pr && pr[0]) { snap.file_url = pr[0].file_url || null; snap.image_url = pr[0].image_url || null; }
+  }
+  if (!o.product_id && productId) snap.product_id = productId;
+  await sbAdmin(`shop_orders?id=eq.${orderId}`, { method: 'PATCH', prefer: 'return=minimal', body: Object.assign({
     status: 'paid', paid_at: new Date().toISOString(),
     stripe_payment_intent: s.payment_intent || null,
     download_token: token, ticket_code: ticket, ship_addr: ship,
-  }});
+  }, snap) });
   // descuenta stock (no-op si el producto es de unidades ilimitadas)
-  const productId = s.metadata && s.metadata.product_id;
   if (productId) {
     await sbAdmin('rpc/shop_decrement_stock', { method: 'POST', prefer: 'return=minimal', body: { p_id: productId } }).catch(() => {});
   }
