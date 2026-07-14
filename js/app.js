@@ -9033,6 +9033,7 @@ async function openShopEdit(p, userId, onSaved) {
       <div class="field" id="shStockRow"><label>Unidades disponibles</label><input type="number" id="shStock" min="0" step="1" inputmode="numeric" value="${p.stock != null ? p.stock : ''}" placeholder="Vacío = ilimitado" /><span class="pk-hint">Pon un número para limitar (ej. <b>1</b> para algo único). Al agotarse se marca <b>“Agotado”</b> y deja de venderse.</span></div>
       <button class="btn primary" id="shSave">${edit ? 'Guardar cambios' : 'Publicar producto'}</button>
       ${edit ? '<button class="btn danger-btn" id="shDel"><svg fill="none" stroke="#fff"><use href="#i-trash"/></svg> Eliminar</button>' : ''}
+      <p class="pk-hint" style="margin-top:8px">Al publicar declaras que tienes los derechos del producto y aceptas los <a href="/terminos" target="_blank" rel="noopener">Términos de la Tienda</a>.</p>
       <div class="auth-msg" id="shMsg"></div>
     </div>`);
   let kind = 'digital', type = p.type || 'beat', imgFile = null, dataFile = null, prevFile = null;  // ventas físicas desactivadas → solo digital
@@ -15516,7 +15517,7 @@ function showPrivacyPolicy() {
       <p>Puedes editar tu perfil en cualquier momento y <b>eliminar tu cuenta y todos tus datos y archivos</b> desde <b>Ajustes → Eliminar cuenta</b>. Podemos conservar registros de pedidos por obligaciones fiscales. Esa acción es permanente.</p>
       <h4>Contacto</h4>
       <p>Para cualquier consulta sobre privacidad o para ejercer tus derechos: <a href="mailto:underbroapp@gmail.com">underbroapp@gmail.com</a>.</p>
-      <p style="color:var(--ink-soft);font-size:12px;margin-top:14px">Versión completa en <a href="/privacy" target="_blank" rel="noopener">underbro.app/privacy</a> · Última actualización: ${new Date().toLocaleDateString('es-ES')}.</p>
+      <p style="color:var(--ink-soft);font-size:12px;margin-top:14px">Versión completa en <a href="/privacy" target="_blank" rel="noopener">underbro.app/privacy</a> · <a href="/terminos" target="_blank" rel="noopener">Términos de la Tienda</a> · Última actualización: ${new Date().toLocaleDateString('es-ES')}.</p>
     </div>`);
 }
 

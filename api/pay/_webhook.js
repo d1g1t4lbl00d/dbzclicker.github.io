@@ -51,7 +51,7 @@ async function fulfill(sessionId) {
     stripe_payment_intent: s.payment_intent || null,
     download_token: token, ticket_code: ticket, ship_addr: ship,
   }, snap) });
-  // descuenta stock (no-op si el producto es de unidades ilimitadas)
+  // descuenta stock solo al confirmarse el pago (no-op si es de unidades ilimitadas)
   if (productId) {
     await sbAdmin('rpc/shop_decrement_stock', { method: 'POST', prefer: 'return=minimal', body: { p_id: productId } }).catch(() => {});
   }
