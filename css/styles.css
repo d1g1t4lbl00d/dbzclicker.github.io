@@ -2604,6 +2604,13 @@ body.q-dragging .npq-list { overflow: hidden; }
 @media (max-width: 720px) { .cv-grid { grid-template-columns: minmax(0, 1fr); gap: 12px; } }
 .cv-kpi b { font-size: 30px; font-weight: 820; letter-spacing: -.5px; color: var(--ink); }
 .cv-kpi span { color: var(--ink-soft); font-size: 13px; }
+
+/* tarjeta de pedido dentro del chat */
+.dm-order { display: flex; align-items: center; gap: 10px; min-width: 0; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--blue, #5f9bff) 12%, var(--panel)); border: 1px solid color-mix(in srgb, var(--blue, #5f9bff) 30%, transparent); }
+.dm-order-ic { flex: none; font-size: 20px; }
+.dm-order-b { min-width: 0; }
+.dm-order-b b { display: block; font-size: 13.5px; font-weight: 750; color: var(--ink); }
+.dm-order-b span { font-size: 11.5px; color: var(--ink-soft); }
 .bdgbtn { width: 30px; height: 30px; border-radius: 9px; border: 1px solid var(--line); background: var(--panel-2); color: var(--ink-soft); font-size: 14px; font-weight: 800; cursor: pointer; display: grid; place-items: center; transition: all .15s var(--ease); }
 .bdgbtn.on { background: linear-gradient(180deg,#ffd96b,#f5b829); border-color: #e8a200; color: #5a3b00; box-shadow: 0 2px 8px rgba(245,184,41,.4); }
 .bdgbtn:active { transform: scale(.92); }

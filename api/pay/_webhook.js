@@ -23,7 +23,7 @@ async function fulfill(sessionId) {
   if (!s || s.payment_status !== 'paid') return;
   const orderId = s.metadata && s.metadata.order_id;
   if (!orderId) return;
-  const cur = await sbAdmin(`shop_orders?id=eq.${orderId}&select=id,status,file_url,image_url,product_id`).catch(() => null);
+  const cur = await sbAdmin(`shop_orders?id=eq.${orderId}&select=id,status,file_url,image_url,product_id,buyer_id,seller_id,title,type,amount_cents,currency`).catch(() => null);
   const o = cur && cur[0];
   if (!o || o.status === 'paid') return; // idempotente
   const token = crypto.randomBytes(18).toString('hex');
@@ -54,6 +54,15 @@ async function fulfill(sessionId) {
   // descuenta stock solo al confirmarse el pago (no-op si es de unidades ilimitadas)
   if (productId) {
     await sbAdmin('rpc/shop_decrement_stock', { method: 'POST', prefer: 'return=minimal', body: { p_id: productId } }).catch(() => {});
+  }
+  // Mensaje automático de pedido en el chat entre comprador y vendedor (recibo + inicio de conversación).
+  // attachment_type 'order' -> no dispara push (la notificación de venta ya avisa).
+  if (o.buyer_id && o.seller_id && o.buyer_id !== o.seller_id) {
+    const isService = !o.file_url && o.type !== 'ticket';   // sin archivo y no es entrada -> encargo por chat
+    await sbAdmin('direct_messages', { method: 'POST', prefer: 'return=minimal', body: {
+      sender_id: o.buyer_id, recipient_id: o.seller_id, body: '', attachment_type: 'order',
+      attachment_name: JSON.stringify({ title: o.title || 'Producto', amount_cents: o.amount_cents || 0, currency: o.currency || 'eur', type: o.type, service: isService }),
+    }}).catch(() => {});
   }
 }
 

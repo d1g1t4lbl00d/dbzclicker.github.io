@@ -14503,6 +14503,7 @@ function mediaLabel(m) {
   if (m.attachment_type === 'video') return '🎬 Vídeo';
   if (m.attachment_type === 'audio') return '🎙️ Nota de voz';
   if (m.attachment_type === 'track') return '🎵 ' + (safeMeta(m).title || 'Pista');
+  if (m.attachment_type === 'order') { let i = {}; try { i = JSON.parse(m.attachment_name || '{}'); } catch (_) {} return '🛒 Compra: ' + (i.title || 'producto'); }
   if (m.attachment_type === 'call') { const mt = safeMeta(m); return (mt.video ? '📹 ' : '📞 ') + callStatusLabel(mt.status, mt.dur, m.sender_id === state.user?.id); }
   if (m.attachment_url) return '📎 ' + (m.attachment_name || 'Archivo');
   return '';
@@ -14557,6 +14558,13 @@ function mediaHTML(msg) {
       ? `<div class="dm-track-cover" style="background-image:url('${czUrl(meta.cover_url)}')"></div>`
       : `<div class="dm-track-cover"><svg fill="none" stroke="#fff"><use href="#i-music"/></svg></div>`;
     return `<div class="dm-track" data-track-id="${esc(meta.id || '')}">${cover}<div class="dm-track-info"><div class="dm-track-title">${esc(meta.title || 'Pista')}</div><div class="dm-track-artist">${esc(meta.artist || '')}</div></div><button class="dm-track-play" data-dmplay aria-label="Reproducir"><svg class="ci-play"><use href="#i-play"/></svg><svg class="ci-pause"><use href="#i-pause"/></svg></button></div>`;
+  }
+  if (t === 'order') {
+    let i = {}; try { i = JSON.parse(msg.attachment_name || '{}'); } catch (_) {}
+    const mine = msg.sender_id === state.user.id;
+    const price = i.amount_cents ? fmtEur(i.amount_cents, i.currency || 'eur') : (i.amount_cents === 0 ? 'Gratis' : '');
+    const sub = i.service ? 'Servicio: envíale/recibe el material por aquí.' : (mine ? 'Ya está en «Mis compras».' : 'Entregado automáticamente.');
+    return `<div class="dm-order"><div class="dm-order-ic">🛒</div><div class="dm-order-b"><b>${mine ? 'Has comprado' : 'Te han comprado'} «${esc((i.title || 'producto').slice(0, 44))}»${price ? ' · ' + esc(price) : ''}</b><span>${esc(sub)}</span></div></div>`;
   }
   return `<a class="dm-filechip" href="${esc(czHref(msg.attachment_url))}" target="_blank" rel="noopener"><svg fill="none"><use href="#i-file"/></svg><span class="fn">${esc(msg.attachment_name || 'archivo')}</span></a>`;
 }
