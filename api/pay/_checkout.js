@@ -19,6 +19,7 @@ module.exports = async (req, res) => {
     const needsFile = !p.needs_shipping && ['beat', 'feat', 'service', 'other'].includes(p.type);
     if (needsFile && !p.file_url) return json(res, 400, { error: 'no_file' });
     if (!p.pay_inapp || !p.price_cents || p.price_cents < 50) return json(res, 400, { error: 'not_payable' });
+    if (p.price_cents > 500000) return json(res, 400, { error: 'price_too_high' });
     if (p.user_id === user.id) return json(res, 400, { error: 'own_product' });
     if (p.needs_shipping) return json(res, 400, { error: 'physical_disabled' });
     if (p.stock != null && p.stock <= 0) return json(res, 400, { error: 'sold_out' });

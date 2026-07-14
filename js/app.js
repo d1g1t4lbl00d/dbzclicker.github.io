@@ -867,7 +867,7 @@ async function unblockUser(userId, onDone) {
   if (onDone) onDone();
 }
 const REPORT_REASONS = ['Spam o engaño', 'Acoso o bullying', 'Contenido sexual', 'Violencia o amenazas', 'Discurso de odio', 'Suplantación de identidad', 'Propiedad intelectual', 'Otro'];
-const REPORT_LABEL = { user: 'usuario', track: 'pista', post: 'publicación', comment: 'comentario', message: 'mensaje', chat: 'mensaje del chat', forum: 'tema del foro', forum_reply: 'respuesta del foro' };
+const REPORT_LABEL = { user: 'usuario', track: 'pista', post: 'publicación', comment: 'comentario', message: 'mensaje', chat: 'mensaje del chat', forum: 'tema del foro', forum_reply: 'respuesta del foro', product: 'producto de la tienda' };
 function openReportModal(targetType, targetId, targetOwner, label) {
   if (!requireNotBanned()) return;
   const chips = REPORT_REASONS.map(r => `<button type="button" class="rep-reason" data-r="${esc(r)}">${esc(r)}</button>`).join('');
@@ -8676,8 +8676,10 @@ function openShopProduct(p, isMe, refresh) {
         </div>
         ${missingFile ? '<div class="shop-secure" style="color:#c0533f">Este producto todavía no tiene el archivo subido; el vendedor debe añadirlo antes de venderlo.</div>' : ''}
         ${inapp ? '<div class="shop-secure"><svg fill="none" stroke="currentColor"><use href="#i-lock"/></svg> Pago seguro en UnderBro</div>' : ''}
+        ${isMe ? '' : '<button class="mylib-claim" id="shpReport" style="margin-top:10px">Reportar este producto (copyright / estafa)</button>'}
       </div>
     </div>`);
+  m.querySelector('#shpReport')?.addEventListener('click', () => openReportModal('product', p.id, p.user_id, '«' + (p.title || 'este producto') + '»'));
   const audio = m.querySelector('#shpAudio');
   if (audio) {
     const btn = m.querySelector('#shpPlay'), fill = m.querySelector('#shpFill'), use = btn.querySelector('use');
@@ -9110,6 +9112,7 @@ async function openShopEdit(p, userId, onSaved) {
     if (!free) {
       const eur = parseFloat(String(m.querySelector('#shPriceEur').value || '').replace(',', '.'));
       if (!(eur >= 0.5)) { msg.className = 'auth-msg error'; msg.textContent = 'Pon un precio de al menos 0,50 €.'; return; }
+      if (eur > 5000) { msg.className = 'auth-msg error'; msg.textContent = 'El precio máximo es 5.000 €.'; return; }
       price_cents = Math.round(eur * 100);
     }
     if (free && needsFile && !hasFile) { msg.className = 'auth-msg error'; msg.textContent = 'Sube el archivo del producto gratuito.'; return; }
