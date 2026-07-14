@@ -85,7 +85,7 @@ async function compressPhoto(file, maxSide = 1600, quality = 0.82) {
 // refleja a Storage en el servidor), y último recurso: URL pública directa de Storage.
 async function uploadMedia(bucket, file, onProgress, contentType) {
   const ct = contentType || file.type || 'application/octet-stream';
-  const ext = (((file.name || '').split('.').pop() || '') || ct.split('/')[1] || 'bin').toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin';
+  const ext = (((file.name || '').split('.').pop() || '') || (ct.split('/')[1] || 'bin').split(';')[0]).toLowerCase().replace(/[^a-z0-9]/g, '') || 'bin';
   try {
     const path = `${state.user.id}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
     const up = await sb.storage.from(bucket).upload(path, file, { cacheControl: '31536000', contentType: ct, upsert: false });
@@ -3822,6 +3822,18 @@ function audioBufferSliceToMp3(audioBuf, start, dur, kbps = 160) {
   return new File(mp3Data, 'preview.mp3', { type: 'audio/mpeg' });
 }
 
+// Convierte una nota de voz (webm/opus de MediaRecorder, que iOS no reproduce)
+// a MP3, compatible con TODOS los dispositivos. Si no se puede, devuelve el original.
+async function voiceToMp3(blob) {
+  try {
+    if (!window.lamejs || !blob) return blob;
+    const ab = await blob.arrayBuffer();
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    let buf; try { buf = await ctx.decodeAudioData(ab); } finally { try { ctx.close(); } catch (_) {} }
+    if (!buf || !buf.duration) return blob;
+    return audioBufferSliceToMp3(buf, 0, buf.duration, 128);   // File 'preview.mp3' audio/mpeg
+  } catch (_) { return blob; }
+}
 // Selector de fragmento sobre la onda (misma mecánica que las historias).
 // Llama a onDone(mp3File, start, dur) con el trozo elegido ya codificado.
 function openAudioFragmentPicker(audioBuf, onDone) {
@@ -14745,12 +14757,13 @@ function dmToggleVoice(box) {
   const dur0 = parseFloat(box.dataset.dur) || 0;
   if (dmVoiceEl && dmVoiceEl._box === box) { if (dmVoiceEl.paused) dmVoiceEl.play(); else dmVoiceEl.pause(); return; }
   if (dmVoiceEl) { dmVoiceEl.pause(); dmVoiceEl._box?.classList.remove('playing'); }
-  const a = new Audio(box.dataset.audio); dmVoiceEl = a; a._box = box;
+  const a = new Audio(czUrl(box.dataset.audio)); dmVoiceEl = a; a._box = box;
   a.ontimeupdate = () => { const d = (a.duration && isFinite(a.duration)) ? a.duration : dur0; if (d) dmVoiceProgress(box, a.currentTime / d, a.currentTime); };
   a.onended = () => { box.classList.remove('playing'); dmVoiceProgress(box, 0, dur0); };
   a.onplay = () => box.classList.add('playing');
   a.onpause = () => box.classList.remove('playing');
-  a.play();
+  a.onerror = () => { box.classList.remove('playing'); toast('No se pudo reproducir esta nota de voz'); };
+  a.play().catch(() => { box.classList.remove('playing'); toast('No se pudo reproducir esta nota de voz'); });
 }
 function openImageViewer(url) {
   const v = el(`<div class="img-viewer"><img decoding="async" src="${esc(url)}" alt="" /></div>`);
@@ -14813,7 +14826,9 @@ async function dmSendAudio(blob, secs, peaks) {
   const other = state.dmPeer;
   if ((!isGroup && !other) || !requireNotBanned()) return;
   try {
-    const url = await uploadMedia('chat', blob, null, blob.type || 'audio/webm');
+    const out = await voiceToMp3(blob);   // MP3 universal (iOS incluido); si falla, el original
+    const isMp3 = out !== blob;
+    const url = await uploadMedia('chat', out, null, isMp3 ? 'audio/mpeg' : (blob.type || 'audio/webm'));
     const reply_to = state.dmReplyTo?.id || null; cancelReply();
     const name = JSON.stringify({ d: secs, w: (peaks && peaks.length) ? peaks : undefined });
     const baseRow = isGroup
