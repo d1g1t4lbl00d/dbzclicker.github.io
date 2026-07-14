@@ -8453,7 +8453,7 @@ async function buyInApp(p, btn) {
     const r = await fetch('/api/pay/checkout', { method: 'POST', headers: h, body: JSON.stringify({ product_id: p.id }) });
     const d = await r.json();
     if (d && d.url) { location.href = d.url; return; }
-    const map = { seller_not_ready: 'El vendedor aún no tiene los cobros activados.', own_product: 'No puedes comprar tu propio producto.', not_payable: 'Producto no disponible para compra.', sold_out: 'Producto agotado.', physical_disabled: 'Las ventas físicas están desactivadas por ahora.' };
+    const map = { seller_not_ready: 'El vendedor aún no tiene los cobros activados.', own_product: 'No puedes comprar tu propio producto.', not_payable: 'Producto no disponible para compra.', sold_out: 'Producto agotado.', physical_disabled: 'Las ventas físicas están desactivadas por ahora.', no_file: 'Este producto aún no tiene el archivo subido. Avisa al vendedor.' };
     toast(map[d.error] || 'No se pudo iniciar el pago.');
   } catch (e) { toast('Error de conexión'); }
   if (btn) { btn.disabled = false; btn.innerHTML = btn.dataset.t || 'Comprar'; }
@@ -8591,8 +8591,10 @@ function shopProductCard(p, isMe, refresh, sold) {
   const t = SHOP_TYPES[p.type] || SHOP_TYPES.merch;
   const img = p.image_url ? czUrl(p.image_url) : '';
   const soldOut = p.stock != null && p.stock <= 0;
+  // digital descargable sin archivo subido: no se puede vender ni entregar
+  const missingFile = !p.needs_shipping && ['beat', 'feat', 'service', 'other'].includes(p.type) && !p.file_url;
   const free = p.is_free && p.file_url && !soldOut;
-  const inapp = !p.is_free && p.pay_inapp && p.price_cents >= 50 && !soldOut;
+  const inapp = !p.is_free && p.pay_inapp && p.price_cents >= 50 && !soldOut && !missingFile;
   const cta = p.type === 'ticket' ? 'Conseguir' : 'Comprar';
   const ship = p.needs_shipping && p.ship_cents > 0;
   const priceTxt = p.is_free ? 'Gratis' : (!p.is_free && p.price_cents >= 50 ? fmtEur(p.price_cents, p.currency) : (p.price || ''));
@@ -8629,8 +8631,10 @@ function openShopProduct(p, isMe, refresh) {
   const t = SHOP_TYPES[p.type] || SHOP_TYPES.merch;
   const img = p.image_url ? czUrl(p.image_url) : '';
   const soldOut = p.stock != null && p.stock <= 0;
+  // digital descargable sin archivo subido: no se puede vender ni entregar
+  const missingFile = !p.needs_shipping && ['beat', 'feat', 'service', 'other'].includes(p.type) && !p.file_url;
   const free = p.is_free && p.file_url && !soldOut;
-  const inapp = !p.is_free && p.pay_inapp && p.price_cents >= 50 && !soldOut;
+  const inapp = !p.is_free && p.pay_inapp && p.price_cents >= 50 && !soldOut && !missingFile;
   const priceTxt = p.is_free ? 'Gratis' : (p.price_cents >= 50 ? fmtEur(p.price_cents, p.currency) : (p.price || ''));
   const cta = p.type === 'ticket' ? 'Conseguir' : 'Comprar';
   const m = openModal(`<div class="modal-head"><h3>Producto</h3><button class="close">&times;</button></div>
@@ -8645,9 +8649,11 @@ function openShopProduct(p, isMe, refresh) {
         <div class="shopd-foot">
           <span class="shopd-price">${esc(priceTxt)}</span>
           ${soldOut ? '<button class="btn" disabled>Agotado</button>'
-            : (free ? `<button class="btn primary" id="shpDl"><svg fill="none" stroke="#fff"><use href="#i-download"/></svg> Descargar</button>`
-                 : (inapp ? `<button class="btn primary" id="shpBuy">${cta}</button>` : ''))}
+            : (missingFile ? '<button class="btn" disabled>No disponible</button>'
+              : (free ? `<button class="btn primary" id="shpDl"><svg fill="none" stroke="#fff"><use href="#i-download"/></svg> Descargar</button>`
+                 : (inapp ? `<button class="btn primary" id="shpBuy">${cta}</button>` : '')))}
         </div>
+        ${missingFile ? '<div class="shop-secure" style="color:#c0533f">Este producto todavía no tiene el archivo subido; el vendedor debe añadirlo antes de venderlo.</div>' : ''}
         ${inapp ? '<div class="shop-secure"><svg fill="none" stroke="currentColor"><use href="#i-lock"/></svg> Pago seguro en UnderBro</div>' : ''}
       </div>
     </div>`);
@@ -9015,16 +9021,17 @@ async function openShopEdit(p, userId, onSaved) {
     const hasFile = !!dataFile || !!p.file_url;
     // ---- validación: un producto debe tener contenido real ----
     if (title.length < 2) { msg.className = 'auth-msg error'; msg.textContent = 'Ponle un título (mínimo 2 caracteres).'; return; }
-    // Beat/Pack: el archivo es obligatorio (entrega automática al comprar)
-    if (type === 'beat' && !hasFile) { msg.className = 'auth-msg error'; msg.textContent = 'Sube el archivo del beat/pack: se entrega automáticamente al comprar.'; return; }
+    // Digital descargable (beat, colaboración, servicio, otro): el archivo es OBLIGATORIO.
+    // Nada de "ya lo paso cuando me lo compren": sin archivo no se está vendiendo nada.
+    const needsFile = !physical && SHOP_DIGITAL_FILE.includes(type);
+    if (needsFile && !hasFile) { msg.className = 'auth-msg error'; msg.textContent = 'Sube el archivo que vas a entregar (audio, zip…). Es obligatorio: el comprador lo recibe automáticamente al pagar.'; return; }
     let price_cents = null;
     if (!free) {
       const eur = parseFloat(String(m.querySelector('#shPriceEur').value || '').replace(',', '.'));
       if (!(eur >= 0.5)) { msg.className = 'auth-msg error'; msg.textContent = 'Pon un precio de al menos 0,50 €.'; return; }
       price_cents = Math.round(eur * 100);
     }
-    if (free && !hasFile) { msg.className = 'auth-msg error'; msg.textContent = 'Sube el archivo del producto gratuito (o ponle precio).'; return; }
-    // digital descargable de pago: recomendable archivo, pero servicios/feats se entregan por acuerdo → no obligatorio
+    if (free && needsFile && !hasFile) { msg.className = 'auth-msg error'; msg.textContent = 'Sube el archivo del producto gratuito.'; return; }
     let stock = null;
     const sv = m.querySelector('#shStock').value.trim();
     if (sv !== '') { const n = parseInt(sv, 10); if (!Number.isFinite(n) || n < 0) { msg.className = 'auth-msg error'; msg.textContent = 'Las unidades deben ser 0 o más (vacío = ilimitado).'; return; } stock = n; }
