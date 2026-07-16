@@ -3832,8 +3832,26 @@ function openModal(html) {
   return backdrop;
 }
 
+// Carga lamejs (codificador MP3) SOLO cuando hace falta (subir/comprimir audio o
+// convertir una nota de voz). Antes se cargaba en cada arranque y ralentizaba la app.
+let _lamejsPromise = null;
+function ensureLamejs() {
+  if (window.lamejs) return Promise.resolve(true);
+  if (_lamejsPromise) return _lamejsPromise;
+  _lamejsPromise = new Promise((resolve) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/lamejs@1.2.1/lame.min.js';
+    s.async = true;
+    s.onload = () => resolve(!!window.lamejs);
+    s.onerror = () => { _lamejsPromise = null; resolve(false); };
+    document.head.appendChild(s);
+  });
+  return _lamejsPromise;
+}
+
 // Comprime cualquier audio a MP3 en el navegador (reduce mucho el tamaño de los WAV)
 async function compressAudioToMp3(file, kbps = 192, onProgress) {
+  await ensureLamejs();
   const arrayBuf = await file.arrayBuffer();
   const AudioCtx = window.AudioContext || window.webkitAudioContext;
   const ctx = new AudioCtx();
@@ -3888,7 +3906,9 @@ function audioBufferSliceToMp3(audioBuf, start, dur, kbps = 160) {
 // a MP3, compatible con TODOS los dispositivos. Si no se puede, devuelve el original.
 async function voiceToMp3(blob) {
   try {
-    if (!window.lamejs || !blob) return blob;
+    if (!blob) return blob;
+    await ensureLamejs();
+    if (!window.lamejs) return blob;
     const ab = await blob.arrayBuffer();
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     let buf; try { buf = await ctx.decodeAudioData(ab); } finally { try { ctx.close(); } catch (_) {} }
@@ -4199,6 +4219,7 @@ function openUploadModal(prefill) {
       const tooBig = audioFile.size > 45 * 1024 * 1024;
       // optimiza si es muy grande (WAV) o si pesa más de lo que ocuparía a 160 kbps (ahorra datos)
       const worthShrinking = duration > 0 && audioFile.size > duration * bytesPerSec * 1.2;
+      if (tooBig || worthShrinking) await ensureLamejs();
       if (window.lamejs && (tooBig || worthShrinking)) {
         msg.className = 'auth-msg'; msg.textContent = 'Optimizando audio… esto puede tardar unos segundos.';
         try {
@@ -7626,6 +7647,7 @@ async function uploadAlbumTrack(file, opts, onProgress) {
   const lossless = /^(wav|flac|aiff|aif|alac)$/.test(ext0);   // formatos sin pérdida → siempre comprimir
   const heavy = file.size > 16 * 1024 * 1024;                 // pesado (probable alta tasa o larga)
   const tooBig = file.size > 45 * 1024 * 1024;
+  if (tooBig || lossless || heavy) await ensureLamejs();
   if (window.lamejs && (tooBig || lossless || heavy)) {
     try {
       uploadFile = await compressAudioToMp3(file, tooBig ? 192 : 160, (p) => onProgress && onProgress(p * 0.5));
@@ -9223,6 +9245,7 @@ async function openShopEdit(p, userId, onSaved) {
     } catch (_) {}
     btn.disabled = false; btn.innerHTML = old;
     if (!buf) { toast('No se pudo leer el audio. Puedes subir un mp3 de preview.'); return; }
+    await ensureLamejs();
     openAudioFragmentPicker(buf, (file, start, clip) => {
       prevFile = file;
       m.querySelector('#shPrevName').textContent = `Fragmento elegido ✓ (${fmtClock(start)}–${fmtClock(start + clip)})`;

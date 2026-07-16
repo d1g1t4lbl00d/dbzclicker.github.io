@@ -27,6 +27,7 @@
   --panel:       #ffffff;
   --panel-2:     #f6f8fc;
   --glass:       rgba(255,255,255,.72);
+  --bar-solid:   rgba(255,255,255,.95);
   --line:        #dde3ee;
   --line-soft:   #e9edf4;
   --track:       #d8dfec;
@@ -65,6 +66,7 @@
   --panel:       #121726;
   --panel-2:     #1a2033;
   --glass:       rgba(10,13,24,.76);
+  --bar-solid:   rgba(12,16,28,.96);
   --line:        #232b40;
   --line-soft:   #1a2030;
   --track:       #2a3350;
@@ -3887,6 +3889,18 @@ button, a, .btn, .icon-btn, .nav-item, .bottom-nav button, .tabs button,
 .person { content-visibility: auto; contain-intrinsic-size: auto 110px; }
 .convo { content-visibility: auto; contain-intrinsic-size: auto 74px; }
 .notif-item { content-visibility: auto; contain-intrinsic-size: auto 66px; }
+
+/* MÓVIL: el backdrop-filter (blur) en barras fijas se reblurea en CADA frame
+   de scroll → principal causa de tirones en teléfonos. En pantallas táctiles
+   lo quitamos y usamos un fondo casi sólido: se ve prácticamente igual pero
+   el scroll pasa a ir fluido. */
+@media (hover: none) and (pointer: coarse) {
+  .topbar, .player, .bottom-nav {
+    -webkit-backdrop-filter: none !important;
+    backdrop-filter: none !important;
+    background: var(--bar-solid) !important;
+  }
+}
 
 /* fade-in suave de imágenes al cargar (sensación más pulida al hacer scroll) */
 @keyframes ubImgIn { from { opacity: 0; } to { opacity: 1; } }
