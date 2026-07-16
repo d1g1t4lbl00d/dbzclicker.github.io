@@ -7,9 +7,36 @@
 // versión de esta build (derivada del ?v= con el que se cargó este script)
 const APP_VERSION = (() => { try { return (document.currentScript.src.match(/[?&]v=([^&]+)/) || [])[1] || 'dev'; } catch { return 'dev'; } })();
 
+// SEGURIDAD: nunca aceptamos un token de sesión que venga en el # de la URL
+// (flujo 'implicit'). Si alguien comparte un enlace con #access_token, lo borramos
+// ANTES de que Supabase lo lea, así ese enlace no inicia sesión en otro dispositivo.
+// El login legítimo usa PKCE (?code en la query), que sí se conserva.
+try {
+  if (location.hash && /(?:access_token|refresh_token|provider_token)=/.test(location.hash)) {
+    history.replaceState(null, '', location.pathname + location.search);
+  }
+} catch (_) {}
+
 const { SUPABASE_URL, SUPABASE_ANON_KEY } = window.UNDERBRO_CONFIG;
 const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: { persistSession: true, autoRefreshToken: true },
+  // flowType 'pkce': el login OAuth vuelve con un ?code de un solo uso ligado al
+  // navegador que lo inició (code_verifier en localStorage). Un enlace compartido
+  // NO puede iniciar sesión en otro dispositivo. Evita el fallo de "compartir la URL
+  // con el token" que exponía el flujo 'implicit' (#access_token en la URL).
+  auth: { persistSession: true, autoRefreshToken: true, flowType: 'pkce', detectSessionInUrl: true },
+});
+// Defensa extra: si por lo que sea llegara un token/código en la URL, lo borramos
+// en cuanto se procesa la sesión, para que nunca se quede en la barra ni se pueda copiar.
+sb.auth.onAuthStateChange((_evt, _session) => {
+  try {
+    const hasTok = /(?:access_token|refresh_token)=/.test(location.hash);
+    const hasCode = new URLSearchParams(location.search).has('code');
+    if (hasTok || hasCode) {
+      const sp = new URLSearchParams(location.search); sp.delete('code'); sp.delete('state');
+      const qs = sp.toString();
+      history.replaceState(null, '', location.pathname + (qs ? '?' + qs : ''));
+    }
+  } catch (_) {}
 });
 
 // ===== Subida de media a Cloudflare R2 (egress gratis) vía URL firmada de la edge function =====
