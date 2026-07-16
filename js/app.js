@@ -13452,10 +13452,10 @@ function renderSettings() {
         <div class="sub" style="margin-top:6px">Lo que has comprado y, si vendes, tus ventas y retiradas.</div>
       </div>
       <hr style="border:none;border-top:1px solid var(--line-soft);margin:20px 0" />
+      <div class="field"><label>Contraseña actual</label><input type="password" id="setPassOld" autocomplete="current-password" placeholder="Tu contraseña actual" /></div>
       <div class="field"><label>Nueva contraseña</label><input type="password" id="setPass" placeholder="Mínimo 6 caracteres" autocomplete="new-password" /></div>
-      <div class="field hidden" id="setPassCodeRow"><label>Código de verificación (tu correo)</label><input type="text" id="setPassCode" inputmode="numeric" autocomplete="one-time-code" maxlength="10" placeholder="Código de 6 dígitos" /></div>
       <button class="btn" id="savePass">Cambiar contraseña</button>
-      <div class="sub" style="margin-top:6px">Por seguridad, te enviaremos un código a tu correo para confirmar que eres tú.</div>
+      <div class="sub" style="margin-top:6px">Por seguridad, confirma tu contraseña actual. ¿Entras con Google? Usa «¿Olvidaste tu contraseña?» en la pantalla de inicio para ponerte una.</div>
       <div class="auth-msg" id="passMsg"></div>
       <hr style="border:none;border-top:1px solid var(--line-soft);margin:20px 0" />
       <button class="btn" id="settingsLogout" style="width:100%"><svg fill="none" stroke="currentColor"><use href="#i-logout"/></svg> Cerrar sesión</button>
@@ -13549,36 +13549,27 @@ function renderSettings() {
     } finally { btn.disabled = false; }
   };
 
-  // Cambio de contraseña CON verificación de identidad (código al correo).
-  // Evita que alguien con tu sesión abierta te cambie la contraseña sin ser tú.
-  let pwCodeSent = false;
+  // Cambio de contraseña CON verificación de identidad (contraseña actual).
+  // Evita que alguien con tu sesión abierta te la cambie sin ser tú. Al re-iniciar
+  // sesión, ésta pasa a ser "reciente" y Supabase no exige el código extra.
   $('savePass').onclick = async () => {
+    const oldPass = $('setPassOld').value;
     const pass = $('setPass').value;
     const msg = $('passMsg'); msg.className = 'auth-msg';
     const btn = $('savePass');
-    if (pass.length < 6) { msg.className = 'auth-msg error'; msg.textContent = 'Mínimo 6 caracteres.'; return; }
-    // Paso 1: pedir el código de verificación al correo
-    if (!pwCodeSent) {
-      btn.disabled = true; btn.textContent = 'Enviando código…';
-      const { error } = await sb.auth.reauthenticate();
-      btn.disabled = false;
-      if (error) { btn.textContent = 'Cambiar contraseña'; msg.className = 'auth-msg error'; msg.textContent = 'No se pudo enviar el código: ' + traducirError(error.message); return; }
-      pwCodeSent = true;
-      $('setPassCodeRow').classList.remove('hidden');
-      $('setPassCode').focus();
-      btn.textContent = 'Confirmar cambio';
-      msg.className = 'auth-msg ok'; msg.textContent = 'Te hemos enviado un código de 6 dígitos a tu correo. Introdúcelo aquí para confirmar el cambio.';
-      return;
-    }
-    // Paso 2: confirmar con el código (nonce)
-    const code = ($('setPassCode').value || '').trim();
-    if (!code) { msg.className = 'auth-msg error'; msg.textContent = 'Introduce el código que te enviamos por correo.'; return; }
+    if (pass.length < 6) { msg.className = 'auth-msg error'; msg.textContent = 'La nueva contraseña debe tener mínimo 6 caracteres.'; return; }
+    if (!oldPass) { msg.className = 'auth-msg error'; msg.textContent = 'Introduce tu contraseña actual para confirmar.'; return; }
+    const email = state.user && state.user.email;
+    if (!email) { msg.className = 'auth-msg error'; msg.textContent = 'No se pudo verificar tu correo.'; return; }
     btn.disabled = true; btn.textContent = 'Cambiando…';
-    const { error } = await sb.auth.updateUser({ password: pass, nonce: code });
-    btn.disabled = false; btn.textContent = 'Confirmar cambio';
-    if (error) { msg.className = 'auth-msg error'; msg.textContent = 'Código incorrecto o caducado. Revisa tu correo e inténtalo de nuevo.'; return; }
-    $('setPass').value = ''; $('setPassCode').value = ''; $('setPassCodeRow').classList.add('hidden');
-    pwCodeSent = false; btn.textContent = 'Cambiar contraseña';
+    // 1) verificar identidad con la contraseña actual (crea sesión reciente)
+    const { error: vErr } = await sb.auth.signInWithPassword({ email, password: oldPass });
+    if (vErr) { btn.disabled = false; btn.textContent = 'Cambiar contraseña'; msg.className = 'auth-msg error'; msg.textContent = 'Contraseña actual incorrecta.'; return; }
+    // 2) actualizar a la nueva
+    const { error } = await sb.auth.updateUser({ password: pass });
+    btn.disabled = false; btn.textContent = 'Cambiar contraseña';
+    if (error) { msg.className = 'auth-msg error'; msg.textContent = traducirError(error.message); return; }
+    $('setPassOld').value = ''; $('setPass').value = '';
     msg.className = 'auth-msg ok'; msg.textContent = 'Contraseña actualizada ✓';
     toast('Contraseña cambiada');
   };
