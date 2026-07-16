@@ -13036,10 +13036,12 @@ async function renderAdmin() {
         <div id="admContent" class="adm-list"><div class="loading" style="padding:18px"><div class="spinner"></div></div></div>
       </div>
       <div class="admin-card"><h3>📣 Difusión a la comunidad</h3>
-        <p class="sub" style="margin:0 0 10px">Envía un aviso (push + notificación) a todos los usuarios.</p>
-        <input id="admBcTitle" type="text" maxlength="60" placeholder="Título · ej. ¡Nueva función!" />
-        <textarea id="admBcBody" maxlength="180" placeholder="Mensaje…" rows="3"></textarea>
+        <p class="sub" style="margin:0 0 10px">Envía un aviso a todos los usuarios: notificación push y/o correo con la plantilla de UnderBro.</p>
+        <input id="admBcTitle" type="text" maxlength="120" placeholder="Título / asunto · ej. ¡Nueva función!" />
+        <textarea id="admBcBody" maxlength="4000" placeholder="Mensaje… (para el email puedes extenderte)" rows="4"></textarea>
+        <label class="pk-tg" style="font-weight:600;display:flex;align-items:center;gap:8px;margin:2px 0 10px"><input type="checkbox" id="admBcEmail" style="width:auto" /> <span>Enviar también por <b>email</b> (con la plantilla de marca)</span></label>
         <button class="btn btn-ig" id="admBcSend" style="width:100%;justify-content:center">Enviar a todos</button>
+        <button class="btn sm" id="admBcTest" style="width:100%;margin-top:8px">✉️ Enviar una prueba a mi correo</button>
         <div class="sub" id="admBcMsg" style="margin-top:8px"></div>
         <button class="btn" id="admReports" style="width:100%;margin-top:14px"><svg fill="none" stroke="currentColor"><use href="#i-bell"/></svg> Reportes de la comunidad</button>
       </div>
@@ -13069,6 +13071,7 @@ async function renderAdmin() {
     loadAdminContent(b.dataset.ct);
   });
   $('admBcSend').onclick = adminBroadcast;
+  $('admBcTest').onclick = adminBroadcastTest;
   $('admReports').onclick = openReportsAdmin;
 }
 async function loadAdminStats() {
@@ -13372,14 +13375,40 @@ async function openAdminTx() {
 }
 async function adminBroadcast() {
   const title = $('admBcTitle').value.trim(), body = $('admBcBody').value.trim();
+  const alsoEmail = $('admBcEmail') && $('admBcEmail').checked;
   const msg = $('admBcMsg');
   if (!title && !body) { msg.textContent = 'Escribe un título o un mensaje.'; return; }
-  if (!confirm('¿Enviar este aviso a TODA la comunidad?')) return;
+  if (!confirm(`¿Enviar este aviso a TODA la comunidad${alsoEmail ? ' (push + email)' : ' (push)'}?`)) return;
   const btn = $('admBcSend'); btn.disabled = true; msg.textContent = 'Enviando…';
+  // push a todos (tabla broadcasts)
   const { error } = await sb.from('broadcasts').insert({ title: title || 'UnderBro', body, sender_id: state.user.id });
+  if (error) { btn.disabled = false; msg.textContent = 'No se pudo enviar la notificación push.'; return; }
+  // email a todos (con plantilla) si está marcado
+  if (alsoEmail) {
+    try {
+      const { data, error: eErr } = await sb.functions.invoke('send-email', { body: { broadcast: { subject: title || 'UnderBro', body } } });
+      if (eErr || (data && data.error)) { btn.disabled = false; msg.textContent = 'Push enviada, pero el email falló: ' + ((data && data.error) || eErr?.message || ''); return; }
+      msg.textContent = `✅ Enviado: push a todos + email a ${data?.sent ?? 0} usuarios.`;
+    } catch (_) { btn.disabled = false; msg.textContent = 'Push enviada, pero el email falló.'; return; }
+  } else {
+    msg.textContent = 'Aviso (push) enviado a la comunidad ✅';
+  }
   btn.disabled = false;
-  if (error) { msg.textContent = 'Falta activar el backend de difusión (tabla broadcasts). Aplica el SQL que te pasé.'; return; }
-  $('admBcTitle').value = ''; $('admBcBody').value = ''; msg.textContent = 'Aviso enviado a la comunidad ✅'; toast('Difusión enviada 📣');
+  $('admBcTitle').value = ''; $('admBcBody').value = ''; if ($('admBcEmail')) $('admBcEmail').checked = false;
+  toast('Difusión enviada 📣');
+}
+// Enviar un email de prueba (con la plantilla) al propio admin
+async function adminBroadcastTest() {
+  const title = $('admBcTitle').value.trim(), body = $('admBcBody').value.trim();
+  const msg = $('admBcMsg');
+  if (!title && !body) { msg.textContent = 'Escribe el asunto y el mensaje para la prueba.'; return; }
+  const btn = $('admBcTest'); btn.disabled = true; msg.textContent = 'Enviando prueba…';
+  try {
+    const { data, error } = await sb.functions.invoke('send-email', { body: { test: { subject: title || 'UnderBro', body } } });
+    if (error || (data && data.error)) { msg.textContent = 'No se pudo enviar la prueba: ' + ((data && data.error) || error?.message || ''); }
+    else msg.textContent = `✅ Prueba enviada a ${data?.test_to || 'tu correo'}. Revisa tu bandeja.`;
+  } catch (_) { msg.textContent = 'No se pudo enviar la prueba.'; }
+  btn.disabled = false;
 }
 
 async function deleteAccount() {
