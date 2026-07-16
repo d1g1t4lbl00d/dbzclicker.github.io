@@ -13384,11 +13384,17 @@ async function adminBroadcast() {
 
 async function deleteAccount() {
   const msg = $('delMsg'); msg.className = 'auth-msg';
-  const typed = prompt('Esta acción es PERMANENTE: borrará tu cuenta y TODOS tus archivos y datos.\n\nEscribe BORRAR para confirmar:');
-  if (typed == null) return;
-  if (typed.trim().toUpperCase() !== 'BORRAR') { msg.className = 'auth-msg error'; msg.textContent = 'Confirmación incorrecta. Escribe BORRAR.'; return; }
-  const btn = $('deleteAccount'); btn.disabled = true;
-  msg.className = 'auth-msg'; msg.textContent = 'Eliminando tu cuenta y archivos…';
+  const btn = $('deleteAccount');
+  const email = state.user && state.user.email;
+  const pass = ($('delPass') && $('delPass').value) || '';
+  if (!email) { msg.className = 'auth-msg error'; msg.textContent = 'No se pudo verificar tu correo.'; return; }
+  if (!pass) { msg.className = 'auth-msg error'; msg.textContent = 'Introduce tu contraseña para confirmar que eres tú.'; return; }
+  if (!confirm('Esta acción es PERMANENTE: borrará tu cuenta y TODOS tus datos y archivos. ¿Continuar?')) return;
+  // Verificar identidad con la contraseña actual antes de borrar
+  btn.disabled = true; msg.className = 'auth-msg'; msg.textContent = 'Verificando…';
+  const { error: vErr } = await sb.auth.signInWithPassword({ email, password: pass });
+  if (vErr) { btn.disabled = false; msg.className = 'auth-msg error'; msg.textContent = 'Contraseña incorrecta. (Si entras con Google, ponte primero una contraseña arriba.)'; return; }
+  msg.textContent = 'Eliminando tu cuenta y archivos…';
   try {
     const { data, error } = await sb.functions.invoke('delete-account');
     if (error) throw error;
@@ -13456,7 +13462,9 @@ function renderSettings() {
       <div class="danger-zone">
         <h4>Eliminar cuenta</h4>
         <p>Borra para siempre tu cuenta, tu perfil y <b>todo</b> lo que has subido: pistas, portadas, comentarios, "me gusta", seguidores y mensajes. No se puede deshacer.</p>
+        <div class="field"><label>Confirma con tu contraseña</label><input type="password" id="delPass" autocomplete="current-password" placeholder="Tu contraseña actual" /></div>
         <button class="btn danger-btn" id="deleteAccount"><svg fill="none" stroke="#fff"><use href="#i-trash"/></svg> Eliminar mi cuenta y mis datos</button>
+        <div class="sub" style="margin-top:6px">Por seguridad, debes confirmar con tu contraseña. Si entras con Google, primero ponte una contraseña arriba.</div>
         <div class="auth-msg" id="delMsg"></div>
       </div>
       <hr style="border:none;border-top:1px solid var(--line-soft);margin:20px 0" />
