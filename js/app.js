@@ -3234,49 +3234,83 @@ function attachMentionAutocomplete(input) {
 }
 
 function renderComments(box, t, comments) {
-  box.innerHTML = comments.map(c => {
+  renderCommentList(box, {
+    table: 'comments', profSelect: '*, profiles(*)',
+    fkField: 'track_id', fkId: t.id, ownerId: t.user_id,
+    notifyType: 'comment', replyType: 'reply', notifyExtra: { track_id: t.id },
+  }, comments);
+}
+// Lista de comentarios con RESPUESTAS (1 nivel), para pistas y fotos.
+function renderCommentList(box, ctx, comments) {
+  const rerender = (list) => renderCommentList(box, ctx, list);
+  const tops = comments.filter(c => !c.parent_id);
+  const repliesBy = {};
+  comments.forEach(c => { if (c.parent_id) (repliesBy[c.parent_id] = repliesBy[c.parent_id] || []).push(c); });
+  const commentHTML = (c, isReply) => {
     const canDel = c.user_id === state.user.id || state.profile.is_admin;
-    return `
-    <div class="comment" data-cid="${c.id}">
+    return `<div class="comment${isReply ? ' is-reply' : ''}" data-cid="${c.id}">
       <span class="c-av" data-uid="${c.user_id}">${avatarHTML(c.profiles)}</span>
       <div class="c-body">
         <div class="c-line"><b class="c-name" data-uid="${c.user_id}">${esc(c.profiles?.display_name || c.profiles?.username || 'anónimo')}</b>
         <span class="c-time">${timeAgo(c.created_at)}</span>
         ${canDel ? `<button class="c-del" data-del-comment="${c.id}" title="Borrar comentario">✕</button>` : ''}</div>
         <p>${linkifyMentions(c.body)}</p>
+        <button class="c-reply" data-reply="${c.id}">Responder</button>
       </div>
     </div>`;
-  }).join('') || '<p class="c-hint">Sé el primero en comentar.</p>';
-  box.querySelectorAll('[data-uid]').forEach(elm => elm.onclick = (e) => { e.stopPropagation(); openProfile(elm.dataset.uid); });
-  box.querySelectorAll('[data-del-comment]').forEach(btn => {
-    btn.onclick = async () => {
-      const id = btn.getAttribute('data-del-comment');
-      const { error } = await sb.from('comments').delete().eq('id', id);
-      if (error) { toast('No se pudo borrar el comentario'); return; }
-      renderComments(box, t, comments.filter(x => x.id !== id));
-    };
+  };
+  let html = '';
+  tops.forEach(c => {
+    html += commentHTML(c, false);
+    (repliesBy[c.id] || []).sort((a, b) => new Date(a.created_at) - new Date(b.created_at)).forEach(r => { html += commentHTML(r, true); });
   });
+  box.innerHTML = html || '<p class="c-hint">Sé el primero en comentar.</p>';
+  box.querySelectorAll('[data-uid]').forEach(elm => elm.onclick = (e) => { e.stopPropagation(); openProfile(elm.dataset.uid); });
+  const delComment = async (id) => {
+    const { error } = await sb.from(ctx.table).delete().eq('id', id);
+    if (error) { toast('No se pudo borrar el comentario'); return; }
+    rerender(comments.filter(x => x.id !== id && x.parent_id !== id)); // quita también sus respuestas
+  };
+  box.querySelectorAll('[data-del-comment]').forEach(btn => btn.onclick = () => delComment(btn.getAttribute('data-del-comment')));
   box.querySelectorAll('.comment').forEach(row => {
     const c = comments.find(x => String(x.id) === String(row.dataset.cid)); if (!c) return;
     const canDel = c.user_id === state.user.id || state.profile.is_admin;
-    attachLongPress(row, () => commentMenu(box, c, canDel, async () => {
-      const { error } = await sb.from('comments').delete().eq('id', c.id);
-      if (error) { toast('No se pudo borrar el comentario'); return; }
-      renderComments(box, t, comments.filter(x => x.id !== c.id));
-    }));
+    attachLongPress(row, () => commentMenu(box, c, canDel, () => delComment(c.id)));
   });
-  const form = el(`<form class="comment-form"><input type="text" placeholder="Añade un comentario... (@ para mencionar)" maxlength="400" required /><button class="comment-send" type="submit" aria-label="Enviar"><svg fill="none" stroke="#fff"><use href="#i-send"/></svg></button></form>`);
-  attachMentionAutocomplete(form.querySelector('input'));
+
+  const form = el(`<form class="comment-form">
+    <div class="c-replybar hidden"><span class="c-replyto"></span><button type="button" class="c-replyx" aria-label="Cancelar">✕</button></div>
+    <div class="c-inputrow"><input type="text" placeholder="Añade un comentario... (@ para mencionar)" maxlength="400" required /><button class="comment-send" type="submit" aria-label="Enviar"><svg fill="none" stroke="#fff"><use href="#i-send"/></svg></button></div>
+  </form>`);
+  const input = form.querySelector('input');
+  const bar = form.querySelector('.c-replybar');
+  attachMentionAutocomplete(input);
+  let replyState = null;
+  const clearReply = () => { replyState = null; bar.classList.add('hidden'); };
+  form.querySelector('.c-replyx').onclick = clearReply;
+  box.querySelectorAll('[data-reply]').forEach(btn => btn.onclick = () => {
+    const c = comments.find(x => String(x.id) === String(btn.dataset.reply)); if (!c) return;
+    const rootId = c.parent_id || c.id; // responder a una respuesta cuelga del comentario raíz
+    const name = c.profiles?.username || c.profiles?.display_name || 'usuario';
+    replyState = { rootId, name, uid: c.user_id };
+    bar.querySelector('.c-replyto').textContent = 'Respondiendo a @' + name;
+    bar.classList.remove('hidden');
+    if (!input.value.trim()) input.value = '@' + name + ' ';
+    input.focus();
+  });
   form.addEventListener('submit', async (e) => {
     e.preventDefault();
     if (!requireNotBanned()) return;
-    const input = form.querySelector('input');
     const body = input.value.trim(); if (!body) return;
     input.value = '';
-    const { data, error } = await sb.from('comments').insert({ track_id: t.id, user_id: state.user.id, body }).select('*, profiles(*)').single();
+    const rs = replyState; clearReply();
+    const row = { user_id: state.user.id, body, [ctx.fkField]: ctx.fkId };
+    if (rs) row.parent_id = rs.rootId;
+    const { data, error } = await sb.from(ctx.table).insert(row).select(ctx.profSelect).single();
     if (error) { toast('No se pudo comentar'); return; }
-    notifySocial('comment', t.user_id, { track_id: t.id, comment: body });
-    renderComments(box, t, [...comments, data]);
+    if (rs && rs.uid) notifySocial(ctx.replyType, rs.uid, Object.assign({ comment: body }, ctx.notifyExtra));
+    else notifySocial(ctx.notifyType, ctx.ownerId, Object.assign({ comment: body }, ctx.notifyExtra));
+    rerender([...comments, data]);
   });
   box.appendChild(form);
 }
@@ -9310,51 +9344,11 @@ async function togglePostComments(p, card) {
 }
 
 function renderPostComments(box, p, comments) {
-  box.innerHTML = comments.map(c => {
-    const canDel = c.user_id === state.user.id || state.profile.is_admin;
-    return `
-    <div class="comment" data-cid="${c.id}">
-      <span class="c-av" data-uid="${c.user_id}">${avatarHTML(c.profiles)}</span>
-      <div class="c-body">
-        <div class="c-line"><b class="c-name" data-uid="${c.user_id}">${esc(c.profiles?.display_name || c.profiles?.username || 'anónimo')}</b>
-        <span class="c-time">${timeAgo(c.created_at)}</span>
-        ${canDel ? `<button class="c-del" data-del-comment="${c.id}" title="Borrar comentario">✕</button>` : ''}</div>
-        <p>${linkifyMentions(c.body)}</p>
-      </div>
-    </div>`;
-  }).join('') || '<p class="c-hint">Sé el primero en comentar.</p>';
-  box.querySelectorAll('[data-uid]').forEach(elm => elm.onclick = (e) => { e.stopPropagation(); openProfile(elm.dataset.uid); });
-  box.querySelectorAll('[data-del-comment]').forEach(btn => {
-    btn.onclick = async () => {
-      const id = btn.getAttribute('data-del-comment');
-      const { error } = await sb.from('post_comments').delete().eq('id', id);
-      if (error) { toast('No se pudo borrar el comentario'); return; }
-      renderPostComments(box, p, comments.filter(x => x.id !== id));
-    };
-  });
-  box.querySelectorAll('.comment').forEach(row => {
-    const c = comments.find(x => String(x.id) === String(row.dataset.cid)); if (!c) return;
-    const canDel = c.user_id === state.user.id || state.profile.is_admin;
-    attachLongPress(row, () => commentMenu(box, c, canDel, async () => {
-      const { error } = await sb.from('post_comments').delete().eq('id', c.id);
-      if (error) { toast('No se pudo borrar el comentario'); return; }
-      renderPostComments(box, p, comments.filter(x => x.id !== c.id));
-    }));
-  });
-  const form = el(`<form class="comment-form"><input type="text" placeholder="Añade un comentario... (@ para mencionar)" maxlength="400" required /><button class="comment-send" type="submit" aria-label="Enviar"><svg fill="none" stroke="#fff"><use href="#i-send"/></svg></button></form>`);
-  attachMentionAutocomplete(form.querySelector('input'));
-  form.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    if (!requireNotBanned()) return;
-    const input = form.querySelector('input');
-    const body = input.value.trim(); if (!body) return;
-    input.value = '';
-    const { data, error } = await sb.from('post_comments').insert({ post_id: p.id, user_id: state.user.id, body }).select('*, profiles!post_comments_user_id_fkey(*)').single();
-    if (error) { toast('No se pudo comentar'); return; }
-    notifySocial('post_comment', p.user_id, { comment: body });
-    renderPostComments(box, p, [...comments, data]);
-  });
-  box.appendChild(form);
+  renderCommentList(box, {
+    table: 'post_comments', profSelect: '*, profiles!post_comments_user_id_fkey(*)',
+    fkField: 'post_id', fkId: p.id, ownerId: p.user_id,
+    notifyType: 'post_comment', replyType: 'post_reply', notifyExtra: {},
+  }, comments);
 }
 
 /* =======================================================================
@@ -13641,7 +13635,7 @@ async function fetchNotifications() {
   if (ids.length) {
     const { data: lk } = await sb.from('likes').select('created_at, track_id, profiles(*)').in('track_id', ids).neq('user_id', state.user.id).order('created_at',{ascending:false}).limit(20);
     (lk||[]).forEach(l => out.push({ ts: l.created_at, type:'like', who: l.profiles, text: `marcó ♥ tu pista "${titleById[l.track_id]||''}"` }));
-    const { data: cm } = await sb.from('comments').select('created_at, track_id, body, profiles(*)').in('track_id', ids).neq('user_id', state.user.id).order('created_at',{ascending:false}).limit(20);
+    const { data: cm } = await sb.from('comments').select('created_at, track_id, body, profiles(*)').in('track_id', ids).neq('user_id', state.user.id).is('parent_id', null).order('created_at',{ascending:false}).limit(20);
     (cm||[]).forEach(c => out.push({ ts: c.created_at, type:'comment', who: c.profiles, text: `comentó en "${titleById[c.track_id]||''}": ${c.body}` }));
     const { data: rp } = await sb.from('reposts').select('created_at, track_id, profiles!reposts_user_id_fkey(*)').in('track_id', ids).neq('user_id', state.user.id).order('created_at',{ascending:false}).limit(20);
     (rp||[]).forEach(r => out.push({ ts: r.created_at, type:'repost', who: r.profiles, text: `🔁 reposteó tu pista "${titleById[r.track_id]||''}"` }));
@@ -13653,8 +13647,25 @@ async function fetchNotifications() {
     if (pids.length) {
       const { data: pl } = await sb.from('post_likes').select('created_at, profiles(*)').in('post_id', pids).neq('user_id', state.user.id).order('created_at',{ascending:false}).limit(20);
       (pl||[]).forEach(l => out.push({ ts: l.created_at, type:'like', who: l.profiles, text: 'marcó ♥ tu foto' }));
-      const { data: pc } = await sb.from('post_comments').select('created_at, body, profiles!post_comments_user_id_fkey(*)').in('post_id', pids).neq('user_id', state.user.id).order('created_at',{ascending:false}).limit(20);
+      const { data: pc } = await sb.from('post_comments').select('created_at, body, profiles!post_comments_user_id_fkey(*)').in('post_id', pids).neq('user_id', state.user.id).is('parent_id', null).order('created_at',{ascending:false}).limit(20);
       (pc||[]).forEach(c => out.push({ ts: c.created_at, type:'comment', who: c.profiles, text: `comentó tu foto: ${c.body}` }));
+    }
+  } catch (_) {}
+  // respuestas a TUS comentarios (en pistas y en fotos)
+  try {
+    const { data: myC } = await sb.from('comments').select('id').eq('user_id', state.user.id).limit(200);
+    const myCids = (myC||[]).map(c => c.id);
+    if (myCids.length) {
+      const { data: rep } = await sb.from('comments').select('created_at, body, parent_id, profiles(*)').in('parent_id', myCids).neq('user_id', state.user.id).order('created_at',{ascending:false}).limit(20);
+      (rep||[]).forEach(r => out.push({ ts: r.created_at, type:'reply', who: r.profiles, text: `te respondió: ${r.body}` }));
+    }
+  } catch (_) {}
+  try {
+    const { data: myPC } = await sb.from('post_comments').select('id').eq('user_id', state.user.id).limit(200);
+    const myPCids = (myPC||[]).map(c => c.id);
+    if (myPCids.length) {
+      const { data: prep } = await sb.from('post_comments').select('created_at, body, parent_id, profiles!post_comments_user_id_fkey(*)').in('parent_id', myPCids).neq('user_id', state.user.id).order('created_at',{ascending:false}).limit(20);
+      (prep||[]).forEach(r => out.push({ ts: r.created_at, type:'reply', who: r.profiles, text: `te respondió en una foto: ${r.body}` }));
     }
   } catch (_) {}
   // ventas en tu tienda
