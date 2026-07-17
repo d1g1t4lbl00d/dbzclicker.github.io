@@ -3030,6 +3030,8 @@ function routeGo(params) {
     else if (go === 'plaza') switchView('plaza');
     else if (go === 'thread' && params.get('id')) openThread(params.get('id'));
     else if (go === 'chat' && params.get('c')) openDM(params.get('c'));
+    else if (go === 'purchases') openMyPurchases();
+    else if (go === 'sales') openSellerSales(state.user.id);
     else return false;
   } catch (_) { return false; }
   return true;
