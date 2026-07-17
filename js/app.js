@@ -14777,7 +14777,15 @@ function wireBubble(row, msg) {
   const dmPlay = row.querySelector('[data-dmplay]'); if (dmPlay) dmPlay.onclick = (e) => { e.stopPropagation(); playSharedTrack(safeMeta(msg), msg.attachment_url); };
   const jump = row.querySelector('[data-jump]'); if (jump) jump.onclick = (e) => { e.stopPropagation(); dmJumpTo(jump.dataset.jump); };
   wireReactChips(row, msg);
-  if (!msg.deleted) attachBubbleGestures(bub, msg);
+  if (!msg.deleted) {
+    attachBubbleGestures(bub, msg);
+    // Botón de opciones: garantiza que el menú (borrar, responder, reportar…) sea
+    // accesible SIEMPRE, incluso en audios/archivos/imágenes donde el long-press
+    // se lo traga el reproductor o el enlace.
+    const more = el(`<button class="dm-more" type="button" aria-label="Opciones del mensaje"><svg fill="none" stroke="currentColor"><use href="#i-more"/></svg></button>`);
+    more.onclick = (e) => { e.stopPropagation(); e.preventDefault(); haptic(10); openMsgMenu(msg, bub); };
+    row.appendChild(more);
+  }
 }
 function wireReactChips(row, msg) {
   row.querySelectorAll('.dm-react').forEach(b => b.onclick = (e) => { e.stopPropagation(); toggleReaction(msg.id, b.dataset.emoji); });
@@ -14909,9 +14917,12 @@ function editMessage(msg) {
 }
 async function softDeleteMessage(msg) {
   if (!confirm('¿Eliminar este mensaje para todos?')) return;
-  const { error } = await sb.from(msg.conversation_id ? 'group_messages' : 'direct_messages').update({ deleted: true }).eq('id', msg.id);
+  // Se marca borrado Y se vacía el contenido: el texto y el adjunto desaparecen
+  // de verdad de la base de datos (no queda accesible para la otra persona).
+  const patch = { deleted: true, body: '', attachment_url: null, attachment_type: null, attachment_name: null };
+  const { error } = await sb.from(msg.conversation_id ? 'group_messages' : 'direct_messages').update(patch).eq('id', msg.id);
   if (error) { toast('No se pudo eliminar'); return; }
-  msg.deleted = true; state.dmMsgs.set(msg.id, msg); replaceRow(msg);
+  Object.assign(msg, patch); state.dmMsgs.set(msg.id, msg); replaceRow(msg);
 }
 function dmJumpTo(id) {
   const r = document.querySelector(`.dm-row[data-mid="${id}"]`); if (!r) return;

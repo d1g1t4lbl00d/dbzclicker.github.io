@@ -819,7 +819,15 @@ body.has-player .right { padding-bottom: var(--player-h); }
 .dm-day { align-self: center; font-size: 11px; font-weight: 650; color: var(--ink-soft); background: var(--glass); backdrop-filter: blur(6px); padding: 4px 14px; border-radius: 20px; margin: 10px 0 6px; box-shadow: var(--sh-1); }
 
 /* fila = burbuja + reacciones, alineadas al lado del emisor */
-.dm-row { display: flex; flex-direction: column; max-width: 80%; gap: 3px; margin-top: 9px; animation: dmIn .22s var(--ease); }
+.dm-row { position: relative; display: flex; flex-direction: column; max-width: 80%; gap: 3px; margin-top: 9px; animation: dmIn .22s var(--ease); }
+/* botón de opciones (···) del mensaje: menú siempre accesible (borrar, responder…) */
+.dm-more { position: absolute; top: 4px; width: 30px; height: 30px; border: none; background: transparent; color: var(--ink-soft); display: grid; place-items: center; border-radius: 50%; opacity: 0; transition: opacity .15s, background .15s; cursor: pointer; z-index: 3; }
+.dm-more svg { width: 18px; height: 18px; }
+.dm-row.me .dm-more { left: -36px; }
+.dm-row.them .dm-more { right: -36px; }
+.dm-row:hover .dm-more { opacity: .65; }
+.dm-more:hover { opacity: 1; background: var(--panel-2); }
+@media (hover: none) and (pointer: coarse) { .dm-more { opacity: .45; } }
 .dm-row.me { align-self: flex-end; align-items: flex-end; }
 .dm-row.them { align-self: flex-start; align-items: flex-start; }
 .dm-row.cont { margin-top: 2px; }
