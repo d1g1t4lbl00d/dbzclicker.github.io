@@ -268,13 +268,13 @@ async function isAdmin() {
   try {
     const { data: { session } } = await sbc.auth.getSession();
     if (!session) return false;
-    const { data } = await sbc.from('profiles').select('is_admin').eq('id', session.user.id).maybeSingle();
-    return !!(data && data.is_admin);
+    const { data } = await sbc.from('profiles').select('is_admin,is_creator').eq('id', session.user.id).maybeSingle();
+    return !!(data && (data.is_admin || data.is_creator));
   } catch (_) { return false; }
 }
 function showLocked() {
   const w = document.querySelector('.wrap'); if (w) w.remove();
-  document.getElementById('gate').innerHTML = '<div class="gate-box"><h2>🔒 Solo administradores</h2><p>Inicia sesión como administrador en UnderBro para usar el Story Studio.</p><a href="/">Ir a UnderBro</a></div>';
+  document.getElementById('gate').innerHTML = '<div class="gate-box"><h2>🔒 Acceso restringido</h2><p>Necesitas acceso de colaborador para usar el Story Studio. Pídeselo a un administrador.</p><a href="/">Ir a UnderBro</a></div>';
 }
 
 // init (solo si eres admin)

@@ -900,11 +900,13 @@ async function shareTheme() {
   $('marketMsg').textContent = 'Compartiendo…';
   const { error } = await sb.from('theme_market').insert({ author: myId, author_name: myName || null, name, config: buildOut() });
   if (error) { $('marketMsg').textContent = /relation|exist|theme_market/i.test(error.message||'') ? 'Falta crear theme_market (ejecuta el SQL).' : (/policy|row-level/i.test(error.message||'') ? 'No tienes permiso para compartir.' : 'Error: ' + error.message); return; }
-  $('marketMsg').textContent = '¡Compartido en el mercado! ✅'; loadMarket();
+  $('marketMsg').textContent = isAdminMode() ? '¡Compartido en el mercado! ✅' : 'Enviado ✅. Aparecerá en el mercado cuando un administrador lo apruebe.'; loadMarket();
 }
 async function loadMarket() {
   const grid = $('marketGrid'); grid.innerHTML = '<p class="hint">Cargando…</p>';
-  const { data, error } = await sb.from('theme_market').select('id,author,author_name,name,config,created_at').order('created_at', { ascending: false }).limit(120);
+  let q = sb.from('theme_market').select('id,author,author_name,name,config,created_at').order('created_at', { ascending: false }).limit(120);
+  if (!isAdminMode()) q = q.or(`approved.eq.true,author.eq.${myId}`);
+  const { data, error } = await q;
   if (error) { grid.innerHTML = '<p class="hint">' + (/relation|exist|theme_market/i.test(error.message||'') ? 'Falta crear theme_market (ejecuta el SQL).' : 'No se pudo cargar.') + '</p>'; return; }
   if (!data || !data.length) { grid.innerHTML = '<p class="hint">Aún no hay webs en el mercado. ¡Comparte la tuya con el botón de arriba!</p>'; return; }
   grid.innerHTML = '';
@@ -933,10 +935,10 @@ async function boot() {
   try { session = (await sb.auth.getSession()).data.session; } catch (_) {}
   if (!session) return gate('Inicia sesión en la app primero (con tu cuenta de administrador).', true);
   let prof = null;
-  try { ({ data: prof } = await sb.from('profiles').select('is_admin,can_customize,username').eq('id', session.user.id).maybeSingle()); }
+  try { ({ data: prof } = await sb.from('profiles').select('is_admin,can_customize,is_creator,username').eq('id', session.user.id).maybeSingle()); }
   catch (_) { ({ data: prof } = await sb.from('profiles').select('is_admin,can_customize').eq('id', session.user.id).maybeSingle()); }
   const isAdmin = !!(prof && prof.is_admin);
-  const canCustom = !!(prof && (prof.can_customize || prof.is_admin));
+  const canCustom = !!(prof && (prof.can_customize || prof.is_creator || prof.is_admin));
   if (!canCustom) return gate('No tienes permiso para personalizar tu web. Pídeselo al administrador.', true);
   mode = isAdmin ? 'global' : 'personal'; myId = session.user.id; myName = (prof && prof.username) || '';
   let liveCfg = defaults();

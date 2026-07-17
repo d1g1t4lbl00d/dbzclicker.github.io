@@ -1125,6 +1125,7 @@ async function switchView(view) {
   if (view === 'beats') return renderBeats();
   if (view === 'tools') return renderTools();
   if (view === 'ecosystems') return renderEcosystems();
+  if (view === 'creatorstudio') return renderCreatorStudio();
   if (view === 'uploads') return renderUploads();
   if (view === 'partners') return renderPartnersView();
   if (view === 'skins') return renderSkins();
@@ -4296,7 +4297,7 @@ let plzCustomLoaded = false;
 async function plzLoadCustomItems(force) {
   if (plzCustomLoaded && !force) return;
   try {
-    const { data } = await sb.from('plaza_shop').select('item,name,category,sprite').not('sprite', 'is', null);
+    const { data } = await sb.from('plaza_shop').select('item,name,category,sprite').not('sprite', 'is', null).eq('approved', true);
     (data || []).forEach(r => {
       const s = r.sprite || {};
       const rawFrames = (Array.isArray(s.frames) && s.frames.length) ? s.frames : [s.data];
@@ -5346,7 +5347,7 @@ async function openPlazaShop(onBuy) {
   const grid = m.querySelector('#shopGrid');
   await plzLoadCustomItems(true);   // que las miniaturas custom estén disponibles y frescas
   let items = [];
-  const load = async () => { try { const { data } = await sb.from('plaza_shop').select('item,name,price,category,sort,custom,created_by').order('sort'); items = data || []; } catch (_) {} };
+  const load = async () => { try { let q = sb.from('plaza_shop').select('item,name,price,category,sort,custom,created_by').order('sort'); if (!admin) q = q.eq('approved', true); const { data } = await q; items = data || []; } catch (_) {} };
   await load();
   if (!items.length) { grid.innerHTML = '<div class="pr-empty">No se pudo cargar la tienda.</div>'; return; }
   // abre el editor con el objeto cargado y guarda con plaza_update_item.
@@ -5806,12 +5807,18 @@ function openPlazaSpriteEditor(onDone, existing) {
       let item = ed0 && ed0.item;
       if (ed0) { const { error } = await sb.rpc('plaza_update_item', { p_item: ed0.item, p_name: name, p_price: price, p_category: cat, p_sprite: sprite }); if (error) throw error; }
       else { const { data, error } = await sb.rpc('plaza_create_item', { p_name: name, p_price: price, p_category: cat, p_sprite: sprite }); if (error) throw error; item = data; }
-      // registro local: fotogramas decodificados (índices) para render inmediato
-      const decFrames = ((sprite.frames && sprite.frames.length) ? sprite.frames : [sprite.data]).map(sprDecodeFrame);
-      PLZ_CUSTOM[item] = { w, h, pal: sprite.pal, data: decFrames[0], frames: decFrames, fps: sprite.fps || fps, fw, fd: 1, solid: propSolid, sit: propSit, anim: propAnim, name, category: cat };
-      PLZ_ITEM_NAME[item] = name;
+      const isAdm = !!(state.profile && state.profile.is_admin);
+      if (isAdm) {
+        // admin publica aprobado → registro local para render inmediato
+        const decFrames = ((sprite.frames && sprite.frames.length) ? sprite.frames : [sprite.data]).map(sprDecodeFrame);
+        PLZ_CUSTOM[item] = { w, h, pal: sprite.pal, data: decFrames[0], frames: decFrames, fps: sprite.fps || fps, fw, fd: 1, solid: propSolid, sit: propSit, anim: propAnim, name, category: cat };
+        PLZ_ITEM_NAME[item] = name;
+      } else {
+        // colaborador: queda PENDIENTE de aprobación → no se muestra aún
+        delete PLZ_CUSTOM[item];
+      }
       document.removeEventListener('keydown', onKey);
-      haptic(14); toast(ed0 ? 'Cambios guardados' : '¡«' + name + '» publicado en la tienda!');
+      haptic(14); toast(isAdm ? (ed0 ? 'Cambios guardados' : '¡«' + name + '» publicado en la tienda!') : 'Enviado para aprobación ✓');
       m.remove(); onDone && onDone();
     } catch (e) { pubBtn.disabled = false; pubBtn.textContent = ed0 ? 'Guardar cambios' : 'Publicar en la tienda'; toast((e && e.message) || 'No se pudo guardar'); }
   };
@@ -6966,6 +6973,23 @@ function plzDrawDiscoBall(c, now) {
 
 // ---- sprites pixel del mobiliario (dibujados por frame, ordenados por profundidad) ----
 // dibuja un sprite custom (rejilla w×h de índices de paleta) apoyado en (cx, base)
+// Pinta un sprite (jsonb crudo de plaza_shop) centrado en un canvas — para miniaturas (aprobaciones).
+function plzSpriteToCanvas(canvas, sp) {
+  if (!canvas || !sp) return;
+  const ctx = canvas.getContext('2d'); if (!ctx) return;
+  const w = sp.w || 16, h = sp.h || 16, pal = Array.isArray(sp.pal) ? sp.pal : [];
+  const rawFrames = (Array.isArray(sp.frames) && sp.frames.length) ? sp.frames : [sp.data];
+  const data = sprDecodeFrame(rawFrames[0] || []);
+  const cw = canvas.width, ch = canvas.height;
+  ctx.clearRect(0, 0, cw, ch);
+  const scale = Math.max(1, Math.floor(Math.min(cw / w, ch / h)));
+  const ox = Math.floor((cw - w * scale) / 2), oy = Math.floor((ch - h * scale) / 2);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const v = data[y * w + x] | 0; if (!v) continue;
+    const col = pal[v - 1]; if (!col) continue;
+    ctx.fillStyle = col; ctx.fillRect(ox + x * scale, oy + y * scale, scale, scale);
+  }
+}
 function plzDrawCustomSprite(c, sp, cx, base, now) {
   const w = sp.w, h = sp.h, pal = sp.pal;
   // animación por fotogramas: elige el fotograma según el tiempo y los FPS
@@ -11106,7 +11130,10 @@ const ECOSYSTEMS = [
   { key: 'stats',     n: 4, name: 'Stats',     icon: 'i-chart',   accent: '#2fb344', desc: 'Tus estadísticas y crecimiento' },
   { key: 'skins',     n: 5, name: 'Mercado',   icon: 'i-palette', accent: '#ff5b8d', desc: 'Webs de la comunidad · personaliza la tuya' },
   { key: 'uploads',   n: 6, name: 'Subidas',   icon: 'i-files',   accent: '#27a9ff', desc: 'Pistas, beats, fotos y playlists' },
+  { key: 'creatorstudio', n: 7, name: 'Estudio de creadores', icon: 'i-sparkles', accent: '#a855f7', desc: 'Herramientas para crear contenido de UnderBro', gated: true },
 ];
+// ¿puede el usuario ver el Estudio de creadores? (permiso concedido por el admin)
+function isCreatorUser() { return !!(state.profile && (state.profile.is_creator || state.profile.is_admin)); }
 function renderEcosystems() {
   setActiveNav('ecosystems');
   const main = $('main');
@@ -11114,13 +11141,13 @@ function renderEcosystems() {
   main.innerHTML = `
     <div class="main-head"><div><h2>Ecosystems</h2><div class="sub">Tu centro de mando como artista</div></div></div>
     <div class="eco-map">
-      ${ECOSYSTEMS.map((e, i) => `
-        <button class="eco-node" data-eco="${e.key}" style="--ea:${e.accent}">
+      ${ECOSYSTEMS.filter(e => !e.gated || isCreatorUser()).map((e, i, arr) => `
+        <button class="eco-node${e.gated ? ' eco-node-creator' : ''}" data-eco="${e.key}" style="--ea:${e.accent}">
           <span class="eco-n">${e.n}</span>
           <span class="eco-ico"><svg fill="none" stroke="#fff"><use href="#${e.icon}"/></svg></span>
-          <span class="eco-txt"><b>${e.name}</b><span>${esc(e.desc)}</span></span>
+          <span class="eco-txt"><b>${esc(e.name)}</b><span>${esc(e.desc)}</span></span>
           <span class="eco-go">→</span>
-        </button>${i < ECOSYSTEMS.length - 1 ? '<span class="eco-link"></span>' : ''}`).join('')}
+        </button>${i < arr.length - 1 ? '<span class="eco-link"></span>' : ''}`).join('')}
     </div>`;
   main.querySelectorAll('.eco-node').forEach(b => b.onclick = () => openEco(b.dataset.eco));
 }
@@ -11133,6 +11160,40 @@ function ecoHead(title, sub) {
   return `<div class="main-head"><div class="eco-head-l"><button class="icon-btn" id="ecoBack" title="Volver a Ecosystems"><svg fill="none" stroke="currentColor"><use href="#i-chevron-left"/></svg></button><div><h2>${esc(title)}</h2><div class="sub">${esc(sub)}</div></div></div></div>`;
 }
 function wireEcoBack() { const b = $('ecoBack'); if (b) b.onclick = () => switchView('ecosystems'); }
+
+/* ---- Estudio de creadores (acceso concedido por el admin) ---- */
+function renderCreatorStudio() {
+  setActiveNav('ecosystems');
+  if (!isCreatorUser()) { switchView('ecosystems'); return; }
+  const main = $('main'); main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
+  const tools = [
+    { key: 'story',  icon: 'i-sparkles', accent: '#a855f7', name: 'Story Studio', desc: 'Crea gráficos e historias promocionales de UnderBro (formato 1080×1920).' },
+    { key: 'web',    icon: 'i-brush',    accent: '#ff5b8d', name: 'Editor web',   desc: 'Diseña skins y temas para la comunidad. Los temas que publiques pasan por revisión.' },
+    { key: 'sprite', icon: 'i-palette',  accent: '#27a9ff', name: 'Editor de sprites', desc: 'Dibuja objetos para la plaza. Se publican tras la aprobación del equipo.' },
+  ];
+  main.innerHTML = ecoHead('Estudio de creadores', 'Herramientas para crear contenido de UnderBro') + `
+    <div class="cs-note"><svg fill="none" stroke="currentColor"><use href="#i-lock"/></svg>
+      <span>Tienes acceso de <b>colaborador</b>. Puedes crear contenido, pero lo que se comparte (objetos y temas) <b>lo revisa un administrador</b> antes de publicarse. No puedes modificar la web ni la configuración global.</span></div>
+    <div class="cs-grid">
+      ${tools.map(t => `
+        <button class="cs-card" data-tool="${t.key}" style="--ea:${t.accent}">
+          <span class="cs-ico"><svg fill="none" stroke="#fff"><use href="#${t.icon}"/></svg></span>
+          <span class="cs-txt"><b>${esc(t.name)}</b><span>${esc(t.desc)}</span></span>
+          <span class="eco-go">→</span>
+        </button>`).join('')}
+    </div>`;
+  wireEcoBack();
+  main.querySelectorAll('.cs-card').forEach(b => b.onclick = () => openCreatorTool(b.dataset.tool));
+}
+function openCreatorTool(tool) {
+  if (tool === 'story') { window.open('/studio', '_blank'); return; }
+  if (tool === 'web') { location.href = '/editor'; return; }
+  if (tool === 'sprite') {
+    try { openPlazaSpriteEditor(() => toast(state.profile.is_admin ? 'Objeto publicado' : 'Enviado para aprobación ✓')); }
+    catch (_) { toast('No se pudo abrir el editor de sprites'); }
+    return;
+  }
+}
 
 /* ---- Subidas ---- */
 async function renderUploads() {
@@ -11259,7 +11320,7 @@ function renderSkins() {
 }
 async function loadMarketGrid() {
   const grid = $('mktGrid'); if (!grid) return;
-  const { data, error } = await sb.from('theme_market').select('id,author_name,name,config,created_at').order('created_at', { ascending: false }).limit(120);
+  const { data, error } = await sb.from('theme_market').select('id,author_name,name,config,created_at').eq('approved', true).order('created_at', { ascending: false }).limit(120);
   if (error) { grid.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-palette"/></svg><p>${/relation|exist|theme_market/i.test(error.message||'') ? 'El mercado aún no está activo.' : 'No se pudo cargar el mercado.'}</p></div>`; return; }
   if (!data || !data.length) { grid.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-palette"/></svg><p>Aún no hay webs en el mercado. ¡Sé el primero en crear una!</p></div>`; return; }
   grid.innerHTML = '';
@@ -13054,6 +13115,11 @@ async function renderAdmin() {
         <div class="adm-tabs"><button class="active" data-ct="tracks">Pistas</button><button data-ct="posts">Fotos</button></div>
         <div id="admContent" class="adm-list"><div class="loading" style="padding:18px"><div class="spinner"></div></div></div>
       </div>
+      <div class="admin-card"><h3>✨ Aprobaciones de creadores</h3>
+        <p class="sub" style="margin:0 0 10px">Contenido enviado por colaboradores. Nada se publica sin tu OK.</p>
+        <div class="adm-tabs" id="admApproveTabs"><button class="active" data-ap="sprites">Objetos</button><button data-ap="themes">Temas web</button></div>
+        <div id="admApproveList" class="adm-list"><div class="loading" style="padding:18px"><div class="spinner"></div></div></div>
+      </div>
       <div class="admin-card"><h3>📣 Difusión a la comunidad</h3>
         <p class="sub" style="margin:0 0 10px">Envía un aviso a todos los usuarios: notificación push y/o correo con la plantilla de UnderBro.</p>
         <input id="admBcTitle" type="text" maxlength="120" placeholder="Título / asunto · ej. ¡Nueva función!" />
@@ -13092,6 +13158,47 @@ async function renderAdmin() {
   $('admBcSend').onclick = adminBroadcast;
   $('admBcTest').onclick = adminBroadcastTest;
   $('admReports').onclick = openReportsAdmin;
+  main.querySelectorAll('#admApproveTabs button').forEach((b) => b.onclick = () => {
+    main.querySelectorAll('#admApproveTabs button').forEach((x) => x.classList.toggle('active', x === b));
+    loadAdminApprovals(b.dataset.ap);
+  });
+  loadAdminApprovals('sprites');
+}
+// Cola de aprobación de contenido de colaboradores (objetos de plaza + temas web)
+async function loadAdminApprovals(kind) {
+  const box = $('admApproveList'); if (!box) return;
+  box.innerHTML = '<div class="loading" style="padding:18px"><div class="spinner"></div></div>';
+  const nameByAuthor = async (ids) => {
+    const u = [...new Set(ids.filter(Boolean))]; if (!u.length) return {};
+    const { data } = await sb.from('profiles').select('id,username,display_name').in('id', u);
+    return Object.fromEntries((data || []).map(p => [p.id, p.username || p.display_name || '—']));
+  };
+  if (kind === 'themes') {
+    const { data } = await sb.from('theme_market').select('id,name,author,author_name,created_at').eq('approved', false).order('created_at', { ascending: false }).limit(60);
+    const rows = data || [];
+    if (!rows.length) { box.innerHTML = '<div class="sub" style="padding:8px">No hay temas pendientes.</div>'; return; }
+    box.innerHTML = '';
+    rows.forEach(t => {
+      const r = el(`<div class="adm-row"><div class="adm-row-main"><b>${esc(t.name || 'Tema')}</b><span>por @${esc(t.author_name || '—')}</span></div><div class="adm-row-acts"><button class="btn sm primary" data-ok>Aprobar</button><button class="btn sm danger" data-no>Rechazar</button></div></div>`);
+      r.querySelector('[data-ok]').onclick = async () => { const { error } = await sb.from('theme_market').update({ approved: true }).eq('id', t.id); if (error) { toast('No se pudo'); return; } r.remove(); toast('Tema aprobado'); };
+      r.querySelector('[data-no]').onclick = async () => { if (!confirm('¿Rechazar y borrar este tema?')) return; const { error } = await sb.from('theme_market').delete().eq('id', t.id); if (error) { toast('No se pudo'); return; } r.remove(); toast('Tema rechazado'); };
+      box.appendChild(r);
+    });
+    return;
+  }
+  // sprites
+  const { data } = await sb.from('plaza_shop').select('item,name,category,sprite,created_by').eq('approved', false).eq('custom', true).limit(60);
+  const rows = data || [];
+  if (!rows.length) { box.innerHTML = '<div class="sub" style="padding:8px">No hay objetos pendientes.</div>'; return; }
+  const names = await nameByAuthor(rows.map(r => r.created_by));
+  box.innerHTML = '';
+  rows.forEach(it => {
+    const r = el(`<div class="adm-row"><span class="adm-av"><canvas class="adm-sprite" width="40" height="40"></canvas></span><div class="adm-row-main"><b>${esc(it.name || 'Objeto')}</b><span>${esc(it.category || '')} · por @${esc(names[it.created_by] || '—')}</span></div><div class="adm-row-acts"><button class="btn sm primary" data-ok>Aprobar</button><button class="btn sm danger" data-no>Rechazar</button></div></div>`);
+    try { plzSpriteToCanvas(r.querySelector('.adm-sprite'), it.sprite); } catch (_) {}
+    r.querySelector('[data-ok]').onclick = async () => { const { error } = await sb.rpc('plaza_approve_item', { p_item: it.item, p_on: true }); if (error) { toast('No se pudo: ' + (error.message || '')); return; } r.remove(); toast('Objeto aprobado'); await plzLoadCustomItems(true); };
+    r.querySelector('[data-no]').onclick = async () => { if (!confirm('¿Rechazar y borrar este objeto?')) return; const { error } = await sb.rpc('plaza_delete_item', { p_item: it.item }); if (error) { toast('No se pudo: ' + (error.message || '')); return; } r.remove(); toast('Objeto rechazado'); };
+    box.appendChild(r);
+  });
 }
 async function loadAdminStats() {
   const box = $('admStats'); if (!box) return;
@@ -13110,7 +13217,7 @@ async function adminUserSearch(q) {
   const list = $('admUserList'); if (!list) return;
   list.innerHTML = '<div class="loading" style="padding:18px"><div class="spinner"></div></div>';
   const term = sanitizeTerm((q || '').replace('@', ''));
-  let query = sb.from('profiles').select('id,username,display_name,avatar_url,verified,banned,is_admin,user_badges(badge)').limit(30);
+  let query = sb.from('profiles').select('id,username,display_name,avatar_url,verified,banned,is_admin,is_creator,user_badges(badge)').limit(30);
   query = term ? query.or(`username.ilike.%${term}%,display_name.ilike.%${term}%`) : query.order('created_at', { ascending: false });
   const { data, error } = await query;
   if (error) { list.innerHTML = '<div class="sub">Error al buscar usuarios.</div>'; return; }
@@ -13120,7 +13227,7 @@ async function adminUserSearch(q) {
 function adminUserRow(p) {
   const me = p.id === state.user.id;
   const have = new Set((p.user_badges || []).map((b) => b.badge));
-  const tag = `${p.is_admin ? ' <span class="adm-tag mod">ADMIN</span>' : ''}${p.verified ? ' <span class="adm-tag ok">✔</span>' : ''}${p.banned ? ' <span class="adm-tag ban">baneado</span>' : ''}`;
+  const tag = `${p.is_admin ? ' <span class="adm-tag mod">ADMIN</span>' : ''}${p.is_creator ? ' <span class="adm-tag creator">colab</span>' : ''}${p.verified ? ' <span class="adm-tag ok">✔</span>' : ''}${p.banned ? ' <span class="adm-tag ban">baneado</span>' : ''}`;
   const badgeBtns = Object.keys(BADGES).map((k) => `<button class="bdgbtn ${have.has(k) ? 'on' : ''}" data-bdg="${k}" title="${esc(BADGES[k].name)}">${BADGES[k].glyph}</button>`).join('');
   const row = el(`<div class="adm-row">
     <span class="adm-av" data-open>${avatarHTML(p)}</span>
@@ -13130,6 +13237,7 @@ function adminUserRow(p) {
       ${me ? '' : `<button class="btn sm" data-a="dm">Mensaje</button>`}
       <button class="btn sm" data-a="verify">${p.verified ? 'Quitar ✔' : 'Verificar'}</button>
       ${me ? '' : `<button class="btn sm" data-a="ban">${p.banned ? 'Desbanear' : 'Banear'}</button>`}
+      ${me ? '' : `<button class="btn sm" data-a="creator">${p.is_creator ? 'Quitar colab.' : 'Colaborador'}</button>`}
       ${me ? '' : `<button class="btn sm" data-a="admin">${p.is_admin ? 'Quitar admin' : 'Hacer admin'}</button>`}
       ${me || p.is_admin ? '' : `<button class="btn sm danger" data-a="del">Eliminar</button>`}
     </div>
@@ -13140,6 +13248,13 @@ function adminUserRow(p) {
   row.querySelector('[data-a="verify"]').onclick = async (e) => { if (await upd({ verified: !p.verified })) { e.target.textContent = p.verified ? 'Quitar ✔' : 'Verificar'; toast(p.verified ? 'Verificado' : 'Verificación quitada'); } };
   const banB = row.querySelector('[data-a="ban"]'); if (banB) banB.onclick = async (e) => { if (await upd({ banned: !p.banned })) { e.target.textContent = p.banned ? 'Desbanear' : 'Banear'; toast(p.banned ? 'Usuario baneado' : 'Usuario desbaneado'); } };
   const admB = row.querySelector('[data-a="admin"]'); if (admB) admB.onclick = async (e) => { if (!confirm(`¿${p.is_admin ? 'QUITAR admin a' : 'HACER admin a'} @${p.username}?`)) return; if (await upd({ is_admin: !p.is_admin })) { e.target.textContent = p.is_admin ? 'Quitar admin' : 'Hacer admin'; toast('Permisos actualizados'); } };
+  const crB = row.querySelector('[data-a="creator"]'); if (crB) crB.onclick = async (e) => {
+    const nv = !p.is_creator;
+    if (!confirm(`¿${nv ? 'DAR' : 'QUITAR'} acceso de colaborador a @${p.username}? Podrá usar el Estudio de creadores (contenido con tu aprobación).`)) return;
+    const { error } = await sb.rpc('set_creator', { p_user: p.id, p_on: nv });
+    if (error) { toast('No se pudo: ' + (error.message || '')); return; }
+    p.is_creator = nv; e.target.textContent = nv ? 'Quitar colab.' : 'Colaborador'; toast(nv ? 'Acceso de colaborador concedido' : 'Acceso retirado');
+  };
   const delB = row.querySelector('[data-a="del"]'); if (delB) delB.onclick = () => adminDeleteUser(p.id, p.username, () => row.remove());
   row.querySelectorAll('[data-bdg]').forEach((b) => b.onclick = async () => {
     const k = b.dataset.bdg, has = have.has(k);
@@ -13519,7 +13634,6 @@ function renderSettings() {
       <div class="field"><label>Privacidad y seguridad</label>
         <button class="btn" id="manageBlocks" style="width:100%"><svg fill="none" stroke="currentColor"><use href="#i-people"/></svg> Cuentas bloqueadas</button>
         ${p.is_admin ? `<button class="btn" id="modReports" style="width:100%;margin-top:8px"><svg fill="none" stroke="currentColor"><use href="#i-bell"/></svg> Moderación · Reportes</button>` : ''}
-        ${p.is_admin ? `<button class="btn" id="storyStudio" style="width:100%;margin-top:8px"><svg fill="none" stroke="currentColor"><use href="#i-image"/></svg> Story Studio (crear historias)</button>` : ''}
         <div class="sub" style="margin-top:6px">Gestiona a quién has bloqueado${p.is_admin ? ' y revisa los reportes de la comunidad.' : '.'}</div>
       </div>
       <hr style="border:none;border-top:1px solid var(--line-soft);margin:20px 0" />
@@ -13542,7 +13656,6 @@ function renderSettings() {
   $('setMyBuys').onclick = () => openMyPurchases();
   $('setMyWallet').onclick = () => openWallet(state.user.id);
   if ($('modReports')) $('modReports').onclick = openReportsAdmin;
-  if ($('storyStudio')) $('storyStudio').onclick = () => window.open('/studio', '_blank');
   const themeBtn = $('setThemeBtn');
   const paintThemeBtn = () => { themeBtn.innerHTML = currentTheme() === 'dark' ? '☀️ Cambiar a tema claro' : '🌙 Cambiar a tema oscuro'; };
   paintThemeBtn();

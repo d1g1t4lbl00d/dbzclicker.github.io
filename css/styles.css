@@ -1608,6 +1608,20 @@ input[type=color] { width: 48px; height: 38px; padding: 2px; border: 1.5px solid
 .eco-node .eco-txt span { font-size: 12.5px; color: var(--ink-soft); }
 .eco-node .eco-go { font-size: 20px; color: var(--ea); font-weight: 700; flex: none; }
 .eco-link { width: 2px; height: 20px; background: linear-gradient(var(--line), transparent); }
+.eco-node-creator { border-color: color-mix(in srgb, var(--ea) 45%, var(--line)); background: color-mix(in srgb, var(--ea) 7%, var(--panel)); }
+/* Estudio de creadores */
+.cs-note { display: flex; gap: 10px; align-items: flex-start; padding: 12px 14px; margin: 4px 0 16px; border-radius: 14px; background: color-mix(in srgb, #a855f7 10%, var(--panel-2)); border: 1px solid color-mix(in srgb, #a855f7 26%, var(--line)); font-size: 13px; color: var(--ink-2); line-height: 1.5; }
+.cs-note svg { width: 18px; height: 18px; flex: none; stroke: #a855f7; margin-top: 1px; }
+.cs-grid { display: flex; flex-direction: column; gap: 12px; }
+.cs-card { width: 100%; display: flex; align-items: center; gap: 14px; text-align: left; padding: 16px 18px; border-radius: var(--r-lg); border: 1px solid var(--line); background: var(--panel); box-shadow: var(--sh-1); cursor: pointer; transition: transform .15s var(--ease), box-shadow .2s, border-color .2s; }
+.cs-card:hover { transform: translateY(-2px); box-shadow: var(--sh-2); border-color: var(--ea); }
+.cs-card .cs-ico { width: 52px; height: 52px; flex: none; border-radius: 15px; background: var(--ea); display: grid; place-items: center; box-shadow: 0 6px 16px color-mix(in srgb, var(--ea) 40%, transparent); }
+.cs-card .cs-ico svg { width: 26px; height: 26px; stroke: #fff; fill: none; }
+.cs-card .cs-txt { display: flex; flex-direction: column; min-width: 0; flex: 1; }
+.cs-card .cs-txt b { font-size: 16px; font-weight: 800; color: var(--ink); }
+.cs-card .cs-txt span { font-size: 12.5px; color: var(--ink-soft); }
+.adm-tag.creator { background: color-mix(in srgb, #a855f7 20%, transparent); color: #a855f7; }
+.adm-sprite { width: 40px; height: 40px; image-rendering: pixelated; background: var(--panel-2); border-radius: 8px; }
 .eco-head-l { display: flex; align-items: center; gap: 10px; }
 .eco-sec { font-size: 14px; font-weight: 800; color: var(--ink); margin: 20px 0 10px; }
 .eco-hint { font-size: 13px; color: var(--ink-soft); padding: 4px 2px 8px; }
