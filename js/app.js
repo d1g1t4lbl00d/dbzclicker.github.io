@@ -5258,7 +5258,7 @@ function plzOwned() { const inv = plzInv(); return Object.keys(inv).filter(k => 
 function plzHasItem(t) { if (plzIsAdmin()) return true; return PLZ_FREE_ITEMS.has(t) || (plzInv()[t] || 0) > 0; }
 function plzAddInv(t, n) { const inv = Object.assign({}, plzInv()); inv[t] = (inv[t] || 0) + (n || 1); if (state.profile) state.profile.plaza_inv = inv; }
 // puede entrar en el editor de objetos: admin o usuario con permiso de editor
-function plzCanCreate() { return !!(state.profile && (state.profile.is_admin || state.profile.plaza_creator)); }
+function plzCanCreate() { return !!(state.profile && (state.profile.is_admin || state.profile.plaza_creator || state.profile.is_creator)); }
 // contador de monedas de la plaza (solo visible dentro de la plaza y sus salas)
 function plzUpdateCoinsHub() {
   const n = document.getElementById('coinsChipN'); if (!n) return;
@@ -11299,7 +11299,7 @@ function loadSavedSkin() {
 function renderSkins() {
   setActiveNav('ecosystems');
   const main = $('main'); main.classList.remove('swap'); void main.offsetWidth; main.classList.add('swap');
-  const isCreator = !!(state.profile && (state.profile.can_customize || state.profile.is_admin));
+  const isCreator = !!(state.profile && (state.profile.can_customize || state.profile.is_creator || state.profile.is_admin));
   main.innerHTML = ecoHead('Mercado de webs', 'Aplica un diseño de la comunidad a tu UnderBro') + `
     <div class="skins-wrap">
       <div class="mkt-top">
