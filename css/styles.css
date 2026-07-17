@@ -873,10 +873,21 @@ body.has-player .right { padding-bottom: var(--player-h); }
 .dm-bubble.has-media .dm-quote { margin: 0 0 5px; }
 .dm-img { display: block; max-width: 260px; width: 100%; border-radius: 12px; cursor: pointer; }
 .dm-video { display: block; max-width: 280px; width: 100%; border-radius: 12px; background: #000; }
-.dm-filechip { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 12px; background: rgba(255,255,255,.18); text-decoration: none; min-width: 180px; color: inherit; }
+.dm-filechip { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 12px; background: rgba(255,255,255,.18); text-decoration: none; min-width: 180px; max-width: 260px; color: inherit; }
 .dm-row.them .dm-filechip { background: var(--panel-2); }
-.dm-filechip svg { width: 22px; height: 22px; flex-shrink: 0; stroke: currentColor; }
-.dm-filechip .fn { font-size: 12.5px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dm-filechip .fic { width: 22px; height: 22px; flex-shrink: 0; stroke: currentColor; }
+.dm-filechip .fn { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dm-filechip .dl { width: 18px; height: 18px; flex-shrink: 0; opacity: .7; }
+.dm-filechip:hover .dl { opacity: 1; }
+/* archivo de audio subido (no es nota de voz): reproductor en línea + descarga */
+.dm-audiofile { display: flex; flex-direction: column; gap: 7px; min-width: 230px; max-width: 300px; }
+.dm-audio-top { display: flex; align-items: center; gap: 8px; }
+.dm-audio-ic { width: 20px; height: 20px; flex-shrink: 0; stroke: currentColor; opacity: .85; }
+.dm-audio-top .fn { flex: 1; min-width: 0; font-size: 12.5px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dm-audio-dl { flex-shrink: 0; display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: rgba(255,255,255,.18); color: inherit; }
+.dm-row.them .dm-audio-dl { background: var(--panel-2); }
+.dm-audio-dl svg { width: 16px; height: 16px; stroke: currentColor; }
+.dm-audioel { width: 100%; height: 38px; }
 
 /* nota de voz */
 .dm-voice { display: flex; align-items: center; gap: 9px; padding: 3px 10px 3px 4px; min-width: 168px; }
@@ -946,10 +957,16 @@ body.has-player .right { padding-bottom: var(--player-h); }
 .dm-reply-bar .rb-x { border: none; background: var(--panel-2); width: 30px; height: 30px; border-radius: 50%; display: grid; place-items: center; flex-shrink: 0; }
 .dm-reply-bar .rb-x svg { width: 15px; height: 15px; stroke: var(--ink-soft); }
 
-.dm-attach-preview { display: flex; align-items: center; gap: 10px; padding: 10px 16px; border-top: 1px solid var(--line-soft); background: var(--panel); max-width: 820px; margin: 0 auto; width: 100%; }
-.dm-attach-preview img { width: 46px; height: 46px; border-radius: 9px; object-fit: cover; }
-.dm-attach-preview .ap-name { flex: 1; min-width: 0; font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dm-attach-preview .ap-x { border: none; background: var(--panel-2); width: 30px; height: 30px; border-radius: 50%; font-size: 16px; color: var(--ink-soft); }
+.dm-screen.dm-dragover::after { content: "Suelta para adjuntar"; position: absolute; inset: 0; z-index: 40; display: grid; place-items: center; font-size: 16px; font-weight: 750; color: var(--blue-deep); background: rgba(62,87,252,.10); border: 3px dashed var(--blue); border-radius: 14px; pointer-events: none; }
+.dm-attach-preview { padding: 10px 16px; border-top: 1px solid var(--line-soft); background: var(--panel); max-width: 820px; margin: 0 auto; width: 100%; }
+.dm-attach-preview .ap-strip { display: flex; gap: 9px; overflow-x: auto; padding-bottom: 2px; }
+.dm-attach-preview .ap-item { position: relative; flex: 0 0 auto; display: flex; flex-direction: column; align-items: center; gap: 5px; width: 88px; }
+.dm-attach-preview .ap-item img, .dm-attach-preview .ap-ic { width: 88px; height: 66px; border-radius: 10px; object-fit: cover; background: var(--panel-2); }
+.dm-attach-preview .ap-ic { display: grid; place-items: center; color: var(--ink-soft); }
+.dm-attach-preview .ap-ic svg { width: 30px; height: 30px; }
+.dm-attach-preview .ap-name { width: 88px; font-size: 11px; font-weight: 600; color: var(--ink-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: center; }
+.dm-attach-preview .ap-x { position: absolute; top: -6px; right: -6px; border: none; background: var(--ink); color: #fff; width: 22px; height: 22px; border-radius: 50%; font-size: 14px; line-height: 1; box-shadow: 0 2px 6px rgba(0,0,0,.25); cursor: pointer; }
+.dm-attach-preview .ap-count { font-size: 11.5px; font-weight: 650; color: var(--ink-soft); margin-top: 7px; }
 
 /* barra de grabación de voz */
 .dm-rec { display: flex; align-items: center; gap: 12px; padding: 10px 14px calc(env(safe-area-inset-bottom,0px) + 10px); border-top: 1px solid var(--line-soft); background: var(--panel); max-width: 820px; margin: 0 auto; width: 100%; }
@@ -989,6 +1006,8 @@ body.has-player .right { padding-bottom: var(--player-h); }
 /* visor de imagen a pantalla completa */
 .img-viewer { position: fixed; inset: 0; z-index: 95; background: rgba(15,18,28,.92); display: grid; place-items: center; padding: 20px; animation: fadeIn .2s; }
 .img-viewer img { max-width: 100%; max-height: 100%; border-radius: 10px; }
+.img-viewer .iv-dl { position: fixed; top: calc(16px + env(safe-area-inset-top,0px)); right: 16px; z-index: 2; width: 46px; height: 46px; border-radius: 50%; background: rgba(255,255,255,.16); backdrop-filter: blur(6px); display: grid; place-items: center; }
+.img-viewer .iv-dl svg { width: 22px; height: 22px; stroke: #fff; }
 
 /* ---- tarjeta de persona (People) ---- */
 .person { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 14px; margin-bottom: 12px; box-shadow: var(--sh-1); animation: fadeUp .35s var(--ease) both; transition: transform .15s var(--ease), box-shadow .2s; }

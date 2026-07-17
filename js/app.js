@@ -151,7 +151,7 @@ const state = {
   dmReacts: new Map(), // message_id -> { emoji: Set(userIds) }
   dmReplyTo: null,     // mensaje al que se está respondiendo
   dmConv: null,        // canal realtime de la conversación abierta
-  dmPendingFile: null,
+  dmPendingFiles: [],  // archivos adjuntos pendientes de enviar (uno o varios)
   hiddenConvos: new Set(JSON.parse(localStorage.getItem('ub_hidden_convos') || '[]')), // chats ocultados localmente
   groupId: null,       // id de la conversación de grupo abierta (null = DM 1-a-1)
   groupConv: null,     // datos de la conversación de grupo abierta
@@ -13869,7 +13869,7 @@ function initDM() {
   attachMentionAutocomplete($('dmInput'));
   $('dmBack').onclick = closeDmScreen;
   $('dmAttach').onclick = () => $('dmFile').click();
-  $('dmFile').onchange = () => { const f = $('dmFile').files[0]; if (f) setDmPending(f); };
+  $('dmFile').onchange = () => { addDmFiles($('dmFile').files); $('dmFile').value = ''; };
   $('dmForm').addEventListener('submit', sendDm);
   $('dmEmoji').onclick = dmToggleEmoji;
   $('dmMic').onclick = () => dmStartRec();
@@ -13883,6 +13883,20 @@ function initDM() {
   $('dmThread').addEventListener('scroll', dmOnThreadScroll, { passive: true });
   $('dmInput').addEventListener('input', dmTypingPing);
   dmBuildEmojiPanel();
+  // arrastrar y soltar archivos sobre el chat (escritorio)
+  (function () {
+    const scr = $('dmScreen'); if (!scr) return;
+    let depth = 0;
+    const show = (on) => scr.classList.toggle('dm-dragover', on);
+    scr.addEventListener('dragenter', (e) => { if (!(e.dataTransfer && [...e.dataTransfer.types].includes('Files'))) return; e.preventDefault(); depth++; show(true); });
+    scr.addEventListener('dragover', (e) => { if (e.dataTransfer && [...e.dataTransfer.types].includes('Files')) e.preventDefault(); });
+    scr.addEventListener('dragleave', () => { depth = Math.max(0, depth - 1); if (!depth) show(false); });
+    scr.addEventListener('drop', (e) => {
+      if (!(e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length)) return;
+      e.preventDefault(); depth = 0; show(false);
+      addDmFiles(e.dataTransfer.files);
+    });
+  })();
 
   sb.channel('dm-inbox-' + state.user.id)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'direct_messages', filter: `recipient_id=eq.${state.user.id}` }, async (payload) => {
@@ -14627,7 +14641,7 @@ function mediaLabel(m) {
   if (!m) return '';
   if (m.attachment_type === 'image') return '📷 Foto';
   if (m.attachment_type === 'video') return '🎬 Vídeo';
-  if (m.attachment_type === 'audio') return '🎙️ Nota de voz';
+  if (m.attachment_type === 'audio') { const nm = String(m.attachment_name || ''); return (nm.charAt(0) === '{' || /^\d+(\.\d+)?$/.test(nm.trim())) ? '🎙️ Nota de voz' : '🎵 ' + nm; }
   if (m.attachment_type === 'track') return '🎵 ' + (safeMeta(m).title || 'Pista');
   if (m.attachment_type === 'order') { let i = {}; try { i = JSON.parse(m.attachment_name || '{}'); } catch (_) {} return '🛒 Compra: ' + (i.title || 'producto'); }
   if (m.attachment_type === 'call') { const mt = safeMeta(m); return (mt.video ? '📹 ' : '📞 ') + callStatusLabel(mt.status, mt.dur, m.sender_id === state.user?.id); }
@@ -14671,9 +14685,15 @@ function mediaHTML(msg) {
   if (t === 'image') return `<img class="dm-img" loading="lazy" decoding="async" src="${esc(msg.attachment_url)}" alt="" data-full="${esc(msg.attachment_url)}" />`;
   if (t === 'video') return `<video class="dm-video" src="${esc(msg.attachment_url)}" controls playsinline preload="metadata"></video>`;
   if (t === 'audio') {
-    let info = {}; try { info = JSON.parse(msg.attachment_name || '{}'); } catch (_) {}
+    // 'audio' es SOLO nota de voz grabada (attachment_name = meta JSON o nº de segundos).
+    // Si el nombre es un fichero real (mp3 subido por error en versiones antiguas),
+    // se muestra como archivo de audio descargable, no como nota de voz.
+    const nm = String(msg.attachment_name || '');
+    const isVoice = nm.charAt(0) === '{' || /^\d+(\.\d+)?$/.test(nm.trim());
+    if (!isVoice) return dmFileAttachHTML(msg);
+    let info = {}; try { info = JSON.parse(nm || '{}'); } catch (_) {}
     let secs = info.d, peaks = info.w;
-    if (secs == null) { const n = parseInt(msg.attachment_name, 10); secs = isNaN(n) ? 0 : n; }
+    if (secs == null) { const n = parseInt(nm, 10); secs = isNaN(n) ? 0 : n; }
     if (!Array.isArray(peaks) || !peaks.length) peaks = dmPlaceholderPeaks(msg.id, 32);
     const bars = peaks.map(p => `<span style="--h:${Math.max(8, Math.min(100, p | 0))}%"></span>`).join('');
     return `<div class="dm-voice" data-audio="${esc(msg.attachment_url)}" data-dur="${secs || 0}"><button class="dm-voice-play" data-vplay aria-label="Reproducir"><svg class="ci-play"><use href="#i-play"/></svg><svg class="ci-pause"><use href="#i-pause"/></svg></button><div class="dm-voice-wave">${bars}</div><span class="dm-voice-time">${fmtDur(secs || 0)}</span></div>`;
@@ -14692,7 +14712,21 @@ function mediaHTML(msg) {
     const sub = i.service ? 'Servicio: envíale/recibe el material por aquí.' : (mine ? 'Ya está en «Mis compras».' : 'Entregado automáticamente.');
     return `<div class="dm-order"><div class="dm-order-ic">🛒</div><div class="dm-order-b"><b>${mine ? 'Has comprado' : 'Te han comprado'} «${esc((i.title || 'producto').slice(0, 44))}»${price ? ' · ' + esc(price) : ''}</b><span>${esc(sub)}</span></div></div>`;
   }
-  return `<a class="dm-filechip" href="${esc(czHref(msg.attachment_url))}" target="_blank" rel="noopener"><svg fill="none"><use href="#i-file"/></svg><span class="fn">${esc(msg.attachment_name || 'archivo')}</span></a>`;
+  return dmFileAttachHTML(msg);
+}
+// Adjunto de archivo: audio → reproductor en línea + descarga; resto → chip descargable.
+// Las URLs viven en underbro.app/media (mismo origen), así que `download` fuerza la descarga.
+function dmFileAttachHTML(msg) {
+  const url = msg.attachment_url;
+  const name = msg.attachment_name || 'archivo';
+  const href = czHref(url);
+  if (attachIsAudio(name)) {
+    return `<div class="dm-audiofile">
+      <div class="dm-audio-top"><svg class="dm-audio-ic" fill="none" stroke="currentColor"><use href="#i-music"/></svg><span class="fn">${esc(name)}</span><a class="dm-audio-dl" href="${esc(href)}" download="${esc(name)}" title="Descargar"><svg fill="none" stroke="currentColor"><use href="#i-download"/></svg></a></div>
+      <audio class="dm-audioel" src="${esc(url)}" controls preload="metadata"></audio>
+    </div>`;
+  }
+  return `<a class="dm-filechip" href="${esc(href)}" download="${esc(name)}" target="_blank" rel="noopener"><svg class="fic" fill="none"><use href="#i-file"/></svg><span class="fn">${esc(name)}</span><svg class="dl" fill="none" stroke="currentColor"><use href="#i-download"/></svg></a>`;
 }
 function groupSenderName(id) { const p = state.groupMembers[id]; return p ? (p.display_name || p.username || 'usuario') : 'usuario'; }
 function bubbleHTML(msg) {
@@ -14987,26 +15021,59 @@ function dmToggleVoice(box) {
   a.play().catch(() => { box.classList.remove('playing'); toast('No se pudo reproducir esta nota de voz'); });
 }
 function openImageViewer(url) {
-  const v = el(`<div class="img-viewer"><img decoding="async" src="${esc(url)}" alt="" /></div>`);
-  v.onclick = () => v.remove();
+  const v = el(`<div class="img-viewer"><a class="iv-dl" href="${esc(czHref(url))}" download title="Descargar" aria-label="Descargar"><svg fill="none" stroke="#fff"><use href="#i-download"/></svg></a><img decoding="async" src="${esc(url)}" alt="" /></div>`);
+  v.onclick = (e) => { if (!e.target.closest('.iv-dl')) v.remove(); };
   document.body.appendChild(v);
 }
 
-/* ---- adjuntos ---- */
-function setDmPending(file) {
-  if (file.size > 26214400) { toast('Máximo 25 MB'); $('dmFile').value = ''; return; }
-  state.dmPendingFile = file;
+/* ---- adjuntos (uno o varios a la vez) ---- */
+const DM_MAX_FILES = 12;
+const DM_MAX_BYTES = 26214400; // 25 MB por archivo
+// añade archivos a la cola de pendientes (acepta varios), avisando de los que no caben
+function addDmFiles(fileList) {
+  const files = Array.from(fileList || []);
+  if (!files.length) return;
+  let tooBig = 0, over = 0;
+  for (const f of files) {
+    if (f.size > DM_MAX_BYTES) { tooBig++; continue; }
+    if (state.dmPendingFiles.length >= DM_MAX_FILES) { over++; continue; }
+    state.dmPendingFiles.push(f);
+  }
+  if (tooBig) toast(tooBig === 1 ? 'Un archivo supera los 25 MB' : `${tooBig} archivos superan los 25 MB`);
+  if (over) toast(`Máximo ${DM_MAX_FILES} archivos a la vez`);
+  renderDmPending();
+}
+function removeDmFile(idx) {
+  state.dmPendingFiles.splice(idx, 1);
+  renderDmPending();
+}
+function renderDmPending() {
   const prev = $('dmAttachPreview');
-  const isImg = file.type.startsWith('image');
-  prev.innerHTML = `${isImg ? `<img decoding="async" src="${URL.createObjectURL(file)}" alt="" />` : `<svg width="34" height="34" fill="none" stroke="var(--ink-soft)"><use href="#i-file"/></svg>`}<span class="ap-name">${esc(file.name)}</span><button type="button" class="ap-x" id="dmApX">&times;</button>`;
+  const files = state.dmPendingFiles;
+  if (!files.length) { prev.classList.add('hidden'); prev.innerHTML = ''; return; }
+  prev.innerHTML = `<div class="ap-strip">${files.map((f, i) => {
+    const isImg = f.type.startsWith('image');
+    const thumb = isImg
+      ? `<img decoding="async" src="${URL.createObjectURL(f)}" alt="" />`
+      : `<span class="ap-ic"><svg fill="none" stroke="currentColor"><use href="#i-${dmFileIcon(f.name, f.type)}"/></svg></span>`;
+    return `<div class="ap-item" title="${esc(f.name)}">${thumb}<span class="ap-name">${esc(f.name)}</span><button type="button" class="ap-x" data-rm="${i}">&times;</button></div>`;
+  }).join('')}</div>${files.length > 1 ? `<div class="ap-count">${files.length} archivos</div>` : ''}`;
   prev.classList.remove('hidden');
-  $('dmApX').onclick = clearDmPending;
+  prev.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => removeDmFile(+b.dataset.rm));
 }
 function clearDmPending() {
-  state.dmPendingFile = null;
+  state.dmPendingFiles = [];
   $('dmFile').value = '';
   $('dmAttachPreview').classList.add('hidden');
   $('dmAttachPreview').innerHTML = '';
+}
+// ¿el adjunto es audio? (por extensión del nombre) → se reproduce en línea
+function attachIsAudio(name) { return /\.(mp3|wav|m4a|aac|ogg|oga|opus|flac|aif|aiff|wma|mid|midi|amr|caf)$/i.test(name || ''); }
+function dmFileIcon(name, type) {
+  const n = (name || '').toLowerCase();
+  if ((type || '').startsWith('audio') || attachIsAudio(n)) return 'music';
+  if ((type || '').startsWith('video') || /\.(mp4|mov|webm|mkv|avi)$/i.test(n)) return 'video';
+  return 'file';
 }
 async function sendDm(e) {
   e.preventDefault();
@@ -15018,29 +15085,39 @@ async function sendDm(e) {
     if (state.blocked.has(other)) { toast('Has bloqueado a este usuario. Desbloquéalo para escribirle.'); return; }
     if (state.hidden.has(other)) { toast('No puedes enviar mensajes a este usuario.'); return; }
   }
-  const input = $('dmInput'); const body = input.value.trim(); const file = state.dmPendingFile;
-  if (!body && !file) return;
+  const input = $('dmInput'); const body = input.value.trim(); const files = state.dmPendingFiles.slice();
+  if (!body && !files.length) return;
   input.value = ''; dmHideEmoji();
   const reply_to = state.dmReplyTo?.id || null; cancelReply();
   if (state.dmConv) state.dmConv.send({ type: 'broadcast', event: 'stop', payload: {} });
-  let attachment_url = null, attachment_type = null, attachment_name = null;
-  if (file) {
-    const sendBtn = $('dmForm').querySelector('.dm-send'); sendBtn.disabled = true;
-    try {
-      const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
-      attachment_url = await uploadMedia('chat', file);
-      attachment_type = file.type.startsWith('image') ? 'image' : file.type.startsWith('video') ? 'video' : file.type.startsWith('audio') ? 'audio' : 'file';
-      attachment_name = file.name;
-    } catch (err) { toast('No se pudo subir el archivo'); sendBtn.disabled = false; return; }
-    sendBtn.disabled = false; clearDmPending();
+  const table = isGroup ? 'group_messages' : 'direct_messages';
+  const mkRow = (fields) => isGroup
+    ? Object.assign({ conversation_id: state.groupId, sender_id: state.user.id, reply_to }, fields)
+    : Object.assign({ sender_id: state.user.id, recipient_id: other, reply_to }, fields);
+  const insertRow = async (fields) => {
+    const { data: sent, error } = await sb.from(table).insert(mkRow(fields)).select().single();
+    if (error) { toast('No se pudo enviar'); return; }
+    dmAppendMessage(sent, { scroll: true });
+  };
+
+  // solo texto
+  if (!files.length) { await insertRow({ body, attachment_url: null, attachment_type: null, attachment_name: null }); return; }
+
+  // uno o varios archivos: cada uno como su propio mensaje; el texto acompaña al primero
+  const sendBtn = $('dmForm').querySelector('.dm-send'); sendBtn.disabled = true;
+  clearDmPending();
+  let firstDone = false;
+  for (const file of files) {
+    let url;
+    try { url = await uploadMedia('chat', file); }
+    catch (err) { toast(`No se pudo subir «${file.name}»`); continue; }
+    // Tipo: imagen/vídeo se muestran en línea; TODO lo demás (incluido audio subido)
+    // va como 'file' (descargable). Las notas de voz grabadas son las únicas 'audio'.
+    const attachment_type = file.type.startsWith('image') ? 'image' : file.type.startsWith('video') ? 'video' : 'file';
+    await insertRow({ body: firstDone ? '' : body, attachment_url: url, attachment_type, attachment_name: file.name });
+    firstDone = true;
   }
-  const baseRow = isGroup
-    ? { conversation_id: state.groupId, sender_id: state.user.id, body, attachment_url, attachment_type, attachment_name, reply_to }
-    : { sender_id: state.user.id, recipient_id: other, body, attachment_url, attachment_type, attachment_name, reply_to };
-  const { data: sent, error } = await sb.from(isGroup ? 'group_messages' : 'direct_messages')
-    .insert(baseRow).select().single();
-  if (error) { toast('No se pudo enviar'); return; }
-  dmAppendMessage(sent, { scroll: true });
+  sendBtn.disabled = false;
 }
 async function dmSendAudio(blob, secs, peaks) {
   const isGroup = !!state.groupId;

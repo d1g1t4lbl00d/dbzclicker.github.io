@@ -29,7 +29,7 @@
 <link rel="manifest" href="/manifest.json?v=20260628m" />
 <meta name="theme-color" content="#0a0d18" />
 <link rel="apple-touch-icon" href="/icon-192.png?v=20260605l" />
-<link rel="stylesheet" href="css/styles.css?v=20260713e" />
+<link rel="stylesheet" href="css/styles.css?v=20260713f" />
 <script>(function(){try{var t=localStorage.getItem('ub_theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}try{if(sessionStorage.getItem('ub_splash'))document.documentElement.classList.add('no-splash');}catch(e){}})();</script>
 <!-- Vercel Web Analytics -->
 <script>
@@ -527,7 +527,7 @@ html.no-splash #splash{display:none}
   <form class="dm-form" id="dmForm">
     <button type="button" class="dm-icbtn" id="dmEmoji" title="Emoji"><svg><use href="#i-smile"/></svg></button>
     <button type="button" class="dm-icbtn dm-attach" id="dmAttach" title="Adjuntar"><svg><use href="#i-paperclip"/></svg></button>
-    <input type="file" id="dmFile" accept="image/*,video/*,audio/*,.pdf,.zip,.doc,.docx,.txt" hidden />
+    <input type="file" id="dmFile" multiple hidden />
     <input type="text" id="dmInput" placeholder="Mensaje..." maxlength="2000" autocomplete="off" />
     <button type="button" class="dm-icbtn dm-mic" id="dmMic" title="Nota de voz"><svg><use href="#i-mic"/></svg></button>
     <button type="submit" class="dm-send" title="Enviar"><svg><use href="#i-send"/></svg></button>
@@ -611,6 +611,6 @@ html.no-splash #splash{display:none}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="js/config.js?v=20260628l"></script>
-<script src="js/app.js?v=20260713e"></script>
+<script src="js/app.js?v=20260713f"></script>
 </body>
 </html>
