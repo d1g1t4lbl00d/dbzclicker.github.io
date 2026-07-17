@@ -5566,7 +5566,7 @@ function openPlazaSpriteEditor(onDone, existing) {
               <select id="sprCat" class="spr-input spr-cat">${PLZ_CATS.map(c => `<option value="${c}"${c === (ed0 ? ed0.category : 'Deco') ? ' selected' : ''}>${c}</option>`).join('')}</select>
             </div>
           </div>
-          <button class="btn primary spr-publish" id="sprPublish">${ed0 ? 'Guardar cambios' : 'Publicar en la tienda'}</button>
+          <button class="btn primary spr-publish" id="sprPublish">${ed0 ? 'Guardar cambios' : ((state.profile && state.profile.is_admin) ? 'Publicar en la tienda' : '📤 Enviar a revisión')}</button>
         </div>
       </div>
     </div>`);
@@ -5802,7 +5802,7 @@ function openPlazaSpriteEditor(onDone, existing) {
     const name = m.querySelector('#sprName').value.trim();
     if (!name) { toast('Ponle un nombre al objeto'); m.querySelector('#sprName').focus(); return; }
     const price = Math.max(0, parseInt(m.querySelector('#sprPrice').value, 10) || 0), cat = m.querySelector('#sprCat').value;
-    pubBtn.disabled = true; pubBtn.textContent = ed0 ? 'Guardando…' : 'Publicando…';
+    pubBtn.disabled = true; pubBtn.textContent = ed0 ? 'Guardando…' : ((state.profile && state.profile.is_admin) ? 'Publicando…' : 'Enviando…');
     try {
       let item = ed0 && ed0.item;
       if (ed0) { const { error } = await sb.rpc('plaza_update_item', { p_item: ed0.item, p_name: name, p_price: price, p_category: cat, p_sprite: sprite }); if (error) throw error; }
@@ -5820,7 +5820,7 @@ function openPlazaSpriteEditor(onDone, existing) {
       document.removeEventListener('keydown', onKey);
       haptic(14); toast(isAdm ? (ed0 ? 'Cambios guardados' : '¡«' + name + '» publicado en la tienda!') : 'Enviado para aprobación ✓');
       m.remove(); onDone && onDone();
-    } catch (e) { pubBtn.disabled = false; pubBtn.textContent = ed0 ? 'Guardar cambios' : 'Publicar en la tienda'; toast((e && e.message) || 'No se pudo guardar'); }
+    } catch (e) { pubBtn.disabled = false; pubBtn.textContent = ed0 ? 'Guardar cambios' : ((state.profile && state.profile.is_admin) ? 'Publicar en la tienda' : '📤 Enviar a revisión'); toast((e && e.message) || 'No se pudo guardar'); }
   };
 
   // arranque + reajuste del zoom cuando el panel del lienzo obtiene/cambia su tamaño
@@ -13117,7 +13117,7 @@ async function renderAdmin() {
       </div>
       <div class="admin-card"><h3>✨ Aprobaciones de creadores</h3>
         <p class="sub" style="margin:0 0 10px">Contenido enviado por colaboradores. Nada se publica sin tu OK.</p>
-        <div class="adm-tabs" id="admApproveTabs"><button class="active" data-ap="sprites">Objetos</button><button data-ap="themes">Temas web</button></div>
+        <div class="adm-tabs" id="admApproveTabs"><button class="active" data-ap="sprites">Objetos</button><button data-ap="themes">Temas web</button><button data-ap="stories">Gráficos</button></div>
         <div id="admApproveList" class="adm-list"><div class="loading" style="padding:18px"><div class="spinner"></div></div></div>
       </div>
       <div class="admin-card"><h3>📣 Difusión a la comunidad</h3>
@@ -13173,6 +13173,20 @@ async function loadAdminApprovals(kind) {
     const { data } = await sb.from('profiles').select('id,username,display_name').in('id', u);
     return Object.fromEntries((data || []).map(p => [p.id, p.username || p.display_name || '—']));
   };
+  if (kind === 'stories') {
+    const { data } = await sb.from('creator_submissions').select('id,title,image_url,author,created_at').eq('status', 'pending').eq('kind', 'story').order('created_at', { ascending: false }).limit(60);
+    const rows = data || [];
+    if (!rows.length) { box.innerHTML = '<div class="sub" style="padding:8px">No hay gráficos pendientes.</div>'; return; }
+    const names = await nameByAuthor(rows.map(r => r.author));
+    box.innerHTML = '';
+    rows.forEach(s => {
+      const r = el(`<div class="adm-row"><span class="adm-av"><img class="adm-subimg" loading="lazy" decoding="async" src="${esc(s.image_url || '')}" alt=""></span><div class="adm-row-main"><b>${esc(s.title || 'Gráfico')}</b><span>por @${esc(names[s.author] || '—')}</span></div><div class="adm-row-acts"><a class="btn sm" href="${esc(s.image_url || '#')}" target="_blank" rel="noopener">Ver</a><button class="btn sm primary" data-ok>Aprobar</button><button class="btn sm danger" data-no>Rechazar</button></div></div>`);
+      r.querySelector('[data-ok]').onclick = async () => { const { error } = await sb.from('creator_submissions').update({ status: 'approved' }).eq('id', s.id); if (error) { toast('No se pudo'); return; } r.remove(); toast('Gráfico aprobado'); };
+      r.querySelector('[data-no]').onclick = async () => { if (!confirm('¿Rechazar y borrar este gráfico?')) return; const { error } = await sb.from('creator_submissions').delete().eq('id', s.id); if (error) { toast('No se pudo'); return; } r.remove(); toast('Gráfico rechazado'); };
+      box.appendChild(r);
+    });
+    return;
+  }
   if (kind === 'themes') {
     const { data } = await sb.from('theme_market').select('id,name,author,author_name,created_at').eq('approved', false).order('created_at', { ascending: false }).limit(60);
     const rows = data || [];

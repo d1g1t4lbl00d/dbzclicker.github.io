@@ -893,7 +893,7 @@ function wireLayout() {
 }
 
 /* ===== mercado de webs (galería pública) ===== */
-function openMarket() { $('market').hidden = false; $('marketMsg').textContent = ''; $('marketName').value = (activeProj() && activeProj().name) || 'Mi web'; loadMarket(); }
+function openMarket() { $('market').hidden = false; $('marketMsg').textContent = ''; $('marketName').value = (activeProj() && activeProj().name) || 'Mi web'; const sh = $('marketShare'); if (sh) sh.textContent = isAdminMode() ? '⬆ Compartir mi diseño' : '📤 Enviar a revisión'; loadMarket(); }
 function closeMarket() { $('market').hidden = true; }
 async function shareTheme() {
   const name = ($('marketName').value || '').trim() || 'Mi web';

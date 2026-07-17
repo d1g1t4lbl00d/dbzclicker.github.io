@@ -78,6 +78,9 @@
 
       <button class="btn primary" id="download">⬇ Descargar PNG (1080×1920)</button>
       <button class="btn ghost" id="copyBtn">Copiar al portapapeles</button>
+      <div class="field" style="margin-top:14px"><label>Enviar a revisión</label><input type="text" id="subTitle" placeholder="Título para el equipo (ej. Promo nueva función)" /></div>
+      <button class="btn primary" id="sendReview" style="background:#a855f7">📤 Enviar a revisión</button>
+      <div id="subMsg" style="font-size:13px;margin-top:8px;color:#555"></div>
     </div>
   </div>
 
@@ -258,6 +261,28 @@ document.getElementById('download').onclick = () => {
 document.getElementById('copyBtn').onclick = async () => {
   try { cv.toBlob(async blob => { await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); alert('Copiada al portapapeles ✓'); }, 'image/png'); }
   catch (e) { alert('Tu navegador no permite copiar imágenes; usa Descargar.'); }
+};
+// Enviar el gráfico a la cola de revisión (lo revisa un administrador antes de usarlo)
+document.getElementById('sendReview').onclick = async () => {
+  const btn = document.getElementById('sendReview'), msg = document.getElementById('subMsg');
+  if (!sbc) { msg.textContent = 'No disponible.'; return; }
+  let session; try { session = (await sbc.auth.getSession()).data.session; } catch (_) {}
+  if (!session) { msg.textContent = 'Inicia sesión primero.'; return; }
+  btn.disabled = true; msg.style.color = '#555'; msg.textContent = 'Enviando…';
+  try {
+    const blob = await new Promise(res => cv.toBlob(res, 'image/png'));
+    if (!blob) throw new Error('No se pudo generar la imagen');
+    const path = session.user.id + '/story-' + Date.now() + '.png';
+    const up = await sbc.storage.from('site-assets').upload(path, blob, { contentType: 'image/png', upsert: false });
+    if (up.error) throw up.error;
+    const url = sbc.storage.from('site-assets').getPublicUrl(path).data.publicUrl;
+    const title = ((document.getElementById('subTitle').value || state.title || 'Gráfico') + '').slice(0, 80);
+    const ins = await sbc.from('creator_submissions').insert({ author: session.user.id, kind: 'story', title, image_url: url });
+    if (ins.error) throw ins.error;
+    msg.style.color = '#1a7f37'; msg.textContent = '✅ Enviado a revisión. Un administrador lo revisará.';
+    document.getElementById('subTitle').value = '';
+  } catch (e) { msg.style.color = '#c0392b'; msg.textContent = 'Error: ' + ((e && e.message) || e); }
+  btn.disabled = false;
 };
 
 // ---- candado de administrador ----
