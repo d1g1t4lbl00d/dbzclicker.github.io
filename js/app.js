@@ -5522,6 +5522,15 @@ let SPR_RECENT = [];  // colores usados recientemente (persisten en la sesión)
 // Reduce enormemente el tamaño del jsonb, sobre todo con varios fotogramas.
 const SPR_CS = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ.-_:;+*=<>?@#%&()[]{}!|~^';
 const SPR_CSMAP = (() => { const m = {}; for (let i = 0; i < SPR_CS.length; i++) m[SPR_CS[i]] = i; return m; })();
+let SPR_CLIP = null;   // portapapeles del editor (persiste en la sesión): {w,h,data:[color|null]}
+// aclara (f>0) u oscurece (f<0) un color hex
+function _sprShade(hex, f) {
+  const mm = /^#?([0-9a-fA-F]{6})$/.exec(hex || ''); if (!mm) return hex;
+  const n = parseInt(mm[1], 16); let r = (n >> 16) & 255, g = (n >> 8) & 255, b = n & 255;
+  const adj = (v) => Math.max(0, Math.min(255, Math.round(f > 0 ? v + (255 - v) * f : v * (1 + f))));
+  r = adj(r); g = adj(g); b = adj(b);
+  return '#' + ((1 << 24) + (r << 16) + (g << 8) + b).toString(16).slice(1);
+}
 function sprEncodeFrame(arr) { for (let i = 0; i < arr.length; i++) if ((arr[i] | 0) >= SPR_CS.length) return null; let s = ''; for (let i = 0; i < arr.length; i++) s += SPR_CS[arr[i] | 0]; return s; }
 function sprDecodeFrame(x) { if (typeof x !== 'string') return Array.isArray(x) ? x : []; const out = new Array(x.length); for (let i = 0; i < x.length; i++) out[i] = SPR_CSMAP[x[i]] || 0; return out; }
 function openPlazaSpriteEditor(onDone, existing) {
@@ -5553,13 +5562,17 @@ function openPlazaSpriteEditor(onDone, existing) {
   let frames = srcFrames ? srcFrames.map(fd => mapFrameData(sprDecodeFrame(fd))) : [new Array(w * h).fill(null)];
   let curFrame = 0, cells = frames[0], fps = srcFps, onion = false, playing = false, previewRaf = null;
   let fw = ed0 && ed0.sprite ? Math.max(1, Math.min(bw, ed0.sprite.fw || 1)) : bw;
-  let curColor = SPR_PAL[7], tool = 'pencil', brush = 1, mirror = false, cs = 16;
+  let curColor = SPR_PAL[7], tool = 'pencil', brush = 1, mirrorMode = 'off', cs = 16;
+  let pixelPerfect = false, ppStroke = null;   // lápiz pixel-perfect
+  let sel = null, floatSel = null, selDrag = null, dragFloat = null, shadeSeen = null, shadeDir = 0.14;   // selección / mover / sombrear
   const undo = [], redo = [];
 
   const TOOLS = [
     ['pencil', 'brush', 'Lápiz (B)'], ['line', 'line', 'Línea (L)'], ['rect', 'rect', 'Rectángulo (R)'],
     ['rectf', 'rect-fill', 'Rect. relleno (F)'], ['ellipse', 'ellipse', 'Elipse (O)'], ['fill', 'bucket', 'Relleno (G)'],
     ['pick', 'eyedropper', 'Cuentagotas (I)'], ['erase', 'eraser', 'Borrador (E)'],
+    ['select', 'select', 'Seleccionar (S) · arrastra dentro para mover'], ['wand', 'wand', 'Varita mágica (W) · selecciona por color'],
+    ['replace', 'swap', 'Reemplazar color (P)'], ['shade', 'shade', 'Sombrear: aclara · Shift oscurece (H)'],
   ];
   const m = openModal(`<div class="modal-head"><h3><svg class="mh-ic" fill="none" stroke="currentColor"><use href="#i-palette"/></svg> ${ed0 ? 'Editar objeto' : 'Crear objeto'}</h3><button class="close">&times;</button></div>
     <div class="modal-body spr2-body">
@@ -5577,6 +5590,8 @@ function openPlazaSpriteEditor(onDone, existing) {
             <button class="spr2-tool" id="sprFlipV" title="Voltear vertical"><svg fill="none" stroke="currentColor"><use href="#i-flip-v"/></svg></button>
             <button class="spr2-tool" id="sprRotate" title="Rotar 90° (solo cuadrado)"><svg fill="none" stroke="currentColor"><use href="#i-rotate"/></svg></button>
             <button class="spr2-tool on" id="sprGrid" title="Mostrar/ocultar rejilla"><svg fill="none" stroke="currentColor"><use href="#i-grid"/></svg></button>
+            <button class="spr2-tool" id="sprOutline" title="Contorno automático (con el color actual)"><svg fill="none" stroke="currentColor"><use href="#i-outline"/></svg></button>
+            <button class="spr2-tool" id="sprPP" title="Lápiz pixel-perfect (sin escaleras)"><b style="font-size:11px;font-weight:800">PP</b></button>
             <button class="spr2-tool spr2-clear" id="sprClear" title="Vaciar"><svg fill="none" stroke="currentColor"><use href="#i-trash"/></svg></button>
           </div>
           <div class="spr2-lbl">Zoom</div>
@@ -5655,6 +5670,15 @@ function openPlazaSpriteEditor(onDone, existing) {
     if (!fcOverride && onion && frames.length > 1) { const pf = frames[(curFrame - 1 + frames.length) % frames.length]; gctx.globalAlpha = .32; for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const col = pf[y * w + x]; if (col) { gctx.fillStyle = col; gctx.fillRect(x * cs, y * cs, cs, cs); } } gctx.globalAlpha = 1; }
     for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const col = cur[y * w + x]; if (col) { gctx.fillStyle = col; gctx.fillRect(x * cs, y * cs, cs, cs); } }
     if (preview && !fcOverride) { gctx.fillStyle = preview.erase ? 'rgba(20,26,44,.95)' : preview.color; for (const [x, y] of preview.cells) if (x >= 0 && y >= 0 && x < w && y < h) gctx.fillRect(x * cs, y * cs, cs, cs); }
+    // contenido flotante (selección que se está moviendo/pegando)
+    if (floatSel && !fcOverride) { for (let ry = 0; ry < floatSel.h; ry++) for (let rx = 0; rx < floatSel.w; rx++) { const col = floatSel.data[ry * floatSel.w + rx]; if (col == null) continue; const gx = floatSel.x + rx, gy = floatSel.y + ry; if (gx < 0 || gy < 0 || gx >= w || gy >= h) continue; gctx.fillStyle = col; gctx.fillRect(gx * cs, gy * cs, cs, cs); } }
+    // marco de la selección
+    if (sel && !fcOverride) {
+      gctx.save(); gctx.fillStyle = 'rgba(120,170,255,.18)';
+      for (let ry = 0; ry < sel.h; ry++) for (let rx = 0; rx < sel.w; rx++) { if (sel.mask && !sel.mask[ry * sel.w + rx]) continue; gctx.fillRect((sel.x + rx) * cs, (sel.y + ry) * cs, cs, cs); }
+      gctx.strokeStyle = '#8fc0ff'; gctx.lineWidth = 1; gctx.setLineDash([4, 3]); gctx.lineDashOffset = -(performance.now() / 55) % 7;
+      gctx.strokeRect(sel.x * cs + .5, sel.y * cs + .5, sel.w * cs - 1, sel.h * cs - 1); gctx.restore();
+    }
     if (showGrid && cs >= 5) {
       gctx.strokeStyle = 'rgba(255,255,255,.05)'; gctx.lineWidth = 1;
       for (let x = 0; x <= w; x++) { gctx.beginPath(); gctx.moveTo(x * cs + .5, 0); gctx.lineTo(x * cs + .5, h * cs); gctx.stroke(); }
@@ -5664,7 +5688,11 @@ function openPlazaSpriteEditor(onDone, existing) {
     gctx.strokeStyle = 'rgba(120,160,255,.35)'; gctx.lineWidth = 1;
     for (let bx = 0; bx <= bw; bx++) { const X = bx * SPR_BLK * cs + .5; gctx.beginPath(); gctx.moveTo(X, 0); gctx.lineTo(X, h * cs); gctx.stroke(); }
     for (let by = 0; by <= bh; by++) { const Y = by * SPR_BLK * cs + .5; gctx.beginPath(); gctx.moveTo(0, Y); gctx.lineTo(w * cs, Y); gctx.stroke(); }
-    if (mirror) { gctx.strokeStyle = 'rgba(255,210,62,.6)'; gctx.beginPath(); gctx.moveTo(w * cs / 2 + .5, 0); gctx.lineTo(w * cs / 2 + .5, h * cs); gctx.stroke(); }
+    if (mirrorMode !== 'off') {
+      gctx.strokeStyle = 'rgba(255,210,62,.6)';
+      if (mirrorMode === 'h' || mirrorMode === 'both') { gctx.beginPath(); gctx.moveTo(w * cs / 2 + .5, 0); gctx.lineTo(w * cs / 2 + .5, h * cs); gctx.stroke(); }
+      if (mirrorMode === 'v' || mirrorMode === 'both') { gctx.beginPath(); gctx.moveTo(0, h * cs / 2 + .5); gctx.lineTo(w * cs, h * cs / 2 + .5); gctx.stroke(); }
+    }
   }
   function drawPreview(now) {
     pctx.setTransform(1, 0, 0, 1, 0, 0); pctx.clearRect(0, 0, pcv.width, pcv.height);
@@ -5688,8 +5716,8 @@ function openPlazaSpriteEditor(onDone, existing) {
   // ---- historial (por fotograma activo) ----
   const snapshot = () => { undo.push(cells.slice()); if (undo.length > 80) undo.shift(); redo.length = 0; updoBtns(); };
   const updoBtns = () => { const u = m.querySelector('#sprUndo'), r = m.querySelector('#sprRedo'); if (u) u.classList.toggle('spr2-off', !undo.length); if (r) r.classList.toggle('spr2-off', !redo.length); };
-  const doUndo = () => { if (!undo.length) return; redo.push(cells.slice()); cells = frames[curFrame] = undo.pop(); updoBtns(); redraw(); renderFrames(); haptic(4); };
-  const doRedo = () => { if (!redo.length) return; undo.push(cells.slice()); cells = frames[curFrame] = redo.pop(); updoBtns(); redraw(); renderFrames(); haptic(4); };
+  const doUndo = () => { if (!undo.length) return; floatSel = null; sel = null; redo.push(cells.slice()); cells = frames[curFrame] = undo.pop(); updoBtns(); redraw(); renderFrames(); haptic(4); };
+  const doRedo = () => { if (!redo.length) return; floatSel = null; sel = null; undo.push(cells.slice()); cells = frames[curFrame] = redo.pop(); updoBtns(); redraw(); renderFrames(); haptic(4); };
 
   // ---- fotogramas de animación ----
   const renderFrames = () => {
@@ -5704,9 +5732,9 @@ function openPlazaSpriteEditor(onDone, existing) {
     });
     const del = m.querySelector('#sprDelFrame'); if (del) del.classList.toggle('spr2-off', frames.length <= 1);
   };
-  const selectFrame = (idx) => { frames[curFrame] = cells; curFrame = Math.max(0, Math.min(frames.length - 1, idx)); cells = frames[curFrame]; undo.length = 0; redo.length = 0; updoBtns(); renderFrames(); drawGrid(); haptic(3); };
-  const addFrame = (dup) => { if (frames.length >= 12) { toast('Máximo 12 fotogramas'); return; } frames[curFrame] = cells; frames.splice(curFrame + 1, 0, dup ? cells.slice() : new Array(w * h).fill(null)); curFrame++; cells = frames[curFrame]; undo.length = 0; redo.length = 0; updoBtns(); renderFrames(); drawGrid(); haptic(4); };
-  const delFrame = () => { if (frames.length <= 1) return; frames.splice(curFrame, 1); if (curFrame >= frames.length) curFrame = frames.length - 1; cells = frames[curFrame]; undo.length = 0; redo.length = 0; updoBtns(); renderFrames(); drawGrid(); haptic(6); };
+  const selectFrame = (idx) => { commitFloat(true); floatSel = null; sel = null; frames[curFrame] = cells; curFrame = Math.max(0, Math.min(frames.length - 1, idx)); cells = frames[curFrame]; undo.length = 0; redo.length = 0; updoBtns(); renderFrames(); drawGrid(); haptic(3); };
+  const addFrame = (dup) => { if (frames.length >= 12) { toast('Máximo 12 fotogramas'); return; } commitFloat(true); floatSel = null; sel = null; frames[curFrame] = cells; frames.splice(curFrame + 1, 0, dup ? cells.slice() : new Array(w * h).fill(null)); curFrame++; cells = frames[curFrame]; undo.length = 0; redo.length = 0; updoBtns(); renderFrames(); drawGrid(); haptic(4); };
+  const delFrame = () => { if (frames.length <= 1) return; floatSel = null; sel = null; frames.splice(curFrame, 1); if (curFrame >= frames.length) curFrame = frames.length - 1; cells = frames[curFrame]; undo.length = 0; redo.length = 0; updoBtns(); renderFrames(); drawGrid(); haptic(6); };
   let playRaf = null;
   const setPlay = (on) => {
     playing = on; const btn = m.querySelector('#sprPlay'); const u = btn && btn.querySelector('use'); if (u) u.setAttribute('href', on ? '#i-pause' : '#i-play'); if (btn) btn.classList.toggle('on', on);
@@ -5727,8 +5755,37 @@ function openPlazaSpriteEditor(onDone, existing) {
   const lineCells = (x0, y0, x1, y1) => { const out = []; let dx = Math.abs(x1 - x0), dy = -Math.abs(y1 - y0), sx = x0 < x1 ? 1 : -1, sy = y0 < y1 ? 1 : -1, err = dx + dy, x = x0, y = y0; for (;;) { stamp(out, x, y); if (x === x1 && y === y1) break; const e2 = 2 * err; if (e2 >= dy) { err += dy; x += sx; } if (e2 <= dx) { err += dx; y += sy; } } return out; };
   const rectCells = (x0, y0, x1, y1, fill) => { const out = [], ax = Math.min(x0, x1), bx = Math.max(x0, x1), ay = Math.min(y0, y1), by = Math.max(y0, y1); for (let y = ay; y <= by; y++) for (let x = ax; x <= bx; x++) { if (fill || x === ax || x === bx || y === ay || y === by) out.push([x, y]); } return out; };
   const ellipseCells = (x0, y0, x1, y1) => { const out = [], ax = Math.min(x0, x1), bx = Math.max(x0, x1), ay = Math.min(y0, y1), by = Math.max(y0, y1); const rx = (bx - ax) / 2, ry = (by - ay) / 2, ccx = (ax + bx) / 2, ccy = (ay + by) / 2; for (let y = ay; y <= by; y++) for (let x = ax; x <= bx; x++) { const nx = (x - ccx) / (rx || .5), ny = (y - ccy) / (ry || .5), d = nx * nx + ny * ny; if (d <= 1) { const inx = (Math.abs(x - ccx) + 1) / (rx || .5), iny = (Math.abs(y - ccy) + 1) / (ry || .5); if (inx * inx + (ny * ny) > 1 || (nx * nx) + iny * iny > 1) out.push([x, y]); } } return out; };
-  const paintList = (list, col) => { for (const [x, y] of list) { if (x < 0 || y < 0 || x >= w || y >= h) continue; cells[y * w + x] = col; if (mirror) { const mx = w - 1 - x; if (mx >= 0 && mx < w) cells[y * w + mx] = col; } } };
-  function floodFill(gx, gy, col) { const target = cells[gy * w + gx] || null; if (target === col) return; const st = [[gx, gy]]; while (st.length) { const [x, y] = st.pop(); if (x < 0 || y < 0 || x >= w || y >= h) continue; const k = y * w + x; if ((cells[k] || null) !== target) continue; cells[k] = col; st.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]); } }
+  // simetría 4 direcciones (off/h/v/both) aplicada a una celda pintada
+  const applyMirror = (x, y, col) => {
+    const setC = (xx, yy) => { if (xx >= 0 && yy >= 0 && xx < w && yy < h) cells[yy * w + xx] = col; };
+    if (mirrorMode === 'h' || mirrorMode === 'both') setC(w - 1 - x, y);
+    if (mirrorMode === 'v' || mirrorMode === 'both') setC(x, h - 1 - y);
+    if (mirrorMode === 'both') setC(w - 1 - x, h - 1 - y);
+  };
+  const paintList = (list, col) => { for (const [x, y] of list) { if (x < 0 || y < 0 || x >= w || y >= h) continue; if (sel && !selHas(x, y)) continue; cells[y * w + x] = col; applyMirror(x, y, col); } };
+  function floodFill(gx, gy, col) { const target = cells[gy * w + gx] || null; if (target === col) return; const st = [[gx, gy]]; while (st.length) { const [x, y] = st.pop(); if (x < 0 || y < 0 || x >= w || y >= h) continue; if (sel && !selHas(x, y)) continue; const k = y * w + x; if ((cells[k] || null) !== target) continue; cells[k] = col; st.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]); } }
+
+  // ===== SELECCIÓN / PORTAPAPELES / TRANSFORMACIONES =====
+  const selHas = (gx, gy) => { if (!sel) return false; const rx = gx - sel.x, ry = gy - sel.y; if (rx < 0 || ry < 0 || rx >= sel.w || ry >= sel.h) return false; return sel.mask ? !!sel.mask[ry * sel.w + rx] : true; };
+  const inFloat = (gx, gy) => !!(floatSel && gx >= floatSel.x && gy >= floatSel.y && gx < floatSel.x + floatSel.w && gy < floatSel.y + floatSel.h);
+  const clampRect = (x0, y0, x1, y1) => { const ax = Math.max(0, Math.min(w - 1, Math.min(x0, x1))), bx = Math.max(0, Math.min(w - 1, Math.max(x0, x1))), ay = Math.max(0, Math.min(h - 1, Math.min(y0, y1))), by = Math.max(0, Math.min(h - 1, Math.max(y0, y1))); return { x: ax, y: ay, w: bx - ax + 1, h: by - ay + 1, mask: null }; };
+  function commitFloat(silent) { if (!floatSel) return; if (!silent) snapshot(); for (let ry = 0; ry < floatSel.h; ry++) for (let rx = 0; rx < floatSel.w; rx++) { const col = floatSel.data[ry * floatSel.w + rx]; if (col == null) continue; const gx = floatSel.x + rx, gy = floatSel.y + ry; if (gx >= 0 && gy >= 0 && gx < w && gy < h) cells[gy * w + gx] = col; } floatSel = null; }
+  function liftSel() { if (!sel) return; snapshot(); const data = new Array(sel.w * sel.h).fill(null); for (let ry = 0; ry < sel.h; ry++) for (let rx = 0; rx < sel.w; rx++) { const gx = sel.x + rx, gy = sel.y + ry; if (!selHas(gx, gy) || gx < 0 || gy < 0 || gx >= w || gy >= h) continue; const k = gy * w + gx; data[ry * sel.w + rx] = cells[k]; cells[k] = null; } floatSel = { x: sel.x, y: sel.y, w: sel.w, h: sel.h, data }; }
+  function deselect() { commitFloat(); sel = null; selDrag = null; dragFloat = null; redraw(); renderFrames(); }
+  function selectAll() { commitFloat(true); sel = { x: 0, y: 0, w, h, mask: null }; drawGrid(); }
+  function delSel() { if (floatSel) { floatSel = null; drawGrid(); renderFrames(); return; } if (!sel) return; snapshot(); for (let ry = 0; ry < sel.h; ry++) for (let rx = 0; rx < sel.w; rx++) { const gx = sel.x + rx, gy = sel.y + ry; if (selHas(gx, gy) && gx < w && gy < h) cells[gy * w + gx] = null; } redraw(); renderFrames(); }
+  function clipFrom() { if (floatSel) return { w: floatSel.w, h: floatSel.h, data: floatSel.data.slice() }; if (!sel) return null; const data = new Array(sel.w * sel.h).fill(null); for (let ry = 0; ry < sel.h; ry++) for (let rx = 0; rx < sel.w; rx++) { const gx = sel.x + rx, gy = sel.y + ry; if (selHas(gx, gy) && gx < w && gy < h) data[ry * sel.w + rx] = cells[gy * w + gx]; } return { w: sel.w, h: sel.h, data }; }
+  function clipCopy() { const c = clipFrom(); if (c) { SPR_CLIP = c; toast('Copiado'); } }
+  function clipCut() { const c = clipFrom(); if (!c) return; SPR_CLIP = c; delSel(); toast('Cortado'); }
+  function clipPaste() { if (!SPR_CLIP) return; commitFloat(); const cw = Math.min(SPR_CLIP.w, w), ch = Math.min(SPR_CLIP.h, h); floatSel = { x: Math.floor((w - cw) / 2), y: Math.floor((h - ch) / 2), w: SPR_CLIP.w, h: SPR_CLIP.h, data: SPR_CLIP.data.slice() }; sel = { x: floatSel.x, y: floatSel.y, w: floatSel.w, h: floatSel.h, mask: null }; setTool('select'); drawGrid(); haptic(6); }
+  function wandSelect(gx, gy) { commitFloat(true); const target = cells[gy * w + gx] || null; const mask = new Uint8Array(w * h); const st = [[gx, gy]]; let minx = gx, miny = gy, maxx = gx, maxy = gy; while (st.length) { const [x, y] = st.pop(); if (x < 0 || y < 0 || x >= w || y >= h) continue; const k = y * w + x; if (mask[k]) continue; if (((cells[k] || null)) !== target) continue; mask[k] = 1; if (x < minx) minx = x; if (x > maxx) maxx = x; if (y < miny) miny = y; if (y > maxy) maxy = y; st.push([x + 1, y], [x - 1, y], [x, y + 1], [x, y - 1]); } const sw = maxx - minx + 1, sh = maxy - miny + 1, sm = new Uint8Array(sw * sh); for (let y = miny; y <= maxy; y++) for (let x = minx; x <= maxx; x++) if (mask[y * w + x]) sm[(y - miny) * sw + (x - minx)] = 1; sel = { x: minx, y: miny, w: sw, h: sh, mask: sm }; drawGrid(); }
+  function replaceColor(gx, gy, col) { const target = cells[gy * w + gx] || null; if (target === col) return; for (let k = 0; k < w * h; k++) if ((cells[k] || null) === target) cells[k] = col; }
+  function shadeAt(gx, gy, f) { if (gx < 0 || gy < 0 || gx >= w || gy >= h) return; const c = cells[gy * w + gx]; if (!c) return; cells[gy * w + gx] = _sprShade(c, f); }
+  function outlineArt() { snapshot(); const add = []; for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { if (cells[y * w + x]) continue; if ((x > 0 && cells[y * w + x - 1]) || (x < w - 1 && cells[y * w + x + 1]) || (y > 0 && cells[(y - 1) * w + x]) || (y < h - 1 && cells[(y + 1) * w + x])) add.push(y * w + x); } add.forEach(k => cells[k] = curColor); pushRecent(curColor); redraw(); renderFrames(); }
+  const ensureFloat = () => { if (floatSel) return true; if (sel) { liftSel(); return true; } return false; };
+  const floatTransform = (fn, nw, nh) => { const W = floatSel.w, H = floatSel.h, NW = nw || W, NH = nh || H, nd = new Array(NW * NH).fill(null); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const v = floatSel.data[y * W + x]; if (v == null) continue; const p = fn(x, y, W, H); if (p[0] >= 0 && p[1] >= 0 && p[0] < NW && p[1] < NH) nd[p[1] * NW + p[0]] = v; } floatSel.data = nd; floatSel.w = NW; floatSel.h = NH; sel = { x: floatSel.x, y: floatSel.y, w: NW, h: NH, mask: null }; drawGrid(); };
+  // lápiz pixel-perfect: quita las esquinas en L al trazar a mano (brocha 1)
+  const ppPaint = (x, y) => { if (x < 0 || y < 0 || x >= w || y >= h) return; if (sel && !selHas(x, y)) return; cells[y * w + x] = curColor; applyMirror(x, y, curColor); ppStroke.push([x, y]); const n = ppStroke.length; if (n >= 3) { const a = ppStroke[n - 3], b = ppStroke[n - 2], c = ppStroke[n - 1]; if (Math.abs(c[0] - a[0]) === 1 && Math.abs(c[1] - a[1]) === 1 && (Math.abs(b[0] - a[0]) + Math.abs(b[1] - a[1])) === 1) { cells[b[1] * w + b[0]] = null; applyMirror(b[0], b[1], null); ppStroke.splice(n - 2, 1); } } };
 
   const cellAt = (ev) => { const r = gcv.getBoundingClientRect(); return [Math.floor((ev.clientX - r.left) / r.width * w), Math.floor((ev.clientY - r.top) / r.height * h)]; };
   let painting = false, start = null, lastPaint = null, panning = false, panFrom = null, spaceDown = false, showGrid = true;
@@ -5746,26 +5803,50 @@ function openPlazaSpriteEditor(onDone, existing) {
     const [x, y] = cellAt(ev);
     // clic derecho = cuentagotas rápido
     if (ev.button === 2) { const c = cells[y * w + x]; if (c) setCur(c); return; }
+    // --- mover una selección flotante arrastrando dentro ---
+    if (floatSel && inFloat(x, y)) { dragFloat = { fx: floatSel.x, fy: floatSel.y, sx: x, sy: y }; return; }
+    // --- herramientas de selección / color ---
+    if (tool === 'select') {
+      if (sel && selHas(x, y)) { liftSel(); dragFloat = { fx: floatSel.x, fy: floatSel.y, sx: x, sy: y }; drawGrid(); return; }
+      commitFloat(); sel = null; selDrag = { x0: x, y0: y }; drawGrid(); return;
+    }
+    if (tool === 'wand') { wandSelect(x, y); return; }
+    if (tool === 'replace') { const t = cells[y * w + x]; if (t && t !== curColor) { snapshot(); replaceColor(x, y, curColor); pushRecent(curColor); redraw(); } return; }
+    if (tool === 'shade') { snapshot(); shadeDir = ev.shiftKey ? -0.14 : 0.14; shadeSeen = new Set([y * w + x]); shadeAt(x, y, shadeDir); painting = true; start = [x, y]; redraw(); return; }
     if (tool === 'pick') { const c = cells[y * w + x]; if (c) { setCur(c); } return; }
     if (tool === 'fill') { snapshot(); floodFill(x, y, curColor); pushRecent(curColor); redraw(); return; }
     // Shift + lápiz = línea recta desde el último punto pintado
     if (tool === 'pencil' && ev.shiftKey && lastPaint) { snapshot(); paintList(lineCells(lastPaint[0], lastPaint[1], x, y), curColor); pushRecent(curColor); lastPaint = [x, y]; redraw(); return; }
     painting = true; start = [x, y];
-    if (freehand(tool)) { snapshot(); const col = tool === 'erase' ? null : curColor; const list = []; stamp(list, x, y); paintList(list, col); if (tool !== 'erase') { pushRecent(curColor); lastPaint = [x, y]; } redraw(); }
+    if (freehand(tool)) {
+      snapshot();
+      if (tool === 'pencil' && pixelPerfect && brush === 1) { ppStroke = [[x, y]]; ppPaint(x, y); pushRecent(curColor); lastPaint = [x, y]; }
+      else { const col = tool === 'erase' ? null : curColor; const list = []; stamp(list, x, y); paintList(list, col); if (tool !== 'erase') { pushRecent(curColor); lastPaint = [x, y]; } }
+      redraw();
+    }
   });
   gcv.addEventListener('pointermove', (ev) => {
     if (panning) { view.scrollLeft = panFrom.sl - (ev.clientX - panFrom.x); view.scrollTop = panFrom.st - (ev.clientY - panFrom.y); return; }
-    if (!painting) return;
     const [x, y] = cellAt(ev);
-    if (freehand(tool)) { const col = tool === 'erase' ? null : curColor; const list = []; stamp(list, x, y); if (start) list.push(...lineCells(start[0], start[1], x, y)); start = [x, y]; if (tool !== 'erase') lastPaint = [x, y]; paintList(list, col); redraw(); }
+    if (selDrag) { sel = clampRect(selDrag.x0, selDrag.y0, x, y); drawGrid(); return; }
+    if (dragFloat) { floatSel.x = dragFloat.fx + (x - dragFloat.sx); floatSel.y = dragFloat.fy + (y - dragFloat.sy); sel = { x: floatSel.x, y: floatSel.y, w: floatSel.w, h: floatSel.h, mask: null }; drawGrid(); return; }
+    if (!painting) return;
+    if (tool === 'shade') { for (const [px, py] of lineCells(start[0], start[1], x, y)) { if (px < 0 || py < 0 || px >= w || py >= h) continue; const k = py * w + px; if (shadeSeen.has(k)) continue; shadeSeen.add(k); shadeAt(px, py, shadeDir); } start = [x, y]; redraw(); return; }
+    if (freehand(tool)) {
+      if (tool === 'pencil' && pixelPerfect && brush === 1) { for (const [px, py] of lineCells(start[0], start[1], x, y)) ppPaint(px, py); start = [x, y]; lastPaint = [x, y]; }
+      else { const col = tool === 'erase' ? null : curColor; const list = []; stamp(list, x, y); if (start) list.push(...lineCells(start[0], start[1], x, y)); start = [x, y]; if (tool !== 'erase') lastPaint = [x, y]; paintList(list, col); }
+      redraw();
+    }
     else if (shapeTool(tool)) { let ex = x, ey = y; if (ev.shiftKey && tool === 'line') { [ex, ey] = constrain45(start[0], start[1], x, y); } preview = { cells: shapeCells(start[0], start[1], ex, ey), color: curColor, erase: false, ex, ey }; drawGrid(); }
   });
   const endStroke = (ev) => {
     if (panning) { panning = false; return; }
+    if (selDrag) { selDrag = null; if (sel && sel.w * sel.h <= 1) sel = null; drawGrid(); return; }
+    if (dragFloat) { dragFloat = null; drawGrid(); return; }
     if (!painting) return; painting = false;
     if (shapeTool(tool) && start) { let [x, y] = ev ? cellAt(ev) : start; if (ev && ev.shiftKey && tool === 'line') [x, y] = constrain45(start[0], start[1], x, y); snapshot(); paintList(shapeCells(start[0], start[1], x, y), curColor); pushRecent(curColor); lastPaint = [x, y]; preview = null; redraw(); }
     else redraw();
-    start = null;
+    start = null; ppStroke = null;
   };
   gcv.addEventListener('pointerup', endStroke); gcv.addEventListener('pointercancel', () => { painting = false; panning = false; preview = null; redraw(); });
   // rueda = zoom (el lienzo se desplaza con las barras o arrastrando con espacio/botón central)
@@ -5780,6 +5861,7 @@ function openPlazaSpriteEditor(onDone, existing) {
 
   // ---- tamaño (bloques) + huella ----
   function resize(nbw, nbh) {
+    commitFloat(true); floatSel = null; sel = null;
     const ow = w, oh = h, followed = (fw === bw);
     frames[curFrame] = cells;
     bw = nbw; bh = nbh; w = bw * SPR_BLK; h = bh * SPR_BLK; fw = followed ? bw : Math.min(fw, bw);
@@ -5797,18 +5879,25 @@ function openPlazaSpriteEditor(onDone, existing) {
 
   // ---- transformaciones del lienzo ----
   const applyTransform = (fn) => { snapshot(); const nc = new Array(w * h).fill(null); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const v = cells[y * w + x]; if (!v) continue; const [nx, ny] = fn(x, y); nc[ny * w + nx] = v; } cells = frames[curFrame] = nc; redraw(); renderFrames(); haptic(6); };
-  const flipH = () => applyTransform((x, y) => [w - 1 - x, y]);
-  const flipV = () => applyTransform((x, y) => [x, h - 1 - y]);
-  const rotate = () => { if (bw !== bh) { toast('Solo se puede rotar un lienzo cuadrado'); return; } applyTransform((x, y) => [h - 1 - y, x]); };
+  const flipH = () => { if (ensureFloat()) floatTransform((x, y, W) => [W - 1 - x, y]); else applyTransform((x, y) => [w - 1 - x, y]); };
+  const flipV = () => { if (ensureFloat()) floatTransform((x, y, W, H) => [x, H - 1 - y]); else applyTransform((x, y) => [x, h - 1 - y]); };
+  const rotate = () => {
+    if (floatSel || sel) { ensureFloat(); floatTransform((x, y, W, H) => [H - 1 - y, x], floatSel.h, floatSel.w); return; }
+    if (bw !== bh) { toast('Selecciona una zona para rotarla, o usa un lienzo cuadrado'); return; }
+    applyTransform((x, y) => [h - 1 - y, x]);
+  };
 
   // ---- eventos ----
   m.querySelectorAll('.spr2-tool[data-tool]').forEach(b => b.onclick = () => setTool(b.dataset.tool));
-  function setTool(t) { tool = t; m.querySelectorAll('.spr2-tool[data-tool]').forEach(x => x.classList.toggle('on', x.dataset.tool === t)); haptic(3); }
+  function setTool(t) { if (t !== 'select' && t !== 'wand') { commitFloat(); sel = null; } tool = t; m.querySelectorAll('.spr2-tool[data-tool]').forEach(x => x.classList.toggle('on', x.dataset.tool === t)); drawGrid(); haptic(3); }
   m.querySelectorAll('#sprBrush .spr2-segb').forEach(b => b.onclick = () => { brush = +b.dataset.b; m.querySelectorAll('#sprBrush .spr2-segb').forEach(x => x.classList.toggle('on', x === b)); haptic(3); });
   m.querySelectorAll('.spr-sw[data-c]').forEach(b => b.onclick = () => { setCur(b.dataset.c); if (tool === 'pick' || tool === 'erase') setTool('pencil'); haptic(3); });
   m.querySelector('#sprPick').oninput = (e) => { setCur(e.target.value); if (tool === 'pick' || tool === 'erase') setTool('pencil'); };
   m.querySelector('#sprHex').onchange = (e) => { let v = e.target.value.trim(); if (!v.startsWith('#')) v = '#' + v; if (/^#[0-9a-fA-F]{6}$/.test(v)) { setCur(v.toLowerCase()); } else { e.target.value = curColor; } };
-  m.querySelector('#sprMirror').onclick = () => { mirror = !mirror; m.querySelector('#sprMirror').classList.toggle('on', mirror); haptic(4); drawGrid(); };
+  const MIRROR_CYCLE = ['off', 'h', 'v', 'both'], MIRROR_LBL = { off: 'Simetría: desactivada', h: 'Simetría: horizontal', v: 'Simetría: vertical', both: 'Simetría: 4 direcciones' };
+  m.querySelector('#sprMirror').onclick = () => { mirrorMode = MIRROR_CYCLE[(MIRROR_CYCLE.indexOf(mirrorMode) + 1) % 4]; const b = m.querySelector('#sprMirror'); b.classList.toggle('on', mirrorMode !== 'off'); b.title = MIRROR_LBL[mirrorMode]; toast(MIRROR_LBL[mirrorMode]); haptic(4); drawGrid(); };
+  m.querySelector('#sprOutline').onclick = () => outlineArt();
+  m.querySelector('#sprPP').onclick = () => { pixelPerfect = !pixelPerfect; m.querySelector('#sprPP').classList.toggle('on', pixelPerfect); toast(pixelPerfect ? 'Lápiz pixel-perfect activado' : 'Pixel-perfect desactivado'); haptic(3); };
   m.querySelector('#sprUndo').onclick = doUndo; m.querySelector('#sprRedo').onclick = doRedo;
   m.querySelector('#sprFlipH').onclick = flipH; m.querySelector('#sprFlipV').onclick = flipV; m.querySelector('#sprRotate').onclick = rotate;
   m.querySelector('#sprClear').onclick = () => { if (cells.some(Boolean) && !confirm('¿Vaciar el fotograma?')) return; snapshot(); cells = frames[curFrame] = new Array(w * h).fill(null); redraw(); renderFrames(); };
@@ -5833,19 +5922,28 @@ function openPlazaSpriteEditor(onDone, existing) {
   // mueve todo el dibujo una casilla (flechas)
   const nudge = (ddx, ddy) => { snapshot(); const nc = new Array(w * h).fill(null); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const v = cells[y * w + x]; if (!v) continue; const nx = x + ddx, ny = y + ddy; if (nx >= 0 && nx < w && ny >= 0 && ny < h) nc[ny * w + nx] = v; } cells = frames[curFrame] = nc; redraw(); renderFrames(); };
   // ---- atajos de teclado ----
-  const keymap = { b: 'pencil', l: 'line', r: 'rect', f: 'rectf', o: 'ellipse', g: 'fill', i: 'pick', e: 'erase' };
+  const keymap = { b: 'pencil', l: 'line', r: 'rect', f: 'rectf', o: 'ellipse', g: 'fill', i: 'pick', e: 'erase', s: 'select', w: 'wand', p: 'replace', h: 'shade' };
+  const arrow = (dx, dy) => { if (floatSel) { floatSel.x += dx; floatSel.y += dy; sel = { x: floatSel.x, y: floatSel.y, w: floatSel.w, h: floatSel.h, mask: null }; drawGrid(); } else nudge(dx, dy); };
   const onKeyUp = (ev) => { if (ev.key === ' ') { spaceDown = false; view.style.cursor = ''; } };
   const onKey = (ev) => {
     if (!document.body.contains(m)) { document.removeEventListener('keydown', onKey); document.removeEventListener('keyup', onKeyUp); return; }
     const tag = (ev.target.tagName || '').toLowerCase(); if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
     if (ev.key === ' ') { ev.preventDefault(); spaceDown = true; view.style.cursor = 'grab'; return; }
-    if (ev.key === 'ArrowLeft') { ev.preventDefault(); return nudge(-1, 0); }
-    if (ev.key === 'ArrowRight') { ev.preventDefault(); return nudge(1, 0); }
-    if (ev.key === 'ArrowUp') { ev.preventDefault(); return nudge(0, -1); }
-    if (ev.key === 'ArrowDown') { ev.preventDefault(); return nudge(0, 1); }
+    if (ev.key === 'ArrowLeft') { ev.preventDefault(); return arrow(-1, 0); }
+    if (ev.key === 'ArrowRight') { ev.preventDefault(); return arrow(1, 0); }
+    if (ev.key === 'ArrowUp') { ev.preventDefault(); return arrow(0, -1); }
+    if (ev.key === 'ArrowDown') { ev.preventDefault(); return arrow(0, 1); }
+    if ((ev.key === 'Delete' || ev.key === 'Backspace') && (sel || floatSel)) { ev.preventDefault(); return delSel(); }
+    if (ev.key === 'Escape' && (sel || floatSel)) { ev.preventDefault(); return deselect(); }
+    if (ev.key === 'Enter' && floatSel) { ev.preventDefault(); commitFloat(); drawGrid(); renderFrames(); return; }
     const k = ev.key.toLowerCase();
     if ((ev.ctrlKey || ev.metaKey) && k === 'z') { ev.preventDefault(); ev.shiftKey ? doRedo() : doUndo(); return; }
     if ((ev.ctrlKey || ev.metaKey) && k === 'y') { ev.preventDefault(); doRedo(); return; }
+    if ((ev.ctrlKey || ev.metaKey) && k === 'c') { ev.preventDefault(); clipCopy(); return; }
+    if ((ev.ctrlKey || ev.metaKey) && k === 'x') { ev.preventDefault(); clipCut(); return; }
+    if ((ev.ctrlKey || ev.metaKey) && k === 'v') { ev.preventDefault(); clipPaste(); return; }
+    if ((ev.ctrlKey || ev.metaKey) && k === 'a') { ev.preventDefault(); setTool('select'); selectAll(); return; }
+    if ((ev.ctrlKey || ev.metaKey) && k === 'd') { ev.preventDefault(); deselect(); return; }
     if (ev.ctrlKey || ev.metaKey) return;
     if (keymap[k]) { setTool(keymap[k]); }
     else if (k === 'x') { m.querySelector('#sprMirror').click(); }
@@ -5859,6 +5957,7 @@ function openPlazaSpriteEditor(onDone, existing) {
 
   // ---- publicar ----
   function buildSprite() {
+    commitFloat(true);
     frames[curFrame] = cells;
     const palMap = new Map(), pal = [];
     const framesData = frames.map(fc => { const d = new Array(w * h).fill(0); for (let k = 0; k < w * h; k++) { const col = fc[k]; if (!col) continue; let idx = palMap.get(col); if (idx == null) { pal.push(col); idx = pal.length; palMap.set(col, idx); } d[k] = idx; } return d; });
@@ -5905,7 +6004,7 @@ function openPlazaSpriteEditor(onDone, existing) {
   const onResize = () => { if (!document.body.contains(m)) { window.removeEventListener('resize', onResize); if (ro) ro.disconnect(); return; } refit(); };
   window.addEventListener('resize', onResize);
   // bucle de la vista previa "en la sala": muestra la animación (cicla fotogramas) mientras está abierto
-  const previewTick = (t) => { if (!document.body.contains(m)) return; drawPreview(t); previewRaf = requestAnimationFrame(previewTick); };
+  const previewTick = (t) => { if (!document.body.contains(m)) return; drawPreview(t); if ((sel || floatSel) && !painting && !selDrag && !dragFloat && !playing) drawGrid(); previewRaf = requestAnimationFrame(previewTick); };
   previewRaf = requestAnimationFrame(previewTick);
 }
 
