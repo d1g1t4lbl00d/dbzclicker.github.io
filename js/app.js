@@ -3491,6 +3491,20 @@ function initNowPlaying() {
   };
   $('npQueueClose').onclick = () => { $('npQueuePanel').classList.remove('open'); $('npQueueBtn').classList.remove('on'); };
 
+  // ir al perfil del artista de la pista que suena
+  const goArtist = () => { const t = state.current; if (!t) return; const id = t.user_id || t.profiles?.id; if (id) { closeNowPlaying(); openProfile(id); } };
+  $('npArtist').onclick = goArtist;
+  $('npCover').onclick = goArtist;
+  // like / comentar / compartir
+  $('npLike').onclick = npToggleLike;
+  $('npShare').onclick = () => { if (state.current) shareTrack(state.current); };
+  $('npComment').onclick = () => {
+    const panel = $('npCommentsPanel'); const open = panel.classList.toggle('open');
+    $('npComment').classList.toggle('on', open);
+    if (open) openNpComments(); haptic(8);
+  };
+  $('npCommentsClose').onclick = () => { $('npCommentsPanel').classList.remove('open'); $('npComment').classList.remove('on'); };
+
   // seek arrastrando sobre el waveform grande
   const w = $('npWave');
   const seekW = (x) => { if (!audio.duration) return; const r = w.getBoundingClientRect(); audio.currentTime = Math.min(1, Math.max(0, (x - r.left) / r.width)) * audio.duration; };
@@ -3502,7 +3516,49 @@ function initNowPlaying() {
 }
 function npIsOpen() { return $('nowPlaying').classList.contains('open'); }
 function openNowPlaying() { if (!state.current) return; $('nowPlaying').classList.add('open'); syncNowPlaying(); }
-function closeNowPlaying() { $('nowPlaying').classList.remove('open'); $('npQueuePanel')?.classList.remove('open'); $('npQueueBtn')?.classList.remove('on'); }
+function closeNowPlaying() { $('nowPlaying').classList.remove('open'); $('npQueuePanel')?.classList.remove('open'); $('npQueueBtn')?.classList.remove('on'); $('npCommentsPanel')?.classList.remove('open'); $('npComment')?.classList.remove('on'); }
+// refresca los botones de acción (like/contador, contador de comentarios) según la pista actual
+async function syncNpActions() {
+  const t = state.current; if (!t) return;
+  const liked = state.likes.has(t.id);
+  $('npLike')?.classList.toggle('on', liked);
+  const ln = $('npLikeN'); if (ln) ln.textContent = t.likes_count || 0;
+  // contador de comentarios (una consulta ligera de conteo)
+  const cn = $('npCommentN'); if (cn) {
+    cn.textContent = '·';
+    try { const { count } = await sb.from('comments').select('id', { count: 'exact', head: true }).eq('track_id', t.id); cn.textContent = count || 0; }
+    catch (_) { cn.textContent = '0'; }
+  }
+}
+async function npToggleLike() {
+  const t = state.current; if (!t) return;
+  if (!requireNotBanned()) return;
+  const busy = (npToggleLike._busy ||= new Set()); if (busy.has(t.id)) return; busy.add(t.id);
+  const liked = state.likes.has(t.id);
+  try {
+    if (liked) {
+      state.likes.delete(t.id); t.likes_count = Math.max(0, (t.likes_count || 0) - 1);
+      await sb.from('likes').delete().eq('track_id', t.id).eq('user_id', state.user.id);
+    } else {
+      state.likes.add(t.id); t.likes_count = (t.likes_count || 0) + 1; haptic(10);
+      await sb.from('likes').insert({ track_id: t.id, user_id: state.user.id });
+      notifySocial('like', t.user_id, { track_id: t.id });
+    }
+    $('npLike')?.classList.toggle('on', !liked);
+    const ln = $('npLikeN'); if (ln) ln.textContent = t.likes_count || 0;
+    // mantén sincronizada cualquier tarjeta visible de esta pista
+    document.querySelectorAll(`[data-track-card="${t.id}"] .likecount, .track[data-id="${t.id}"] .likecount`).forEach(el => el.textContent = t.likes_count || 0);
+    updateCounts();
+  } finally { busy.delete(t.id); }
+}
+async function openNpComments() {
+  const t = state.current; if (!t) return;
+  const box = $('npCommentsBox');
+  box.innerHTML = `<div class="loading" style="padding:14px"><div class="spinner"></div></div>`;
+  const { data } = await sb.from('comments').select('*, profiles(*)').eq('track_id', t.id).order('created_at', { ascending: true });
+  renderComments(box, t, data || []);
+  const cn = $('npCommentN'); if (cn) cn.textContent = (data || []).length;
+}
 function closePlayer() {
   try { audio.pause(); audio.removeAttribute('src'); audio.load(); } catch (_) {}
   state.current = null; state.queue = [];
@@ -3523,6 +3579,9 @@ function syncNowPlaying() {
   $('npWave').innerHTML = npPeaks.map(h => `<div class="bar" style="--h:${czNum(h)}%"></div>`).join('');
   setNpPlayIcon(!audio.paused);
   updateNpProgress(audio.duration ? audio.currentTime / audio.duration : 0);
+  const npA = $('npArtist'); if (npA) npA.classList.toggle('linkable', !!(t.user_id || t.profiles?.id));
+  syncNpActions();
+  if ($('npCommentsPanel')?.classList.contains('open')) openNpComments();   // pista cambiada con el panel abierto
 }
 function updateNpProgress(pct) {
   if (!npIsOpen()) return;

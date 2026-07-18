@@ -29,7 +29,7 @@
 <link rel="manifest" href="/manifest.json?v=20260628m" />
 <meta name="theme-color" content="#0a0d18" />
 <link rel="apple-touch-icon" href="/icon-192.png?v=20260605l" />
-<link rel="stylesheet" href="css/styles.css?v=20260717c" />
+<link rel="stylesheet" href="css/styles.css?v=20260717d" />
 <script>(function(){try{var t=localStorage.getItem('ub_theme')||'dark';document.documentElement.setAttribute('data-theme',t);}catch(e){}try{if(sessionStorage.getItem('ub_splash'))document.documentElement.classList.add('no-splash');}catch(e){}})();</script>
 <!-- Vercel Web Analytics -->
 <script>
@@ -472,7 +472,12 @@ html.no-splash #splash{display:none}
     <div class="np-art" id="npCover"></div>
     <div class="np-meta">
       <div class="np-title" id="npTitle"></div>
-      <div class="np-artist" id="npArtist"></div>
+      <button class="np-artist" id="npArtist" type="button"></button>
+    </div>
+    <div class="np-actions">
+      <button class="np-act" id="npLike" title="Me gusta"><svg><use href="#i-heart"/></svg><span class="np-act-n" id="npLikeN">0</span></button>
+      <button class="np-act" id="npComment" title="Comentar"><svg fill="none" stroke="currentColor"><use href="#i-comment"/></svg><span class="np-act-n" id="npCommentN">0</span></button>
+      <button class="np-act" id="npShare" title="Compartir"><svg fill="none" stroke="currentColor"><use href="#i-share"/></svg></button>
     </div>
     <div class="np-wave" id="npWave"></div>
     <div class="np-times"><span id="npCur">0:00</span><span id="npDur" title="Tiempo restante">0:00</span></div>
@@ -489,6 +494,10 @@ html.no-splash #splash{display:none}
   <div class="np-queue" id="npQueuePanel">
     <div class="npq-head"><div class="npq-head-l"><b id="npqCount">Cola</b><span class="npq-hint">Mantén pulsada una pista para moverla</span></div><button class="npq-close" id="npQueueClose" title="Cerrar"><svg><use href="#i-chevron-down"/></svg></button></div>
     <div class="npq-list" id="npqList"></div>
+  </div>
+  <div class="np-comments" id="npCommentsPanel">
+    <div class="npq-head"><div class="npq-head-l"><b>Comentarios</b></div><button class="npq-close" id="npCommentsClose" title="Cerrar"><svg><use href="#i-chevron-down"/></svg></button></div>
+    <div class="npc-list" id="npCommentsBox"></div>
   </div>
 </div>
 
@@ -611,6 +620,6 @@ html.no-splash #splash{display:none}
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 <script src="js/config.js?v=20260628l"></script>
-<script src="js/app.js?v=20260717c"></script>
+<script src="js/app.js?v=20260717d"></script>
 </body>
 </html>

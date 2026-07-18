@@ -751,7 +751,18 @@ body.has-player .right { padding-bottom: var(--player-h); }
 .np-art svg { width: 64px; height: 64px; }
 .np-meta { text-align: center; width: 100%; }
 .np-title { font-size: 22px; font-weight: 820; color: var(--ink); letter-spacing: -.3px; line-height: 1.2; }
-.np-artist { font-size: 14px; color: var(--ink-soft); margin-top: 5px; }
+.np-art { cursor: pointer; }
+.np-artist { font-size: 14px; color: var(--ink-soft); margin-top: 5px; border: none; background: none; padding: 0; font-family: inherit; cursor: pointer; }
+.np-artist.linkable { color: var(--accent, #7c9bff); font-weight: 650; }
+.np-artist.linkable:hover { text-decoration: underline; }
+/* fila de acciones del reproductor: me gusta · comentar · compartir */
+.np-actions { display: flex; align-items: center; justify-content: center; gap: 10px; margin-top: 14px; }
+.np-act { display: inline-flex; align-items: center; gap: 7px; padding: 9px 16px; border-radius: 22px; border: 1px solid rgba(255,255,255,.16); background: rgba(255,255,255,.06); color: #fff; font-size: 13px; font-weight: 700; cursor: pointer; transition: transform .12s var(--ease), background .18s, color .18s, border-color .18s; }
+.np-act:active { transform: scale(.93); }
+.np-act svg { width: 18px; height: 18px; fill: none; stroke: currentColor; }
+.np-act .np-act-n { font-variant-numeric: tabular-nums; }
+.np-act.on { color: #ff4d6d; border-color: rgba(255,77,109,.5); background: rgba(255,77,109,.12); }
+#npLike svg { fill: currentColor; stroke: none; }
 .np-wave { display: flex; align-items: center; justify-content: center; gap: 2px; height: 56px; width: 100%; cursor: pointer; overflow: hidden; }
 .np-wave .bar { flex: 1 1 0; min-width: 0; height: 100%; display: flex; align-items: center; }
 .np-wave .bar::before { content: ""; width: 100%; border-radius: 3px; background: #cfd8ea; height: var(--h,40%); transition: background .1s; }
@@ -2473,6 +2484,11 @@ textarea.pk-in { resize: vertical; line-height: 1.5; }
 .npq-close { width: 32px; height: 32px; border-radius: 50%; border: none; background: var(--panel-2, rgba(255,255,255,.06)); color: var(--ink-soft, #9aa3b2); display: grid; place-items: center; cursor: pointer; }
 .npq-close svg { width: 18px; height: 18px; }
 .npq-list { overflow-y: auto; padding: 4px 10px 18px; -webkit-overflow-scrolling: touch; }
+/* panel deslizante de comentarios dentro del reproductor */
+.np-comments { position: absolute; left: 0; right: 0; bottom: 0; height: 82%; background: var(--panel, #0f1320); border-radius: 20px 20px 0 0; border-top: 1px solid var(--line, rgba(255,255,255,.1)); box-shadow: 0 -20px 50px rgba(0,0,0,.45); transform: translateY(105%); transition: transform .28s var(--ease, cubic-bezier(.22,.61,.36,1)); z-index: 6; display: flex; flex-direction: column; }
+.np-comments.open { transform: translateY(0); }
+.npc-list { flex: 1; overflow-y: auto; padding: 6px 16px 18px; -webkit-overflow-scrolling: touch; }
+.npc-list .comment-form { position: sticky; bottom: 0; background: var(--panel, #0f1320); padding-top: 8px; margin-top: 4px; }
 .npq-row { display: flex; align-items: center; gap: 11px; padding: 8px 8px; border-radius: 12px; cursor: pointer; }
 .npq-row:active { background: var(--panel-2, rgba(255,255,255,.05)); }
 .npq-row.past { opacity: .42; }
