@@ -4749,6 +4749,11 @@ html { touch-action: manipulation; }
 .spr-anim-btns { display: flex; gap: 6px; flex-wrap: wrap; }
 .spr-abtn { padding: 6px 11px; border-radius: 999px; border: 1px solid var(--line); background: var(--panel-2); color: var(--ink-soft); font-weight: 700; font-size: 12px; cursor: pointer; }
 .spr-abtn.on { border-color: var(--accent); color: var(--accent); background: color-mix(in srgb, var(--accent) 14%, var(--panel-2)); }
+.spr-persp-btns { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+.spr-depthrow { display: flex; align-items: center; gap: 8px; margin-top: 6px; }
+.spr-depthrow.hidden { display: none; }
+.spr-depth { flex: 1; min-width: 0; accent-color: var(--accent); }
+.spr-depthv { font-size: 12px; font-weight: 700; color: var(--ink-soft); min-width: 20px; text-align: right; }
 .spr-meta { display: flex; flex-direction: column; gap: 8px; }
 .spr-input { width: 100%; padding: 9px 11px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel-2); color: var(--ink); font-size: 14px; }
 .spr-meta-row { display: flex; gap: 8px; }

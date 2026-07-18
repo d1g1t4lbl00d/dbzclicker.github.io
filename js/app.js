@@ -4366,7 +4366,7 @@ async function plzLoadCustomItems(force) {
         w: s.w || 16, h: s.h || 16, pal: Array.isArray(s.pal) ? s.pal : [], data,
         frames, fps: Math.max(1, Math.min(20, s.fps || 6)),
         fw: Math.max(1, Math.min(4, s.fw || 1)), fd: Math.max(1, Math.min(4, s.fd || 1)),
-        solid: !!s.solid, sit: !!s.sit, anim: s.anim || 'none', name: r.name, category: r.category || 'Deco',
+        solid: !!s.solid, sit: !!s.sit, anim: s.anim || 'none', proj: s.proj || 'billboard', depth: s.depth || 8, name: r.name, category: r.category || 'Deco',
       };
       PLZ_ITEM_NAME[r.item] = r.name;
     });
@@ -5528,10 +5528,12 @@ function openPlazaSpriteEditor(onDone, existing) {
   if (!plzCanCreate()) { toast('No tienes permiso para crear objetos'); return; }
   const ed0 = existing || null;
   let bw = 1, bh = 1, propSit = false, propSolid = true, propAnim = 'none';
+  let proj = 'billboard', depth = 8;   // perspectiva: billboard | floor | wall | box (+profundidad px)
   let srcFrames = null, srcFps = 6, srcW = 16, srcH = 16, srcPal = [];
   if (ed0 && ed0.sprite) {
     const s = ed0.sprite;
     propSit = !!s.sit; propSolid = !!s.solid; propAnim = s.anim || 'none';
+    proj = s.proj || 'billboard'; depth = Math.max(2, Math.min(24, s.depth || 8));
     srcW = s.w || 16; srcH = s.h || 16; srcPal = Array.isArray(s.pal) ? s.pal : [];
     bw = Math.max(1, Math.min(4, Math.round(srcW / SPR_BLK) || 1));
     bh = Math.max(1, Math.min(4, Math.round(srcH / SPR_BLK) || 1));
@@ -5614,6 +5616,10 @@ function openPlazaSpriteEditor(onDone, existing) {
             <div class="spr-foot" id="sprFoot"></div>
           </div>
           <div class="spr-props">
+            <div class="spr-prop spr-anim"><span><b>Perspectiva</b><small>Dibuja recto; el mundo lo coloca en isométrico</small></span>
+              <div class="spr-persp-btns" id="sprProj">${[['billboard', 'Recto', 'De pie, mirando de frente (plantas, lámparas, carteles)'], ['floor', 'Suelo', 'Tumbado sobre la baldosa (alfombras, baldosas)'], ['wall', 'Pared', 'Pegado a la pared (pósters)'], ['box', 'Caja', 'Con volumen 3D: dibujas el frente y se extruye (sillas, mesas)']].map(([a, l, ti]) => `<button class="spr-abtn ${proj === a ? 'on' : ''}" data-p="${a}" title="${ti}">${l}</button>`).join('')}</div>
+            </div>
+            <div class="spr2-sizerow spr-depthrow ${proj === 'box' ? '' : 'hidden'}" id="sprDepthRow"><span class="spr-lbl">Profundidad</span><input type="range" id="sprDepth" min="2" max="24" value="${depth}" class="spr-depth"><span class="spr-depthv" id="sprDepthV">${depth}</span></div>
             <label class="spr-prop"><input type="checkbox" id="sprSit" ${propSit ? 'checked' : ''}> <span><b>Sentable</b><small>Los avatares se sientan encima (una plaza por casilla de ancho)</small></span></label>
             <label class="spr-prop"><input type="checkbox" id="sprSolid" ${propSolid ? 'checked' : ''}> <span><b>Sólido</b><small>Bloquea el paso (desactívalo para que sea pisable)</small></span></label>
             <div class="spr-prop spr-anim"><span><b>Animación / luz</b></span><div class="spr-anim-btns" id="sprAnim">${[['none', 'Ninguna'], ['glow', 'Brillo'], ['blink', 'Parpadeo'], ['float', 'Flotar']].map(([a, l]) => `<button class="spr-abtn ${propAnim === a ? 'on' : ''}" data-a="${a}">${l}</button>`).join('')}</div></div>
@@ -5662,19 +5668,20 @@ function openPlazaSpriteEditor(onDone, existing) {
   }
   function drawPreview(now) {
     pctx.setTransform(1, 0, 0, 1, 0, 0); pctx.clearRect(0, 0, pcv.width, pcv.height);
+    const efw = proj === 'billboard' ? fw : 1;   // las perspectivas usan 1 casilla
     const fd = 1, TW = PLZ.TW, TH = PLZ.TH, isoX = (i, j) => (i - j) * TW / 2, isoY = (i, j) => (i + j) * TH / 2;
     let minX = 1e9, maxX = -1e9, minY = 1e9, maxY = -1e9; const acc = (x, y) => { if (x < minX) minX = x; if (x > maxX) maxX = x; if (y < minY) minY = y; if (y > maxY) maxY = y; };
-    for (let di = 0; di < fw; di++) { const x = isoX(di, 0), y = isoY(di, 0); acc(x - TW / 2, y - TH / 2); acc(x + TW / 2, y + TH / 2); }
-    const cx = ((fw - 1) / 2) * TW / 2, base = (fw - 1) * TH / 2 + TH / 2; acc(cx - w / 2, base - h); acc(cx + w / 2, base);
+    for (let di = 0; di < efw; di++) { const x = isoX(di, 0), y = isoY(di, 0); acc(x - TW / 2, y - TH / 2); acc(x + TW / 2, y + TH / 2); }
+    const cx = ((efw - 1) / 2) * TW / 2, base = (efw - 1) * TH / 2 + TH / 2; acc(cx - w / 2, base - h); acc(cx + w / 2, base);
     const s = Math.min((pcv.width - 12) / (maxX - minX), (pcv.height - 12) / (maxY - minY));
     pctx.setTransform(s, 0, 0, s, pcv.width / 2 - s * (minX + maxX) / 2, pcv.height / 2 - s * (minY + maxY) / 2);
-    for (let di = 0; di < fw; di++) { const x = isoX(di, 0), y = isoY(di, 0); plzDiamond(pctx, x, y + 1, TW, TH, '#0a0e1c'); plzDiamond(pctx, x, y, TW - 2, TH - 1, di % 2 ? '#1b2340' : '#161c33'); }
+    for (let di = 0; di < efw; di++) { const x = isoX(di, 0), y = isoY(di, 0); plzDiamond(pctx, x, y + 1, TW, TH, '#0a0e1c'); plzDiamond(pctx, x, y, TW - 2, TH - 1, di % 2 ? '#1b2340' : '#161c33'); }
     // en el preview de la sala se ve la animación completa (cicla los fotogramas)
     const fi = frames.length > 1 ? Math.floor((now || 0) / (1000 / fps)) % frames.length : 0;
     const fc = frames[fi] || cells;
     const palMap = new Map(), pal = [], data = new Array(w * h).fill(0);
     for (let k = 0; k < w * h; k++) { const col = fc[k]; if (!col) continue; let idx = palMap.get(col); if (idx == null) { pal.push(col); idx = pal.length; palMap.set(col, idx); } data[k] = idx; }
-    plzDrawCustomSprite(pctx, { w, h, pal, data, anim: propAnim }, cx, base, now || 900);
+    plzDrawCustomSprite(pctx, { w, h, pal, data, anim: propAnim, proj, depth, fw }, cx, base, now || 900);
   }
   const redraw = () => { drawGrid(); drawPreview(performance.now()); };
 
@@ -5784,9 +5791,9 @@ function openPlazaSpriteEditor(onDone, existing) {
     const mk = (host, max, val, set) => { host.innerHTML = ''; for (let n = 1; n <= 4; n++) { const b = el(`<button class="spr-step ${n === val ? 'on' : ''} ${n > max ? 'spr2-off' : ''}">${n}</button>`); if (n <= max) b.onclick = () => set(n); host.appendChild(b); } };
     mk(m.querySelector('#sprBW'), 4, bw, (n) => { if (n !== bw) resize(n, bh); });
     mk(m.querySelector('#sprBH'), 4, bh, (n) => { if (n !== bh) resize(bw, n); });
-    mk(m.querySelector('#sprFW'), bw, fw, (n) => { fw = n; renderSteps(); renderFoot(); drawPreview(performance.now()); });
+    mk(m.querySelector('#sprFW'), proj === 'billboard' ? bw : 1, proj === 'billboard' ? fw : 1, (n) => { if (proj !== 'billboard') return; fw = n; renderSteps(); renderFoot(); drawPreview(performance.now()); });
   };
-  const renderFoot = () => { m.querySelector('#sprFoot').textContent = (fw > 1 ? `Ocupa ${fw} casillas` : 'Ocupa 1 casilla') + ` · ${w}×${h}px`; };
+  const renderFoot = () => { const efw = proj === 'billboard' ? fw : 1; m.querySelector('#sprFoot').textContent = (efw > 1 ? `Ocupa ${efw} casillas` : 'Ocupa 1 casilla') + ` · ${w}×${h}px`; };
 
   // ---- transformaciones del lienzo ----
   const applyTransform = (fn) => { snapshot(); const nc = new Array(w * h).fill(null); for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const v = cells[y * w + x]; if (!v) continue; const [nx, ny] = fn(x, y); nc[ny * w + nx] = v; } cells = frames[curFrame] = nc; redraw(); renderFrames(); haptic(6); };
@@ -5807,7 +5814,14 @@ function openPlazaSpriteEditor(onDone, existing) {
   m.querySelector('#sprClear').onclick = () => { if (cells.some(Boolean) && !confirm('¿Vaciar el fotograma?')) return; snapshot(); cells = frames[curFrame] = new Array(w * h).fill(null); redraw(); renderFrames(); };
   m.querySelector('#sprSit').onchange = (e) => { propSit = e.target.checked; drawPreview(performance.now()); };
   m.querySelector('#sprSolid').onchange = (e) => { propSolid = e.target.checked; };
-  m.querySelectorAll('.spr-abtn').forEach(b => b.onclick = () => { propAnim = b.dataset.a; m.querySelectorAll('.spr-abtn').forEach(x => x.classList.toggle('on', x === b)); haptic(3); drawPreview(performance.now()); });
+  m.querySelectorAll('#sprAnim .spr-abtn').forEach(b => b.onclick = () => { propAnim = b.dataset.a; m.querySelectorAll('#sprAnim .spr-abtn').forEach(x => x.classList.toggle('on', x === b)); haptic(3); drawPreview(performance.now()); });
+  // perspectiva (billboard / suelo / pared / caja) + profundidad de la caja
+  m.querySelectorAll('#sprProj .spr-abtn').forEach(b => b.onclick = () => {
+    proj = b.dataset.p; m.querySelectorAll('#sprProj .spr-abtn').forEach(x => x.classList.toggle('on', x === b));
+    m.querySelector('#sprDepthRow').classList.toggle('hidden', proj !== 'box');
+    renderSteps(); renderFoot(); drawGrid(); drawPreview(performance.now()); haptic(4);
+  });
+  m.querySelector('#sprDepth').oninput = (e) => { depth = Math.max(2, Math.min(24, parseInt(e.target.value, 10) || 8)); m.querySelector('#sprDepthV').textContent = depth; drawPreview(performance.now()); };
   // fotogramas
   m.querySelector('#sprAddFrame').onclick = () => addFrame(false);
   m.querySelector('#sprDupFrame').onclick = () => addFrame(true);
@@ -5850,7 +5864,8 @@ function openPlazaSpriteEditor(onDone, existing) {
     const framesData = frames.map(fc => { const d = new Array(w * h).fill(0); for (let k = 0; k < w * h; k++) { const col = fc[k]; if (!col) continue; let idx = palMap.get(col); if (idx == null) { pal.push(col); idx = pal.length; palMap.set(col, idx); } d[k] = idx; } return d; });
     // guarda cada fotograma como texto compacto (1 char/celda) si la paleta cabe; si no, arrays
     const enc = framesData.map(d => { const e = sprEncodeFrame(d); return e == null ? d : e; });
-    const out = { v: 2, w, h, pal, data: enc[0], fw, fd: 1, solid: propSolid, sit: propSit, anim: propAnim };
+    const out = { v: 2, w, h, pal, data: enc[0], fw: proj === 'billboard' ? fw : 1, fd: 1, solid: propSolid, sit: propSit, anim: propAnim, proj };
+    if (proj === 'box') out.depth = depth;
     if (enc.length > 1) { out.frames = enc; out.fps = fps; }
     return out;
   }
@@ -5870,7 +5885,7 @@ function openPlazaSpriteEditor(onDone, existing) {
       if (isAdm) {
         // admin publica aprobado → registro local para render inmediato
         const decFrames = ((sprite.frames && sprite.frames.length) ? sprite.frames : [sprite.data]).map(sprDecodeFrame);
-        PLZ_CUSTOM[item] = { w, h, pal: sprite.pal, data: decFrames[0], frames: decFrames, fps: sprite.fps || fps, fw, fd: 1, solid: propSolid, sit: propSit, anim: propAnim, name, category: cat };
+        PLZ_CUSTOM[item] = { w, h, pal: sprite.pal, data: decFrames[0], frames: decFrames, fps: sprite.fps || fps, fw, fd: 1, solid: propSolid, sit: propSit, anim: propAnim, proj, depth, name, category: cat };
         PLZ_ITEM_NAME[item] = name;
       } else {
         // colaborador: queda PENDIENTE de aprobación → no se muestra aún
@@ -7049,11 +7064,60 @@ function plzSpriteToCanvas(canvas, sp) {
     ctx.fillStyle = col; ctx.fillRect(ox + x * scale, oy + y * scale, scale, scale);
   }
 }
+// rasteriza un fotograma (índices de paleta) a un canvas w×h con alfa — base para las proyecciones
+function _sprOffscreen(w, h, pal, data) {
+  const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
+  const cx = cv.getContext('2d'); const img = cx.createImageData(w, h), d = img.data;
+  for (let k = 0; k < w * h; k++) {
+    const v = data[k] | 0; if (!v) continue; const col = pal[v - 1]; if (!col) continue;
+    let r = 0, g = 0, b = 0; const mm = /^#?([0-9a-fA-F]{6})$/.exec(col);
+    if (mm) { const n = parseInt(mm[1], 16); r = (n >> 16) & 255; g = (n >> 8) & 255; b = n & 255; }
+    const o = k * 4; d[o] = r; d[o + 1] = g; d[o + 2] = b; d[o + 3] = 255;
+  }
+  cx.putImageData(img, 0, 0); return cv;
+}
+function _sprTinted(src, rgba) {
+  const cv = document.createElement('canvas'); cv.width = src.width; cv.height = src.height;
+  const cx = cv.getContext('2d'); cx.imageSmoothingEnabled = false; cx.drawImage(src, 0, 0);
+  cx.globalCompositeOperation = 'source-atop'; cx.fillStyle = rgba; cx.fillRect(0, 0, cv.width, cv.height);
+  return cv;
+}
+// Proyecciones isométricas de un sprite plano: suelo (rombo), pared (plano vertical),
+// caja (extrusión del frente + profundidad). Usa transform MULTIPLICATIVO para respetar
+// cualquier escala previa del contexto (p. ej. la vista previa del editor).
+function plzProjSprite(c, sp, cx, base, now, data) {
+  const w = sp.w, h = sp.h, pal = sp.pal, TW = PLZ.TW, TH = PLZ.TH, proj = sp.proj;
+  const off = _sprOffscreen(w, h, pal, data);
+  c.save(); c.imageSmoothingEnabled = false;
+  if (sp.anim === 'blink') c.globalAlpha = (Math.floor(now / 420) % 2) ? 1 : 0.5;
+  let bob = 0; if (sp.anim === 'float') bob = Math.round(Math.sin(now / 620) * 2) - 2;
+  if (sp.anim === 'glow') { c.shadowColor = pal[0] || '#ffd23e'; c.shadowBlur = 3 + 3 * Math.abs(Math.sin(now / 480)); }
+  if (proj === 'floor') {
+    // mapea la rejilla al rombo de la baldosa (cara superior del suelo)
+    c.transform((TW / 2) / w, (TH / 2) / w, (-TW / 2) / h, (TH / 2) / h, cx, base - TH + bob);
+    c.drawImage(off, 0, 0);
+  } else if (proj === 'wall') {
+    // pega la rejilla al plano de la pared trasera-derecha (horizontal en diagonal, vertical recto)
+    c.transform((TW / 2) / w, (TH / 2) / w, 0, 1, cx - TW / 4, base - TH - h - TH / 4 + bob);
+    c.drawImage(off, 0, 0);
+  } else {
+    // caja: extrusión del frente hacia atrás-arriba (da volumen 3D partiendo de una cara recta)
+    const dep = Math.max(1, sp.depth || 8);
+    const x0 = cx - Math.floor(w / 2), y0 = base - h + bob;
+    const dvx = dep * 0.6, dvy = -dep * 0.5;                 // dirección de profundidad (iso arriba-derecha)
+    const steps = Math.max(2, Math.round(dep));
+    const dark = _sprTinted(off, 'rgba(0,0,0,.42)'), mid = _sprTinted(off, 'rgba(0,0,0,.20)');
+    for (let t = steps; t >= 1; t--) { const f = t / steps; c.drawImage(t > steps * 0.5 ? dark : mid, Math.round(x0 + dvx * f), Math.round(y0 + dvy * f)); }
+    c.drawImage(off, x0, y0);                                // cara frontal nítida encima
+  }
+  c.restore();
+}
 function plzDrawCustomSprite(c, sp, cx, base, now) {
   const w = sp.w, h = sp.h, pal = sp.pal;
   // animación por fotogramas: elige el fotograma según el tiempo y los FPS
   const frames = sp.frames && sp.frames.length ? sp.frames : null;
   const data = (frames && frames.length > 1) ? frames[Math.floor((now || 0) / (1000 / (sp.fps || 6))) % frames.length] : (frames ? frames[0] : sp.data);
+  if (sp.proj && sp.proj !== 'billboard') { plzProjSprite(c, sp, cx, base, now, data); return; }
   const x0 = cx - Math.floor(w / 2), y0 = base - h;   // base = pies del objeto en el frente de la baldosa
   // brillo pulsante para objetos con animación de luz
   let bob = 0;
