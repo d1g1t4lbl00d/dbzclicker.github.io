@@ -7945,7 +7945,17 @@ function plzDraw(now) {
   // suelos custom primero (bajo todo lo demás), ordenados entre sí por profundidad
   floorSprites.sort((a, b) => a.d - b.d);
   for (const fsp of floorSprites) fsp.draw();
-  for (const e of plaza.ents.values()) items.push({ d: e.x + e.y, draw: () => plzDrawAvatar(e, now) });
+  for (const e of plaza.ents.values()) items.push({ d: e.x + e.y, draw: () => {
+    // si el personaje pisa una casilla con "efecto agua", se recorta por debajo de la
+    // línea de agua para que las piernas no sobresalgan (parece metido dentro del mar)
+    const ri = Math.round(e.x), rj = Math.round(e.y);
+    const fk = plzFindFurnLayer(plzR.furn, ri, rj, 'floor');
+    const cuF = fk >= 0 ? PLZ_CUSTOM[plzR.furn[fk].t] : null;
+    if (cuF && cuF.wade) {
+      const p = plzIso(ri, rj), wl = Math.round(p.y + PLZ.TH / 2) - 9;   // línea de agua (≈ rodilla)
+      ctx.save(); ctx.beginPath(); ctx.rect(-9999, -9999, 19999, wl + 9999); ctx.clip(); plzDrawAvatar(e, now); ctx.restore();
+    } else plzDrawAvatar(e, now);
+  } });
   items.sort((a, b) => a.d - b.d);
   for (const it of items) it.draw();
   if (wadeOver.length) { wadeOver.sort((a, b) => a.d - b.d); for (const o of wadeOver) o.draw(); }
