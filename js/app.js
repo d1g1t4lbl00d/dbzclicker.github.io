@@ -7907,7 +7907,8 @@ function plzDraw(now) {
 
   // mobiliario + avatares, ordenados por profundidad (pintor)
   const items = [];
-  const wadeOver = [];   // franja frontal de sprites "efecto agua": se pinta SOBRE los avatares
+  const wadeOver = [];       // franja frontal de sprites "efecto agua": se pinta SOBRE los avatares
+  const floorSprites = [];   // suelos custom: SIEMPRE bajo avatares/muebles (evita el parpadeo de las piernas)
   for (const f of plzR.furn) {
     const ft = plzFurnFoot(f.t);
     const cu = PLZ_CUSTOM[f.t];
@@ -7915,13 +7916,16 @@ function plzDraw(now) {
       ? () => { const cx = plzFurnCenterX(f); ctx.save(); ctx.translate(2 * cx, 0); ctx.scale(-1, 1); plzDrawFurn(f, now, rows); ctx.restore(); }
       : () => plzDrawFurn(f, now, rows);
     const d = f.i + f.j + (ft.fw - 1) + (ft.fd - 1) - 0.15;
-    if (cu && cu.wade && cu.proj === 'floor') {
-      items.push({ d, draw: mkDraw([0, 0.5]) });                 // mitad trasera: detrás del avatar
-      wadeOver.push({ d: d + 0.3, draw: mkDraw([0.5, 1]) });     // mitad delantera: por delante (dentro del agua)
+    if (cu && cu.proj === 'floor') {
+      floorSprites.push({ d, draw: mkDraw(cu.wade ? [0, 0.5] : undefined) });   // (mitad trasera si es efecto agua)
+      if (cu.wade) wadeOver.push({ d: d + 0.3, draw: mkDraw([0.5, 1]) });        // mitad delantera: por delante (dentro del agua)
     } else {
       items.push({ d, draw: mkDraw(undefined) });
     }
   }
+  // suelos custom primero (bajo todo lo demás), ordenados entre sí por profundidad
+  floorSprites.sort((a, b) => a.d - b.d);
+  for (const fsp of floorSprites) fsp.draw();
   for (const e of plaza.ents.values()) items.push({ d: e.x + e.y, draw: () => plzDrawAvatar(e, now) });
   items.sort((a, b) => a.d - b.d);
   for (const it of items) it.draw();
