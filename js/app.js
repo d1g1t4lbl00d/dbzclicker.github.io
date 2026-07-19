@@ -7388,7 +7388,9 @@ function plzProjSprite(c, sp, cx, base, now, data, rows) {
     for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) { if (data[yy * w + xx]) { if (xx < bx) bx = xx; if (xx > bX) bX = xx; if (yy < by) by = yy; if (yy > bY) bY = yy; } }
     if (bX < 0) { c.restore(); return; }
     const bw = bX - bx + 1, bh = bY - by + 1;
-    c.transform((TW / 2) / w, (TH / 2) / w, (-TW / 2) / h, (TH / 2) / h, cx, base - TH + bob);
+    // base = vértice frontal de la baldosa; el vértice SUPERIOR está TH/2 más arriba
+    // (plzIso es el vértice superior, no el centro) → así el suelo queda PEGADO, sin flotar
+    c.transform((TW / 2) / w, (TH / 2) / w, (-TW / 2) / h, (TH / 2) / h, cx, base - TH / 2 + bob);
     if (rows) { const a = rows[0], b = rows[1]; c.drawImage(off, bx, by + a * bh, bw, (b - a) * bh, 0, a * h, w, (b - a) * h); }   // franja (efecto agua), en fracciones 0..1
     else c.drawImage(off, bx, by, bw, bh, 0, 0, w, h);
   } else if (proj === 'wall') {
