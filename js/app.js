@@ -7926,6 +7926,8 @@ function plzDraw(now) {
   items.sort((a, b) => a.d - b.d);
   for (const it of items) it.draw();
   if (wadeOver.length) { wadeOver.sort((a, b) => a.d - b.d); for (const o of wadeOver) o.draw(); }
+  // nombres SIEMPRE por encima (para que el suelo/muebles de delante no los tapen)
+  [...plaza.ents.values()].sort((a, b) => (a.x + a.y) - (b.x + b.y)).forEach(e => plzDrawAvatarName(e, now));
 
   // indicador flotante sobre el objeto interactivo de la sala (vida + descubribilidad del minijuego)
   const pact = PLZ_ACTIVITY[plaza.roomId];
@@ -7960,6 +7962,17 @@ function plzDraw(now) {
   ctx.drawImage(plaza._vig, 0, 0);
 }
 
+// placa del nombre bajo el avatar — se pinta en una pasada final para que nada la tape
+function plzDrawAvatarName(e, now) {
+  const c = plaza.ctx; const p = plzIso(e.x, e.y);
+  const cx = Math.round(p.x), base = Math.round(p.y + PLZ.TH / 2);
+  const isMe = e.id === state.user.id;
+  c.font = '700 7px monospace'; c.textAlign = 'center'; c.textBaseline = 'alphabetic';
+  const nm = (e.name || 'bro').length > 13 ? e.name.slice(0, 12) + '…' : (e.name || 'bro');
+  const nw = Math.ceil(c.measureText(nm).width) + 8;
+  plzRect(c, cx - nw / 2, base + 3, nw, 10, 'rgba(6,9,18,.85)', 'rgba(96,140,255,.35)');
+  c.fillStyle = isMe ? '#8fc0ff' : '#d6dff5'; c.fillText(nm, cx, base + 11);
+}
 function plzDrawAvatar(e, now) {
   const { ctx: c } = plaza;
   const p = plzIso(e.x, e.y);
@@ -8029,12 +8042,8 @@ function plzDrawAvatar(e, now) {
   // accesorio de cabeza
   if (e.hat && e.hat !== 'none') plzDrawHat(c, e, cx, hx, hy, hs, now);
 
-  // nombre (placa pixel)
-  c.font = '700 7px monospace'; c.textAlign = 'center'; c.textBaseline = 'alphabetic';
-  const nm = e.name.length > 13 ? e.name.slice(0, 12) + '…' : e.name;
-  const nw = Math.ceil(c.measureText(nm).width) + 8;
-  plzRect(c, cx - nw / 2, base + 3, nw, 10, 'rgba(6,9,18,.85)', 'rgba(96,140,255,.35)');
-  c.fillStyle = isMe ? '#8fc0ff' : '#d6dff5'; c.fillText(nm, cx, base + 11);
+  // (el nombre se pinta en una pasada final, por encima de todo, para que el
+  //  suelo/muebles de delante no lo tapen — ver plzDrawAvatarName en plzDraw)
 
   // bocadillo estilo Habbo (esquinas duras, borde 1px, cola en escalera)
   if (e.bubble) {
