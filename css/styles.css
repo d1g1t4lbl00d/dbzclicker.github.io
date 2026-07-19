@@ -4518,7 +4518,9 @@ html { touch-action: manipulation; }
   position: absolute; z-index: 20; min-width: 150px; padding: 6px;
   background: rgba(12,16,28,.97); border: 1px solid var(--line); border-radius: 14px;
   box-shadow: 0 14px 40px rgba(0,0,0,.55); backdrop-filter: blur(10px); animation: fadeUp .14s var(--ease);
+  touch-action: manipulation;
 }
+.plaza-menu button { touch-action: manipulation; }
 .plaza-menu.hidden { display: none; }
 .plaza-menu .pm-head { font-size: 12px; font-weight: 800; color: #8fc0ff; padding: 5px 8px 7px; border-bottom: 1px solid var(--line-soft); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .plaza-menu > button { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; border: none; background: none; color: var(--ink); font: inherit; font-size: 13px; font-weight: 600; padding: 9px 9px; border-radius: 10px; cursor: pointer; }

@@ -4760,6 +4760,8 @@ async function renderPlaza() {
 
   // ---- menú al tocar un avatar ----
   const menuEl = $('plazaMenu');
+  // los toques que empiezan en el menú no deben propagar al canvas ni al cierre global
+  menuEl.addEventListener('pointerdown', (e) => e.stopPropagation());
   const closeMenu = () => menuEl.classList.add('hidden');
   const openMenu = (ent, cssX, cssY) => {
     const self = ent.id === state.user.id;
@@ -4832,17 +4834,16 @@ async function renderPlaza() {
       const efi = Math.floor((rx / (PLZ.TW / 2) + ry / (PLZ.TH / 2)) / 2);
       const efj = Math.floor((ry / (PLZ.TH / 2) - rx / (PLZ.TW / 2)) / 2);
       if (plaza.moving) { plzMoveTo(plaza.moving, efi, efj); plaza.moving = null; return; }   // recolocar
-      // hit-test del sprite visible (de delante hacia atrás): permite tocar el objeto donde SE VE,
-      // no solo su casilla del suelo (los muebles altos se dibujan por encima de su baldosa).
-      const hitF = [...plzR.furn].filter(f => f.t !== 'portal').sort((a, b) => (b.i + b.j) - (a.i + a.j))
-        .find(f => { const bx = plzFurnHitBox(f); return rx >= bx.x0 && rx <= bx.x1 && ry >= bx.y0 && ry <= bx.y1; });
-      if (plaza.editTool === 'erase') {   // quitar: el objeto tocado o el de la casilla
-        let t = hitF; if (!t) { const k = plzFindFurnAt(plzR.furn, efi, efj); if (k >= 0) t = plzR.furn[k]; }
-        if (t) plzPickFurn(t); else toast('Toca un objeto para quitarlo');
+      // Interacción por CASILLA BASE (su huella), no por el sprite alto: así los muebles
+      // altos no tapan las casillas de al lado y puedes colocar objetos pegados unos a otros.
+      const kAt = plzFindFurnAt(plzR.furn, efi, efj);
+      const tileObj = (kAt >= 0 && plzR.furn[kAt].t !== 'portal') ? plzR.furn[kAt] : null;
+      if (plaza.editTool === 'erase') {   // quitar: el objeto de la casilla tocada
+        if (tileObj) plzPickFurn(tileObj); else toast('Toca un objeto para quitarlo');
         return;
       }
-      if (hitF) { openObjMenu(hitF, (e.clientX - r.left), (e.clientY - r.top)); haptic(6); return; }   // menú del objeto
-      plzEditTap(efi, efj); return;   // suelo vacío → colocar el objeto elegido
+      if (tileObj) { openObjMenu(tileObj, (e.clientX - r.left), (e.clientY - r.top)); haptic(6); return; }   // menú del objeto
+      plzEditTap(efi, efj); return;   // casilla libre → colocar el objeto elegido
     }
     // ¿ha tocado el objeto interactivo de la sala? → abre su minijuego
     const act = PLZ_ACTIVITY[plaza.roomId];
@@ -5129,12 +5130,14 @@ function openPlazaRoomsBrowser() {
   };
   m.querySelectorAll('#prTabs button').forEach(b => b.onclick = () => { tab = b.dataset.t; m.querySelectorAll('#prTabs button').forEach(x => x.classList.toggle('on', x === b)); load(); });
   m.querySelector('#prCreate').onclick = async () => {
-    const name = (prompt('Ponle nombre a tu sala:', 'Mi sala') || '').trim().slice(0, 40);
-    if (!name) return;
+    const btn = m.querySelector('#prCreate'); btn.disabled = true;
     const data = { floorA: '#161c33', floorB: '#121729', wall: '#0d1122', neonA: '#27a9ff', neonB: '#6e2df5', furn: [] };
-    const { data: rec, error } = await sb.from('plaza_rooms').insert({ owner_id: state.user.id, name, data }).select('id,name,visits,owner_id,data,profiles:owner_id(username,display_name,avatar_url)').single();
+    // se crea con nombre por defecto y is_public; el nombre se cambia en el editor (campo arriba).
+    // (antes usaba prompt(), que en móvil/PWA suele cancelarse y no creaba nada)
+    const { data: rec, error } = await sb.from('plaza_rooms').insert({ owner_id: state.user.id, name: 'Mi sala', data, is_public: true }).select('id,name,visits,owner_id,data,profiles:owner_id(username,display_name,avatar_url)').single();
+    btn.disabled = false;
     if (error) { toast(error.message || 'No se pudo crear la sala'); return; }
-    m.remove(); await plzOpenRoom(rec); plzEnterEdit();
+    m.remove(); await plzOpenRoom(rec); plzEnterEdit(); toast('Sala creada · ponle nombre arriba y guarda');
   };
   load();
 }
