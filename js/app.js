@@ -4396,6 +4396,19 @@ function plzFindFurnAt(furn, fi, fj) {
   }
   return -1;
 }
+// ¿es un sprite de SUELO? (capa de abajo: caminos, césped… se pueden pisar y poner cosas encima)
+function plzIsFloorSprite(t) { const cu = PLZ_CUSTOM[t]; return !!(cu && cu.proj === 'floor'); }
+// índice del mueble por CAPA en la casilla (i,j). layer: 'floor' (suelo) | 'top' (objeto encima)
+function plzFindFurnLayer(furn, fi, fj, layer) {
+  for (let k = furn.length - 1; k >= 0; k--) {
+    const f = furn[k]; if (f.t === 'portal') continue;
+    const isFloor = plzIsFloorSprite(f.t);
+    if (layer === 'floor' ? !isFloor : isFloor) continue;
+    const { fw, fd } = plzFurnFoot(f.t);
+    if (fi >= f.i && fi < f.i + fw && fj >= f.j && fj < f.j + fd) return k;
+  }
+  return -1;
+}
 // caja de selección en pantalla (coords de arte) del sprite VISIBLE de un mueble.
 // Sirve para tocar el objeto donde se ve, no solo en su baldosa (los altos suben mucho).
 function plzFurnHitBox(f) {
@@ -4873,16 +4886,19 @@ async function renderPlaza() {
       const efi = Math.floor((rx / (PLZ.TW / 2) + ry / (PLZ.TH / 2)) / 2);
       const efj = Math.floor((ry / (PLZ.TH / 2) - rx / (PLZ.TW / 2)) / 2);
       if (plaza.moving) { plzMoveTo(plaza.moving, efi, efj); plaza.moving = null; return; }   // recolocar
-      // Interacción por CASILLA BASE (su huella), no por el sprite alto: así los muebles
-      // altos no tapan las casillas de al lado y puedes colocar objetos pegados unos a otros.
-      const kAt = plzFindFurnAt(plzR.furn, efi, efj);
-      const tileObj = (kAt >= 0 && plzR.furn[kAt].t !== 'portal') ? plzR.furn[kAt] : null;
-      if (plaza.editTool === 'erase') {   // quitar: el objeto de la casilla tocada
-        if (tileObj) plzPickFurn(tileObj); else toast('Toca un objeto para quitarlo');
+      // Dos capas: SUELO (caminos/césped, pisable) + OBJETO encima (banco, maceta…).
+      // Se prioriza el objeto de encima; el suelo permite poner cosas sobre él.
+      const kTop = plzFindFurnLayer(plzR.furn, efi, efj, 'top');
+      const kFloor = plzFindFurnLayer(plzR.furn, efi, efj, 'floor');
+      const topObj = kTop >= 0 ? plzR.furn[kTop] : null;
+      const floorObj = kFloor >= 0 ? plzR.furn[kFloor] : null;
+      if (plaza.editTool === 'erase') {   // quitar: primero lo de encima; si no, el suelo
+        const t = topObj || floorObj;
+        if (t) plzPickFurn(t); else toast('Toca un objeto para quitarlo');
         return;
       }
-      if (tileObj) { openObjMenu(tileObj, (e.clientX - r.left), (e.clientY - r.top)); haptic(6); return; }   // menú del objeto
-      plzEditTap(efi, efj); return;   // casilla libre → colocar el objeto elegido
+      if (topObj) { openObjMenu(topObj, (e.clientX - r.left), (e.clientY - r.top)); haptic(6); return; }   // menú del objeto de encima
+      plzEditTap(efi, efj); return;   // suelo o casilla libre → colocar el objeto elegido (encima del suelo)
     }
     // ¿ha tocado el objeto interactivo de la sala? → abre su minijuego
     const act = PLZ_ACTIVITY[plaza.roomId];
@@ -5309,7 +5325,9 @@ function plzEditTap(fi, fj) {
   for (let di = 0; di < fw; di++) for (let dj = 0; dj < fd; dj++) tiles.push([fi + di, fj + dj]);
   if (tiles.some(([ti, tj]) => ti >= PLZ.COLS || tj >= PLZ.ROWS)) { toast('No cabe aquí · déjale sitio hacia el fondo'); haptic(20); return; }
   if (tiles.some(([ti, tj]) => furn.some(f => f.t === 'portal' && f.i === ti && f.j === tj))) { toast('Ahí está la salida'); haptic(20); return; }
-  if (tiles.some(([ti, tj]) => plzFindFurnAt(furn, ti, tj) >= 0)) { toast('Ahí ya hay un objeto · recógelo primero'); haptic(18); return; }
+  // por CAPA: un suelo choca con otro suelo; un objeto choca con otro objeto; pero un objeto SÍ puede ir sobre un suelo
+  const layer = plzIsFloorSprite(tool) ? 'floor' : 'top';
+  if (tiles.some(([ti, tj]) => plzFindFurnLayer(furn, ti, tj, layer) >= 0)) { toast('Ahí ya hay ' + (layer === 'floor' ? 'suelo' : 'un objeto') + ' · recógelo primero'); haptic(18); return; }
   // límite por unidades del inventario (el admin tiene ilimitado)
   if (!PLZ_FREE_ITEMS.has(tool)) {
     const placed = furn.filter(f => f.t === tool).length;
@@ -5326,7 +5344,8 @@ function plzMoveTo(f, fi, fj) {
   for (let di = 0; di < fw; di++) for (let dj = 0; dj < fd; dj++) tiles.push([fi + di, fj + dj]);
   if (tiles.some(([ti, tj]) => ti < 0 || tj < 0 || ti >= PLZ.COLS || tj >= PLZ.ROWS)) { toast('No cabe ahí'); haptic(20); return; }
   if (tiles.some(([ti, tj]) => furn.some(o => o.t === 'portal' && o.i === ti && o.j === tj))) { toast('Ahí está la salida'); haptic(20); return; }
-  for (const [ti, tj] of tiles) { const k = plzFindFurnAt(furn, ti, tj); if (k >= 0 && furn[k] !== f) { toast('Ahí ya hay algo'); haptic(20); return; } }
+  const mlayer = plzIsFloorSprite(f.t) ? 'floor' : 'top';   // mover respeta la capa (objeto sobre suelo permitido)
+  for (const [ti, tj] of tiles) { const k = plzFindFurnLayer(furn, ti, tj, mlayer); if (k >= 0 && furn[k] !== f) { toast('Ahí ya hay algo'); haptic(20); return; } }
   f.i = fi; f.j = fj; plzRecompute(); haptic(8);
 }
 // recoger un objeto: lo quita de la sala y su unidad vuelve a estar disponible en el inventario
