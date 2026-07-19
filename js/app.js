@@ -4494,7 +4494,7 @@ const PLZ_ACTIVITY = {
   estudio: { furn: 'djbooth', open: () => openPerkyPads(),     w: 13, top: 44, hint: 'Toca la mesa para tocar la batería en PerkyPads' },
   azotea:  { furn: 'hoop',    open: () => openPerkyHoops(),     w: 14, top: 52, hint: 'Toca la canasta para jugar a PerkyHoops' },
   arcade:  { furn: 'arcade',  open: () => openPerkyInvaders(),  w: 11, top: 40, hint: 'Toca una recreativa para jugar a PerkyInvaders' },
-  playa:   { furn: 'sea',     match: (f) => f.t === 'sea' || /orilla|surf|ola|playa|mar/i.test(PLZ_ITEM_NAME[f.t] || ''), open: () => openPerkySurf(), w: 22, top: 26, bot: 18, hint: 'Toca el agua para surfear en PerkySurf 🏄' },
+  playa:   { furn: 'sea',     match: (f) => f.t === 'sea' || /orilla|surf|ola|playa|mar/i.test(PLZ_ITEM_NAME[f.t] || ''), open: () => openPerkyFish(), w: 22, top: 26, bot: 18, hint: 'Toca el agua para pescar en PerkyFish 🎣' },
 };
 
 let plaza = null;          // runtime del render (solo mientras la vista está abierta)
@@ -6903,6 +6903,10 @@ function openPerkyFish() {
   document.documentElement.style.overflow = 'hidden';
   const canvas = wrap.querySelector('#pkCanvas'), ctx = canvas.getContext('2d');
   const DPR = Math.min(2, Math.max(1, Math.round(window.devicePixelRatio || 1))); canvas.width = AW * DPR; canvas.height = AH * DPR; ctx.scale(DPR, DPR);
+  // Orilla (sprite custom que puso el admin) → arena en primer plano de la escena
+  const orillaId = Object.keys(PLZ_ITEM_NAME).find(id => /orilla/i.test(PLZ_ITEM_NAME[id] || ''));
+  const orillaSp = (orillaId && PLZ_CUSTOM[orillaId]) || null;
+  const drawFlat = (sp, ox, oy, scale) => { const w = sp.w, h = sp.h, pal = sp.pal, data = (sp.frames && sp.frames[0]) || sp.data || []; for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const v = data[y * w + x] | 0; if (!v) continue; const col = pal[v - 1]; if (!col) continue; ctx.fillStyle = col; ctx.fillRect(ox + x * scale, oy + y * scale, scale, scale); } };
   let g, last = performance.now();
   function reset() { g = { score: 0, time: 60, state: 'cast', wait: 0, bite: 0, cool: 0, msg: 'Preparando caña…', popup: null, bob: 0, dip: 0, over: false, splash: [], fishX: 0, fishDir: 1 }; wrap.querySelector('#pkScore').textContent = '0'; cast(); }
   function cast() { g.state = 'waiting'; g.wait = 1.2 + Math.random() * 2.8; g.msg = 'Espera el picado…'; g.dip = 0; g.fishX = -20; g.fishDir = 1; }
@@ -6974,11 +6978,13 @@ function openPerkyFish() {
     for (const s of g.splash) { ctx.globalAlpha = Math.max(0, 1 - s.t / s.life); ctx.fillStyle = s.col; ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, 7); ctx.fill(); } ctx.globalAlpha = 1;
     // aviso de picado
     if (g.state === 'bite') { const s = 1 + Math.sin(g.bob * 22) * 0.18; ctx.save(); ctx.translate(bx, by - 36); ctx.scale(s, s); ctx.shadowColor = '#ffd23e'; ctx.shadowBlur = 14; ctx.fillStyle = '#ffd23e'; ctx.font = 'bold 30px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('❗', 0, 0); ctx.restore(); ctx.textBaseline = 'alphabetic'; }
+    // orilla (arena del jugador) en primer plano abajo
+    if (orillaSp && orillaSp.w) { const sc = Math.max(1, Math.round(26 / orillaSp.h)); const oy = AH - orillaSp.h * sc; ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.4)'; ctx.shadowBlur = 6; ctx.shadowOffsetY = -2; for (let ox = 0; ox < AW; ox += orillaSp.w * sc) drawFlat(orillaSp, ox, oy, sc); ctx.restore(); }
     // HUD
     ctx.fillStyle = 'rgba(0,0,0,.35)'; ctx.fillRect(8, 8, AW - 16, 6);
     ctx.save(); ctx.shadowColor = g.time < 10 ? '#e0507a' : accent; ctx.shadowBlur = 8; ctx.fillStyle = g.time < 10 ? '#ff6a94' : accent; ctx.fillRect(8, 8, (AW - 16) * (g.time / 60), 6); ctx.restore();
     ctx.fillStyle = '#eaf2ff'; ctx.font = 'bold 11px system-ui'; ctx.textAlign = 'left'; ctx.fillText('⏱ ' + Math.ceil(g.time) + 's', 8, 30);
-    ctx.textAlign = 'center'; ctx.fillStyle = '#dfeeffcc'; ctx.font = 'bold 12px system-ui'; ctx.fillText(g.msg, AW / 2, AH - 14);
+    ctx.textAlign = 'center'; ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.8)'; ctx.shadowBlur = 4; ctx.fillStyle = '#eaf4ff'; ctx.font = 'bold 12px system-ui'; ctx.fillText(g.msg, AW / 2, AH - 36); ctx.restore();
     if (g.popup) { const k = (now - g.popup.t0) / 1000; ctx.globalAlpha = Math.max(0, 1 - k); const yy = 158 - (g.popup.rise ? k * 46 : 0); const s = 1 + Math.max(0, 0.35 - k); ctx.save(); ctx.translate(AW / 2, yy); ctx.scale(s, s); ctx.fillStyle = g.popup.col; ctx.shadowColor = g.popup.col; ctx.shadowBlur = 12; ctx.font = 'bold ' + (g.popup.big ? 26 : 18) + 'px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(g.popup.txt, 0, 0); ctx.restore(); ctx.globalAlpha = 1; ctx.textBaseline = 'alphabetic'; }
   }
   async function showEnd() { await pkGameOver({ game: 'fish', score: g.score, wrap, title: '¡SE ACABÓ!', onRetry: () => { reset(); last = performance.now(); }, onQuit: close }); }
