@@ -4490,11 +4490,12 @@ const PLZ_ROOMS = {
 // Objeto interactivo de cada sala: al tocarlo se abre su minijuego/actividad.
 // (Las funciones openPerky* están declaradas más abajo — hoisting las hace accesibles.)
 const PLZ_ACTIVITY = {
-  plaza:   { furn: 'djbooth', open: () => openPerkyDance(),    w: 13, top: 44, hint: 'Toca la cabina para bailar en PerkyDance' },
-  estudio: { furn: 'djbooth', open: () => openPerkyPads(),     w: 13, top: 44, hint: 'Toca la mesa para tocar la batería en PerkyPads' },
-  azotea:  { furn: 'hoop',    open: () => openPerkyHoops(),     w: 14, top: 52, hint: 'Toca la canasta para jugar a PerkyHoops' },
-  arcade:  { furn: 'arcade',  open: () => openPerkyInvaders(),  w: 11, top: 40, hint: 'Toca una recreativa para jugar a PerkyInvaders' },
-  playa:   { furn: 'sea',     match: (f) => f.t === 'sea' || /orilla|surf|ola|playa|mar/i.test(PLZ_ITEM_NAME[f.t] || ''), open: () => openPerkyFish(), w: 22, top: 26, bot: 18, hint: 'Toca el agua para pescar en PerkyFish 🎣' },
+  plaza:   { furn: 'djbooth', open: () => openPerkyDance(),    w: 13, top: 44, label: '🕺 Bailar', hint: 'Toca la cabina (o el botón) para bailar en PerkyDance' },
+  estudio: { furn: 'djbooth', open: () => openPerkyPads(),     w: 13, top: 44, label: '🥁 Batería', hint: 'Toca la mesa (o el botón) para tocar en PerkyPads' },
+  azotea:  { furn: 'hoop',    open: () => openPerkyHoops(),     w: 14, top: 52, label: '🏀 Encestar', hint: 'Toca la canasta (o el botón) para jugar a PerkyHoops' },
+  arcade:  { furn: 'arcade',  open: () => openPerkyInvaders(),  w: 11, top: 40, label: '🕹️ Jugar', hint: 'Toca una recreativa (o el botón) para PerkyInvaders' },
+  // la playa usa el botón flotante (la orilla es suelo pisable, no dispara el juego al tocarla)
+  playa:   { furn: 'sea',     open: () => openPerkyFish(),      w: 22, top: 26, bot: 18, label: '🎣 Pescar', hint: 'Camina por la orilla y toca el botón 🎣 para pescar' },
 };
 
 let plaza = null;          // runtime del render (solo mientras la vista está abierta)
@@ -4650,6 +4651,7 @@ function plzJoinRoom(id, si, sj) {
   // botón de editar: admin en cualquier sala (fijas incluidas) o dueño de una sala custom
   if (plzIsAdmin() || (plzR.def.custom && plzR.def.ownerId === state.user.id)) plzShowEditFab();
   const act0 = PLZ_ACTIVITY[id];
+  plzHideActFab(); if (act0) plzShowActFab(act0);   // botón flotante del minijuego
   if (act0 && act0.hint) setTimeout(() => { if (plaza && plaza.roomId === id) toast(act0.hint); }, 550);
 
   // canal de la sala: presencia (roster) + movimiento + chat + emotes
@@ -5191,12 +5193,21 @@ function plzShowEditFab() {
 function plzHideEditFab() {
   const f = document.getElementById('plazaEditFab'); if (f) f.remove();
 }
+// ---- botón flotante para abrir el minijuego de la sala ----
+function plzShowActFab(act) {
+  const wrap = $('plazaWrap'); if (!wrap || !act) return;
+  plzHideActFab();
+  const fab = el(`<button class="plaza-actfab" id="plazaActFab">${esc(act.label || '🎮 Jugar')}</button>`);
+  fab.onclick = () => { if (!plaza || plaza.editing) return; haptic(12); act.open(); };
+  wrap.appendChild(fab);
+}
+function plzHideActFab() { const f = document.getElementById('plazaActFab'); if (f) f.remove(); }
 
 // ---- modo edición: catálogo visual estilo Habbo ----
 function plzEnterEdit() {
   if (!plaza || !plzR || !(plzR.def.custom || plzIsAdmin())) return;
   plaza.editing = true;
-  plzHideEditFab();
+  plzHideEditFab(); plzHideActFab();
   const dock = document.querySelector('.plaza-dock'); if (dock) dock.style.display = 'none';
   const hint = document.querySelector('.plaza-hint'); if (hint) hint.style.display = 'none';
   const old = document.getElementById('plazaEditor'); if (old) old.remove();
@@ -5284,6 +5295,7 @@ function plzExitEdit() {
   const dock = document.querySelector('.plaza-dock'); if (dock) dock.style.display = '';
   const hint = document.querySelector('.plaza-hint'); if (hint) hint.style.display = '';
   if (plzR && (plzIsAdmin() || (plzR.def.custom && plzR.def.ownerId === state.user.id))) plzShowEditFab();
+  const act = plaza && PLZ_ACTIVITY[plaza.roomId]; if (act) plzShowActFab(act);
 }
 // colocar un objeto en el suelo (el borrado y el menú se gestionan en el tap del lienzo)
 function plzEditTap(fi, fj) {
@@ -7370,10 +7382,15 @@ function plzProjSprite(c, sp, cx, base, now, data, rows) {
   let bob = 0; if (sp.anim === 'float') bob = Math.round(Math.sin(now / 620) * 2) - 2;
   if (sp.anim === 'glow') { c.shadowColor = pal[0] || '#ffd23e'; c.shadowBlur = 3 + 3 * Math.abs(Math.sin(now / 480)); }
   if (proj === 'floor') {
-    // mapea la rejilla al rombo de la baldosa (cara superior del suelo)
+    // bounding box del contenido: así el dibujo LLENA la baldosa y queda pegado al
+    // suelo (sin "flotar" por los márgenes vacíos de la rejilla)
+    let bx = w, by = h, bX = -1, bY = -1;
+    for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) { if (data[yy * w + xx]) { if (xx < bx) bx = xx; if (xx > bX) bX = xx; if (yy < by) by = yy; if (yy > bY) bY = yy; } }
+    if (bX < 0) { c.restore(); return; }
+    const bw = bX - bx + 1, bh = bY - by + 1;
     c.transform((TW / 2) / w, (TH / 2) / w, (-TW / 2) / h, (TH / 2) / h, cx, base - TH + bob);
-    if (rows) { const y0 = rows[0], sh = rows[1] - rows[0]; c.drawImage(off, 0, y0, w, sh, 0, y0, w, sh); }   // solo una franja (efecto agua)
-    else c.drawImage(off, 0, 0);
+    if (rows) { const a = rows[0], b = rows[1]; c.drawImage(off, bx, by + a * bh, bw, (b - a) * bh, 0, a * h, w, (b - a) * h); }   // franja (efecto agua), en fracciones 0..1
+    else c.drawImage(off, bx, by, bw, bh, 0, 0, w, h);
   } else if (proj === 'wall') {
     // pega la rejilla al plano de la pared trasera-derecha (horizontal en diagonal, vertical recto)
     c.transform((TW / 2) / w, (TH / 2) / w, 0, 1, cx - TW / 4, base - TH - h - TH / 4 + bob);
@@ -7897,9 +7914,8 @@ function plzDraw(now) {
       : () => plzDrawFurn(f, now, rows);
     const d = f.i + f.j + (ft.fw - 1) + (ft.fd - 1) - 0.15;
     if (cu && cu.wade && cu.proj === 'floor') {
-      const half = Math.ceil((cu.h || 16) / 2);
-      items.push({ d, draw: mkDraw([0, half]) });                        // mitad superior: detrás del avatar
-      wadeOver.push({ d: d + 0.3, draw: mkDraw([half, cu.h || 16]) });   // mitad inferior: por delante (dentro del agua)
+      items.push({ d, draw: mkDraw([0, 0.5]) });                 // mitad trasera: detrás del avatar
+      wadeOver.push({ d: d + 0.3, draw: mkDraw([0.5, 1]) });     // mitad delantera: por delante (dentro del agua)
     } else {
       items.push({ d, draw: mkDraw(undefined) });
     }
