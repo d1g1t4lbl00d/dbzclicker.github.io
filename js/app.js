@@ -4531,7 +4531,9 @@ function plzEnsureStructural(id, base, furn) {
     if (bf.t === 'portal' && !furn.some(f => f.t === 'portal' && f.to === bf.to)) furn.push({ ...bf });
   }
   const act = PLZ_ACTIVITY[id];
-  if (act && act.furn && !furn.some(f => f.t === act.furn)) { const bf = base.furn.find(f => f.t === act.furn); if (bf) furn.push({ ...bf }); }
+  // solo re-añade el ancla del minijuego si NO hay ya algo que la dispare
+  // (p. ej. en la playa, la "Orilla" custom ya vale → no metas el 'sea' viejo)
+  if (act) { const anchor = act.match || ((f) => f.t === act.furn); if (!furn.some(anchor)) { const bf = base.furn.find(f => f.t === act.furn); if (bf) furn.push({ ...bf }); } }
 }
 function plzComputeRoom(id) {
   const custom = plzCustomRooms[id];
