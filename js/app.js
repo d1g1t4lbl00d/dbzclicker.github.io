@@ -4366,7 +4366,7 @@ async function plzLoadCustomItems(force) {
         w: s.w || 16, h: s.h || 16, pal: Array.isArray(s.pal) ? s.pal : [], data,
         frames, fps: Math.max(1, Math.min(20, s.fps || 6)),
         fw: Math.max(1, Math.min(4, s.fw || 1)), fd: Math.max(1, Math.min(4, s.fd || 1)),
-        solid: !!s.solid, sit: !!s.sit, anim: s.anim || 'none', proj: s.proj || 'billboard', depth: s.depth || 8, name: r.name, category: r.category || 'Deco',
+        solid: !!s.solid, sit: !!s.sit, anim: s.anim || 'none', proj: s.proj || 'billboard', depth: s.depth || 8, wade: !!s.wade, name: r.name, category: r.category || 'Deco',
       };
       PLZ_ITEM_NAME[r.item] = r.name;
     });
@@ -4408,7 +4408,7 @@ function plzFurnHitBox(f) {
 }
 // colisión y asiento son propiedades del objeto (custom) o del tipo base.
 // Un asiento nunca bloquea el paso (hay que poder caminar hasta él para sentarse).
-function plzIsSolid(t) { const cu = PLZ_CUSTOM[t]; return cu ? (cu.solid && !cu.sit) : PLZ_SOLID.has(t); }
+function plzIsSolid(t) { const cu = PLZ_CUSTOM[t]; return cu ? (cu.solid && !cu.sit && cu.proj !== 'floor' && cu.proj !== 'wall') : PLZ_SOLID.has(t); }
 function plzIsSeat(f) { const cu = PLZ_CUSTOM[f.t]; if (cu) return cu.sit; return f.t === 'bench' || f.t === 'stool' || f.t === 'sofa' || f.t === 'couch'; }
 
 // --- SALAS: cada una con su tema, mobiliario y portales a otras salas ---
@@ -5589,12 +5589,12 @@ function openPlazaSpriteEditor(onDone, existing) {
   if (!plzCanCreate()) { toast('No tienes permiso para crear objetos'); return; }
   const ed0 = existing || null;
   let bw = 1, bh = 1, propSit = false, propSolid = true, propAnim = 'none';
-  let proj = 'billboard', depth = 8;   // perspectiva: billboard | floor | wall | box (+profundidad px)
+  let proj = 'billboard', depth = 8, wade = false;   // perspectiva + efecto agua (pisar dentro)
   let srcFrames = null, srcFps = 6, srcW = 16, srcH = 16, srcPal = [];
   if (ed0 && ed0.sprite) {
     const s = ed0.sprite;
     propSit = !!s.sit; propSolid = !!s.solid; propAnim = s.anim || 'none';
-    proj = s.proj || 'billboard'; depth = Math.max(2, Math.min(24, s.depth || 8));
+    proj = s.proj || 'billboard'; depth = Math.max(2, Math.min(24, s.depth || 8)); wade = !!s.wade;
     srcW = s.w || 16; srcH = s.h || 16; srcPal = Array.isArray(s.pal) ? s.pal : [];
     bw = Math.max(1, Math.min(4, Math.round(srcW / SPR_BLK) || 1));
     bh = Math.max(1, Math.min(4, Math.round(srcH / SPR_BLK) || 1));
@@ -5687,6 +5687,7 @@ function openPlazaSpriteEditor(onDone, existing) {
               <div class="spr-persp-btns" id="sprProj">${[['billboard', 'Recto', 'De pie, mirando de frente (plantas, lámparas, carteles)'], ['floor', 'Suelo', 'Tumbado sobre la baldosa (alfombras, baldosas)'], ['wall', 'Pared', 'Pegado a la pared (pósters)'], ['box', 'Caja', 'Con volumen 3D: dibujas el frente y se extruye (sillas, mesas)']].map(([a, l, ti]) => `<button class="spr-abtn ${proj === a ? 'on' : ''}" data-p="${a}" title="${ti}">${l}</button>`).join('')}</div>
             </div>
             <div class="spr2-sizerow spr-depthrow ${proj === 'box' ? '' : 'hidden'}" id="sprDepthRow"><span class="spr-lbl">Profundidad</span><input type="range" id="sprDepth" min="2" max="24" value="${depth}" class="spr-depth"><span class="spr-depthv" id="sprDepthV">${depth}</span></div>
+            <label class="spr-prop spr-waderow ${proj === 'floor' ? '' : 'hidden'}" id="sprWadeRow"><input type="checkbox" id="sprWade" ${wade ? 'checked' : ''}> <span><b>Efecto agua</b><small>El personaje se ve DENTRO: la mitad delantera se pinta por encima (para orillas/charcos)</small></span></label>
             <label class="spr-prop"><input type="checkbox" id="sprSit" ${propSit ? 'checked' : ''}> <span><b>Sentable</b><small>Los avatares se sientan encima (una plaza por casilla de ancho)</small></span></label>
             <label class="spr-prop"><input type="checkbox" id="sprSolid" ${propSolid ? 'checked' : ''}> <span><b>Sólido</b><small>Bloquea el paso (desactívalo para que sea pisable)</small></span></label>
             <div class="spr-prop spr-anim"><span><b>Animación / luz</b></span><div class="spr-anim-btns" id="sprAnim">${[['none', 'Ninguna'], ['glow', 'Brillo'], ['blink', 'Parpadeo'], ['float', 'Flotar']].map(([a, l]) => `<button class="spr-abtn ${propAnim === a ? 'on' : ''}" data-a="${a}">${l}</button>`).join('')}</div></div>
@@ -5960,9 +5961,11 @@ function openPlazaSpriteEditor(onDone, existing) {
   m.querySelectorAll('#sprProj .spr-abtn').forEach(b => b.onclick = () => {
     proj = b.dataset.p; m.querySelectorAll('#sprProj .spr-abtn').forEach(x => x.classList.toggle('on', x === b));
     m.querySelector('#sprDepthRow').classList.toggle('hidden', proj !== 'box');
+    m.querySelector('#sprWadeRow').classList.toggle('hidden', proj !== 'floor');
     renderSteps(); renderFoot(); drawGrid(); drawPreview(performance.now()); haptic(4);
   });
   m.querySelector('#sprDepth').oninput = (e) => { depth = Math.max(2, Math.min(24, parseInt(e.target.value, 10) || 8)); m.querySelector('#sprDepthV').textContent = depth; drawPreview(performance.now()); };
+  m.querySelector('#sprWade').onchange = (e) => { wade = e.target.checked; drawPreview(performance.now()); };
   // fotogramas
   m.querySelector('#sprAddFrame').onclick = () => addFrame(false);
   m.querySelector('#sprDupFrame').onclick = () => addFrame(true);
@@ -6017,6 +6020,7 @@ function openPlazaSpriteEditor(onDone, existing) {
     const enc = framesData.map(d => { const e = sprEncodeFrame(d); return e == null ? d : e; });
     const out = { v: 2, w, h, pal, data: enc[0], fw: proj === 'billboard' ? fw : 1, fd: 1, solid: propSolid, sit: propSit, anim: propAnim, proj };
     if (proj === 'box') out.depth = depth;
+    if (proj === 'floor' && wade) out.wade = true;
     if (enc.length > 1) { out.frames = enc; out.fps = fps; }
     return out;
   }
@@ -6036,7 +6040,7 @@ function openPlazaSpriteEditor(onDone, existing) {
       if (isAdm) {
         // admin publica aprobado → registro local para render inmediato
         const decFrames = ((sprite.frames && sprite.frames.length) ? sprite.frames : [sprite.data]).map(sprDecodeFrame);
-        PLZ_CUSTOM[item] = { w, h, pal: sprite.pal, data: decFrames[0], frames: decFrames, fps: sprite.fps || fps, fw, fd: 1, solid: propSolid, sit: propSit, anim: propAnim, proj, depth, name, category: cat };
+        PLZ_CUSTOM[item] = { w, h, pal: sprite.pal, data: decFrames[0], frames: decFrames, fps: sprite.fps || fps, fw, fd: 1, solid: propSolid, sit: propSit, anim: propAnim, proj, depth, wade, name, category: cat };
         PLZ_ITEM_NAME[item] = name;
       } else {
         // colaborador: queda PENDIENTE de aprobación → no se muestra aún
@@ -7358,7 +7362,7 @@ function _sprTinted(src, rgba) {
 // Proyecciones isométricas de un sprite plano: suelo (rombo), pared (plano vertical),
 // caja (extrusión del frente + profundidad). Usa transform MULTIPLICATIVO para respetar
 // cualquier escala previa del contexto (p. ej. la vista previa del editor).
-function plzProjSprite(c, sp, cx, base, now, data) {
+function plzProjSprite(c, sp, cx, base, now, data, rows) {
   const w = sp.w, h = sp.h, pal = sp.pal, TW = PLZ.TW, TH = PLZ.TH, proj = sp.proj;
   const off = _sprOffscreen(w, h, pal, data);
   c.save(); c.imageSmoothingEnabled = false;
@@ -7368,7 +7372,8 @@ function plzProjSprite(c, sp, cx, base, now, data) {
   if (proj === 'floor') {
     // mapea la rejilla al rombo de la baldosa (cara superior del suelo)
     c.transform((TW / 2) / w, (TH / 2) / w, (-TW / 2) / h, (TH / 2) / h, cx, base - TH + bob);
-    c.drawImage(off, 0, 0);
+    if (rows) { const y0 = rows[0], sh = rows[1] - rows[0]; c.drawImage(off, 0, y0, w, sh, 0, y0, w, sh); }   // solo una franja (efecto agua)
+    else c.drawImage(off, 0, 0);
   } else if (proj === 'wall') {
     // pega la rejilla al plano de la pared trasera-derecha (horizontal en diagonal, vertical recto)
     c.transform((TW / 2) / w, (TH / 2) / w, 0, 1, cx - TW / 4, base - TH - h - TH / 4 + bob);
@@ -7385,12 +7390,12 @@ function plzProjSprite(c, sp, cx, base, now, data) {
   }
   c.restore();
 }
-function plzDrawCustomSprite(c, sp, cx, base, now) {
+function plzDrawCustomSprite(c, sp, cx, base, now, rows) {
   const w = sp.w, h = sp.h, pal = sp.pal;
   // animación por fotogramas: elige el fotograma según el tiempo y los FPS
   const frames = sp.frames && sp.frames.length ? sp.frames : null;
   const data = (frames && frames.length > 1) ? frames[Math.floor((now || 0) / (1000 / (sp.fps || 6))) % frames.length] : (frames ? frames[0] : sp.data);
-  if (sp.proj && sp.proj !== 'billboard') { plzProjSprite(c, sp, cx, base, now, data); return; }
+  if (sp.proj && sp.proj !== 'billboard') { plzProjSprite(c, sp, cx, base, now, data, rows); return; }
   const x0 = cx - Math.floor(w / 2), y0 = base - h;   // base = pies del objeto en el frente de la baldosa
   // brillo pulsante para objetos con animación de luz
   let bob = 0;
@@ -7412,23 +7417,26 @@ function plzDrawCustomSprite(c, sp, cx, base, now) {
 
 // objeto custom multi-casilla: sombra por cada baldosa + sprite centrado sobre la huella,
 // apoyado en el frente de la casilla más cercana al espectador
-function plzDrawCustom(f, sp, now) {
+function plzDrawCustom(f, sp, now, rows) {
   const c = plaza.ctx;
   const fw = sp.fw || 1, fd = sp.fd || 1;
-  for (let di = 0; di < fw; di++) for (let dj = 0; dj < fd; dj++) {
-    const p = plzIso(f.i + di, f.j + dj);
-    plzDiamond(c, Math.round(p.x), Math.round(p.y) + 2, PLZ.TW - 8, PLZ.TH - 4, 'rgba(0,0,0,.24)');
+  // sombra solo en la pasada normal/superior (no al re-pintar la franja de agua encima)
+  if (!rows || rows[0] === 0) {
+    for (let di = 0; di < fw; di++) for (let dj = 0; dj < fd; dj++) {
+      const p = plzIso(f.i + di, f.j + dj);
+      if (sp.proj !== 'floor') plzDiamond(c, Math.round(p.x), Math.round(p.y) + 2, PLZ.TW - 8, PLZ.TH - 4, 'rgba(0,0,0,.24)');
+    }
   }
   const cx = Math.round(((f.i + (fw - 1) / 2) - (f.j + (fd - 1) / 2)) * PLZ.TW / 2);   // centro horizontal de la huella
   const front = plzIso(f.i + fw - 1, f.j + fd - 1);
   const base = Math.round(front.y + PLZ.TH / 2);
-  plzDrawCustomSprite(c, sp, cx, base, now);
+  plzDrawCustomSprite(c, sp, cx, base, now, rows);
 }
 
-function plzDrawFurn(f, now) {
+function plzDrawFurn(f, now, rows) {
   const c = plaza.ctx;
   // objeto custom: se dibuja con su propia huella (puede ocupar varias casillas)
-  if (PLZ_CUSTOM[f.t]) { plzDrawCustom(f, PLZ_CUSTOM[f.t], now); return; }
+  if (PLZ_CUSTOM[f.t]) { plzDrawCustom(f, PLZ_CUSTOM[f.t], now, rows); return; }
 
   const p = plzIso(f.i, f.j);
   const cx = Math.round(p.x), base = Math.round(p.y + PLZ.TH / 2);
@@ -7880,16 +7888,26 @@ function plzDraw(now) {
 
   // mobiliario + avatares, ordenados por profundidad (pintor)
   const items = [];
+  const wadeOver = [];   // franja frontal de sprites "efecto agua": se pinta SOBRE los avatares
   for (const f of plzR.furn) {
     const ft = plzFurnFoot(f.t);
-    const draw = f.flip
-      ? () => { const cx = plzFurnCenterX(f); ctx.save(); ctx.translate(2 * cx, 0); ctx.scale(-1, 1); plzDrawFurn(f, now); ctx.restore(); }
-      : () => plzDrawFurn(f, now);
-    items.push({ d: f.i + f.j + (ft.fw - 1) + (ft.fd - 1) - 0.15, draw });
+    const cu = PLZ_CUSTOM[f.t];
+    const mkDraw = (rows) => f.flip
+      ? () => { const cx = plzFurnCenterX(f); ctx.save(); ctx.translate(2 * cx, 0); ctx.scale(-1, 1); plzDrawFurn(f, now, rows); ctx.restore(); }
+      : () => plzDrawFurn(f, now, rows);
+    const d = f.i + f.j + (ft.fw - 1) + (ft.fd - 1) - 0.15;
+    if (cu && cu.wade && cu.proj === 'floor') {
+      const half = Math.ceil((cu.h || 16) / 2);
+      items.push({ d, draw: mkDraw([0, half]) });                        // mitad superior: detrás del avatar
+      wadeOver.push({ d: d + 0.3, draw: mkDraw([half, cu.h || 16]) });   // mitad inferior: por delante (dentro del agua)
+    } else {
+      items.push({ d, draw: mkDraw(undefined) });
+    }
   }
   for (const e of plaza.ents.values()) items.push({ d: e.x + e.y, draw: () => plzDrawAvatar(e, now) });
   items.sort((a, b) => a.d - b.d);
   for (const it of items) it.draw();
+  if (wadeOver.length) { wadeOver.sort((a, b) => a.d - b.d); for (const o of wadeOver) o.draw(); }
 
   // indicador flotante sobre el objeto interactivo de la sala (vida + descubribilidad del minijuego)
   const pact = PLZ_ACTIVITY[plaza.roomId];
