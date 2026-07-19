@@ -4507,8 +4507,8 @@ const PLZ_ACTIVITY = {
   estudio: { furn: 'djbooth', open: () => openPerkyPads(),     w: 13, top: 44, label: '🥁 Batería', hint: 'Toca la mesa (o el botón) para tocar en PerkyPads' },
   azotea:  { furn: 'hoop',    open: () => openPerkyHoops(),     w: 14, top: 52, label: '🏀 Encestar', hint: 'Toca la canasta (o el botón) para jugar a PerkyHoops' },
   arcade:  { furn: 'arcade',  open: () => openPerkyInvaders(),  w: 11, top: 40, label: '🕹️ Jugar', hint: 'Toca una recreativa (o el botón) para PerkyInvaders' },
-  // la playa usa el botón flotante (la orilla es suelo pisable, no dispara el juego al tocarla)
-  playa:   { furn: 'sea',     open: () => openPerkyFish(),      w: 22, top: 26, bot: 18, label: '🎣 Pescar', hint: 'Camina por la orilla y toca el botón 🎣 para pescar' },
+  // la playa usa el botón flotante (la orilla es suelo pisable). noAnchor: no fuerza el 'sea' viejo ni el indicador flotante
+  playa:   { furn: 'sea',     open: () => openPerkyFish(),      noAnchor: true, label: '🎣 Pescar', hint: 'Camina por la orilla y toca el botón 🎣 para pescar' },
 };
 
 let plaza = null;          // runtime del render (solo mientras la vista está abierta)
@@ -4545,9 +4545,9 @@ function plzEnsureStructural(id, base, furn) {
     if (bf.t === 'portal' && !furn.some(f => f.t === 'portal' && f.to === bf.to)) furn.push({ ...bf });
   }
   const act = PLZ_ACTIVITY[id];
-  // solo re-añade el ancla del minijuego si NO hay ya algo que la dispare
-  // (p. ej. en la playa, la "Orilla" custom ya vale → no metas el 'sea' viejo)
-  if (act) { const anchor = act.match || ((f) => f.t === act.furn); if (!furn.some(anchor)) { const bf = base.furn.find(f => f.t === act.furn); if (bf) furn.push({ ...bf }); } }
+  // re-añade el ancla del minijuego solo si la actividad se dispara tocando el objeto
+  // (las que usan botón flotante llevan noAnchor: no fuerzan ningún objeto — p. ej. la playa)
+  if (act && !act.noAnchor) { const anchor = act.match || ((f) => f.t === act.furn); if (!furn.some(anchor)) { const bf = base.furn.find(f => f.t === act.furn); if (bf) furn.push({ ...bf }); } }
 }
 function plzComputeRoom(id) {
   const custom = plzCustomRooms[id];
@@ -7955,7 +7955,7 @@ function plzDraw(now) {
 
   // indicador flotante sobre el objeto interactivo de la sala (vida + descubribilidad del minijuego)
   const pact = PLZ_ACTIVITY[plaza.roomId];
-  if (pact) {
+  if (pact && !pact.noAnchor) {
     const spot = plzR.furn.find(f => f.t === pact.furn);
     if (spot) {
       const p = plzIso(spot.i, spot.j);
