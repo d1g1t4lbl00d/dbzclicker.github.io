@@ -4494,7 +4494,7 @@ const PLZ_ACTIVITY = {
   estudio: { furn: 'djbooth', open: () => openPerkyPads(),     w: 13, top: 44, hint: 'Toca la mesa para tocar la batería en PerkyPads' },
   azotea:  { furn: 'hoop',    open: () => openPerkyHoops(),     w: 14, top: 52, hint: 'Toca la canasta para jugar a PerkyHoops' },
   arcade:  { furn: 'arcade',  open: () => openPerkyInvaders(),  w: 11, top: 40, hint: 'Toca una recreativa para jugar a PerkyInvaders' },
-  playa:   { furn: 'sea',     open: () => openPerkyFish(),      w: 16, top: 22, bot: 14, hint: 'Toca el mar para pescar en PerkyFish' },
+  playa:   { furn: 'sea',     match: (f) => f.t === 'sea' || /orilla|surf|ola|playa|mar/i.test(PLZ_ITEM_NAME[f.t] || ''), open: () => openPerkySurf(), w: 22, top: 26, bot: 18, hint: 'Toca el agua para surfear en PerkySurf 🏄' },
 };
 
 let plaza = null;          // runtime del render (solo mientras la vista está abierta)
@@ -4884,8 +4884,9 @@ async function renderPlaza() {
     const act = PLZ_ACTIVITY[plaza.roomId];
     if (act) {
       const w = act.w || 12, top = act.top || 40, bot = act.bot || 4;
+      const anchor = act.match || ((f) => f.t === act.furn);
       const spot = plzR.furn.find(f => {
-        if (f.t !== act.furn) return false;
+        if (!anchor(f)) return false;
         const p2 = plzIso(f.i, f.j), bx2 = p2.x, base2 = p2.y + PLZ.TH / 2;
         return rx >= bx2 - w && rx <= bx2 + w && ry >= base2 - top && ry <= base2 + bot;
       });
@@ -6980,6 +6981,122 @@ function openPerkyFish() {
   }
   async function showEnd() { await pkGameOver({ game: 'fish', score: g.score, wrap, title: '¡SE ACABÓ!', onRetry: () => { reset(); last = performance.now(); }, onQuit: close }); }
   const loop = (now) => { const dt = Math.min((now - last) / 1000, 0.05); last = now; try { update(dt); draw(); } catch (e) { console.warn('fish', e); } g._raf = requestAnimationFrame(loop); };
+  g._raf = requestAnimationFrame(loop);
+}
+
+// ============ PERKYSURF (Playa) — surfea con TU muñeco: esquiva y coge monedas ============
+function openPerkySurf() {
+  if (window._pkGameOpen) return; window._pkGameOpen = true;
+  const AW = 240, AH = 340, accent = (state.profile.theme && state.profile.theme.accent) || '#3e57fc';
+  const SURFY = Math.round(AH * 0.72);
+  // avatar (foto de perfil) del jugador
+  let img = null, imgOk = false;
+  if (state.profile.avatar_url) { const im = new Image(); im.crossOrigin = 'anonymous'; im.onload = () => { imgOk = true; }; im.onerror = () => { imgOk = false; }; im.src = czUrl(state.profile.avatar_url); img = im; }
+  // sprite "orilla" que colocó el admin en la playa (si existe) → arena del fondo
+  const orillaId = Object.keys(PLZ_ITEM_NAME).find(id => /orilla/i.test(PLZ_ITEM_NAME[id] || ''));
+  const orillaSp = (orillaId && PLZ_CUSTOM[orillaId]) || null;
+
+  const wrap = el(`
+    <div class="pk-game" id="pkGame">
+      <div class="pk-top">
+        <button class="pk-x" id="pkClose" aria-label="Salir">✕</button>
+        <div class="pk-title">PERKY&nbsp;<span>SURF</span></div>
+        <div class="pk-stat">SCORE <b id="pkScore">0</b></div>
+      </div>
+      <div class="pk-stage" id="pkStage"><canvas id="pkCanvas" width="${AW}" height="${AH}"></canvas></div>
+      <div class="pk-hint">Desliza para surfear · esquiva rocas y aletas · coge monedas y ⭐</div>
+    </div>`);
+  document.body.appendChild(wrap);
+  document.documentElement.style.overflow = 'hidden';
+  const canvas = wrap.querySelector('#pkCanvas'), ctx = canvas.getContext('2d');
+  const DPR = Math.min(2, Math.max(1, Math.round(window.devicePixelRatio || 1))); canvas.width = AW * DPR; canvas.height = AH * DPR; ctx.scale(DPR, DPR);
+  let g, last = performance.now(), popupObj = null;
+  function reset() { g = { score: 0, x: AW / 2, tx: AW / 2, lean: 0, speed: 100, scroll: 0, spawn: 0.6, items: [], wake: [], over: false, shake: 0 }; wrap.querySelector('#pkScore').textContent = '0'; popupObj = null; }
+  reset();
+
+  const stage = wrap.querySelector('#pkStage');
+  const setTarget = (e) => { const r = canvas.getBoundingClientRect(); g.tx = Math.max(16, Math.min(AW - 16, (e.clientX - r.left) / (r.width / AW))); };
+  let dragging = false;
+  stage.addEventListener('pointerdown', (e) => { e.preventDefault(); dragging = true; try { stage.setPointerCapture(e.pointerId); } catch (_) {} setTarget(e); });
+  stage.addEventListener('pointermove', (e) => { if (dragging) setTarget(e); });
+  const stopDrag = () => { dragging = false; };
+  stage.addEventListener('pointerup', stopDrag); stage.addEventListener('pointercancel', stopDrag);
+  const onKey = (e) => { if (e.key === 'Escape') close(); else if (e.key === 'ArrowLeft') g.tx = Math.max(16, g.tx - 30); else if (e.key === 'ArrowRight') g.tx = Math.min(AW - 16, g.tx + 30); };
+  document.addEventListener('keydown', onKey);
+  const close = () => { cancelAnimationFrame(g._raf); document.removeEventListener('keydown', onKey); document.documentElement.style.overflow = ''; wrap.remove(); window._pkGameOpen = false; };
+  wrap.querySelector('#pkClose').onclick = close;
+
+  const popup = (txt, col) => { popupObj = { txt, col, t0: performance.now() }; };
+  function spawn() {
+    const roll = Math.random();
+    const type = roll < 0.40 ? 'coin' : roll < 0.50 ? 'star' : roll < 0.77 ? 'rock' : 'fin';
+    g.items.push({ type, x: 22 + Math.random() * (AW - 44), y: -22, r: type === 'rock' ? 13 : type === 'fin' ? 11 : 8, sway: Math.random() * 6.28, dead: false });
+  }
+  function wipeout() { if (g.over) return; g.over = true; g.shake = 1; try { pkBlip(200, 0.32); } catch (_) {} haptic(40); setTimeout(showEnd, 720); }
+  async function showEnd() { await pkGameOver({ game: 'surf', score: Math.floor(g.score), wrap, title: '¡WIPEOUT!', onRetry: () => { reset(); last = performance.now(); }, onQuit: close }); }
+
+  function update(dt) {
+    if (g.over) { if (g.shake > 0) g.shake = Math.max(0, g.shake - dt * 2); return; }
+    g.speed += dt * 3.2;
+    g.scroll += g.speed * dt;
+    g.score += g.speed * dt * 0.08; wrap.querySelector('#pkScore').textContent = Math.floor(g.score);
+    const dx = g.tx - g.x; g.x += dx * Math.min(1, dt * 12); g.lean = Math.max(-1, Math.min(1, dx / 38));
+    g.wake.push({ x: g.x, y: SURFY + 8, t: 0 }); if (g.wake.length > 28) g.wake.shift();
+    for (const w2 of g.wake) w2.t += dt;
+    g.spawn -= dt; if (g.spawn <= 0) { spawn(); g.spawn = Math.max(0.30, 0.95 - g.speed * 0.0018); }
+    for (const it of g.items) { it.y += (g.speed + (it.type === 'fin' ? 70 : 0)) * dt; if (it.type === 'fin') it.x += Math.sin(g.scroll * 0.02 + it.sway) * 0.7; }
+    for (const it of g.items) {
+      if (it.dead) continue;
+      if (Math.hypot(it.x - g.x, it.y - SURFY) < it.r + 11) {
+        if (it.type === 'coin') { g.score += 8; it.dead = true; try { pkBlip(880, 0.06); } catch (_) {} haptic(8); popup('+8', '#ffd23e'); }
+        else if (it.type === 'star') { g.score += 25; it.dead = true; try { pkBlip(1120, 0.08); } catch (_) {} haptic(14); popup('+25 ⭐', '#8fc0ff'); }
+        else wipeout();
+      }
+    }
+    g.items = g.items.filter(it => !it.dead && it.y < AH + 30);
+  }
+  function drawFlat(sp, ox, oy, scale) {
+    const w = sp.w, h = sp.h, pal = sp.pal, data = (sp.frames && sp.frames[0]) || sp.data || [];
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const v = data[y * w + x] | 0; if (!v) continue; const col = pal[v - 1]; if (!col) continue; ctx.fillStyle = col; ctx.fillRect(ox + x * scale, oy + y * scale, scale, scale); }
+  }
+  function drawSurfer(x, y, lean, now) {
+    const c = ctx, bob = Math.sin(now / 160) * 1.5;
+    c.save(); c.translate(x, y + bob); c.rotate(lean * 0.2);
+    c.fillStyle = '#ff5d5d'; c.beginPath(); c.ellipse(0, 15, 16, 5, 0, 0, 7); c.fill(); c.fillStyle = '#fff'; c.fillRect(-1, 11, 2, 8);
+    c.fillStyle = '#10142a'; c.fillRect(-5, 4, 4, 10); c.fillRect(1, 4, 4, 10);
+    c.fillStyle = accent; c.fillRect(-6, -8, 12, 13);
+    c.fillStyle = _shade(accent, 1.24); c.fillRect(-6, -8, 3, 13);
+    c.fillStyle = _shade(accent, 0.7); c.fillRect(4, -8, 2, 13);
+    c.fillStyle = _shade(accent, 1.1); c.fillRect(-10, -6 + lean * 3, 3, 8);
+    c.fillStyle = _shade(accent, 0.8); c.fillRect(7, -6 - lean * 3, 3, 8);
+    const hs = 13; c.fillStyle = '#1a2138'; c.fillRect(-hs / 2, -9 - hs, hs, hs);
+    if (imgOk) { try { c.drawImage(img, -hs / 2 + 1, -8 - hs, hs - 2, hs - 2); } catch (_) { imgOk = false; } }
+    if (!imgOk) { c.fillStyle = accent; c.fillRect(-hs / 2 + 1, -8 - hs, hs - 2, hs - 2); }
+    c.restore();
+  }
+  function draw() {
+    const now = performance.now();
+    ctx.save();
+    if (g.shake > 0) ctx.translate((Math.random() - 0.5) * g.shake * 9, (Math.random() - 0.5) * g.shake * 9);
+    ctx.clearRect(-12, -12, AW + 24, AH + 24);
+    const sea = ctx.createLinearGradient(0, 0, 0, AH); sea.addColorStop(0, '#0e6d89'); sea.addColorStop(.5, '#0a5570'); sea.addColorStop(1, '#06304a'); ctx.fillStyle = sea; ctx.fillRect(0, 0, AW, AH);
+    ctx.strokeStyle = 'rgba(255,255,255,.13)'; ctx.lineWidth = 2;
+    for (let r = 0; r < 9; r++) { const yy = ((g.scroll * 0.8 + r * 44) % (AH + 44)) - 22; ctx.beginPath(); for (let x = 0; x <= AW; x += 8) ctx.lineTo(x, yy + Math.sin((x + g.scroll) / 22) * 4); ctx.stroke(); }
+    if (orillaSp && orillaSp.w) { const sc = Math.max(2, Math.floor(AW / orillaSp.w)); for (let ox = 0; ox < AW; ox += orillaSp.w * sc) drawFlat(orillaSp, ox, 2, sc); }
+    else { ctx.fillStyle = '#d9c07e'; ctx.fillRect(0, 0, AW, 16); ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.fillRect(0, 16, AW, 3); }
+    for (const w2 of g.wake) { const k = w2.t / 0.6; if (k > 1) continue; ctx.globalAlpha = (1 - k) * 0.5; ctx.fillStyle = '#dff3ff'; const rr = 2 + k * 7; ctx.beginPath(); ctx.ellipse(w2.x, w2.y + k * 22, rr, rr * 0.5, 0, 0, 7); ctx.fill(); } ctx.globalAlpha = 1;
+    for (const it of g.items) {
+      if (it.type === 'coin') { ctx.fillStyle = '#ffd23e'; ctx.beginPath(); ctx.arc(it.x, it.y, it.r, 0, 7); ctx.fill(); ctx.fillStyle = '#fff6c8'; ctx.fillRect(it.x - 2, it.y - 4, 2, 8); }
+      else if (it.type === 'star') { ctx.font = 'bold 20px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('⭐', it.x, it.y); ctx.textBaseline = 'alphabetic'; }
+      else if (it.type === 'rock') { ctx.fillStyle = '#5a6274'; ctx.beginPath(); ctx.arc(it.x, it.y, it.r, 0, 7); ctx.fill(); ctx.fillStyle = '#7c8698'; ctx.beginPath(); ctx.arc(it.x - 3, it.y - 3, it.r * 0.5, 0, 7); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,.4)'; ctx.beginPath(); ctx.ellipse(it.x, it.y + it.r, it.r, 3, 0, 0, 7); ctx.fill(); }
+      else { ctx.fillStyle = '#20303f'; ctx.beginPath(); ctx.moveTo(it.x, it.y - it.r); ctx.lineTo(it.x - it.r * 0.8, it.y + it.r * 0.6); ctx.lineTo(it.x + it.r * 0.8, it.y + it.r * 0.6); ctx.closePath(); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,.4)'; ctx.beginPath(); ctx.ellipse(it.x, it.y + it.r * 0.6, it.r, 2.5, 0, 0, 7); ctx.fill(); }
+    }
+    if (!g.over || g.shake > 0.12) drawSurfer(g.x, SURFY, g.lean, now);
+    if (popupObj) { const k = (now - popupObj.t0) / 900; if (k < 1) { ctx.globalAlpha = 1 - k; ctx.fillStyle = popupObj.col; ctx.font = 'bold 16px system-ui'; ctx.textAlign = 'center'; ctx.fillText(popupObj.txt, g.x, SURFY - 40 - k * 30); ctx.globalAlpha = 1; } }
+    ctx.restore();
+    ctx.fillStyle = '#dfeeffcc'; ctx.font = 'bold 11px system-ui'; ctx.textAlign = 'left'; ctx.fillText('🌊 ' + Math.floor(g.speed) + ' km/h', 8, AH - 10);
+  }
+  const loop = (now) => { const dt = Math.min((now - last) / 1000, 0.05); last = now; try { update(dt); draw(); } catch (e) { console.warn('surf', e); } g._raf = requestAnimationFrame(loop); };
   g._raf = requestAnimationFrame(loop);
 }
 
