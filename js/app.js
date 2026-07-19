@@ -4519,10 +4519,36 @@ function plzRoomFromRecord(rec) {
   return def;
 }
 
+// Overrides de las salas FIJAS (editados por admin, globales para todos)
+const PLZ_WORLD = {}; let plzWorldLoaded = false;
+async function plzLoadWorldRooms(force) {
+  if (plzWorldLoaded && !force) return;
+  try { const { data } = await sb.from('plaza_world_rooms').select('room_key,data'); (data || []).forEach(r => { PLZ_WORLD[r.room_key] = r.data || {}; }); plzWorldLoaded = true; } catch (_) {}
+}
+// Garantiza que una sala fija editada conserve navegación (portales) y minijuego (ancla)
+function plzEnsureStructural(id, base, furn) {
+  for (const bf of base.furn) {
+    if (bf.t === 'portal' && !furn.some(f => f.t === 'portal' && f.to === bf.to)) furn.push({ ...bf });
+  }
+  const act = PLZ_ACTIVITY[id];
+  if (act && act.furn && !furn.some(f => f.t === act.furn)) { const bf = base.furn.find(f => f.t === act.furn); if (bf) furn.push({ ...bf }); }
+}
 function plzComputeRoom(id) {
   const custom = plzCustomRooms[id];
-  const def = custom ? custom.def : (PLZ_ROOMS[id] || PLZ_ROOMS.plaza);
-  const furn = custom ? custom.furn : def.furn;
+  if (custom) return { id, def: custom.def, furn: custom.furn, dance: custom.def.dance || [], ...plzCollisions(custom.furn) };
+  // sala fija: parte de la definición base y aplica el override global si existe (clona para no mutar PLZ_ROOMS)
+  const base = PLZ_ROOMS[id] || PLZ_ROOMS.plaza;
+  const ovr = PLZ_WORLD[id];
+  const def = { ...base };
+  let furn;
+  if (ovr && Array.isArray(ovr.furn)) {
+    furn = ovr.furn.map(f => ({ ...f }));
+    if (ovr.style) Object.assign(def, ovr.style);
+    plzEnsureStructural(id, base, furn);
+  } else {
+    furn = base.furn.map(f => ({ ...f }));
+  }
+  def.furn = furn;
   return { id, def, furn, dance: def.dance || [], ...plzCollisions(furn) };
 }
 // construye colisiones/asientos/portales considerando la huella de cada mueble
@@ -4619,6 +4645,8 @@ function plzJoinRoom(id, si, sj) {
   const h = $('plazaRoomName'); if (h) h.textContent = plzR.def.name;
   const s = $('plazaRoomSub'); if (s) s.textContent = plzR.def.sub;
   const n = $('plazaLiveN'); if (n) n.textContent = '1';
+  // botón de editar: admin en cualquier sala (fijas incluidas) o dueño de una sala custom
+  if (plzIsAdmin() || (plzR.def.custom && plzR.def.ownerId === state.user.id)) plzShowEditFab();
   const act0 = PLZ_ACTIVITY[id];
   if (act0 && act0.hint) setTimeout(() => { if (plaza && plaza.roomId === id) toast(act0.hint); }, 550);
 
@@ -4739,8 +4767,9 @@ async function renderPlaza() {
   ctx.imageSmoothingEnabled = false;
   plaza = { canvas, ctx, ents: new Map([[state.user.id, me]]), me, raf: 0, last: performance.now(), target: null, ox: artW / 2, oy: PLZ.PADT, floor: null, chan: null, roomId: startRoom };
 
-  // catálogo de objetos custom (para colisión, asientos y render) antes de entrar
+  // catálogo de objetos custom + overrides de las salas fijas (antes de entrar)
   await plzLoadCustomItems();
+  await plzLoadWorldRooms();
   // canal de conteo (badge) + entrar en la sala inicial
   initPlazaWatch();
   try { plazaChan.track({ room: startRoom }); } catch (_) {}   // aparece en el conteo del mundo
@@ -5156,7 +5185,7 @@ function plzHideEditFab() {
 
 // ---- modo edición: catálogo visual estilo Habbo ----
 function plzEnterEdit() {
-  if (!plaza || !plzR || !plzR.def.custom) return;
+  if (!plaza || !plzR || !(plzR.def.custom || plzIsAdmin())) return;
   plaza.editing = true;
   plzHideEditFab();
   const dock = document.querySelector('.plaza-dock'); if (dock) dock.style.display = 'none';
@@ -5245,7 +5274,7 @@ function plzExitEdit() {
   const ed = document.getElementById('plazaEditor'); if (ed) ed.remove();
   const dock = document.querySelector('.plaza-dock'); if (dock) dock.style.display = '';
   const hint = document.querySelector('.plaza-hint'); if (hint) hint.style.display = '';
-  if (plzR && plzR.def.custom && (plzR.def.ownerId === state.user.id || plzIsAdmin())) plzShowEditFab();
+  if (plzR && (plzIsAdmin() || (plzR.def.custom && plzR.def.ownerId === state.user.id))) plzShowEditFab();
 }
 // colocar un objeto en el suelo (el borrado y el menú se gestionan en el tap del lienzo)
 function plzEditTap(fi, fj) {
@@ -5300,12 +5329,23 @@ async function plzSellFurn(f) {
   } catch (e) { toast((e && e.message) || 'No se pudo vender'); }
 }
 async function plzSaveRoom() {
-  const def = plzR && plzR.def; if (!def || !def.custom) return;
-  const data = { sub: def.sub, floorA: def.floorA, floorB: def.floorB, wall: def.wall, neonA: def.neonA, neonB: def.neonB, sign: (def.name || 'ROOM').toUpperCase().slice(0, 10), dance: def.dance, furn: plzR.furn.filter(f => f.t !== 'portal') };
+  const def = plzR && plzR.def; if (!def) return;
+  if (def.custom) {
+    const data = { sub: def.sub, floorA: def.floorA, floorB: def.floorB, wall: def.wall, neonA: def.neonA, neonB: def.neonB, sign: (def.name || 'ROOM').toUpperCase().slice(0, 10), dance: def.dance, furn: plzR.furn.filter(f => f.t !== 'portal') };
+    try { await sb.from('plaza_rooms').update({ name: def.name || 'Mi sala', data, updated_at: new Date().toISOString() }).eq('id', def.roomId); toast('Sala guardada'); }
+    catch (e) { toast('No se pudo guardar'); }
+    return;
+  }
+  // sala FIJA (solo admin): guarda un override global para todos
+  if (!plzIsAdmin()) return;
+  const key = plaza.roomId;
+  const style = { floorA: def.floorA, floorB: def.floorB, wall: def.wall, neonA: def.neonA, neonB: def.neonB };
+  const data = { furn: plzR.furn.map(f => ({ ...f })), style };   // guarda todo (portales incluidos); la carga garantiza los que falten
   try {
-    await sb.from('plaza_rooms').update({ name: def.name || 'Mi sala', data, updated_at: new Date().toISOString() }).eq('id', def.roomId);
-    toast('Sala guardada');
-  } catch (e) { toast('No se pudo guardar'); }
+    await sb.from('plaza_world_rooms').upsert({ room_key: key, data, updated_at: new Date().toISOString() });
+    PLZ_WORLD[key] = data;
+    toast('Sala guardada para todos ✓');
+  } catch (e) { toast((e && e.message) || 'No se pudo guardar'); }
 }
 
 // ---- economía: monedas, inventario (por unidades) y tienda ----
