@@ -4814,6 +4814,9 @@ async function renderPlaza() {
     const mw = menuEl.offsetWidth || 150, mh = menuEl.offsetHeight || 160;
     menuEl.style.left = Math.max(6, Math.min(cssX - mw / 2, wrap.clientWidth - mw - 6)) + 'px';
     menuEl.style.top = Math.max(6, Math.min(cssY - mh - 14, wrap.clientHeight - mh - 6)) + 'px';
+    // evita el "ghost click": el mismo toque que abre el menú no debe activar un botón
+    menuEl.style.pointerEvents = 'none';
+    setTimeout(() => { if (!menuEl.classList.contains('hidden')) menuEl.style.pointerEvents = ''; }, 320);
     menuEl.querySelectorAll('button').forEach(b => b.onclick = (ev) => {
       ev.stopPropagation(); closeMenu(); haptic(10);
       const a = b.dataset.a;
@@ -4838,6 +4841,9 @@ async function renderPlaza() {
     const mw = menuEl.offsetWidth || 150, mh = menuEl.offsetHeight || 160;
     menuEl.style.left = Math.max(6, Math.min(cssX - mw / 2, $('plazaWrap').clientWidth - mw - 6)) + 'px';
     menuEl.style.top = Math.max(6, Math.min(cssY - mh - 14, $('plazaWrap').clientHeight - mh - 6)) + 'px';
+    // evita el "ghost click": el mismo toque que abre el menú no debe activar un botón
+    menuEl.style.pointerEvents = 'none';
+    setTimeout(() => { if (!menuEl.classList.contains('hidden')) menuEl.style.pointerEvents = ''; }, 320);
     menuEl.querySelectorAll('button').forEach(b => b.onclick = (ev) => {
       ev.stopPropagation(); closeMenu(); haptic(8);
       const a = b.dataset.a;
