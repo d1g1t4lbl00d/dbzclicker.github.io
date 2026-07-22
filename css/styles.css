@@ -834,6 +834,7 @@ body.has-player .right { padding-bottom: var(--player-h); }
 /* botón de opciones (···) del mensaje: menú siempre accesible (borrar, responder…) */
 .dm-more { position: absolute; top: 4px; width: 30px; height: 30px; border: none; background: transparent; color: var(--ink-soft); display: grid; place-items: center; border-radius: 50%; opacity: 0; transition: opacity .15s, background .15s; cursor: pointer; z-index: 3; }
 .dm-more svg { width: 18px; height: 18px; }
+.dm-more::after { content: ""; position: absolute; inset: -9px; }  /* zona de toque ~48px, cómoda en móvil */
 .dm-row.me .dm-more { left: -36px; }
 .dm-row.them .dm-more { right: -36px; }
 .dm-row:hover .dm-more { opacity: .65; }
@@ -947,7 +948,7 @@ body.has-player .right { padding-bottom: var(--player-h); }
 /* reacciones */
 .dm-reacts { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 4px; }
 .dm-reacts:empty { display: none; }
-.dm-react { display: inline-flex; align-items: center; gap: 3px; font-size: 12.5px; line-height: 1; padding: 3px 7px; border-radius: 20px; border: 1px solid var(--line); background: var(--panel); box-shadow: var(--sh-1); cursor: pointer; transition: transform .12s var(--ease-spring); }
+.dm-react { display: inline-flex; align-items: center; gap: 3px; min-height: 32px; font-size: 13px; line-height: 1; padding: 5px 9px; border-radius: 20px; border: 1px solid var(--line); background: var(--panel); box-shadow: var(--sh-1); cursor: pointer; transition: transform .12s var(--ease-spring); }
 .dm-react:active { transform: scale(.88); }
 .dm-react.mine { background: rgba(62,87,252,.16); border-color: rgba(62,87,252,.5); }
 .dm-react .rc { font-size: 11px; font-weight: 700; opacity: .85; }

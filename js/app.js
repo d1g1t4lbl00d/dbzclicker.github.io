@@ -126,6 +126,12 @@ async function uploadMedia(bucket, file, onProgress, contentType) {
 }
 
 // ---------------------------------------------------------------- estado
+// Lee un array JSON de localStorage sin arriesgar que un valor corrupto tumbe
+// toda la app durante la evaluación del módulo (pantalla en blanco).
+function safeParseArr(key) {
+  try { const v = JSON.parse(localStorage.getItem(key) || '[]'); return Array.isArray(v) ? v : []; }
+  catch (_) { return []; }
+}
 const state = {
   user: null,          // sesión auth
   profile: null,       // fila profiles propia
@@ -137,7 +143,7 @@ const state = {
   follows: new Set(),  // user_ids que sigo
   blocked: new Set(),  // user_ids que he bloqueado
   hidden: new Set(),   // user_ids a ocultar (bloqueo en cualquier sentido)
-  downloads: new Set(JSON.parse(localStorage.getItem('ub_downloads') || '[]')),
+  downloads: new Set(safeParseArr('ub_downloads')),
   view: 'feed',
   tab: 'trending',
   search: '',
@@ -152,11 +158,12 @@ const state = {
   dmReplyTo: null,     // mensaje al que se está respondiendo
   dmConv: null,        // canal realtime de la conversación abierta
   dmPendingFiles: [],  // archivos adjuntos pendientes de enviar (uno o varios)
-  hiddenConvos: new Set(JSON.parse(localStorage.getItem('ub_hidden_convos') || '[]')), // chats ocultados localmente
+  hiddenConvos: new Set(safeParseArr('ub_hidden_convos')), // chats ocultados localmente
   groupId: null,       // id de la conversación de grupo abierta (null = DM 1-a-1)
   groupConv: null,     // datos de la conversación de grupo abierta
   groupMembers: {},    // miembros del grupo abierto (id → perfil)
   call: null,          // llamada en curso (audio/vídeo) o null
+  _chatOpenSeq: 0,     // token de secuencia para evitar cruce de hilos al abrir chats rápido
 };
 
 /* ---- TEMA (claro / oscuro) ---- */
@@ -218,13 +225,15 @@ async function applyReferral() {
   if (!state.profile || state.profile.referred_by) return;
   const ref = localStorage.getItem('ub_ref');
   if (!ref) return;
-  localStorage.removeItem('ub_ref');
   try {
-    const { data } = await sb.from('profiles').select('id').ilike('username', ref).maybeSingle();
+    // eq (no ilike): evita que un ?ref=% comodín case con el primer usuario alfabético
+    const { data } = await sb.from('profiles').select('id').eq('username', ref).maybeSingle();
     if (data && data.id && data.id !== state.user.id) {
-      await sb.from('profiles').update({ referred_by: data.id }).eq('id', state.user.id);
+      const { error } = await sb.from('profiles').update({ referred_by: data.id }).eq('id', state.user.id);
+      if (error) return;                             // conserva ub_ref para reintentar; no perder la atribución
       state.profile.referred_by = data.id;
     }
+    localStorage.removeItem('ub_ref');               // solo tras éxito (o usuario inexistente)
   } catch (_) {}
 }
 
@@ -2348,6 +2357,10 @@ function openActionSheet(menu) {
   sheet.querySelector('[data-cancel]').onclick = close;
   items.forEach((it, i) => { const b = sheet.querySelector(`[data-i="${i}"]`); if (b) b.onclick = () => { close(); haptic(8); try { it.onClick && it.onClick(); } catch (err) { console.error(err); } }; });
   $('modalRoot').appendChild(sheet);
+  // Anti "ghost click": el mismo toque que abre el sheet (desde un long-press) no debe
+  // caer sobre el backdrop ni un botón al soltar el dedo.
+  sheet.style.pointerEvents = 'none';
+  setTimeout(() => { sheet.style.pointerEvents = ''; }, 320);
   haptic(12);
   return sheet;
 }
@@ -2356,9 +2369,9 @@ function attachLongPress(node, build, opts = {}) {
   let timer = 0, sx = 0, sy = 0, fired = false, active = false;
   node.classList.add('lp-target');
   const cancel = () => { clearTimeout(timer); timer = 0; active = false; };
-  const fire = () => { fired = true; const menu = build(); if (menu) openActionSheet(menu); };
+  const fire = () => { if (fired) return; fired = true; const menu = build(); if (menu) openActionSheet(menu); };
   node.addEventListener('pointerdown', (e) => {
-    if (e.pointerType === 'mouse') return;            // en ratón se usa clic derecho
+    if (e.pointerType === 'mouse') { fired = false; return; }  // en ratón se usa clic derecho
     e.stopPropagation();                              // evita que un lp-target padre también dispare
     active = true; fired = false; sx = e.clientX; sy = e.clientY;
     timer = setTimeout(() => { if (active) fire(); }, delay);
@@ -2576,8 +2589,11 @@ function resamplePeaks(peaks, n) {
   return out;
 }
 function waveHTML(t) {
-  let peaks = Array.isArray(t.waveform) && t.waveform.length ? t.waveform : waveBars(t.id, 140);
-  peaks = resamplePeaks(peaks, 140);
+  // 72 barras: a la anchura de una tarjeta ya se ven densas y continuas, pero es la MITAD de
+  // nodos DOM que antes (140) — en un feed de ~50 pistas eso son miles de nodos menos.
+  const N = 72;
+  let peaks = Array.isArray(t.waveform) && t.waveform.length ? t.waveform : waveBars(t.id, N);
+  peaks = resamplePeaks(peaks, N);
   const bars = peaks.map((h, i) => `<div class="bar" data-i="${i}" style="--h:${czNum(h)}%;--d:${((i * 37) % 23) * 0.045}s"></div>`).join('');
   return `<div class="wave" data-act="seekwave">${bars}</div>`;
 }
@@ -4388,14 +4404,6 @@ function plzFurnCenterX(f) {
   return Math.round(plzIso(f.i, f.j).x);
 }
 // mueble (no portal) cuya huella contiene la casilla (i,j) — para reemplazar/borrar
-function plzFindFurnAt(furn, fi, fj) {
-  for (let k = furn.length - 1; k >= 0; k--) {
-    const f = furn[k]; if (f.t === 'portal') continue;
-    const { fw, fd } = plzFurnFoot(f.t);
-    if (fi >= f.i && fi < f.i + fw && fj >= f.j && fj < f.j + fd) return k;
-  }
-  return -1;
-}
 // ¿es un sprite de SUELO? (capa de abajo: caminos, césped… se pueden pisar y poner cosas encima)
 function plzIsFloorSprite(t) { const cu = PLZ_CUSTOM[t]; return !!(cu && cu.proj === 'floor'); }
 // índice del mueble por CAPA en la casilla (i,j). layer: 'floor' (suelo) | 'top' (objeto encima)
@@ -4408,16 +4416,6 @@ function plzFindFurnLayer(furn, fi, fj, layer) {
     if (fi >= f.i && fi < f.i + fw && fj >= f.j && fj < f.j + fd) return k;
   }
   return -1;
-}
-// caja de selección en pantalla (coords de arte) del sprite VISIBLE de un mueble.
-// Sirve para tocar el objeto donde se ve, no solo en su baldosa (los altos suben mucho).
-function plzFurnHitBox(f) {
-  const cu = PLZ_CUSTOM[f.t];
-  const fw = cu ? (cu.fw || 1) : 1, fd = cu ? (cu.fd || 1) : 1;
-  const cx = plzFurnCenterX(f);
-  const base = plzIso(f.i + fw - 1, f.j + fd - 1).y + PLZ.TH / 2;
-  const sw = cu ? cu.w : 30, sh = cu ? cu.h : 44;   // los base miden ~30×44 de arte
-  return { x0: cx - sw / 2 - 3, x1: cx + sw / 2 + 3, y0: base - sh - 3, y1: base + 4 };
 }
 // colisión y asiento son propiedades del objeto (custom) o del tipo base.
 // Un asiento nunca bloquea el paso (hay que poder caminar hasta él para sentarse).
@@ -5396,7 +5394,6 @@ function plzInv() { return (state.profile && state.profile.plaza_inv) || {}; }
 function plzIsAdmin() { return !!(state.profile && state.profile.is_admin); }
 // el admin tiene acceso ilimitado a todos los objetos (no necesita comprarlos ni tenerlos)
 function plzQty(t) { if (plzIsAdmin()) return Infinity; return PLZ_FREE_ITEMS.has(t) ? Infinity : (plzInv()[t] || 0); }
-function plzOwned() { const inv = plzInv(); return Object.keys(inv).filter(k => inv[k] > 0); }
 function plzHasItem(t) { if (plzIsAdmin()) return true; return PLZ_FREE_ITEMS.has(t) || (plzInv()[t] || 0) > 0; }
 function plzAddInv(t, n) { const inv = Object.assign({}, plzInv()); inv[t] = (inv[t] || 0) + (n || 1); if (state.profile) state.profile.plaza_inv = inv; }
 // puede entrar en el editor de objetos: admin o usuario con permiso de editor
@@ -7024,122 +7021,6 @@ function openPerkyFish() {
   }
   async function showEnd() { await pkGameOver({ game: 'fish', score: g.score, wrap, title: '¡SE ACABÓ!', onRetry: () => { reset(); last = performance.now(); }, onQuit: close }); }
   const loop = (now) => { const dt = Math.min((now - last) / 1000, 0.05); last = now; try { update(dt); draw(); } catch (e) { console.warn('fish', e); } g._raf = requestAnimationFrame(loop); };
-  g._raf = requestAnimationFrame(loop);
-}
-
-// ============ PERKYSURF (Playa) — surfea con TU muñeco: esquiva y coge monedas ============
-function openPerkySurf() {
-  if (window._pkGameOpen) return; window._pkGameOpen = true;
-  const AW = 240, AH = 340, accent = (state.profile.theme && state.profile.theme.accent) || '#3e57fc';
-  const SURFY = Math.round(AH * 0.72);
-  // avatar (foto de perfil) del jugador
-  let img = null, imgOk = false;
-  if (state.profile.avatar_url) { const im = new Image(); im.crossOrigin = 'anonymous'; im.onload = () => { imgOk = true; }; im.onerror = () => { imgOk = false; }; im.src = czUrl(state.profile.avatar_url); img = im; }
-  // sprite "orilla" que colocó el admin en la playa (si existe) → arena del fondo
-  const orillaId = Object.keys(PLZ_ITEM_NAME).find(id => /orilla/i.test(PLZ_ITEM_NAME[id] || ''));
-  const orillaSp = (orillaId && PLZ_CUSTOM[orillaId]) || null;
-
-  const wrap = el(`
-    <div class="pk-game" id="pkGame">
-      <div class="pk-top">
-        <button class="pk-x" id="pkClose" aria-label="Salir">✕</button>
-        <div class="pk-title">PERKY&nbsp;<span>SURF</span></div>
-        <div class="pk-stat">SCORE <b id="pkScore">0</b></div>
-      </div>
-      <div class="pk-stage" id="pkStage"><canvas id="pkCanvas" width="${AW}" height="${AH}"></canvas></div>
-      <div class="pk-hint">Desliza para surfear · esquiva rocas y aletas · coge monedas y ⭐</div>
-    </div>`);
-  document.body.appendChild(wrap);
-  document.documentElement.style.overflow = 'hidden';
-  const canvas = wrap.querySelector('#pkCanvas'), ctx = canvas.getContext('2d');
-  const DPR = Math.min(2, Math.max(1, Math.round(window.devicePixelRatio || 1))); canvas.width = AW * DPR; canvas.height = AH * DPR; ctx.scale(DPR, DPR);
-  let g, last = performance.now(), popupObj = null;
-  function reset() { g = { score: 0, x: AW / 2, tx: AW / 2, lean: 0, speed: 100, scroll: 0, spawn: 0.6, items: [], wake: [], over: false, shake: 0 }; wrap.querySelector('#pkScore').textContent = '0'; popupObj = null; }
-  reset();
-
-  const stage = wrap.querySelector('#pkStage');
-  const setTarget = (e) => { const r = canvas.getBoundingClientRect(); g.tx = Math.max(16, Math.min(AW - 16, (e.clientX - r.left) / (r.width / AW))); };
-  let dragging = false;
-  stage.addEventListener('pointerdown', (e) => { e.preventDefault(); dragging = true; try { stage.setPointerCapture(e.pointerId); } catch (_) {} setTarget(e); });
-  stage.addEventListener('pointermove', (e) => { if (dragging) setTarget(e); });
-  const stopDrag = () => { dragging = false; };
-  stage.addEventListener('pointerup', stopDrag); stage.addEventListener('pointercancel', stopDrag);
-  const onKey = (e) => { if (e.key === 'Escape') close(); else if (e.key === 'ArrowLeft') g.tx = Math.max(16, g.tx - 30); else if (e.key === 'ArrowRight') g.tx = Math.min(AW - 16, g.tx + 30); };
-  document.addEventListener('keydown', onKey);
-  const close = () => { cancelAnimationFrame(g._raf); document.removeEventListener('keydown', onKey); document.documentElement.style.overflow = ''; wrap.remove(); window._pkGameOpen = false; };
-  wrap.querySelector('#pkClose').onclick = close;
-
-  const popup = (txt, col) => { popupObj = { txt, col, t0: performance.now() }; };
-  function spawn() {
-    const roll = Math.random();
-    const type = roll < 0.40 ? 'coin' : roll < 0.50 ? 'star' : roll < 0.77 ? 'rock' : 'fin';
-    g.items.push({ type, x: 22 + Math.random() * (AW - 44), y: -22, r: type === 'rock' ? 13 : type === 'fin' ? 11 : 8, sway: Math.random() * 6.28, dead: false });
-  }
-  function wipeout() { if (g.over) return; g.over = true; g.shake = 1; try { pkBlip(200, 0.32); } catch (_) {} haptic(40); setTimeout(showEnd, 720); }
-  async function showEnd() { await pkGameOver({ game: 'surf', score: Math.floor(g.score), wrap, title: '¡WIPEOUT!', onRetry: () => { reset(); last = performance.now(); }, onQuit: close }); }
-
-  function update(dt) {
-    if (g.over) { if (g.shake > 0) g.shake = Math.max(0, g.shake - dt * 2); return; }
-    g.speed += dt * 3.2;
-    g.scroll += g.speed * dt;
-    g.score += g.speed * dt * 0.08; wrap.querySelector('#pkScore').textContent = Math.floor(g.score);
-    const dx = g.tx - g.x; g.x += dx * Math.min(1, dt * 12); g.lean = Math.max(-1, Math.min(1, dx / 38));
-    g.wake.push({ x: g.x, y: SURFY + 8, t: 0 }); if (g.wake.length > 28) g.wake.shift();
-    for (const w2 of g.wake) w2.t += dt;
-    g.spawn -= dt; if (g.spawn <= 0) { spawn(); g.spawn = Math.max(0.30, 0.95 - g.speed * 0.0018); }
-    for (const it of g.items) { it.y += (g.speed + (it.type === 'fin' ? 70 : 0)) * dt; if (it.type === 'fin') it.x += Math.sin(g.scroll * 0.02 + it.sway) * 0.7; }
-    for (const it of g.items) {
-      if (it.dead) continue;
-      if (Math.hypot(it.x - g.x, it.y - SURFY) < it.r + 11) {
-        if (it.type === 'coin') { g.score += 8; it.dead = true; try { pkBlip(880, 0.06); } catch (_) {} haptic(8); popup('+8', '#ffd23e'); }
-        else if (it.type === 'star') { g.score += 25; it.dead = true; try { pkBlip(1120, 0.08); } catch (_) {} haptic(14); popup('+25 ⭐', '#8fc0ff'); }
-        else wipeout();
-      }
-    }
-    g.items = g.items.filter(it => !it.dead && it.y < AH + 30);
-  }
-  function drawFlat(sp, ox, oy, scale) {
-    const w = sp.w, h = sp.h, pal = sp.pal, data = (sp.frames && sp.frames[0]) || sp.data || [];
-    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const v = data[y * w + x] | 0; if (!v) continue; const col = pal[v - 1]; if (!col) continue; ctx.fillStyle = col; ctx.fillRect(ox + x * scale, oy + y * scale, scale, scale); }
-  }
-  function drawSurfer(x, y, lean, now) {
-    const c = ctx, bob = Math.sin(now / 160) * 1.5;
-    c.save(); c.translate(x, y + bob); c.rotate(lean * 0.2);
-    c.fillStyle = '#ff5d5d'; c.beginPath(); c.ellipse(0, 15, 16, 5, 0, 0, 7); c.fill(); c.fillStyle = '#fff'; c.fillRect(-1, 11, 2, 8);
-    c.fillStyle = '#10142a'; c.fillRect(-5, 4, 4, 10); c.fillRect(1, 4, 4, 10);
-    c.fillStyle = accent; c.fillRect(-6, -8, 12, 13);
-    c.fillStyle = _shade(accent, 1.24); c.fillRect(-6, -8, 3, 13);
-    c.fillStyle = _shade(accent, 0.7); c.fillRect(4, -8, 2, 13);
-    c.fillStyle = _shade(accent, 1.1); c.fillRect(-10, -6 + lean * 3, 3, 8);
-    c.fillStyle = _shade(accent, 0.8); c.fillRect(7, -6 - lean * 3, 3, 8);
-    const hs = 13; c.fillStyle = '#1a2138'; c.fillRect(-hs / 2, -9 - hs, hs, hs);
-    if (imgOk) { try { c.drawImage(img, -hs / 2 + 1, -8 - hs, hs - 2, hs - 2); } catch (_) { imgOk = false; } }
-    if (!imgOk) { c.fillStyle = accent; c.fillRect(-hs / 2 + 1, -8 - hs, hs - 2, hs - 2); }
-    c.restore();
-  }
-  function draw() {
-    const now = performance.now();
-    ctx.save();
-    if (g.shake > 0) ctx.translate((Math.random() - 0.5) * g.shake * 9, (Math.random() - 0.5) * g.shake * 9);
-    ctx.clearRect(-12, -12, AW + 24, AH + 24);
-    const sea = ctx.createLinearGradient(0, 0, 0, AH); sea.addColorStop(0, '#0e6d89'); sea.addColorStop(.5, '#0a5570'); sea.addColorStop(1, '#06304a'); ctx.fillStyle = sea; ctx.fillRect(0, 0, AW, AH);
-    ctx.strokeStyle = 'rgba(255,255,255,.13)'; ctx.lineWidth = 2;
-    for (let r = 0; r < 9; r++) { const yy = ((g.scroll * 0.8 + r * 44) % (AH + 44)) - 22; ctx.beginPath(); for (let x = 0; x <= AW; x += 8) ctx.lineTo(x, yy + Math.sin((x + g.scroll) / 22) * 4); ctx.stroke(); }
-    if (orillaSp && orillaSp.w) { const sc = Math.max(2, Math.floor(AW / orillaSp.w)); for (let ox = 0; ox < AW; ox += orillaSp.w * sc) drawFlat(orillaSp, ox, 2, sc); }
-    else { ctx.fillStyle = '#d9c07e'; ctx.fillRect(0, 0, AW, 16); ctx.fillStyle = 'rgba(255,255,255,.3)'; ctx.fillRect(0, 16, AW, 3); }
-    for (const w2 of g.wake) { const k = w2.t / 0.6; if (k > 1) continue; ctx.globalAlpha = (1 - k) * 0.5; ctx.fillStyle = '#dff3ff'; const rr = 2 + k * 7; ctx.beginPath(); ctx.ellipse(w2.x, w2.y + k * 22, rr, rr * 0.5, 0, 0, 7); ctx.fill(); } ctx.globalAlpha = 1;
-    for (const it of g.items) {
-      if (it.type === 'coin') { ctx.fillStyle = '#ffd23e'; ctx.beginPath(); ctx.arc(it.x, it.y, it.r, 0, 7); ctx.fill(); ctx.fillStyle = '#fff6c8'; ctx.fillRect(it.x - 2, it.y - 4, 2, 8); }
-      else if (it.type === 'star') { ctx.font = 'bold 20px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('⭐', it.x, it.y); ctx.textBaseline = 'alphabetic'; }
-      else if (it.type === 'rock') { ctx.fillStyle = '#5a6274'; ctx.beginPath(); ctx.arc(it.x, it.y, it.r, 0, 7); ctx.fill(); ctx.fillStyle = '#7c8698'; ctx.beginPath(); ctx.arc(it.x - 3, it.y - 3, it.r * 0.5, 0, 7); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,.4)'; ctx.beginPath(); ctx.ellipse(it.x, it.y + it.r, it.r, 3, 0, 0, 7); ctx.fill(); }
-      else { ctx.fillStyle = '#20303f'; ctx.beginPath(); ctx.moveTo(it.x, it.y - it.r); ctx.lineTo(it.x - it.r * 0.8, it.y + it.r * 0.6); ctx.lineTo(it.x + it.r * 0.8, it.y + it.r * 0.6); ctx.closePath(); ctx.fill(); ctx.fillStyle = 'rgba(255,255,255,.4)'; ctx.beginPath(); ctx.ellipse(it.x, it.y + it.r * 0.6, it.r, 2.5, 0, 0, 7); ctx.fill(); }
-    }
-    if (!g.over || g.shake > 0.12) drawSurfer(g.x, SURFY, g.lean, now);
-    if (popupObj) { const k = (now - popupObj.t0) / 900; if (k < 1) { ctx.globalAlpha = 1 - k; ctx.fillStyle = popupObj.col; ctx.font = 'bold 16px system-ui'; ctx.textAlign = 'center'; ctx.fillText(popupObj.txt, g.x, SURFY - 40 - k * 30); ctx.globalAlpha = 1; } }
-    ctx.restore();
-    ctx.fillStyle = '#dfeeffcc'; ctx.font = 'bold 11px system-ui'; ctx.textAlign = 'left'; ctx.fillText('🌊 ' + Math.floor(g.speed) + ' km/h', 8, AH - 10);
-  }
-  const loop = (now) => { const dt = Math.min((now - last) / 1000, 0.05); last = now; try { update(dt); draw(); } catch (e) { console.warn('surf', e); } g._raf = requestAnimationFrame(loop); };
   g._raf = requestAnimationFrame(loop);
 }
 
@@ -11823,13 +11704,6 @@ function openBecomeCreator() {
     m.querySelector('#reqMsg').textContent = error ? (/relation|exist/i.test(error.message||'') ? 'Función no disponible aún (falta el SQL).' : 'No se pudo enviar la solicitud.') : '¡Solicitud enviada! El administrador la revisará. ✅';
   };
 }
-function downloadSkinTemplate() {
-  const tpl = `/* Plantilla de skin para UnderBro\n   Edita las variables y pega el resultado en Ecosystems > Skins > CSS personalizado. */\n:root{\n  --blue: #3e57fc;       /* color principal */\n  --blue-2: #27a9ff;     /* color secundario */\n  --accent-grad: linear-gradient(135deg,#3e57fc,#27a9ff);\n  --bg: #f3f6fb;         /* fondo */\n  --panel: #ffffff;      /* tarjetas */\n  --ink: #10142a;        /* texto */\n}\n/* Ejemplos libres: */\n/* .track{ border-radius: 20px; } */\n/* .topbar{ backdrop-filter: blur(20px); } */\n`;
-  const blob = new Blob([tpl], { type: 'text/css' });
-  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'underbro-skin.css'; a.click();
-  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-}
-
 /* ---- Contratos ---- */
 const CONTRACT_TYPES = ['Colaboración (feat)', 'Productor / Beat', 'Sala / Concierto', 'Management', 'Distribución', 'Otro'];
 function getContracts() { try { return JSON.parse(localStorage.getItem('ub_contracts') || '[]'); } catch { return []; } }
@@ -14406,7 +14280,7 @@ async function initChat() {
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload) => {
       const m = payload.new;
       let prof = m.user_id === state.user.id ? state.profile : null;
-      if (!prof) { const { data: p } = await sb.from('profiles').select('*').eq('id', m.user_id).single(); prof = p; }
+      if (!prof) prof = await cachedProfile(m.user_id);
       appendChatMsg({ ...m, profiles: prof });
       scrollChat();
     })
@@ -14425,6 +14299,17 @@ async function initChat() {
     const { error } = await sb.from('messages').insert({ user_id: state.user.id, body });
     if (error) toast('No se pudo enviar el mensaje');
   });
+}
+// Caché de perfiles por sesión: evita N+1 (una consulta por cada mensaje entrante en tiempo real).
+const _profCache = new Map();
+async function cachedProfile(id) {
+  if (!id) return null;
+  if (_profCache.has(id)) return _profCache.get(id);
+  try {
+    const { data } = await sb.from('profiles').select('*').eq('id', id).single();
+    if (data) _profCache.set(id, data);
+    return data || null;
+  } catch (_) { return null; }
 }
 function appendChatMsg(m) {
   if (isHidden(m.user_id)) return; // ocultar mensajes de usuarios bloqueados
@@ -14515,7 +14400,7 @@ function initDM() {
         dmAppendMessage(msg, { scroll: true }); markDmRead(msg.sender_id); dmShowTyping(false);
       } else {
         refreshDmBadge();
-        let p = null; try { ({ data: p } = await sb.from('profiles').select('username,display_name').eq('id', msg.sender_id).single()); } catch {}
+        const p = await cachedProfile(msg.sender_id);
         const snip = (msg.deleted ? 'mensaje' : (msg.body || mediaLabel(msg) || 'Adjunto')).slice(0, 38);
         toast('💬 ' + (p?.display_name || p?.username || 'Mensaje') + ': ' + snip);
         if (state.view === 'messages') renderMessages();
@@ -14534,6 +14419,7 @@ function initDM() {
   sb.channel('group-inbox-' + state.user.id)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'group_messages' }, async (payload) => {
       const msg = payload.new;
+      if (isHidden(msg.sender_id)) return;           // coherencia con DM: no mostrar mensajes de bloqueados
       if (state.groupId === msg.conversation_id) {
         if (!state.dmMsgs.has(msg.id)) dmAppendMessage(msg, { scroll: true });
         if (msg.sender_id !== state.user.id) markGroupRead(msg.conversation_id);
@@ -15480,6 +15366,10 @@ function openMsgMenu(msg, node) {
   const dl = sheet.querySelector('[data-a="del"]'); if (dl) dl.onclick = () => { close(); softDeleteMessage(msg); };
   const rp = sheet.querySelector('[data-a="report"]'); if (rp) rp.onclick = () => { close(); openReportModal('message', msg.id, msg.sender_id, 'este mensaje'); };
   $('modalRoot').appendChild(sheet);
+  // Anti "ghost click": el long-press abre el sheet con el dedo aún pulsado; al soltar
+  // el mismo toque no debe cerrar el backdrop ni activar un botón.
+  sheet.style.pointerEvents = 'none';
+  setTimeout(() => { sheet.style.pointerEvents = ''; }, 320);
 }
 function openReactPicker(msg) {
   const grid = DM_EMOJIS.map(e => `<button type="button" class="em" data-e="${e}">${e}</button>`).join('');
@@ -15714,8 +15604,9 @@ async function sendDm(e) {
     : Object.assign({ sender_id: state.user.id, recipient_id: other, reply_to }, fields);
   const insertRow = async (fields) => {
     const { data: sent, error } = await sb.from(table).insert(mkRow(fields)).select().single();
-    if (error) { toast('No se pudo enviar'); return; }
+    if (error) { toast('No se pudo enviar'); return false; }
     dmAppendMessage(sent, { scroll: true });
+    return true;
   };
 
   // solo texto
@@ -15732,9 +15623,12 @@ async function sendDm(e) {
     // Tipo: imagen/vídeo se muestran en línea; TODO lo demás (incluido audio subido)
     // va como 'file' (descargable). Las notas de voz grabadas son las únicas 'audio'.
     const attachment_type = file.type.startsWith('image') ? 'image' : file.type.startsWith('video') ? 'video' : 'file';
-    await insertRow({ body: firstDone ? '' : body, attachment_url: url, attachment_type, attachment_name: file.name });
-    firstDone = true;
+    // el texto solo se marca como enviado si el insert que lo llevaba tuvo éxito
+    const ok = await insertRow({ body: firstDone ? '' : body, attachment_url: url, attachment_type, attachment_name: file.name });
+    if (ok) firstDone = true;
   }
+  // si ningún adjunto llegó a llevar el texto (todos fallaron), envíalo como mensaje propio
+  if (body && !firstDone) await insertRow({ body, attachment_url: null, attachment_type: null, attachment_name: null });
   sendBtn.disabled = false;
 }
 async function dmSendAudio(blob, secs, peaks) {
@@ -15937,11 +15831,6 @@ function dmMarkAllMineRead() {
   });
 }
 function isDesktopChat() { return matchMedia('(min-width: 1025px)').matches; }
-function openRightPanel() {
-  if (isDesktopChat()) { $('app').classList.remove('right-collapsed'); try { localStorage.setItem('ub_right_collapsed', '0'); } catch (_) {} }
-  else { const r = rightEl(); if (!r.classList.contains('open')) toggleRight(); }
-  refreshRightChats();
-}
 function closeRightPanel() {
   if (isDesktopChat()) { $('app').classList.add('right-collapsed'); try { localStorage.setItem('ub_right_collapsed', '1'); } catch (_) {} }
   else { const r = rightEl(); r.classList.remove('open'); $('drawerBackdrop')?.classList.remove('show'); }
@@ -15993,7 +15882,7 @@ async function renderRightChats() {
           <span class="rpc-av">${avatarHTML(p)}${online ? '<i class="rpc-on"></i>' : ''}</span>
           <span class="rpc-main">
             <b>${esc(p.display_name || p.username || 'usuario')}</b>
-            <span class="${c.unread ? 'rpc-unread' : ''}">${c.last.sender_id === state.user.id ? 'Tú: ' : ''}${esc(rpSnippet(c.last)).slice(0, 46)}</span>
+            <span class="${c.unread ? 'rpc-unread' : ''}">${c.last.sender_id === state.user.id ? 'Tú: ' : ''}${esc(rpSnippet(c.last).slice(0, 46))}</span>
           </span>
           ${c.unread ? `<span class="rpc-badge">${c.unread > 9 ? '9+' : c.unread}</span>` : `<span class="rpc-when">${timeAgo(c.last.created_at)}</span>`}
         </button>`);
@@ -16121,10 +16010,13 @@ async function renderMessages() {
 
 async function openDM(other, prefill) {
   if (!other || other === state.user.id) return;
+  const seq = ++state._chatOpenSeq;                  // si se abre otro chat mientras esperamos la red, abortamos
   if (state.hiddenConvos.has(other)) { state.hiddenConvos.delete(other); saveHiddenConvos(); }
   const { data: prof } = await sb.from('profiles').select('*').eq('id', other).single();
+  if (seq !== state._chatOpenSeq) return;
   if (!prof) { toast('Usuario no encontrado'); return; }
   state.dmPeer = other; state.dmPeerProfile = prof;
+  state.groupId = null; state.groupConv = null;      // salir de cualquier contexto de grupo (evita enviar el DM al grupo)
   cancelReply(); clearDmPending(); dmCloseSearch(); dmHideEmoji();
   const name = prof.display_name || prof.username;
   const online = state.online.some(u => u.id === other);
@@ -16151,9 +16043,11 @@ async function openDM(other, prefill) {
   const { data } = await sb.from('direct_messages').select('*')
     .or(`and(sender_id.eq.${state.user.id},recipient_id.eq.${other}),and(sender_id.eq.${other},recipient_id.eq.${state.user.id})`)
     .order('created_at', { ascending: true }).limit(400);
+  if (seq !== state._chatOpenSeq) return;
   const msgs = data || [];
   state.dmReacts.clear();
   await dmLoadReactions(msgs.map(m => m.id));
+  if (seq !== state._chatOpenSeq) return;
   renderThread(msgs);
   markDmRead(other);
   setTimeout(() => $('dmInput')?.focus(), 120);
@@ -16193,11 +16087,13 @@ function groupRow(conv, last, unread) {
 function groupLastSenderPrefix() { return ''; }
 async function openGroup(conv) {
   if (!conv || !conv.id) return;
+  const seq = ++state._chatOpenSeq;                  // aborta si se abre otro chat mientras carga
   state.dmPeer = null; state.dmPeerProfile = null;
   state.groupId = conv.id; state.groupConv = conv;
   cancelReply(); clearDmPending(); dmCloseSearch(); dmHideEmoji();
   if (state.dmConv) { try { sb.removeChannel(state.dmConv); } catch (_) {} state.dmConv = null; }
   const { data: members } = await sb.from('conversation_members').select('user_id, role, profiles:user_id(*)').eq('conversation_id', conv.id);
+  if (seq !== state._chatOpenSeq) return;
   state.groupMembers = {};
   (members || []).forEach(mm => { if (mm.profiles) state.groupMembers[mm.user_id] = { ...mm.profiles, role: mm.role }; });
   const count = (members || []).length;
@@ -16210,6 +16106,7 @@ async function openGroup(conv) {
   $('dmScreen').classList.add('open');
   hideDrawers();
   const { data } = await sb.from('group_messages').select('*').eq('conversation_id', conv.id).order('created_at', { ascending: true }).limit(400);
+  if (seq !== state._chatOpenSeq) return;
   state.dmReacts.clear();
   renderThread(data || []);
   markGroupRead(conv.id);
@@ -16519,6 +16416,7 @@ function renderPushButton() {
    AUTO-ACTUALIZACIÓN (si hay versión nueva publicada, recarga sola)
    ======================================================================= */
 async function checkForUpdate() {
+  if (document.hidden) return;                       // no gastar red/batería en segundo plano
   try {
     const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
     if (!r.ok) return;
@@ -16533,7 +16431,7 @@ async function checkForUpdate() {
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkForUpdate(); });
 window.addEventListener('focus', checkForUpdate);
 window.addEventListener('online', checkForUpdate);
-setInterval(checkForUpdate, 45000);
+setInterval(checkForUpdate, 5 * 60 * 1000);          // sondeo ligero; el foco/visibilidad cubre el resto
 
 /* ----------------------------------------------------------------------- */
 setTheme(currentTheme());
