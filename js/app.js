@@ -1113,7 +1113,7 @@ async function switchView(view) {
   if (view !== 'admin') admShopChanClose();   // cerrar el realtime de la tienda al salir del admin
   const main = $('main');
   $('feedTabs')?.classList.toggle('hidden', view !== 'feed');
-  if (!ubSwiping) { main.classList.remove('swap', 'swap-fwd', 'swap-back'); void main.offsetWidth; main.classList.add(_swapDir ? ('swap-' + _swapDir) : 'swap'); }
+  if (!ubSwiping) { feedBusy(true); main.classList.remove('swap', 'swap-fwd', 'swap-back'); void main.offsetWidth; main.classList.add(_swapDir ? ('swap-' + _swapDir) : 'swap'); }
   _swapDir = '';
   if (['feed','feed-trending','all','favorites','mytracks','downloads','search'].includes(view)) setActiveNav(view === 'search' ? '' : view);
   else setActiveNav(view);
@@ -2280,7 +2280,16 @@ function personSearchRow(p) {
   return row;
 }
 
+// Marca "feed ocupado" mientras se pinta la lista: desactiva el blur de la topbar/nav
+// durante ese instante (re-muestrearlo cada frame era lo que causaba la cámara lenta).
+function feedBusy(on) {
+  const b = document.body;
+  clearTimeout(feedBusy._t);
+  if (on) { b.classList.add('feed-busy'); feedBusy._t = setTimeout(() => b.classList.remove('feed-busy'), 800); }
+  else b.classList.remove('feed-busy');
+}
 function renderFeed(head, tracks, view) {
+  feedBusy(true);
   tracks = (tracks || []).filter(t => !isHidden(t.user_id) && !isHidden(t._repostedById));
   const main = $('main');
   const showStories = view === 'feed';
@@ -2295,6 +2304,7 @@ function renderFeed(head, tracks, view) {
     if (view === 'downloads') hint = 'No has descargado ninguna pista.';
     if (view === 'feed' && state.tab === 'following') hint = 'Sigue a gente para ver sus pistas aquí.';
     list.innerHTML = `<div class="empty"><svg fill="none"><use href="#i-music"/></svg><p>${esc(hint)}</p></div>`;
+    feedBusy(false);
     return;
   }
   state.queue = tracks.map(t => t.id);
@@ -2307,7 +2317,7 @@ function renderFeed(head, tracks, view) {
     + '#A:' + arts.map(a => a.profile.id + ':' + a.score).join(',');
   if (cacheKey) {
     const c = feedDomCache.get(cacheKey);
-    if (c && c.sig === sig && c.node) { list.replaceWith(c.node); if (state.current && audio && !audio.paused) markPlayingCard(); return; }
+    if (c && c.sig === sig && c.node) { list.replaceWith(c.node); if (state.current && audio && !audio.paused) markPlayingCard(); feedBusy(false); return; }
   }
   // Pintado por trozos (8 elementos por frame): construir y adjuntar las tarjetas
   // poco a poco para no bloquear el hilo al cargar ~50 (cada una con su waveform).
@@ -2331,6 +2341,7 @@ function renderFeed(head, tracks, view) {
     else {
       if (cacheKey) feedDomCache.set(cacheKey, { sig, node: list });
       if (state.current && audio && !audio.paused) markPlayingCard();
+      feedBusy(false);
     }
   };
   step();

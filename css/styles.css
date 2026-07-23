@@ -287,6 +287,12 @@ img { display: block; }
    en movimiento es lo que provocaba los tirones */
 .ub-swiping .topbar, .ub-swiping .bottom-nav, .ub-swiping .player { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
 .ub-swiping .topbar, .ub-swiping .bottom-nav { background: var(--panel) !important; }
+/* mismo motivo al repintar el feed (cambio de pestaña Siguiendo/Tendencias/Nuevo):
+   mientras se pinta la lista y corre la animación de entrada, el blur de la topbar
+   tenía que re-muestrear su fondo en movimiento cada frame → animación a cámara lenta.
+   Se desactiva el blur solo durante ese instante. */
+.feed-busy .topbar, .feed-busy .bottom-nav, .feed-busy .player { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; }
+.feed-busy .topbar, .feed-busy .bottom-nav { background: var(--panel) !important; }
 .ub-swiping .main { will-change: transform; }
 /* botones del header: aspecto sutil (sin relleno ni sombra, solo hover suave) */
 .topbar .icon-btn { background: transparent; border: 1px solid transparent; box-shadow: none; color: var(--ink-soft); }
