@@ -4948,6 +4948,9 @@ async function renderPlaza() {
   // === EL BUCLE ARRANCA YA (antes que nada opcional): moverse siempre funciona ===
   const loop = (now) => {
     if (!plaza || !canvas.isConnected) { plzLeave(); return; }
+    // No malgastar el hilo dibujando la plaza cuando hay un minijuego encima o la
+    // pestaña está oculta: el bucle sigue vivo, pero sin pintar (evita el lag del juego).
+    if (window._pkGameOpen || document.hidden) { plaza.last = now; plaza.raf = requestAnimationFrame(loop); return; }
     const dt = Math.min((now - plaza.last) / 1000, 0.1); plaza.last = now;
     try { for (const e of plaza.ents.values()) plzStep(e, dt, e === me); plzDraw(now); } catch (_) {}
     plaza.raf = requestAnimationFrame(loop);
@@ -7265,7 +7268,14 @@ function plzSpriteToCanvas(canvas, sp) {
   }
 }
 // rasteriza un fotograma (índices de paleta) a un canvas w×h con alfa — base para las proyecciones
+// Los bitmaps de los sprites son inmutables por tipo (el array `data` se comparte entre
+// todas las instancias de ese tipo). Se cachean por referencia del array → un WeakMap que
+// se auto-limpia. Antes se reconstruía un canvas pixel a pixel (con regex por píxel) EN CADA
+// FRAME por cada sprite: eso era el gran lag de la plaza tras poner suelos custom.
+const _sprOffCache = new WeakMap();
 function _sprOffscreen(w, h, pal, data) {
+  const hit = _sprOffCache.get(data);
+  if (hit && hit.w === w && hit.h === h && hit.pal === pal) return hit.cv;
   const cv = document.createElement('canvas'); cv.width = w; cv.height = h;
   const cx = cv.getContext('2d'); const img = cx.createImageData(w, h), d = img.data;
   for (let k = 0; k < w * h; k++) {
@@ -7274,13 +7284,26 @@ function _sprOffscreen(w, h, pal, data) {
     if (mm) { const n = parseInt(mm[1], 16); r = (n >> 16) & 255; g = (n >> 8) & 255; b = n & 255; }
     const o = k * 4; d[o] = r; d[o + 1] = g; d[o + 2] = b; d[o + 3] = 255;
   }
-  cx.putImageData(img, 0, 0); return cv;
+  cx.putImageData(img, 0, 0);
+  _sprOffCache.set(data, { w, h, pal, cv });
+  return cv;
 }
+const _sprTintCache = new WeakMap();
 function _sprTinted(src, rgba) {
+  let m = _sprTintCache.get(src); if (!m) { m = Object.create(null); _sprTintCache.set(src, m); }
+  if (m[rgba]) return m[rgba];
   const cv = document.createElement('canvas'); cv.width = src.width; cv.height = src.height;
   const cx = cv.getContext('2d'); cx.imageSmoothingEnabled = false; cx.drawImage(src, 0, 0);
   cx.globalCompositeOperation = 'source-atop'; cx.fillStyle = rgba; cx.fillRect(0, 0, cv.width, cv.height);
-  return cv;
+  m[rgba] = cv; return cv;
+}
+// bounding box del contenido de un sprite (constante) → cacheado por referencia del array `data`
+const _sprBBoxCache = new WeakMap();
+function _sprBBox(w, h, data) {
+  const hit = _sprBBoxCache.get(data); if (hit) return hit;
+  let bx = w, by = h, bX = -1, bY = -1;
+  for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) { if (data[yy * w + xx]) { if (xx < bx) bx = xx; if (xx > bX) bX = xx; if (yy < by) by = yy; if (yy > bY) bY = yy; } }
+  const bb = { bx, by, bX, bY }; _sprBBoxCache.set(data, bb); return bb;
 }
 // Proyecciones isométricas de un sprite plano: suelo (rombo), pared (plano vertical),
 // caja (extrusión del frente + profundidad). Usa transform MULTIPLICATIVO para respetar
@@ -7293,10 +7316,9 @@ function plzProjSprite(c, sp, cx, base, now, data, rows) {
   let bob = 0; if (sp.anim === 'float') bob = Math.round(Math.sin(now / 620) * 2) - 2;
   if (sp.anim === 'glow') { c.shadowColor = pal[0] || '#ffd23e'; c.shadowBlur = 3 + 3 * Math.abs(Math.sin(now / 480)); }
   if (proj === 'floor') {
-    // bounding box del contenido: así el dibujo LLENA la baldosa y queda pegado al
+    // bounding box del contenido (cacheado): así el dibujo LLENA la baldosa y queda pegado al
     // suelo (sin "flotar" por los márgenes vacíos de la rejilla)
-    let bx = w, by = h, bX = -1, bY = -1;
-    for (let yy = 0; yy < h; yy++) for (let xx = 0; xx < w; xx++) { if (data[yy * w + xx]) { if (xx < bx) bx = xx; if (xx > bX) bX = xx; if (yy < by) by = yy; if (yy > bY) bY = yy; } }
+    const { bx, by, bX, bY } = _sprBBox(w, h, data);
     if (bX < 0) { c.restore(); return; }
     const bw = bX - bx + 1, bh = bY - by + 1;
     // base = vértice frontal de la baldosa; el vértice SUPERIOR está TH/2 más arriba
@@ -7333,15 +7355,9 @@ function plzDrawCustomSprite(c, sp, cx, base, now, rows) {
   else if (sp.anim === 'blink') { c.save(); c.globalAlpha = (Math.floor(now / 420) % 2) ? 1 : 0.42; }
   else if (sp.anim === 'float') { bob = Math.round(Math.sin(now / 620) * 2) - 2; c.save(); }
   else c.save();
-  for (let y = 0; y < h; y++) {
-    for (let x = 0; x < w; x++) {
-      const v = data[y * w + x] | 0;
-      if (!v) continue;                       // 0 = transparente
-      const col = pal[v - 1]; if (!col) continue;
-      c.fillStyle = col;
-      c.fillRect(x0 + x, y0 + y + bob, 1, 1);
-    }
-  }
+  // bitmap cacheado (antes se pintaba píxel a píxel con fillRect en cada frame)
+  c.imageSmoothingEnabled = false;
+  c.drawImage(_sprOffscreen(w, h, pal, data), x0, y0 + bob);
   c.restore();
 }
 
@@ -7819,6 +7835,8 @@ function plzDraw(now) {
   // mobiliario + avatares, ordenados por profundidad (pintor)
   const items = [];
   const floorSprites = [];   // suelos custom: SIEMPRE bajo avatares/muebles (evita el parpadeo de las piernas)
+  const wadeSet = plaza._wadeSet || (plaza._wadeSet = new Set());  // casillas con "efecto agua" (se recalcula en esta pasada)
+  wadeSet.clear();
   for (const f of plzR.furn) {
     const ft = plzFurnFoot(f.t);
     const cu = PLZ_CUSTOM[f.t];
@@ -7826,7 +7844,11 @@ function plzDraw(now) {
       ? () => { const cx = plzFurnCenterX(f); ctx.save(); ctx.translate(2 * cx, 0); ctx.scale(-1, 1); plzDrawFurn(f, now); ctx.restore(); }
       : () => plzDrawFurn(f, now);
     const d = f.i + f.j + (ft.fw - 1) + (ft.fd - 1) - 0.15;
-    if (cu && cu.proj === 'floor') floorSprites.push({ d, draw: mkDraw() });   // el suelo (incl. orilla) va completo, debajo
+    if (cu && cu.proj === 'floor') {
+      floorSprites.push({ d, draw: mkDraw() });   // el suelo (incl. orilla) va completo, debajo
+      // registra sus casillas de "efecto agua" una sola vez (no una búsqueda por avatar/frame)
+      if (cu.wade) for (let di = 0; di < ft.fw; di++) for (let dj = 0; dj < ft.fd; dj++) wadeSet.add((f.i + di) + ',' + (f.j + dj));
+    }
     else items.push({ d, draw: mkDraw() });
   }
   // suelos custom primero (bajo todo lo demás), ordenados entre sí por profundidad
@@ -7836,9 +7858,7 @@ function plzDraw(now) {
     plzDrawAvatar(e, now);
     // si pisa una casilla con "efecto agua": charco translúcido sobre las piernas (parece dentro del mar)
     const ri = Math.round(e.x), rj = Math.round(e.y);
-    const fk = plzFindFurnLayer(plzR.furn, ri, rj, 'floor');
-    const cuF = fk >= 0 ? PLZ_CUSTOM[plzR.furn[fk].t] : null;
-    if (cuF && cuF.wade) plzDrawWade(ctx, ri, rj, now);
+    if (wadeSet.has(ri + ',' + rj)) plzDrawWade(ctx, ri, rj, now);
   } });
   items.sort((a, b) => a.d - b.d);
   for (const it of items) it.draw();
